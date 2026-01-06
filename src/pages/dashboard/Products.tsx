@@ -48,7 +48,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Input } from "@/components/ui/input"; // Adicionado
+import { Input } from "@/components/ui/input";
 import { ProductForm } from "../../components/dashboard/ProductForm";
 import { AddStockForm } from "../../components/dashboard/AddStockForm";
 import { showSuccess, showError } from "../../utils/toast";
@@ -628,7 +628,11 @@ const ProductsPage = () => {
                   Adicionar Produto
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogContent 
+                className="max-w-4xl max-h-[90vh] overflow-y-auto"
+                onInteractOutside={(e) => e.preventDefault()}
+                onEscapeKeyDown={(e) => e.preventDefault()}
+              >
                 <DialogHeader>
                   <DialogTitle>Adicionar Novo Produto</DialogTitle>
                 </DialogHeader>
@@ -812,9 +816,12 @@ const ProductsPage = () => {
         </Table>
       </div>
 
-      {/* Modais de Edição e Alertas permanecem iguais */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent 
+            className="max-w-4xl max-h-[90vh] overflow-y-auto"
+            onInteractOutside={(e) => e.preventDefault()}
+            onEscapeKeyDown={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>Editar Produto: {selectedProduct?.name}</DialogTitle>
           </DialogHeader>
