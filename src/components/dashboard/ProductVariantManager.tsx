@@ -6,9 +6,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Package, Ruler, Droplets, Pencil, X, Check } from "lucide-react";
+import { Plus, Trash2, Package, Ruler, Droplets, Pencil, X, Check, Loader2 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -33,24 +32,16 @@ export const ProductVariantManager = ({ productId }: ProductVariantManagerProps)
   const queryClient = useQueryClient();
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValues, setEditValues] = useState<Partial<Variant>>({});
+  const [editValues, setEditValues] = useState<Partial<Variant & { flavor_name?: string }>>({});
 
-  const [newVariant, setNewVariant] = useState<Partial<Variant>>({
-    flavor_id: null,
+  const [newVariant, setNewVariant] = useState<Partial<Variant & { flavor_name: string }>>({
+    flavor_name: "",
     volume_ml: null,
     sku: "",
     price: 0,
     pix_price: 0,
     cost_price: 0,
     stock_quantity: 0,
-  });
-
-  const { data: flavors } = useQuery({
-    queryKey: ["allFlavors"],
-    queryFn: async () => {
-      const { data } = await supabase.from("flavors").select("id, name").eq("is_visible", true);
-      return data || [];
-    },
   });
 
   const { data: variants, isLoading } = useQuery({
@@ -67,10 +58,40 @@ export const ProductVariantManager = ({ productId }: ProductVariantManagerProps)
     enabled: !!productId,
   });
 
+  // Função auxiliar para encontrar ou criar um sabor pelo nome
+  const getOrCreateFlavorId = async (name: string): Promise<number | null> => {
+    if (!name || name.trim() === "") return null;
+    
+    const cleanName = name.trim();
+    
+    // 1. Tenta buscar o sabor existente
+    const { data: existing } = await supabase
+      .from("flavors")
+      .select("id")
+      .ilike("name", cleanName)
+      .single();
+    
+    if (existing) return existing.id;
+    
+    // 2. Se não existir, cria um novo
+    const { data: created, error } = await supabase
+      .from("flavors")
+      .insert({ name: cleanName, is_visible: true })
+      .select("id")
+      .single();
+    
+    if (error) throw error;
+    return created.id;
+  };
+
   const addMutation = useMutation({
-    mutationFn: async (variant: Partial<Variant>) => {
+    mutationFn: async (v: typeof newVariant) => {
+      const flavorId = await getOrCreateFlavorId(v.flavor_name || "");
+      
+      const { flavor_name, ...variantData } = v;
       const { error } = await supabase.from("product_variants").insert({
-        ...variant,
+        ...variantData,
+        flavor_id: flavorId,
         product_id: productId,
       });
       if (error) throw error;
@@ -79,17 +100,19 @@ export const ProductVariantManager = ({ productId }: ProductVariantManagerProps)
       queryClient.invalidateQueries({ queryKey: ["productVariants", productId] });
       showSuccess("Variação adicionada!");
       setIsAdding(false);
-      setNewVariant({ flavor_id: null, volume_ml: null, sku: "", price: 0, pix_price: 0, cost_price: 0, stock_quantity: 0 });
+      setNewVariant({ flavor_name: "", volume_ml: null, sku: "", price: 0, pix_price: 0, cost_price: 0, stock_quantity: 0 });
     },
     onError: (err: any) => showError(err.message),
   });
 
   const updateMutation = useMutation({
-    mutationFn: async (variant: Partial<Variant>) => {
-      const { id, flavors, ...updateData } = variant as any;
+    mutationFn: async (v: typeof editValues) => {
+      const flavorId = await getOrCreateFlavorId(v.flavor_name || "");
+      
+      const { id, flavors, flavor_name, ...updateData } = v as any;
       const { error } = await supabase
         .from("product_variants")
-        .update(updateData)
+        .update({ ...updateData, flavor_id: flavorId })
         .eq("id", id);
       if (error) throw error;
     },
@@ -114,7 +137,10 @@ export const ProductVariantManager = ({ productId }: ProductVariantManagerProps)
 
   const startEditing = (v: Variant) => {
     setEditingId(v.id);
-    setEditValues(v);
+    setEditValues({
+        ...v,
+        flavor_name: v.flavors?.name || ""
+    });
   };
 
   const formatCurrency = (val: number | null) => 
@@ -128,23 +154,23 @@ export const ProductVariantManager = ({ productId }: ProductVariantManagerProps)
     <div className="space-y-4 border rounded-lg p-4 bg-gray-50/50">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-bold flex items-center gap-2">
-            <Package className="w-5 h-5" /> Variações de Estoque e Preço
+            <Package className="w-5 h-5" /> Variações (Grade de Produtos)
         </h3>
         <Button type="button" variant="outline" size="sm" onClick={() => setIsAdding(!isAdding)}>
-          {isAdding ? "Cancelar" : <><Plus className="w-4 h-4 mr-1" /> Adicionar Nova Opção</>}
+          {isAdding ? "Cancelar" : <><Plus className="w-4 h-4 mr-1" /> Adicionar Opção</>}
         </Button>
       </div>
 
       {isAdding && (
         <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-8 gap-3 p-4 border rounded-lg bg-white shadow-sm animate-in fade-in slide-in-from-top-2">
           <div className="space-y-1">
-            <Label className="text-[10px] uppercase font-bold">Sabor</Label>
-            <Select onValueChange={(v) => setNewVariant({ ...newVariant, flavor_id: Number(v) })}>
-              <SelectTrigger className="h-8"><SelectValue placeholder="Selecione" /></SelectTrigger>
-              <SelectContent>
-                {flavors?.map(f => <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <Label className="text-[10px] uppercase font-bold">Escreva o Sabor</Label>
+            <Input 
+                placeholder="Ex: Menta" 
+                className="h-8" 
+                value={newVariant.flavor_name} 
+                onChange={(e) => setNewVariant({ ...newVariant, flavor_name: e.target.value })} 
+            />
           </div>
           <div className="space-y-1">
             <Label className="text-[10px] uppercase font-bold">ML</Label>
@@ -172,7 +198,7 @@ export const ProductVariantManager = ({ productId }: ProductVariantManagerProps)
           </div>
           <div className="flex items-end pb-0.5">
             <Button type="button" className="w-full h-8" onClick={() => addMutation.mutate(newVariant)} disabled={addMutation.isPending}>
-              Salvar
+              {addMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar"}
             </Button>
           </div>
         </div>
@@ -197,8 +223,32 @@ export const ProductVariantManager = ({ productId }: ProductVariantManagerProps)
               <TableRow key={v.id} className={editingId === v.id ? "bg-primary/5" : ""}>
                 <TableCell>
                   <div className="flex flex-col gap-1">
-                    <span className="font-bold flex items-center gap-1 text-gray-800 text-xs"><Droplets className="w-3 h-3 text-primary" /> {v.flavors?.name || "Sem Sabor"}</span>
-                    {v.volume_ml && <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Ruler className="w-3 h-3" /> {v.volume_ml}ml</span>}
+                    {editingId === v.id ? (
+                        <Input 
+                            className="h-7 text-xs font-bold" 
+                            value={editValues.flavor_name || ""} 
+                            onChange={(e) => setEditValues({ ...editValues, flavor_name: e.target.value })}
+                            placeholder="Sabor..."
+                        />
+                    ) : (
+                        <span className="font-bold flex items-center gap-1 text-gray-800 text-xs">
+                            <Droplets className="w-3 h-3 text-primary" /> {v.flavors?.name || "Sem Sabor"}
+                        </span>
+                    )}
+                    {editingId === v.id ? (
+                        <div className="flex items-center gap-1">
+                            <Ruler className="w-3 h-3 text-muted-foreground" />
+                            <Input 
+                                type="number" 
+                                className="h-7 text-xs w-20" 
+                                value={editValues.volume_ml || ""} 
+                                onChange={(e) => setEditValues({ ...editValues, volume_ml: Number(e.target.value) })}
+                                placeholder="ML"
+                            />
+                        </div>
+                    ) : (
+                        v.volume_ml && <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Ruler className="w-3 h-3" /> {v.volume_ml}ml</span>
+                    )}
                   </div>
                 </TableCell>
                 <TableCell>
@@ -233,8 +283,8 @@ export const ProductVariantManager = ({ productId }: ProductVariantManagerProps)
                   <div className="flex justify-end gap-1">
                     {editingId === v.id ? (
                       <>
-                        <Button type="button" variant="ghost" size="icon" onClick={() => updateMutation.mutate(editValues)} className="h-7 w-7 text-green-600 hover:bg-green-50">
-                            <Check className="w-4 h-4" />
+                        <Button type="button" variant="ghost" size="icon" onClick={() => updateMutation.mutate(editValues)} className="h-7 w-7 text-green-600 hover:bg-green-50" disabled={updateMutation.isPending}>
+                            {updateMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                         </Button>
                         <Button type="button" variant="ghost" size="icon" onClick={() => setEditingId(null)} className="h-7 w-7 text-gray-500 hover:bg-gray-100">
                             <X className="w-4 h-4" />
