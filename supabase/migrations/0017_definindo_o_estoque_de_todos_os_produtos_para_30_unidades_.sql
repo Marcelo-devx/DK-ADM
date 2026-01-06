@@ -1,0 +1,1 @@
+UPDATE public.products SET stock_quantity = 30;

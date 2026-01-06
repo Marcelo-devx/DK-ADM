@@ -1,0 +1,1 @@
+UPDATE public.orders SET payment_method = 'Pix';

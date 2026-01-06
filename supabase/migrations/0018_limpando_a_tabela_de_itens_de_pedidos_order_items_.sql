@@ -1,0 +1,1 @@
+TRUNCATE TABLE public.order_items RESTART IDENTITY;
