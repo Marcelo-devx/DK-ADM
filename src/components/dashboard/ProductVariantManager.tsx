@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Package, Ruler, Droplets, Pencil, X, Check, Loader2 } from "lucide-react";
+import { Plus, Trash2, Package, Ruler, Droplets, Pencil, X, Check, Loader2, AlertCircle } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -58,22 +58,50 @@ export const ProductVariantManager = ({ productId }: ProductVariantManagerProps)
     enabled: !!productId,
   });
 
+  // Função para verificar se um SKU já existe no banco (Produtos ou Outras Variações)
+  const isSkuTaken = async (sku: string, currentVariantId?: string): Promise<boolean> => {
+    if (!sku || sku.trim() === "") return false;
+    
+    const cleanSku = sku.trim();
+
+    // 1. Verifica na tabela de produtos (SKU global do produto)
+    const { data: productWithSku } = await supabase
+      .from("products")
+      .select("id")
+      .eq("sku", cleanSku)
+      .maybeSingle();
+    
+    if (productWithSku) return true;
+
+    // 2. Verifica na tabela de variações
+    const query = supabase
+      .from("product_variants")
+      .select("id")
+      .eq("sku", cleanSku);
+    
+    if (currentVariantId) {
+      query.neq("id", currentVariantId);
+    }
+
+    const { data: variantWithSku } = await query.maybeSingle();
+    
+    return !!variantWithSku;
+  };
+
   // Função auxiliar para encontrar ou criar um sabor pelo nome
   const getOrCreateFlavorId = async (name: string): Promise<number | null> => {
     if (!name || name.trim() === "") return null;
     
     const cleanName = name.trim();
     
-    // 1. Tenta buscar o sabor existente
     const { data: existing } = await supabase
       .from("flavors")
       .select("id")
       .ilike("name", cleanName)
-      .single();
+      .maybeSingle();
     
     if (existing) return existing.id;
     
-    // 2. Se não existir, cria um novo
     const { data: created, error } = await supabase
       .from("flavors")
       .insert({ name: cleanName, is_visible: true })
@@ -86,6 +114,11 @@ export const ProductVariantManager = ({ productId }: ProductVariantManagerProps)
 
   const addMutation = useMutation({
     mutationFn: async (v: typeof newVariant) => {
+      // Validação de SKU
+      if (v.sku && await isSkuTaken(v.sku)) {
+        throw new Error(`O SKU "${v.sku}" já está em uso por outro produto ou variação.`);
+      }
+
       const flavorId = await getOrCreateFlavorId(v.flavor_name || "");
       
       const { flavor_name, ...variantData } = v;
@@ -107,6 +140,11 @@ export const ProductVariantManager = ({ productId }: ProductVariantManagerProps)
 
   const updateMutation = useMutation({
     mutationFn: async (v: typeof editValues) => {
+      // Validação de SKU
+      if (v.sku && await isSkuTaken(v.sku, v.id)) {
+        throw new Error(`O SKU "${v.sku}" já está em uso.`);
+      }
+
       const flavorId = await getOrCreateFlavorId(v.flavor_name || "");
       
       const { id, flavors, flavor_name, ...updateData } = v as any;
@@ -178,7 +216,12 @@ export const ProductVariantManager = ({ productId }: ProductVariantManagerProps)
           </div>
           <div className="space-y-1">
             <Label className="text-[10px] uppercase font-bold">SKU</Label>
-            <Input className="h-8" value={newVariant.sku || ""} onChange={(e) => setNewVariant({ ...newVariant, sku: e.target.value })} />
+            <Input 
+                className="h-8" 
+                placeholder="Código único"
+                value={newVariant.sku || ""} 
+                onChange={(e) => setNewVariant({ ...newVariant, sku: e.target.value.toUpperCase() })} 
+            />
           </div>
           <div className="space-y-1">
             <Label className="text-[10px] uppercase font-bold">Custo (R$)</Label>
@@ -253,7 +296,11 @@ export const ProductVariantManager = ({ productId }: ProductVariantManagerProps)
                 </TableCell>
                 <TableCell>
                   {editingId === v.id ? (
-                    <Input className="h-7 text-[10px] font-mono p-1" value={editValues.sku || ""} onChange={(e) => setEditValues({ ...editValues, sku: e.target.value })} />
+                    <Input 
+                        className="h-7 text-[10px] font-mono p-1" 
+                        value={editValues.sku || ""} 
+                        onChange={(e) => setEditValues({ ...editValues, sku: e.target.value.toUpperCase() })} 
+                    />
                   ) : (
                     <span className="font-mono text-[10px] text-muted-foreground bg-gray-100 px-1 rounded">{v.sku || "-"}</span>
                   )}
