@@ -66,16 +66,26 @@ export const InformationalPopup = () => {
 
   return (
     <AlertDialog open={isOpen} onOpenChange={setIsOpen}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{popup.title}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {popup.content}
+      <AlertDialogContent className="max-w-[400px]">
+        <AlertDialogHeader className="flex flex-col items-center text-center">
+          <AlertDialogTitle className="text-2xl font-black">{popup.title}</AlertDialogTitle>
+          <AlertDialogDescription className="text-base text-gray-600 w-full">
+            <div 
+              className="formatted-content"
+              dangerouslySetInnerHTML={{ __html: popup.content }} 
+            />
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogAction onClick={handleClose}>
+        <AlertDialogAction onClick={handleClose} className="w-full font-bold h-12">
           {popup.button_text}
         </AlertDialogAction>
+        <style>{`
+          .formatted-content p { margin-bottom: 0.5rem; }
+          .formatted-content p:last-child { margin-bottom: 0; }
+          .formatted-content .ql-align-center { text-align: center; }
+          .formatted-content .ql-align-right { text-align: right; }
+          .formatted-content .ql-align-justify { text-align: justify; }
+        `}</style>
       </AlertDialogContent>
     </AlertDialog>
   );

@@ -11,16 +11,16 @@ import {
   FormMessage,
 } from "../ui/form";
 import { Input } from "../ui/input";
-import { Textarea } from "../ui/textarea";
 import { Switch } from "../ui/switch";
 import { useEffect } from "react";
 import { Eye, Smartphone, Monitor } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
 
 const formSchema = z.object({
   title: z.string().min(2, "O título é obrigatório."),
-  content: z.string().min(10, "O conteúdo é obrigatório."),
+  content: z.string().min(1, "O conteúdo é obrigatório."),
   button_text: z.string().min(2, "O texto do botão é obrigatório."),
   is_active: z.boolean().default(true),
 });
@@ -32,6 +32,21 @@ interface PopupFormProps {
   isSubmitting: boolean;
   initialData?: Partial<PopupFormValues>;
 }
+
+const quillModules = {
+  toolbar: [
+    [{ 'header': [1, 2, 3, false] }],
+    ['bold', 'italic', 'underline', 'strike'],
+    [{ 'color': [] }, { 'background': [] }],
+    [{ 'align': [] }],
+    ['clean']
+  ],
+};
+
+const quillFormats = [
+  'header', 'bold', 'italic', 'underline', 'strike',
+  'color', 'background', 'align'
+];
 
 export const PopupForm = ({
   onSubmit,
@@ -58,7 +73,7 @@ export const PopupForm = ({
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-      {/* Formulário - 2 colunas */}
+      {/* Formulário */}
       <div className="lg:col-span-2">
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -75,23 +90,31 @@ export const PopupForm = ({
                 </FormItem>
               )}
             />
+            
             <FormField
               control={form.control}
               name="content"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="font-bold">Conteúdo (Respeita 'Enter')</FormLabel>
+                  <FormLabel className="font-bold">Conteúdo (Estilo Word)</FormLabel>
                   <FormControl>
-                    <Textarea 
-                      placeholder="Digite sua mensagem aqui..." 
-                      className="min-h-[150px]"
-                      {...field} 
-                    />
+                    <div className="bg-white">
+                      <ReactQuill 
+                        theme="snow"
+                        value={field.value}
+                        onChange={field.onChange}
+                        modules={quillModules}
+                        formats={quillFormats}
+                        placeholder="Escreva sua mensagem aqui..."
+                        className="h-[200px] mb-12"
+                      />
+                    </div>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
             <FormField
               control={form.control}
               name="button_text"
@@ -129,7 +152,7 @@ export const PopupForm = ({
         </Form>
       </div>
 
-      {/* Preview - 3 colunas */}
+      {/* Preview */}
       <div className="lg:col-span-3 flex flex-col space-y-4">
         <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-sm font-black text-gray-500 uppercase tracking-widest">
@@ -141,16 +164,19 @@ export const PopupForm = ({
             </div>
         </div>
         
-        <div className="flex-1 flex items-center justify-center bg-slate-200 rounded-2xl border-4 border-white shadow-inner p-4 min-h-[400px]">
-          {/* Simulador de Modal */}
+        <div className="flex-1 flex items-center justify-center bg-slate-200 rounded-2xl border-4 border-white shadow-inner p-4 min-h-[450px]">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-[400px] overflow-hidden border animate-in zoom-in-95 duration-300">
             <div className="p-8 flex flex-col items-center text-center space-y-6">
               <h3 className="text-2xl font-black text-gray-900 leading-tight">
                 {watchedValues.title || "Título do Seu Aviso"}
               </h3>
-              <p className="text-base text-gray-600 whitespace-pre-wrap leading-relaxed">
-                {watchedValues.content || "Digite o conteúdo ao lado para ver como o texto será organizado e centralizado aqui no preview."}
-              </p>
+              
+              {/* Div para renderizar o HTML formatado pelo Quill */}
+              <div 
+                className="text-base text-gray-600 leading-relaxed w-full ql-editor-preview"
+                dangerouslySetInnerHTML={{ __html: watchedValues.content || "Digite o conteúdo ao lado..." }}
+              />
+              
               <div className="w-full pt-4">
                 <Button className="w-full h-12 text-md font-bold rounded-lg pointer-events-none shadow-lg">
                   {watchedValues.button_text || "Entendi"}
@@ -160,9 +186,23 @@ export const PopupForm = ({
           </div>
         </div>
         <p className="text-[11px] text-center text-slate-500 font-medium">
-          O preview acima reflete o alinhamento e as quebras de linha reais do site.
+          O preview acima reflete a formatação e alinhamento reais do editor.
         </p>
       </div>
+
+      <style>{`
+        .ql-editor-preview {
+            padding: 0 !important;
+            height: auto !important;
+            overflow: visible !important;
+        }
+        .ql-editor-preview * {
+            margin-bottom: 0.5rem;
+        }
+        .ql-editor-preview *:last-child {
+            margin-bottom: 0;
+        }
+      `}</style>
     </div>
   );
 };
