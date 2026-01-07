@@ -19,6 +19,7 @@ import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 
 const formSchema = z.object({
+  id: z.number().optional(), // Adicionado para identificar edições
   title: z.string().min(2, "O título é obrigatório."),
   content: z.string().min(1, "O conteúdo é obrigatório."),
   button_text: z.string().min(2, "O texto do botão é obrigatório."),
@@ -146,7 +147,7 @@ export const PopupForm = ({
               )}
             />
             <Button type="submit" disabled={isSubmitting} className="w-full h-12 text-lg font-bold">
-              {isSubmitting ? "Processando..." : (initialData ? "Salvar Alterações" : "Criar Aviso")}
+              {isSubmitting ? "Processando..." : (initialData?.id ? "Salvar Alterações" : "Criar Aviso")}
             </Button>
           </form>
         </Form>
@@ -171,7 +172,6 @@ export const PopupForm = ({
                 {watchedValues.title || "Título do Seu Aviso"}
               </h3>
               
-              {/* Div para renderizar o HTML formatado pelo Quill */}
               <div 
                 className="text-base text-gray-600 leading-relaxed w-full ql-editor-preview"
                 dangerouslySetInnerHTML={{ __html: watchedValues.content || "Digite o conteúdo ao lado..." }}

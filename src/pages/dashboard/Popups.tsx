@@ -32,22 +32,23 @@ const PopupsPage = () => {
 
   const upsertMutation = useMutation({
     mutationFn: async (values: any) => {
-      const { id, ...data } = values;
-      if (selectedPopup && !isPreviewOnly) {
-        const { error } = await supabase.from("informational_popups").update(data).eq("id", selectedPopup.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("informational_popups").insert([data]);
-        if (error) throw error;
-      }
+      // Se estamos em modo preview apenas, não salvamos nada ao clicar no botão do form
+      if (isPreviewOnly) return;
+
+      const { error } = await supabase
+        .from("informational_popups")
+        .upsert(values, { onConflict: 'id' });
+      
+      if (error) throw error;
     },
     onSuccess: () => {
+      if (isPreviewOnly) return;
       queryClient.invalidateQueries({ queryKey: ["popups-admin"] });
       showSuccess(selectedPopup ? "Aviso atualizado!" : "Novo aviso criado!");
       setIsModalOpen(false);
       setSelectedPopup(null);
     },
-    onError: (err: any) => showError(`Erro: ${err.message}`),
+    onError: (err: any) => showError(`Erro ao salvar: ${err.message}`),
   });
 
   const deleteMutation = useMutation({
@@ -147,7 +148,10 @@ const PopupsPage = () => {
                       </div>
                   </CardHeader>
                   <CardContent className="text-sm text-gray-600 py-4">
-                      <p className="line-clamp-4 italic bg-gray-50 p-3 rounded-lg border border-gray-100">"{popup.content}"</p>
+                      <div 
+                        className="line-clamp-4 italic bg-gray-50 p-3 rounded-lg border border-gray-100 overflow-hidden max-h-[100px]"
+                        dangerouslySetInnerHTML={{ __html: popup.content }}
+                      />
                   </CardContent>
                   <CardFooter className="flex justify-between pt-3 border-t bg-gray-50/30">
                       <Button 
