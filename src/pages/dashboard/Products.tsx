@@ -212,8 +212,20 @@ const ProductsPage = () => {
   });
 
   const addProductMutation = useMutation({
-    mutationFn: async (newProduct: Omit<Product, "id" | "sku" | "flavor_count" | "variant_prices" | "variant_costs">) => {
-      const { error } = await supabase.from("products").insert([newProduct]);
+    mutationFn: async (newProduct: any) => {
+      const productData = { ...newProduct };
+      
+      // Sanitização: Se SKU estiver vazio, removemos para que o banco gere um automaticamente.
+      if (!productData.sku || productData.sku.trim() === "") {
+        delete productData.sku;
+      }
+      
+      // Sanitização: URL de imagem vazia vira null
+      if (!productData.image_url || productData.image_url.trim() === "") {
+        productData.image_url = null;
+      }
+
+      const { error } = await supabase.from("products").insert([productData]);
       if (error) throw new Error(error.message);
     },
     onSuccess: () => {
@@ -232,11 +244,24 @@ const ProductsPage = () => {
       values,
     }: {
       productId: number;
-      values: Partial<Product>;
+      values: any;
     }) => {
+      const updates = { ...values };
+      
+      // Se SKU estiver vazio, mandamos null (para não conflitar com outro vazio), 
+      // ou mantemos o que estava se o usuário não mexeu. 
+      // Se o usuário apagou o SKU, assumimos que ele quer remover/resetar.
+      if (updates.sku === "") {
+        updates.sku = null;
+      }
+
+      if (updates.image_url === "") {
+        updates.image_url = null;
+      }
+
       const { error } = await supabase
         .from("products")
-        .update(values)
+        .update(updates)
         .eq("id", productId);
       if (error) throw new Error(error.message);
     },
