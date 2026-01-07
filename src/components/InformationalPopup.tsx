@@ -73,10 +73,18 @@ export const InformationalPopup = () => {
   }
 
   return (
-    <AlertDialog open={isOpen} onOpenChange={(open) => { if(!open) handleClose(); }}>
-      <AlertDialogContent className="max-w-[450px] bg-[#0B1221] border-[#1E293B] text-white p-0 overflow-hidden rounded-3xl">
+    <AlertDialog 
+      open={isOpen} 
+      onOpenChange={(open) => {
+        // Se tentar fechar (open === false), impedimos a mudança de estado
+        if (!open) return;
+        setIsOpen(open);
+      }}
+    >
+      <AlertDialogContent 
+        className="max-w-[450px] bg-[#0B1221] border-[#1E293B] text-white p-0 overflow-hidden rounded-3xl"
+      >
         <div className="p-8 flex flex-col items-center text-center space-y-6">
-          {/* Ícone Estilo Screenshot */}
           <div className="bg-[#1E293B] p-4 rounded-2xl">
             <Info className="h-8 w-8 text-[#0099FF]" />
           </div>
@@ -85,7 +93,7 @@ export const InformationalPopup = () => {
             <AlertDialogTitle className="text-3xl font-black italic uppercase tracking-tight leading-tight">
                 {currentPopup.title}
             </AlertDialogTitle>
-            <AlertDialogDescription className="text-gray-400 text-base leading-relaxed w-full mt-4">
+            <AlertDialogDescription className="text-gray-400 text-base leading-relaxed w-full mt-4" asChild>
               <div 
                 className="formatted-content max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar"
                 dangerouslySetInnerHTML={{ __html: currentPopup.content }} 
