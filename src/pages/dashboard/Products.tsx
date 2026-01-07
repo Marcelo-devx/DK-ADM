@@ -246,7 +246,6 @@ const ProductsPage = () => {
   };
 
   const addProductMutation = useMutation({
-    // ... mantido igual
     mutationFn: async (newProduct: any) => {
       const productData = { ...newProduct };
       if (!productData.sku || productData.sku.trim() === "") delete productData.sku;
@@ -263,7 +262,6 @@ const ProductsPage = () => {
   });
 
   const updateProductMutation = useMutation({
-    // ... mantido igual
     mutationFn: async ({ productId, values }: { productId: number; values: any; }) => {
       const updates = { ...values };
       if (updates.sku === "") updates.sku = null;
@@ -420,7 +418,17 @@ const ProductsPage = () => {
             <Dialog open={isProductModalOpen} onOpenChange={setIsProductModalOpen}>
               <DialogTrigger asChild><Button><PlusCircle className="w-4 h-4 mr-2" />Adicionar Produto</Button></DialogTrigger>
               <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>Adicionar Novo Produto</DialogTitle></DialogHeader>
-                <ProductForm onSubmit={handleAddProduct} isSubmitting={addProductMutation.isPending} categories={categories || []} isLoadingCategories={isLoadingCategories} subCategories={subCategories || []} isLoadingSubCategories={isLoadingSubCategories} brands={brands || []} isLoadingBrands={isLoadingBrands} />
+                <ProductForm 
+                    onSubmit={handleAddProduct} 
+                    isSubmitting={addProductMutation.isPending} 
+                    categories={categories || []} 
+                    isLoadingCategories={isLoadingCategories} 
+                    subCategories={subCategories || []} 
+                    isLoadingSubCategories={isLoadingSubCategories} 
+                    brands={brands || []} 
+                    isLoadingBrands={isLoadingBrands}
+                    existingProducts={products}
+                />
               </DialogContent>
             </Dialog>
           </div>
@@ -496,10 +504,20 @@ const ProductsPage = () => {
         </Table>
       </div>
 
-      {/* Modais de Edição e Alertas (mantidos conforme original) */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>Editar: {selectedProduct?.name}</DialogTitle></DialogHeader>
-          <ProductForm onSubmit={handleUpdateProduct} isSubmitting={updateProductMutation.isPending} categories={categories || []} isLoadingCategories={isLoadingCategories} subCategories={subCategories || []} isLoadingSubCategories={isLoadingSubCategories} brands={brands || []} isLoadingBrands={isLoadingBrands} initialData={selectedProduct ? { ...selectedProduct, sku: selectedProduct.sku || '', description: selectedProduct.description || '', category: selectedProduct.category || '', sub_category: selectedProduct.sub_category || '', brand: selectedProduct.brand || '', image_url: selectedProduct.image_url || '', cost_price: selectedProduct.cost_price || 0 } : undefined} />
+          <ProductForm 
+            onSubmit={handleUpdateProduct} 
+            isSubmitting={updateProductMutation.isPending} 
+            categories={categories || []} 
+            isLoadingCategories={isLoadingCategories} 
+            subCategories={subCategories || []} 
+            isLoadingSubCategories={isLoadingSubCategories} 
+            brands={brands || []} 
+            isLoadingBrands={isLoadingBrands} 
+            initialData={selectedProduct ? { ...selectedProduct, sku: selectedProduct.sku || '', description: selectedProduct.description || '', category: selectedProduct.category || '', sub_category: selectedProduct.sub_category || '', brand: selectedProduct.brand || '', image_url: selectedProduct.image_url || '', cost_price: selectedProduct.cost_price || 0 } : undefined} 
+            existingProducts={products}
+          />
         </DialogContent>
       </Dialog>
 

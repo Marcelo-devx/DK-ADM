@@ -10,7 +10,7 @@ import {
   FormLabel,
   FormMessage,
 } from "../ui/form";
-import { Input } from "../ui/input";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "../ui/textarea";
 import {
   Select,
@@ -18,15 +18,15 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "../ui/select";
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from "../ui/dialog";
+} from "@/components/ui/dialog";
 import { CategoryForm } from "./category-form";
-import { PlusCircle, Layers, Info, RefreshCw } from "lucide-react";
+import { PlusCircle, Layers, Copy, RefreshCw, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -35,7 +35,6 @@ import { ImageUploader } from "./ImageUploader";
 import { Switch } from "../ui/switch";
 import { ProductVariantManager } from "./ProductVariantManager";
 import { Separator } from "../ui/separator";
-import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Badge } from "@/components/ui/badge";
 
 const formSchema = z.object({
@@ -66,9 +65,9 @@ interface ProductFormProps {
   brands: { id: number; name: string }[];
   isLoadingBrands: boolean;
   initialData?: ProductFormValues & { is_visible?: boolean };
+  existingProducts?: any[]; // Adicionado para permitir clonagem
 }
 
-// Função auxiliar para gerar SKU aleatório
 const generateRandomSku = () => {
   const randomStr = Math.random().toString(36).substring(2, 8).toUpperCase();
   return `PROD-${randomStr}`;
@@ -84,11 +83,12 @@ export const ProductForm = ({
   brands,
   isLoadingBrands,
   initialData,
+  existingProducts = [],
 }: ProductFormProps) => {
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: initialData || {
-      sku: generateRandomSku(), // Gera SKU automaticamente se for novo
+      sku: generateRandomSku(),
       name: "",
       description: "",
       price: 0,
@@ -110,7 +110,6 @@ export const ProductForm = ({
   const selectedCategoryName = form.watch("category");
   const productId = initialData?.id;
 
-  // Watch price fields to pass them down
   const currentPrice = form.watch("price");
   const currentPixPrice = form.watch("pix_price");
   const currentCostPrice = form.watch("cost_price");
@@ -118,7 +117,8 @@ export const ProductForm = ({
   const { data: variants } = useQuery({
     queryKey: ["productVariants", productId],
     queryFn: async () => {
-      const { data } = await supabase.from("product_variants").select("id").eq("product_id", productId!);
+      if (!productId) return [];
+      const { data } = await supabase.from("product_variants").select("id").eq("product_id", productId);
       return data || [];
     },
     enabled: !!productId,
@@ -129,12 +129,6 @@ export const ProductForm = ({
   useEffect(() => {
     if (initialData) {
       form.reset(initialData);
-    } else {
-      // Se não tem dados iniciais (é criação), garante um SKU novo se estiver vazio
-      const currentSku = form.getValues("sku");
-      if (!currentSku) {
-        form.setValue("sku", generateRandomSku());
-      }
     }
   }, [initialData, form]);
 
@@ -165,8 +159,53 @@ export const ProductForm = ({
     form.setValue("sku", generateRandomSku());
   };
 
+  const handleCloneProduct = (productIdStr: string) => {
+    const productToClone = existingProducts.find(p => String(p.id) === productIdStr);
+    if (productToClone) {
+        // Remove campos que não devem ser clonados para um novo registro
+        const { id, created_at, updated_at, flavor_count, variants: v, variant_prices, variant_costs, ...cloneData } = productToClone;
+        
+        form.reset({
+            ...cloneData,
+            sku: generateRandomSku(), // Sempre gera um novo SKU
+            stock_quantity: 0, // Reseta estoque por segurança
+            is_visible: cloneData.is_visible ?? true,
+        });
+        showSuccess(`Dados de "${productToClone.name}" copiados com sucesso!`);
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {/* Botão de Clonagem (Apenas se for criação de novo produto) */}
+      {!initialData && existingProducts.length > 0 && (
+        <div className="bg-primary/5 p-4 rounded-xl border border-primary/10 flex flex-col sm:flex-row items-center gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
+            <div className="flex items-center gap-3">
+                <div className="bg-primary/10 p-2 rounded-lg text-primary">
+                    <Copy className="h-5 w-5" />
+                </div>
+                <div>
+                    <p className="text-sm font-bold text-primary">Clonar Produto Existente</p>
+                    <p className="text-[10px] text-muted-foreground uppercase font-medium">Economize tempo copiando dados de outro item</p>
+                </div>
+            </div>
+            <div className="flex-1 w-full">
+                <Select onValueChange={handleCloneProduct}>
+                    <SelectTrigger className="bg-white">
+                        <SelectValue placeholder="Selecione um produto para copiar..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {existingProducts.map(p => (
+                            <SelectItem key={p.id} value={String(p.id)}>
+                                {p.name} {p.brand ? `(${p.brand})` : ''}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+        </div>
+      )}
+
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -352,7 +391,7 @@ export const ProductForm = ({
             )}
           />
 
-          <Button type="submit" disabled={isSubmitting} className="w-full">
+          <Button type="submit" disabled={isSubmitting} className="w-full h-12 text-lg font-bold">
             {isSubmitting ? "Salvando..." : (initialData ? "Atualizar Cadastro" : "Criar Produto")}
           </Button>
         </form>
