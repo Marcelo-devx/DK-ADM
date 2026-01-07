@@ -52,7 +52,7 @@ import { Input } from "@/components/ui/input";
 import { ProductForm } from "../../components/dashboard/product-form";
 import { AddStockForm } from "../../components/dashboard/AddStockForm";
 import { showSuccess, showError } from "../../utils/toast";
-import { PlusCircle, MoreHorizontal, ImageOff, FileDown, DatabaseBackup, Upload, FileUp, Leaf, Star, Search, ArrowUpDown, ChevronUp, ChevronDown } from "lucide-react";
+import { PlusCircle, MoreHorizontal, ImageOff, FileDown, DatabaseBackup, Upload, FileUp, Leaf, Star, Search, ArrowUpDown, ChevronUp, ChevronDown, Copy, Loader2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import * as XLSX from 'xlsx';
@@ -69,6 +69,7 @@ type Product = {
   description: string | null;
   price: number;
   cost_price: number | null;
+  pix_price: number | null;
   stock_quantity: number;
   category: string | null;
   sub_category: string | null;
@@ -146,6 +147,11 @@ const fetchBrands = async () => {
     .order("name", { ascending: true });
   if (error) throw new Error(error.message);
   return data;
+};
+
+const generateRandomSku = () => {
+  const randomStr = Math.random().toString(36).substring(2, 8).toUpperCase();
+  return `CLONE-${randomStr}`;
 };
 
 const cleanAndParseFloat = (value: any): number => {
@@ -246,7 +252,6 @@ const ProductsPage = () => {
   };
 
   const addProductMutation = useMutation({
-    // ... mantido igual
     mutationFn: async (newProduct: any) => {
       const productData = { ...newProduct };
       if (!productData.sku || productData.sku.trim() === "") delete productData.sku;
@@ -262,8 +267,74 @@ const ProductsPage = () => {
     onError: (error) => showError(error.message),
   });
 
+  const cloneProductMutation = useMutation({
+    mutationFn: async (product: Product) => {
+        const newSku = generateRandomSku();
+        const { data: newProduct, error: productError } = await supabase
+            .from("products")
+            .insert({
+                name: `${product.name} (Cópia)`,
+                sku: newSku,
+                description: product.description,
+                price: product.price,
+                pix_price: product.pix_price,
+                cost_price: product.cost_price,
+                stock_quantity: product.stock_quantity,
+                category: product.category,
+                sub_category: product.sub_category,
+                brand: product.brand,
+                image_url: product.image_url,
+                is_visible: false,
+            })
+            .select()
+            .single();
+        
+        if (productError) throw productError;
+
+        const { data: originalVariants } = await supabase
+            .from("product_variants")
+            .select("*")
+            .eq("product_id", product.id);
+        
+        if (originalVariants && originalVariants.length > 0) {
+            const variantsToInsert = originalVariants.map(v => ({
+                product_id: newProduct.id,
+                flavor_id: v.flavor_id,
+                volume_ml: v.volume_ml,
+                price: v.price,
+                pix_price: v.pix_price,
+                cost_price: v.cost_price,
+                stock_quantity: v.stock_quantity,
+                sku: `${v.sku}-COPY`,
+                is_active: v.is_active
+            }));
+            await supabase.from("product_variants").insert(variantsToInsert);
+        }
+
+        const { data: originalFlavors } = await supabase
+            .from("product_flavors")
+            .select("*")
+            .eq("product_id", product.id);
+        
+        if (originalFlavors && originalFlavors.length > 0) {
+            const flavorsToInsert = originalFlavors.map(f => ({
+                product_id: newProduct.id,
+                flavor_id: f.flavor_id,
+                is_visible: f.is_visible
+            }));
+            await supabase.from("product_flavors").insert(flavorsToInsert);
+        }
+
+        return newProduct;
+    },
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["products"] });
+        showSuccess("Produto clonado com sucesso!");
+    },
+    onError: (err: any) => showError(`Erro ao clonar: ${err.message}`),
+  });
+
   const updateProductMutation = useMutation({
-    // ... mantido igual
     mutationFn: async ({ productId, values }: { productId: number; values: any; }) => {
       const updates = { ...values };
       if (updates.sku === "") updates.sku = null;
@@ -378,6 +449,7 @@ const ProductsPage = () => {
             stock_quantity: parseInt(row.estoque, 10),
             description: row.descrição || null,
             cost_price: cleanAndParseFloat(row.preçodecusto) || null,
+            pix_price: cleanAndParseFloat(row.preçopix) || null,
             category: row.categoria || null,
             sub_category: row.subcategoria || null,
             brand: row.marca || null,
@@ -393,7 +465,7 @@ const ProductsPage = () => {
   };
 
   const handleDownloadTemplate = () => {
-    const headers = ["SKU", "Nome", "Preço de Custo", "Preço de Venda", "Estoque", "Sabores (Separados por vírgula)", "Categoria", "Sub-categoria", "Marca", "Imagem", "Publicado (Sim/Não)"];
+    const headers = ["SKU", "Nome", "Preço de Custo", "Preço de Venda", "Preço Pix", "Estoque", "Sabores (Separados por vírgula)", "Categoria", "Sub-categoria", "Marca", "Imagem", "Publicado (Sim/Não)"];
     const worksheet = XLSX.utils.aoa_to_sheet([headers]);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Template");
@@ -487,7 +559,36 @@ const ProductsPage = () => {
                     ) : <Button variant="ghost" size="icon" disabled><Leaf className="h-4 w-4 text-gray-300" /></Button>}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => { setSelectedProduct(product); setIsEditModalOpen(true); }}><MoreHorizontal className="h-4 w-4 text-primary" /></Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="h-8 w-8 p-0" disabled={cloneProductMutation.isPending}>
+                          <span className="sr-only">Menu</span>
+                          {cloneProductMutation.isPending && selectedProduct?.id === product.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <MoreHorizontal className="h-4 w-4" />}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Opções</DropdownMenuLabel>
+                        <DropdownMenuItem onSelect={() => { setSelectedProduct(product); setIsEditModalOpen(true); }}>
+                          Editar Detalhes
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                            className="text-blue-600 font-medium"
+                            onSelect={() => { setSelectedProduct(product); cloneProductMutation.mutate(product); }}
+                        >
+                          <Copy className="w-4 h-4 mr-2" /> Clonar Produto
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="text-red-600"
+                          onSelect={() => {
+                            setSelectedProduct(product);
+                            setIsDeleteAlertOpen(true);
+                          }}
+                        >
+                          Remover do Catálogo
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableCell>
                 </TableRow>
               ))
