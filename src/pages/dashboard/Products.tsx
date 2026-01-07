@@ -178,8 +178,6 @@ const ProductsPage = () => {
   const [isImportConfirmationModalOpen, setIsImportConfirmationModalOpen] = useState(false);
   const [productsToConfirm, setProductsToConfirm] = useState<ProductImportData[]>([]);
 
-  // Adicionado refetchOnWindowFocus: false para todas as queries
-  // Isso impede que a página recarregue dados (e possivelmente resete estados) ao trocar de aba no navegador
   const { data: products, isLoading: isLoadingProducts } = useQuery<Product[]>({
     queryKey: ["products"],
     queryFn: fetchProducts,
@@ -221,12 +219,10 @@ const ProductsPage = () => {
     mutationFn: async (newProduct: any) => {
       const productData = { ...newProduct };
       
-      // Sanitização: Se SKU estiver vazio, removemos para que o banco gere um automaticamente.
       if (!productData.sku || productData.sku.trim() === "") {
         delete productData.sku;
       }
       
-      // Sanitização: URL de imagem vazia vira null
       if (!productData.image_url || productData.image_url.trim() === "") {
         productData.image_url = null;
       }
@@ -736,6 +732,7 @@ const ProductsPage = () => {
               <TableHead>SKU</TableHead>
               <TableHead>Nome</TableHead>
               <TableHead>Categoria</TableHead>
+              <TableHead>Sub-categoria</TableHead>
               <TableHead>Marca</TableHead>
               <TableHead>Preço de Custo</TableHead>
               <TableHead>Preço de Venda</TableHead>
@@ -769,6 +766,7 @@ const ProductsPage = () => {
                     <TableCell className="font-mono text-sm font-bold">#{product.id}</TableCell>
                     <TableCell className="font-medium">{product.name}</TableCell>
                     <TableCell>{product.category || "N/A"}</TableCell>
+                    <TableCell>{product.sub_category || "-"}</TableCell>
                     <TableCell>
                       {brandData?.image_url ? (
                         <img src={brandData.image_url} alt={brandData.name} className="h-10 w-16 rounded-md object-contain" />
