@@ -8,32 +8,39 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 
-const fetchActivePopup = async () => {
+const fetchActivePopups = async () => {
   const { data, error } = await supabase
     .from("informational_popups")
     .select("*")
     .eq("is_active", true)
-    .limit(1)
-    .single();
+    .order("sort_order", { ascending: true });
 
-  if (error && error.code !== 'PGRST116') { // Ignore no rows found error
-    console.error("Error fetching active popup:", error.message);
-    return null;
+  if (error) {
+    console.error("Error fetching active popups:", error.message);
+    return [];
   }
   return data;
 };
 
 export const InformationalPopup = () => {
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
-  const { data: popup, isLoading } = useQuery({
-    queryKey: ["activeInformationalPopup"],
-    queryFn: fetchActivePopup,
+
+  const { data: popups, isLoading } = useQuery({
+    queryKey: ["activeInformationalPopups"],
+    queryFn: fetchActivePopups,
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
+
+  // Filtra apenas os popups que ainda não foram mostrados nesta sessão
+  const pendingPopups = useMemo(() => {
+    if (!popups) return [];
+    return popups.filter(p => !sessionStorage.getItem(`popup-${p.id}`));
+  }, [popups]);
 
   useEffect(() => {
     const isExcludedRoute = 
@@ -41,43 +48,45 @@ export const InformationalPopup = () => {
       location.pathname === '/' || 
       location.pathname.startsWith('/dashboard');
 
-    if (popup && !isExcludedRoute) {
-      const popupId = `popup-${popup.id}`;
-      const hasBeenShown = sessionStorage.getItem(popupId);
-      if (!hasBeenShown) {
+    if (pendingPopups.length > 0 && !isExcludedRoute && !isOpen) {
         setIsOpen(true);
-      }
-    } else {
-      setIsOpen(false);
     }
-  }, [popup, location.pathname]);
+  }, [pendingPopups, location.pathname, isOpen]);
+
+  const currentPopup = pendingPopups[currentIndex];
 
   const handleClose = () => {
-    if (popup) {
-      const popupId = `popup-${popup.id}`;
-      sessionStorage.setItem(popupId, 'true');
+    if (currentPopup) {
+      sessionStorage.setItem(`popup-${currentPopup.id}`, 'true');
     }
-    setIsOpen(false);
+    
+    // Se houver mais popups na fila, avança. Caso contrário, fecha.
+    if (currentIndex < pendingPopups.length - 1) {
+        setCurrentIndex(prev => prev + 1);
+    } else {
+        setIsOpen(false);
+        setCurrentIndex(0); // Reseta para a próxima vez que a página carregar
+    }
   };
 
-  if (isLoading || !popup || !isOpen) {
+  if (isLoading || !currentPopup || !isOpen) {
     return null;
   }
 
   return (
-    <AlertDialog open={isOpen} onOpenChange={setIsOpen}>
+    <AlertDialog open={isOpen} onOpenChange={(open) => { if(!open) handleClose(); }}>
       <AlertDialogContent className="max-w-[400px]">
         <AlertDialogHeader className="flex flex-col items-center text-center">
-          <AlertDialogTitle className="text-2xl font-black">{popup.title}</AlertDialogTitle>
+          <AlertDialogTitle className="text-2xl font-black">{currentPopup.title}</AlertDialogTitle>
           <AlertDialogDescription className="text-base text-gray-600 w-full">
             <div 
               className="formatted-content"
-              dangerouslySetInnerHTML={{ __html: popup.content }} 
+              dangerouslySetInnerHTML={{ __html: currentPopup.content }} 
             />
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogAction onClick={handleClose} className="w-full font-bold h-12">
-          {popup.button_text}
+          {currentPopup.button_text}
         </AlertDialogAction>
         <style>{`
           .formatted-content p { margin-bottom: 0.5rem; }

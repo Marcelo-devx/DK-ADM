@@ -5,12 +5,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { PopupForm } from "@/components/dashboard/PopupForm";
-import { Trash2, AlertCircle, Info, Plus, Pencil, Eye } from "lucide-react";
+import { Trash2, AlertCircle, Info, Plus, Pencil, Eye, ArrowDownUp } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const PopupsPage = () => {
   const queryClient = useQueryClient();
@@ -24,7 +24,7 @@ const PopupsPage = () => {
       const { data, error } = await supabase
         .from("informational_popups")
         .select("*")
-        .order("created_at", { ascending: false });
+        .order("sort_order", { ascending: true });
       if (error) throw error;
       return data;
     },
@@ -32,13 +32,10 @@ const PopupsPage = () => {
 
   const upsertMutation = useMutation({
     mutationFn: async (values: any) => {
-      // Se estamos em modo preview apenas, não salvamos nada ao clicar no botão do form
       if (isPreviewOnly) return;
-
       const { error } = await supabase
         .from("informational_popups")
         .upsert(values, { onConflict: 'id' });
-      
       if (error) throw error;
     },
     onSuccess: () => {
@@ -66,9 +63,6 @@ const PopupsPage = () => {
   const toggleActiveMutation = useMutation({
     mutationFn: async ({ id, currentState }: { id: number, currentState: boolean }) => {
        const newStatus = !currentState;
-       if (newStatus) {
-         await supabase.from("informational_popups").update({ is_active: false }).neq("id", id);
-       }
        const { error } = await supabase.from("informational_popups").update({ is_active: newStatus }).eq("id", id);
        if (error) throw error;
     },
@@ -133,7 +127,10 @@ const PopupsPage = () => {
               <Card key={popup.id} className={popup.is_active ? "border-green-500 border-2 shadow-xl ring-4 ring-green-500/5 relative overflow-hidden" : "opacity-80 border-dashed"}>
                   <CardHeader className="pb-3 border-b bg-gray-50/50">
                       <CardTitle className="flex justify-between items-start gap-4">
-                          <span className="text-base font-bold line-clamp-1">{popup.title}</span>
+                          <div className="flex items-center gap-2 overflow-hidden">
+                            <Badge variant="outline" className="bg-white shrink-0"><ArrowDownUp className="w-3 h-3 mr-1" /> {popup.sort_order}</Badge>
+                            <span className="text-base font-bold line-clamp-1">{popup.title}</span>
+                          </div>
                           <div className="flex gap-1 shrink-0">
                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleViewPreview(popup)}><Eye className="w-4 h-4 text-gray-500" /></Button>
                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEdit(popup)}><Pencil className="w-4 h-4 text-blue-600" /></Button>
@@ -141,7 +138,7 @@ const PopupsPage = () => {
                       </CardTitle>
                       <div className="flex mt-1">
                         {popup.is_active ? (
-                            <Badge className="bg-green-500 text-[10px] uppercase font-black">Em exibição no site</Badge>
+                            <Badge className="bg-green-500 text-[10px] uppercase font-black">Em exibição</Badge>
                           ) : (
                             <Badge variant="secondary" className="text-[10px] uppercase font-bold">Pausado</Badge>
                           )}
@@ -179,7 +176,6 @@ const PopupsPage = () => {
           <div className="col-span-full text-center py-20 bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200">
               <AlertCircle className="h-10 w-10 mx-auto text-gray-300 mb-4" />
               <h3 className="text-lg font-bold text-gray-400 uppercase tracking-wider">Nenhum aviso criado</h3>
-              <p className="text-gray-400 mt-2">Clique no botão "Novo Aviso" para criar sua primeira mensagem.</p>
           </div>
         )}
       </div>

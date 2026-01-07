@@ -1,0 +1,1 @@
+ALTER TABLE public.informational_popups ADD COLUMN sort_order INTEGER DEFAULT 0;

@@ -19,10 +19,11 @@ import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 
 const formSchema = z.object({
-  id: z.number().optional(), // Adicionado para identificar edições
+  id: z.number().optional(),
   title: z.string().min(2, "O título é obrigatório."),
   content: z.string().min(1, "O conteúdo é obrigatório."),
   button_text: z.string().min(2, "O texto do botão é obrigatório."),
+  sort_order: z.coerce.number().int().default(0),
   is_active: z.boolean().default(true),
 });
 
@@ -60,6 +61,7 @@ export const PopupForm = ({
       title: "",
       content: "",
       button_text: "Entendi",
+      sort_order: 0,
       is_active: true,
     },
   });
@@ -116,19 +118,35 @@ export const PopupForm = ({
               )}
             />
 
-            <FormField
-              control={form.control}
-              name="button_text"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="font-bold">Texto do Botão</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Ex: Entendi" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div className="grid grid-cols-2 gap-4">
+                <FormField
+                    control={form.control}
+                    name="button_text"
+                    render={({ field }) => (
+                        <FormItem>
+                        <FormLabel className="font-bold">Texto do Botão</FormLabel>
+                        <FormControl>
+                            <Input placeholder="Ex: Entendi" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                />
+                <FormField
+                    control={form.control}
+                    name="sort_order"
+                    render={({ field }) => (
+                        <FormItem>
+                        <FormLabel className="font-bold">Ordem (0, 1, 2...)</FormLabel>
+                        <FormControl>
+                            <Input type="number" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                />
+            </div>
+
             <FormField
               control={form.control}
               name="is_active"
@@ -185,9 +203,6 @@ export const PopupForm = ({
             </div>
           </div>
         </div>
-        <p className="text-[11px] text-center text-slate-500 font-medium">
-          O preview acima reflete a formatação e alinhamento reais do editor.
-        </p>
       </div>
 
       <style>{`
