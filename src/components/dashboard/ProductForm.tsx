@@ -25,12 +25,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
-import { CategoryForm } from "./CategoryForm";
-import { PlusCircle, Layers, Info } from "lucide-react";
+import { CategoryForm } from "./category-form";
+import { PlusCircle, Layers, Info, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "../../integrations/supabase/client";
-import { showSuccess, showError } from "../../utils/toast";
+import { supabase } from "@/integrations/supabase/client";
+import { showSuccess, showError } from "@/utils/toast";
 import { ImageUploader } from "./ImageUploader";
 import { Switch } from "../ui/switch";
 import { ProductVariantManager } from "./ProductVariantManager";
@@ -67,6 +67,12 @@ interface ProductFormProps {
   initialData?: ProductFormValues & { is_visible?: boolean };
 }
 
+// Função auxiliar para gerar SKU aleatório
+const generateRandomSku = () => {
+  const randomStr = Math.random().toString(36).substring(2, 8).toUpperCase();
+  return `PROD-${randomStr}`;
+};
+
 export const ProductForm = ({
   onSubmit,
   isSubmitting,
@@ -81,7 +87,7 @@ export const ProductForm = ({
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: initialData || {
-      sku: "",
+      sku: generateRandomSku(), // Gera SKU automaticamente se for novo
       name: "",
       description: "",
       price: 0,
@@ -117,6 +123,12 @@ export const ProductForm = ({
   useEffect(() => {
     if (initialData) {
       form.reset(initialData);
+    } else {
+      // Se não tem dados iniciais (é criação), garante um SKU novo se estiver vazio
+      const currentSku = form.getValues("sku");
+      if (!currentSku) {
+        form.setValue("sku", generateRandomSku());
+      }
     }
   }, [initialData, form]);
 
@@ -143,6 +155,10 @@ export const ProductForm = ({
     onError: (error) => showError(error.message),
   });
 
+  const handleRegenerateSku = () => {
+    form.setValue("sku", generateRandomSku());
+  };
+
   return (
     <div className="space-y-6">
       <Form {...form}>
@@ -160,6 +176,27 @@ export const ProductForm = ({
               )}
               />
               <FormField
+                control={form.control}
+                name="sku"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>SKU (Código do Produto)</FormLabel>
+                    <div className="flex gap-2">
+                      <FormControl>
+                        <Input placeholder="Gerado Automático" {...field} />
+                      </FormControl>
+                      <Button type="button" variant="outline" size="icon" onClick={handleRegenerateSku} title="Gerar novo código">
+                        <RefreshCw className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
               control={form.control}
               name="brand"
               render={({ field }) => (
@@ -175,38 +212,27 @@ export const ProductForm = ({
                   </FormItem>
               )}
               />
+              
+              <FormField
+                control={form.control}
+                name="category"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Categoria</FormLabel>
+                    <div className="flex items-center gap-2">
+                      <Select onValueChange={(value) => { field.onChange(value); form.setValue("sub_category", ""); }} value={field.value} disabled={isLoadingCategories}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
+                        <SelectContent>{categories.map((c) => (<SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>))}</SelectContent>
+                      </Select>
+                      <Button type="button" variant="outline" size="icon" onClick={() => setIsCategoryModalOpen(true)}><PlusCircle className="h-4 w-4" /></Button>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
           </div>
 
-          <FormField
-            control={form.control}
-            name="description"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Descrição Curta</FormLabel>
-                <FormControl><Textarea placeholder="Detalhes gerais..." {...field} /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormField
-              control={form.control}
-              name="category"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Categoria</FormLabel>
-                  <div className="flex items-center gap-2">
-                    <Select onValueChange={(value) => { field.onChange(value); form.setValue("sub_category", ""); }} value={field.value} disabled={isLoadingCategories}>
-                      <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
-                      <SelectContent>{categories.map((c) => (<SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>))}</SelectContent>
-                    </Select>
-                    <Button type="button" variant="outline" size="icon" onClick={() => setIsCategoryModalOpen(true)}><PlusCircle className="h-4 w-4" /></Button>
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
             <FormField
               control={form.control}
               name="sub_category"
@@ -222,6 +248,18 @@ export const ProductForm = ({
               )}
             />
           </div>
+
+          <FormField
+            control={form.control}
+            name="description"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Descrição Curta</FormLabel>
+                <FormControl><Textarea placeholder="Detalhes gerais..." {...field} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
           <div className="border-t pt-6">
               <h4 className="text-sm font-bold flex items-center gap-2 mb-4 text-primary"><Layers className="w-4 h-4" /> Configurações de Variações</h4>
