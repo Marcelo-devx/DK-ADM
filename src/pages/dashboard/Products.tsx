@@ -178,9 +178,12 @@ const ProductsPage = () => {
   const [isImportConfirmationModalOpen, setIsImportConfirmationModalOpen] = useState(false);
   const [productsToConfirm, setProductsToConfirm] = useState<ProductImportData[]>([]);
 
+  // Adicionado refetchOnWindowFocus: false para todas as queries
+  // Isso impede que a página recarregue dados (e possivelmente resete estados) ao trocar de aba no navegador
   const { data: products, isLoading: isLoadingProducts } = useQuery<Product[]>({
     queryKey: ["products"],
     queryFn: fetchProducts,
+    refetchOnWindowFocus: false,
   });
 
   const { data: categories, isLoading: isLoadingCategories } = useQuery<
@@ -188,6 +191,7 @@ const ProductsPage = () => {
   >({
     queryKey: ["categories"],
     queryFn: fetchCategories,
+    refetchOnWindowFocus: false,
   });
 
   const { data: subCategories, isLoading: isLoadingSubCategories } = useQuery<
@@ -195,11 +199,13 @@ const ProductsPage = () => {
   >({
     queryKey: ["subCategories"],
     queryFn: fetchSubCategories,
+    refetchOnWindowFocus: false,
   });
 
   const { data: brands, isLoading: isLoadingBrands } = useQuery<Brand[]>({
     queryKey: ["brands"],
     queryFn: fetchBrands,
+    refetchOnWindowFocus: false,
   });
 
   const filteredProducts = products?.filter(product => {
@@ -248,9 +254,6 @@ const ProductsPage = () => {
     }) => {
       const updates = { ...values };
       
-      // Se SKU estiver vazio, mandamos null (para não conflitar com outro vazio), 
-      // ou mantemos o que estava se o usuário não mexeu. 
-      // Se o usuário apagou o SKU, assumimos que ele quer remover/resetar.
       if (updates.sku === "") {
         updates.sku = null;
       }
@@ -656,6 +659,7 @@ const ProductsPage = () => {
               <DialogContent 
                 className="max-w-4xl max-h-[90vh] overflow-y-auto"
                 onInteractOutside={(e) => e.preventDefault()}
+                onPointerDownOutside={(e) => e.preventDefault()}
                 onEscapeKeyDown={(e) => e.preventDefault()}
               >
                 <DialogHeader>
@@ -845,6 +849,7 @@ const ProductsPage = () => {
         <DialogContent 
             className="max-w-4xl max-h-[90vh] overflow-y-auto"
             onInteractOutside={(e) => e.preventDefault()}
+            onPointerDownOutside={(e) => e.preventDefault()}
             onEscapeKeyDown={(e) => e.preventDefault()}
         >
           <DialogHeader>
