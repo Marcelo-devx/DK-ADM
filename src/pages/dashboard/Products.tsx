@@ -407,7 +407,14 @@ const ProductsPage = () => {
     <div>
       <div className="flex flex-col gap-6 mb-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <h1 className="text-3xl font-bold">Produtos</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold">Produtos</h1>
+            {!isLoadingProducts && (
+              <Badge variant="secondary" className="h-7 px-3 text-sm font-bold bg-gray-100 text-gray-700">
+                {filteredProducts.length} itens
+              </Badge>
+            )}
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <TooltipProvider>
               <Tooltip><TooltipTrigger asChild><Button variant="outline" size="icon" onClick={handleDownloadTemplate}><Upload className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent><p>Baixar modelo</p></TooltipContent></Tooltip>
