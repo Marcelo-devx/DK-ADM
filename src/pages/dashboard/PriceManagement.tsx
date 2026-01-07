@@ -6,13 +6,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DollarSign, Save, Search, QrCode, CreditCard, ChevronDown, ChevronRight, Package, Percent, Zap, Loader2 } from "lucide-react";
+import { DollarSign, Save, Search, QrCode, CreditCard, ChevronDown, ChevronRight, Package, Percent, Zap, Loader2, Palette } from "lucide-react";
 import { useState } from "react";
 import { showSuccess, showError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
 
 const PriceManagementPage = () => {
   const queryClient = useQueryClient();
@@ -27,7 +26,7 @@ const PriceManagementPage = () => {
         .from("products")
         .select(`
           id, name, price, pix_price, brand, category,
-          product_variants (id, flavor_id, volume_ml, price, pix_price, flavors(name))
+          product_variants (id, flavor_id, volume_ml, color, price, pix_price, flavors(name))
         `)
         .order("name");
       if (error) throw error;
@@ -53,8 +52,6 @@ const PriceManagementPage = () => {
 
   const bulkUpdateMutation = useMutation({
     mutationFn: async (percent: number) => {
-        // Busca todos os produtos e variações para atualizar um por um (para garantir precisão)
-        // Em um cenário real com milhares de itens, faríamos via RPC no Postgres.
         const { data: prods } = await supabase.from("products").select("id, price");
         const { data: vars } = await supabase.from("product_variants").select("id, price");
 
@@ -118,7 +115,7 @@ const PriceManagementPage = () => {
           showError("Porcentagem inválida.");
           return;
       }
-      if (confirm(`Isso vai recalcular o preço Pix de TODOS os produtos e variações para ${p}% de desconto sobre o preço normal. Confirmar?`)) {
+      if (confirm(`Isso vai recalcular o preço Pix de TODOS os itens para ${p}% de desconto?`)) {
           bulkUpdateMutation.mutate(p);
       }
   }
@@ -130,7 +127,7 @@ const PriceManagementPage = () => {
           <h1 className="text-3xl font-bold flex items-center gap-2">
             <DollarSign className="h-8 w-8 text-green-600" /> Gestão de Preços
           </h1>
-          <p className="text-muted-foreground text-sm">Ajuste os valores de venda e descontos Pix de todo o catálogo.</p>
+          <p className="text-muted-foreground text-sm">Ajuste os valores de venda e descontos Pix.</p>
         </div>
         <div className="relative w-full md:w-80">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -143,7 +140,6 @@ const PriceManagementPage = () => {
         </div>
       </div>
 
-      {/* Ferramenta de Ajuste em Massa */}
       <Card className="border-orange-200 bg-orange-50/30">
           <CardContent className="p-4 flex flex-col md:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-3">
@@ -183,15 +179,9 @@ const PriceManagementPage = () => {
             <TableRow>
               <TableHead className="w-10"></TableHead>
               <TableHead>Produto / Variação</TableHead>
-              <TableHead className="w-40">
-                <div className="flex items-center gap-2"><CreditCard className="h-4 w-4 text-primary" /> Preço Normal</div>
-              </TableHead>
-              <TableHead className="w-32">
-                <div className="flex items-center gap-2 text-orange-600"><Percent className="h-4 w-4" /> Desconto %</div>
-              </TableHead>
-              <TableHead className="w-40">
-                <div className="flex items-center gap-2 text-green-600"><QrCode className="h-4 w-4" /> Preço Pix</div>
-              </TableHead>
+              <TableHead className="w-40">Preço Normal</TableHead>
+              <TableHead className="w-32">Desconto %</TableHead>
+              <TableHead className="w-40 text-green-600">Preço Pix</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -264,9 +254,11 @@ const PriceManagementPage = () => {
                     <TableRow key={v.id} className="bg-white">
                       <TableCell></TableCell>
                       <TableCell className="pl-8">
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground items-center">
                           <Package className="h-3 w-3" />
-                          <span>{v.flavors?.name || "Padrão"} {v.volume_ml ? `- ${v.volume_ml}ml` : ""}</span>
+                          <span className="font-bold">{v.flavors?.name || "Padrão"}</span>
+                          {v.color && <span className="flex items-center gap-1 opacity-70"><Palette className="w-2.5 h-2.5" /> {v.color}</span>}
+                          {v.volume_ml && <span className="opacity-70">{v.volume_ml}ml</span>}
                         </div>
                       </TableCell>
                       <TableCell>

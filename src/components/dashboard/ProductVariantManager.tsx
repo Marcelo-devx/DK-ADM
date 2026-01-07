@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Package, Ruler, Droplets, Pencil, X, Check, Loader2, Copy, RefreshCcw } from "lucide-react";
+import { Plus, Trash2, Package, Ruler, Droplets, Pencil, X, Check, Loader2, RefreshCcw, Palette } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,6 +17,7 @@ interface Variant {
   id: string;
   flavor_id: number | null;
   volume_ml: number | null;
+  color: string | null;
   sku: string | null;
   price: number;
   pix_price: number | null;
@@ -46,6 +47,7 @@ export const ProductVariantManager = ({
   const [newVariant, setNewVariant] = useState<Partial<Variant & { flavor_name: string }>>({
     flavor_name: "",
     volume_ml: null,
+    color: "",
     sku: "",
     price: basePrice || 0,
     pix_price: basePixPrice || 0,
@@ -53,7 +55,6 @@ export const ProductVariantManager = ({
     stock_quantity: 0,
   });
 
-  // Atualiza os valores padrão do novo item quando os props mudam, se o usuário ainda não tiver editado
   useEffect(() => {
     if (!isAdding) {
         setNewVariant(prev => ({
@@ -79,7 +80,6 @@ export const ProductVariantManager = ({
     enabled: !!productId,
   });
 
-  // Função para verificar se um SKU já existe
   const isSkuTaken = async (sku: string, currentVariantId?: string): Promise<boolean> => {
     if (!sku || sku.trim() === "") return false;
     const cleanSku = sku.trim();
@@ -113,8 +113,7 @@ export const ProductVariantManager = ({
       queryClient.invalidateQueries({ queryKey: ["productVariants", productId] });
       showSuccess("Variação adicionada!");
       setIsAdding(false);
-      // Reset using current base prices
-      setNewVariant({ flavor_name: "", volume_ml: null, sku: "", price: basePrice, pix_price: basePixPrice, cost_price: baseCostPrice, stock_quantity: 0 });
+      setNewVariant({ flavor_name: "", volume_ml: null, color: "", sku: "", price: basePrice, pix_price: basePixPrice, cost_price: baseCostPrice, stock_quantity: 0 });
     },
     onError: (err: any) => showError(err.message),
   });
@@ -175,7 +174,7 @@ export const ProductVariantManager = ({
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
 
   if (!productId) {
-    return <div className="p-4 border-2 border-dashed rounded-lg text-center text-muted-foreground">Salve o produto para habilitar variações (Sabores/ML).</div>;
+    return <div className="p-4 border-2 border-dashed rounded-lg text-center text-muted-foreground">Salve o produto para habilitar variações.</div>;
   }
 
   return (
@@ -185,33 +184,24 @@ export const ProductVariantManager = ({
             <h3 className="text-lg font-bold flex items-center gap-2">
                 <Package className="w-5 h-5" /> Grade de Variações
             </h3>
-            <p className="text-xs text-muted-foreground">Gerencie sabores e preços específicos.</p>
+            <p className="text-xs text-muted-foreground">Gerencie sabores, cores e tamanhos específicos.</p>
         </div>
         <div className="flex gap-2">
-            <TooltipProvider>
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button 
-                            type="button" 
-                            variant="secondary" 
-                            size="sm" 
-                            className="bg-white border text-orange-600 hover:bg-orange-50"
-                            onClick={() => {
-                                if (confirm(`Deseja aplicar os preços base (Venda: ${formatCurrency(basePrice)}, Pix: ${formatCurrency(basePixPrice)}) em TODAS as variações existentes?`)) {
-                                    bulkUpdatePricesMutation.mutate();
-                                }
-                            }}
-                            disabled={bulkUpdatePricesMutation.isPending || !variants || variants.length === 0}
-                        >
-                            {bulkUpdatePricesMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCcw className="w-4 h-4 mr-2" />}
-                            Replicar Preços Base
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                        <p>Copia os preços do produto principal para todas as variações abaixo.</p>
-                    </TooltipContent>
-                </Tooltip>
-            </TooltipProvider>
+            <Button 
+                type="button" 
+                variant="secondary" 
+                size="sm" 
+                className="bg-white border text-orange-600 hover:bg-orange-50"
+                onClick={() => {
+                    if (confirm(`Deseja aplicar os preços base em TODAS as variações?`)) {
+                        bulkUpdatePricesMutation.mutate();
+                    }
+                }}
+                disabled={bulkUpdatePricesMutation.isPending || !variants || variants.length === 0}
+            >
+                {bulkUpdatePricesMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCcw className="w-4 h-4 mr-2" />}
+                Replicar Preços Base
+            </Button>
 
             <Button type="button" variant="outline" size="sm" onClick={() => setIsAdding(!isAdding)}>
             {isAdding ? "Cancelar" : <><Plus className="w-4 h-4 mr-1" /> Adicionar Opção</>}
@@ -220,14 +210,23 @@ export const ProductVariantManager = ({
       </div>
 
       {isAdding && (
-        <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-8 gap-3 p-4 border rounded-lg bg-white shadow-sm animate-in fade-in slide-in-from-top-2">
+        <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-9 gap-3 p-4 border rounded-lg bg-white shadow-sm animate-in fade-in slide-in-from-top-2">
           <div className="space-y-1">
-            <Label className="text-[10px] uppercase font-bold">Escreva o Sabor</Label>
+            <Label className="text-[10px] uppercase font-bold">Sabor</Label>
             <Input 
-                placeholder="Ex: Menta" 
+                placeholder="Menta" 
                 className="h-8" 
                 value={newVariant.flavor_name} 
                 onChange={(e) => setNewVariant({ ...newVariant, flavor_name: e.target.value })} 
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-[10px] uppercase font-bold">Cor</Label>
+            <Input 
+                placeholder="Ex: Vermelho" 
+                className="h-8" 
+                value={newVariant.color || ""} 
+                onChange={(e) => setNewVariant({ ...newVariant, color: e.target.value })} 
             />
           </div>
           <div className="space-y-1">
@@ -236,23 +235,18 @@ export const ProductVariantManager = ({
           </div>
           <div className="space-y-1">
             <Label className="text-[10px] uppercase font-bold">SKU</Label>
-            <Input 
-                className="h-8" 
-                placeholder="Código único"
-                value={newVariant.sku || ""} 
-                onChange={(e) => setNewVariant({ ...newVariant, sku: e.target.value.toUpperCase() })} 
-            />
+            <Input className="h-8" placeholder="Opcional" value={newVariant.sku || ""} onChange={(e) => setNewVariant({ ...newVariant, sku: e.target.value.toUpperCase() })} />
           </div>
           <div className="space-y-1">
-            <Label className="text-[10px] uppercase font-bold">Custo (R$)</Label>
+            <Label className="text-[10px] uppercase font-bold">Custo</Label>
             <Input type="number" step="0.01" className="h-8" value={newVariant.cost_price || ""} onChange={(e) => setNewVariant({ ...newVariant, cost_price: Number(e.target.value) })} />
           </div>
           <div className="space-y-1">
-            <Label className="text-[10px] uppercase font-bold">Venda (R$)</Label>
+            <Label className="text-[10px] uppercase font-bold">Venda</Label>
             <Input type="number" step="0.01" className="h-8" value={newVariant.price || ""} onChange={(e) => setNewVariant({ ...newVariant, price: Number(e.target.value) })} />
           </div>
           <div className="space-y-1">
-            <Label className="text-[10px] uppercase font-bold text-green-600">Pix (R$)</Label>
+            <Label className="text-[10px] uppercase font-bold text-green-600">Pix</Label>
             <Input type="number" step="0.01" className="h-8" value={newVariant.pix_price || ""} onChange={(e) => setNewVariant({ ...newVariant, pix_price: Number(e.target.value) })} />
           </div>
           <div className="space-y-1">
@@ -298,20 +292,37 @@ export const ProductVariantManager = ({
                             <Droplets className="w-3 h-3 text-primary" /> {v.flavors?.name || "Sem Sabor"}
                         </span>
                     )}
-                    {editingId === v.id ? (
-                        <div className="flex items-center gap-1">
-                            <Ruler className="w-3 h-3 text-muted-foreground" />
-                            <Input 
-                                type="number" 
-                                className="h-7 text-xs w-20" 
-                                value={editValues.volume_ml || ""} 
-                                onChange={(e) => setEditValues({ ...editValues, volume_ml: Number(e.target.value) })}
-                                placeholder="ML"
-                            />
-                        </div>
-                    ) : (
-                        v.volume_ml && <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Ruler className="w-3 h-3" /> {v.volume_ml}ml</span>
-                    )}
+                    
+                    <div className="flex flex-wrap gap-2 items-center">
+                        {editingId === v.id ? (
+                            <div className="flex items-center gap-1">
+                                <Palette className="w-3 h-3 text-muted-foreground" />
+                                <Input 
+                                    className="h-7 text-[10px] w-20" 
+                                    value={editValues.color || ""} 
+                                    onChange={(e) => setEditValues({ ...editValues, color: e.target.value })}
+                                    placeholder="Cor..."
+                                />
+                            </div>
+                        ) : (
+                            v.color && <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Palette className="w-3 h-3" /> {v.color}</span>
+                        )}
+
+                        {editingId === v.id ? (
+                            <div className="flex items-center gap-1">
+                                <Ruler className="w-3 h-3 text-muted-foreground" />
+                                <Input 
+                                    type="number" 
+                                    className="h-7 text-[10px] w-16" 
+                                    value={editValues.volume_ml || ""} 
+                                    onChange={(e) => setEditValues({ ...editValues, volume_ml: Number(e.target.value) })}
+                                    placeholder="ML"
+                                />
+                            </div>
+                        ) : (
+                            v.volume_ml && <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Ruler className="w-3 h-3" /> {v.volume_ml}ml</span>
+                        )}
+                    </div>
                   </div>
                 </TableCell>
                 <TableCell>

@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Package, Ruler, Droplets } from "lucide-react";
+import { Package, Ruler, Droplets, Palette } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -22,6 +22,7 @@ interface Variant {
   id: string;
   flavor_id: number | null;
   volume_ml: number | null;
+  color: string | null;
   sku: string | null;
   price: number;
   stock_quantity: number;
@@ -84,7 +85,7 @@ export const ProductVariantViewer = ({
             <Table>
               <TableHeader className="bg-gray-50 sticky top-0 z-10">
                 <TableRow>
-                  <TableHead>Especificação (Sabor / ML)</TableHead>
+                  <TableHead>Especificação</TableHead>
                   <TableHead>SKU</TableHead>
                   <TableHead className="text-center">Preço</TableHead>
                   <TableHead className="text-right">Estoque</TableHead>
@@ -98,11 +99,18 @@ export const ProductVariantViewer = ({
                         <span className="font-bold text-sm flex items-center gap-1">
                           <Droplets className="w-3 h-3 text-primary" /> {v.flavors?.name || "Sem Sabor"}
                         </span>
-                        {v.volume_ml && (
-                          <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                            <Ruler className="w-3 h-3" /> {v.volume_ml}ml
-                          </span>
-                        )}
+                        <div className="flex gap-2">
+                            {v.color && (
+                                <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                    <Palette className="w-3 h-3" /> {v.color}
+                                </span>
+                            )}
+                            {v.volume_ml && (
+                                <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                    <Ruler className="w-3 h-3" /> {v.volume_ml}ml
+                                </span>
+                            )}
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -123,7 +131,7 @@ export const ProductVariantViewer = ({
               </TableBody>
             </Table>
           ) : (
-            <p className="p-10 text-center text-muted-foreground">Nenhuma variação encontrada para este produto.</p>
+            <p className="p-10 text-center text-muted-foreground">Nenhuma variação encontrada.</p>
           )}
         </div>
       </DialogContent>
