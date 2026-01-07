@@ -6,16 +6,19 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DollarSign, Save, Search, QrCode, CreditCard, ChevronDown, ChevronRight, Package, Percent } from "lucide-react";
+import { DollarSign, Save, Search, QrCode, CreditCard, ChevronDown, ChevronRight, Package, Percent, Zap, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { showSuccess, showError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 
 const PriceManagementPage = () => {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedProducts, setExpandedProducts] = useState<Record<number, boolean>>({});
+  const [bulkPercent, setBulkPercent] = useState<string>("10");
 
   const { data: products, isLoading } = useQuery({
     queryKey: ["priceManagementProducts"],
@@ -48,6 +51,36 @@ const PriceManagementPage = () => {
     onError: (err: any) => showError(`Erro: ${err.message}`),
   });
 
+  const bulkUpdateMutation = useMutation({
+    mutationFn: async (percent: number) => {
+        // Busca todos os produtos e variações para atualizar um por um (para garantir precisão)
+        // Em um cenário real com milhares de itens, faríamos via RPC no Postgres.
+        const { data: prods } = await supabase.from("products").select("id, price");
+        const { data: vars } = await supabase.from("product_variants").select("id, price");
+
+        const factor = 1 - (percent / 100);
+
+        if (prods) {
+            for (const p of prods) {
+                const newPix = parseFloat((p.price * factor).toFixed(2));
+                await supabase.from("products").update({ pix_price: newPix }).eq("id", p.id);
+            }
+        }
+
+        if (vars) {
+            for (const v of vars) {
+                const newPix = parseFloat((v.price * factor).toFixed(2));
+                await supabase.from("product_variants").update({ pix_price: newPix }).eq("id", v.id);
+            }
+        }
+    },
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["priceManagementProducts"] });
+        showSuccess("Desconto aplicado a todo o catálogo!");
+    },
+    onError: (err: any) => showError(err.message),
+  });
+
   const handleBlur = (id: any, type: 'product' | 'variant', field: 'price' | 'pix_price', originalValue: number, newValue: string) => {
     const value = parseFloat(newValue.replace(',', '.'));
     if (isNaN(value) || value === originalValue) return;
@@ -58,10 +91,7 @@ const PriceManagementPage = () => {
     const percent = parseFloat(percentValue.replace(',', '.'));
     if (isNaN(percent) || price <= 0) return;
     
-    // Calcula o novo valor Pix baseado na porcentagem: Preço * (1 - %/100)
     const newPixPrice = price * (1 - (percent / 100));
-    
-    // Evita salvar se o valor for o mesmo (considerando arredondamento)
     if (newPixPrice.toFixed(2) === currentPixPrice?.toFixed(2)) return;
 
     updatePriceMutation.mutate({ id, type, field: 'pix_price', value: parseFloat(newPixPrice.toFixed(2)) });
@@ -82,6 +112,17 @@ const PriceManagementPage = () => {
     p.brand?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const handleApplyBulk = () => {
+      const p = parseFloat(bulkPercent);
+      if (isNaN(p) || p < 0 || p > 100) {
+          showError("Porcentagem inválida.");
+          return;
+      }
+      if (confirm(`Isso vai recalcular o preço Pix de TODOS os produtos e variações para ${p}% de desconto sobre o preço normal. Confirmar?`)) {
+          bulkUpdateMutation.mutate(p);
+      }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -101,6 +142,40 @@ const PriceManagementPage = () => {
           />
         </div>
       </div>
+
+      {/* Ferramenta de Ajuste em Massa */}
+      <Card className="border-orange-200 bg-orange-50/30">
+          <CardContent className="p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                  <div className="p-2 bg-orange-100 rounded-lg text-orange-600">
+                      <Zap className="h-5 w-5" />
+                  </div>
+                  <div>
+                      <p className="font-bold text-orange-900">Ajuste em Massa</p>
+                      <p className="text-xs text-orange-700">Defina o desconto Pix padrão para a loja inteira.</p>
+                  </div>
+              </div>
+              <div className="flex items-center gap-3 w-full md:w-auto">
+                  <div className="flex items-center gap-2 bg-white border rounded-lg px-3 py-1 shadow-sm">
+                      <Percent className="h-4 w-4 text-orange-500" />
+                      <Input 
+                        type="number" 
+                        value={bulkPercent} 
+                        onChange={(e) => setBulkPercent(e.target.value)}
+                        className="w-16 border-none focus-visible:ring-0 h-8 font-bold p-0 text-center"
+                      />
+                  </div>
+                  <Button 
+                    onClick={handleApplyBulk} 
+                    disabled={bulkUpdateMutation.isPending}
+                    className="bg-orange-600 hover:bg-orange-700 font-bold h-10 px-6"
+                  >
+                      {bulkUpdateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                      Aplicar em Tudo
+                  </Button>
+              </div>
+          </CardContent>
+      </Card>
 
       <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
         <Table>
@@ -148,6 +223,7 @@ const PriceManagementPage = () => {
                       <div className="relative">
                         <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">R$</span>
                         <Input 
+                          key={`price-${product.id}-${product.price}`}
                           defaultValue={product.price?.toFixed(2)} 
                           onBlur={(e) => handleBlur(product.id, 'product', 'price', product.price, e.target.value)}
                           className="pl-8 h-8 text-sm font-medium"
@@ -159,6 +235,7 @@ const PriceManagementPage = () => {
                       {!hasVariants ? (
                         <div className="relative">
                           <Input 
+                            key={`pct-${product.id}-${product.pix_price}`}
                             defaultValue={calculatePercent(product.price, product.pix_price)}
                             onBlur={(e) => handlePercentBlur(product.id, 'product', product.price, product.pix_price || 0, e.target.value)}
                             className="pr-6 h-8 text-sm text-center font-bold text-orange-600"
@@ -173,6 +250,7 @@ const PriceManagementPage = () => {
                       <div className="relative">
                         <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">R$</span>
                         <Input 
+                          key={`pix-${product.id}-${product.pix_price}`}
                           defaultValue={product.pix_price?.toFixed(2)} 
                           onBlur={(e) => handleBlur(product.id, 'product', 'pix_price', product.pix_price || 0, e.target.value)}
                           className="pl-8 h-8 text-sm font-bold text-green-700 border-green-200 bg-green-50/30"
@@ -195,6 +273,7 @@ const PriceManagementPage = () => {
                         <div className="relative">
                           <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">R$</span>
                           <Input 
+                            key={`v-price-${v.id}-${v.price}`}
                             defaultValue={v.price?.toFixed(2)} 
                             onBlur={(e) => handleBlur(v.id, 'variant', 'price', v.price, e.target.value)}
                             className="pl-8 h-7 text-xs border-dashed"
@@ -204,6 +283,7 @@ const PriceManagementPage = () => {
                       <TableCell>
                         <div className="relative">
                           <Input 
+                            key={`v-pct-${v.id}-${v.pix_price}`}
                             defaultValue={calculatePercent(v.price, v.pix_price)}
                             onBlur={(e) => handlePercentBlur(v.id, 'variant', v.price, v.pix_price || 0, e.target.value)}
                             className="pr-5 h-7 text-xs text-center border-dashed text-orange-600"
@@ -215,6 +295,7 @@ const PriceManagementPage = () => {
                         <div className="relative">
                           <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">R$</span>
                           <Input 
+                            key={`v-pix-${v.id}-${v.pix_price}`}
                             defaultValue={v.pix_price?.toFixed(2)} 
                             onBlur={(e) => handleBlur(v.id, 'variant', 'pix_price', v.pix_price || 0, e.target.value)}
                             className="pl-8 h-7 text-xs font-bold text-green-600 border-dashed border-green-100"
