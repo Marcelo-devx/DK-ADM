@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { PopupForm } from "@/components/dashboard/PopupForm";
-import { Trash2, AlertCircle, Info, Plus } from "lucide-react";
+import { Trash2, AlertCircle, Info, Plus, Pencil, Eye } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 const PopupsPage = () => {
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedPopup, setSelectedPopup] = useState<any>(null);
+  const [isPreviewOnly, setIsPreviewOnly] = useState(false);
 
   const { data: popups, isLoading } = useQuery({
     queryKey: ["popups-admin"],
@@ -28,17 +30,24 @@ const PopupsPage = () => {
     },
   });
 
-  const addMutation = useMutation({
+  const upsertMutation = useMutation({
     mutationFn: async (values: any) => {
-      const { error } = await supabase.from("informational_popups").insert([values]);
-      if (error) throw error;
+      const { id, ...data } = values;
+      if (selectedPopup && !isPreviewOnly) {
+        const { error } = await supabase.from("informational_popups").update(data).eq("id", selectedPopup.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("informational_popups").insert([data]);
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["popups-admin"] });
-      showSuccess("Novo popup informativo criado!");
+      showSuccess(selectedPopup ? "Aviso atualizado!" : "Novo aviso criado!");
       setIsModalOpen(false);
+      setSelectedPopup(null);
     },
-    onError: (err: any) => showError(`Erro ao criar: ${err.message}`),
+    onError: (err: any) => showError(`Erro: ${err.message}`),
   });
 
   const deleteMutation = useMutation({
@@ -56,11 +65,9 @@ const PopupsPage = () => {
   const toggleActiveMutation = useMutation({
     mutationFn: async ({ id, currentState }: { id: number, currentState: boolean }) => {
        const newStatus = !currentState;
-       
        if (newStatus) {
          await supabase.from("informational_popups").update({ is_active: false }).neq("id", id);
        }
-       
        const { error } = await supabase.from("informational_popups").update({ is_active: newStatus }).eq("id", id);
        if (error) throw error;
     },
@@ -68,81 +75,107 @@ const PopupsPage = () => {
         queryClient.invalidateQueries({ queryKey: ["popups-admin"] });
         showSuccess("Status de ativação atualizado!");
     },
-    onError: (err: any) => showError(`Erro ao alterar status: ${err.message}`),
+    onError: (err: any) => showError(`Erro: ${err.message}`),
   });
+
+  const handleEdit = (popup: any) => {
+    setSelectedPopup(popup);
+    setIsPreviewOnly(false);
+    setIsModalOpen(true);
+  };
+
+  const handleViewPreview = (popup: any) => {
+    setSelectedPopup(popup);
+    setIsPreviewOnly(true);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenNew = () => {
+      setSelectedPopup(null);
+      setIsPreviewOnly(false);
+      setIsModalOpen(true);
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Info className="h-8 w-8 text-primary" />
+          <div className="p-2 bg-primary/10 rounded-lg"><Info className="h-6 w-6 text-primary" /></div>
           <h1 className="text-3xl font-bold">Popups Informativos</h1>
         </div>
         
-        <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-            <DialogTrigger asChild>
-                <Button className="bg-primary hover:bg-primary/90">
-                    <Plus className="w-4 h-4 mr-2" /> Novo Aviso
-                </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                    <DialogTitle>Criar Novo Popup Informativo</DialogTitle>
-                </DialogHeader>
-                <PopupForm 
-                    onSubmit={(v) => addMutation.mutate(v)} 
-                    isSubmitting={addMutation.isPending} 
-                />
-            </DialogContent>
-        </Dialog>
+        <Button onClick={handleOpenNew} className="bg-primary hover:bg-primary/90 font-bold h-11 px-6 shadow-lg">
+            <Plus className="w-5 h-5 mr-2" /> Novo Aviso
+        </Button>
       </div>
+
+      <Dialog open={isModalOpen} onOpenChange={(open) => { setIsModalOpen(open); if(!open) setSelectedPopup(null); }}>
+          <DialogContent className="max-w-6xl max-h-[95vh] overflow-y-auto">
+              <DialogHeader>
+                  <DialogTitle className="text-xl font-bold">
+                    {isPreviewOnly ? "Visualizando Aviso" : selectedPopup ? `Editando: ${selectedPopup.title}` : "Criar Novo Popup Informativo"}
+                  </DialogTitle>
+              </DialogHeader>
+              <PopupForm 
+                  onSubmit={(v) => upsertMutation.mutate(v)} 
+                  isSubmitting={upsertMutation.isPending}
+                  initialData={selectedPopup || undefined}
+              />
+          </DialogContent>
+      </Dialog>
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {isLoading ? (
-          Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-48 w-full rounded-xl" />)
+          Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-56 w-full rounded-2xl" />)
         ) : popups && popups.length > 0 ? (
           popups.map(popup => (
-              <Card key={popup.id} className={popup.is_active ? "border-green-500 border-2 shadow-md" : "opacity-75"}>
-                  <CardHeader className="pb-2">
-                      <CardTitle className="flex justify-between items-center text-lg">
-                          <span className="truncate">{popup.title}</span>
-                          {popup.is_active ? (
-                            <Badge className="bg-green-500">Ativo</Badge>
-                          ) : (
-                            <Badge variant="outline">Inativo</Badge>
-                          )}
+              <Card key={popup.id} className={popup.is_active ? "border-green-500 border-2 shadow-xl ring-4 ring-green-500/5 relative overflow-hidden" : "opacity-80 border-dashed"}>
+                  <CardHeader className="pb-3 border-b bg-gray-50/50">
+                      <CardTitle className="flex justify-between items-start gap-4">
+                          <span className="text-base font-bold line-clamp-1">{popup.title}</span>
+                          <div className="flex gap-1 shrink-0">
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleViewPreview(popup)}><Eye className="w-4 h-4 text-gray-500" /></Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEdit(popup)}><Pencil className="w-4 h-4 text-blue-600" /></Button>
+                          </div>
                       </CardTitle>
+                      <div className="flex mt-1">
+                        {popup.is_active ? (
+                            <Badge className="bg-green-500 text-[10px] uppercase font-black">Em exibição no site</Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-[10px] uppercase font-bold">Pausado</Badge>
+                          )}
+                      </div>
                   </CardHeader>
-                  <CardContent className="text-sm text-gray-600 pb-2">
-                      <p className="line-clamp-3 italic">"{popup.content}"</p>
-                      <p className="mt-2 text-xs font-bold text-gray-400 uppercase">Botão: {popup.button_text}</p>
+                  <CardContent className="text-sm text-gray-600 py-4">
+                      <p className="line-clamp-4 italic bg-gray-50 p-3 rounded-lg border border-gray-100">"{popup.content}"</p>
                   </CardContent>
-                  <CardFooter className="flex justify-between pt-2 border-t mt-2">
+                  <CardFooter className="flex justify-between pt-3 border-t bg-gray-50/30">
                       <Button 
                           variant={popup.is_active ? "outline" : "default"}
                           size="sm"
-                          className={popup.is_active ? "text-orange-600 border-orange-200" : "bg-green-600 hover:bg-green-700"}
+                          className={popup.is_active ? "text-orange-600 border-orange-200 hover:bg-orange-50 font-bold" : "bg-green-600 hover:bg-green-700 font-bold"}
                           onClick={() => toggleActiveMutation.mutate({ id: popup.id, currentState: popup.is_active })}
                           disabled={toggleActiveMutation.isPending}
                       >
-                          {popup.is_active ? "Desativar" : "Ativar"}
+                          {popup.is_active ? "Desativar" : "Ativar no Site"}
                       </Button>
                       <Button 
                           variant="ghost" 
                           size="sm" 
                           className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                          onClick={() => { if(confirm("Tem certeza que deseja excluir este aviso?")) deleteMutation.mutate(popup.id); }}
+                          onClick={() => { if(confirm("Deseja realmente apagar este aviso?")) deleteMutation.mutate(popup.id); }}
                           disabled={deleteMutation.isPending}
                       >
-                          <Trash2 className="h-4 w-4 mr-2" /> Excluir
+                          <Trash2 className="h-4 w-4 mr-1" /> Excluir
                       </Button>
                   </CardFooter>
               </Card>
           ))
         ) : (
-          <div className="col-span-full text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed">
-              <AlertCircle className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-              <p className="text-gray-500">Nenhum aviso configurado. Clique em "Novo Aviso" para começar.</p>
+          <div className="col-span-full text-center py-20 bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200">
+              <AlertCircle className="h-10 w-10 mx-auto text-gray-300 mb-4" />
+              <h3 className="text-lg font-bold text-gray-400 uppercase tracking-wider">Nenhum aviso criado</h3>
+              <p className="text-gray-400 mt-2">Clique no botão "Novo Aviso" para criar sua primeira mensagem.</p>
           </div>
         )}
       </div>
