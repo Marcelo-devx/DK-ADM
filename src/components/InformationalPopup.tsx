@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "react-router-dom";
+import { Info } from "lucide-react";
 
 const fetchActivePopups = async () => {
   const { data, error } = await supabase
@@ -33,10 +34,9 @@ export const InformationalPopup = () => {
   const { data: popups, isLoading } = useQuery({
     queryKey: ["activeInformationalPopups"],
     queryFn: fetchActivePopups,
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: 1000 * 60 * 5,
   });
 
-  // Filtra apenas os popups que ainda não foram mostrados nesta sessão
   const pendingPopups = useMemo(() => {
     if (!popups) return [];
     return popups.filter(p => !sessionStorage.getItem(`popup-${p.id}`));
@@ -60,12 +60,11 @@ export const InformationalPopup = () => {
       sessionStorage.setItem(`popup-${currentPopup.id}`, 'true');
     }
     
-    // Se houver mais popups na fila, avança. Caso contrário, fecha.
     if (currentIndex < pendingPopups.length - 1) {
         setCurrentIndex(prev => prev + 1);
     } else {
         setIsOpen(false);
-        setCurrentIndex(0); // Reseta para a próxima vez que a página carregar
+        setCurrentIndex(0);
     }
   };
 
@@ -75,25 +74,52 @@ export const InformationalPopup = () => {
 
   return (
     <AlertDialog open={isOpen} onOpenChange={(open) => { if(!open) handleClose(); }}>
-      <AlertDialogContent className="max-w-[400px]">
-        <AlertDialogHeader className="flex flex-col items-center text-center">
-          <AlertDialogTitle className="text-2xl font-black">{currentPopup.title}</AlertDialogTitle>
-          <AlertDialogDescription className="text-base text-gray-600 w-full">
-            <div 
-              className="formatted-content"
-              dangerouslySetInnerHTML={{ __html: currentPopup.content }} 
-            />
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogAction onClick={handleClose} className="w-full font-bold h-12">
-          {currentPopup.button_text}
-        </AlertDialogAction>
+      <AlertDialogContent className="max-w-[450px] bg-[#0B1221] border-[#1E293B] text-white p-0 overflow-hidden rounded-3xl">
+        <div className="p-8 flex flex-col items-center text-center space-y-6">
+          {/* Ícone Estilo Screenshot */}
+          <div className="bg-[#1E293B] p-4 rounded-2xl">
+            <Info className="h-8 w-8 text-[#0099FF]" />
+          </div>
+
+          <AlertDialogHeader className="w-full flex flex-col items-center">
+            <AlertDialogTitle className="text-3xl font-black italic uppercase tracking-tight leading-tight">
+                {currentPopup.title}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-400 text-base leading-relaxed w-full mt-4">
+              <div 
+                className="formatted-content max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar"
+                dangerouslySetInnerHTML={{ __html: currentPopup.content }} 
+              />
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <AlertDialogAction 
+            onClick={handleClose} 
+            className="w-full bg-[#0099FF] hover:bg-[#0088EE] text-white font-black h-14 rounded-2xl text-lg uppercase shadow-lg shadow-[#0099FF]/20"
+          >
+            {currentPopup.button_text}
+          </AlertDialogAction>
+        </div>
+
         <style>{`
-          .formatted-content p { margin-bottom: 0.5rem; }
+          .formatted-content p { margin-bottom: 0.75rem; }
           .formatted-content p:last-child { margin-bottom: 0; }
           .formatted-content .ql-align-center { text-align: center; }
           .formatted-content .ql-align-right { text-align: right; }
           .formatted-content .ql-align-justify { text-align: justify; }
+          .formatted-content strong { color: white; }
+          
+          .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+          }
+          .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+          }
+          .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+          }
         `}</style>
       </AlertDialogContent>
     </AlertDialog>

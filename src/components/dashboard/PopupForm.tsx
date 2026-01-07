@@ -13,7 +13,7 @@ import {
 import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
 import { useEffect } from "react";
-import { Eye, Smartphone, Monitor } from "lucide-react";
+import { Eye, Smartphone, Monitor, Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
@@ -171,7 +171,7 @@ export const PopupForm = ({
         </Form>
       </div>
 
-      {/* Preview */}
+      {/* Preview Real Style */}
       <div className="lg:col-span-3 flex flex-col space-y-4">
         <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-sm font-black text-gray-500 uppercase tracking-widest">
@@ -183,20 +183,25 @@ export const PopupForm = ({
             </div>
         </div>
         
-        <div className="flex-1 flex items-center justify-center bg-slate-200 rounded-2xl border-4 border-white shadow-inner p-4 min-h-[450px]">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-[400px] overflow-hidden border animate-in zoom-in-95 duration-300">
+        <div className="flex-1 flex items-center justify-center bg-slate-100 rounded-2xl border-4 border-white shadow-inner p-4 min-h-[500px]">
+          <div className="bg-[#0B1221] rounded-[2.5rem] shadow-2xl w-full max-w-[420px] overflow-hidden border-[#1E293B] border animate-in zoom-in-95 duration-300">
             <div className="p-8 flex flex-col items-center text-center space-y-6">
-              <h3 className="text-2xl font-black text-gray-900 leading-tight">
+              
+              <div className="bg-[#1E293B] p-4 rounded-2xl">
+                <Info className="h-8 w-8 text-[#0099FF]" />
+              </div>
+
+              <h3 className="text-3xl font-black text-white italic uppercase tracking-tight leading-tight">
                 {watchedValues.title || "Título do Seu Aviso"}
               </h3>
               
               <div 
-                className="text-base text-gray-600 leading-relaxed w-full ql-editor-preview"
+                className="text-gray-400 text-base leading-relaxed w-full ql-editor-preview custom-scrollbar-preview max-h-[300px] overflow-y-auto pr-2"
                 dangerouslySetInnerHTML={{ __html: watchedValues.content || "Digite o conteúdo ao lado..." }}
               />
               
               <div className="w-full pt-4">
-                <Button className="w-full h-12 text-md font-bold rounded-lg pointer-events-none shadow-lg">
+                <Button className="w-full h-14 bg-[#0099FF] hover:bg-[#0088EE] text-white font-black rounded-2xl text-lg uppercase shadow-lg shadow-[#0099FF]/20 pointer-events-none">
                   {watchedValues.button_text || "Entendi"}
                 </Button>
               </div>
@@ -211,11 +216,20 @@ export const PopupForm = ({
             height: auto !important;
             overflow: visible !important;
         }
-        .ql-editor-preview * {
-            margin-bottom: 0.5rem;
+        .ql-editor-preview p { margin-bottom: 0.75rem; }
+        .ql-editor-preview p:last-child { margin-bottom: 0; }
+        .ql-editor-preview strong { color: white; }
+        
+        .custom-scrollbar-preview::-webkit-scrollbar {
+            width: 4px;
         }
-        .ql-editor-preview *:last-child {
-            margin-bottom: 0;
+        .custom-scrollbar-preview::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+        }
+        .custom-scrollbar-preview::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
         }
       `}</style>
     </div>
