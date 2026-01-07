@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../../integrations/supabase/client";
 import { Button } from "../../components/ui/button";
@@ -37,14 +37,16 @@ import {
 } from "@/components/ui/alert-dialog";
 import { SalesPopupForm } from "../../components/dashboard/SalesPopupForm";
 import { showSuccess, showError } from "../../utils/toast";
-import { PlusCircle, MoreHorizontal, ShoppingCart, ImageOff } from "lucide-react";
+import { PlusCircle, MoreHorizontal, ShoppingCart, ImageOff, Timer, Save, Loader2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 type SalesPopup = {
   id: number;
   customer_name: string;
-  product_id: number | null; // Adicionado
+  product_id: number | null;
   product_name: string;
   product_image_url: string | null;
   time_ago: string;
@@ -80,6 +82,7 @@ const SalesPopupsPage = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
   const [selectedPopup, setSelectedPopup] = useState<SalesPopup | null>(null);
+  const [popupInterval, setPopupInterval] = useState<string>("20");
 
   const { data: popups, isLoading } = useQuery<SalesPopup[]>({
     queryKey: ["sales_popups"],
@@ -89,6 +92,30 @@ const SalesPopupsPage = () => {
   const { data: products, isLoading: isLoadingProducts } = useQuery<ProductOption[]>({
     queryKey: ["productsForSalesPopup"],
     queryFn: fetchProducts,
+  });
+
+  const { data: settings } = useQuery({
+    queryKey: ["sales_popup_settings"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", "sales_popup_interval")
+        .single();
+      if (data) setPopupInterval(data.value);
+      return data;
+    }
+  });
+
+  const updateIntervalMutation = useMutation({
+    mutationFn: async (val: string) => {
+      const { error } = await supabase
+        .from("app_settings")
+        .upsert({ key: "sales_popup_interval", value: val }, { onConflict: "key" });
+      if (error) throw error;
+    },
+    onSuccess: () => showSuccess("Intervalo atualizado!"),
+    onError: (err: any) => showError(err.message),
   });
 
   const upsertMutation = useMutation({
@@ -110,7 +137,7 @@ const SalesPopupsPage = () => {
   const deleteMutation = useMutation({
     mutationFn: async (popupId: number) => {
       const { error } = await supabase.from("sales_popups").delete().eq("id", popupId);
-      if (error) throw new Error(error.message);
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sales_popups"] });
@@ -138,39 +165,67 @@ const SalesPopupsPage = () => {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
         <div className="flex items-center gap-2">
           <ShoppingCart className="h-7 w-7" />
           <h1 className="text-3xl font-bold">Popups de Venda (Prova Social)</h1>
         </div>
-        <Dialog
-          open={isModalOpen}
-          onOpenChange={(isOpen) => {
-            setIsModalOpen(isOpen);
-            if (!isOpen) setSelectedPopup(null);
-          }}
-        >
-          <DialogTrigger asChild>
-            <Button>
-              <PlusCircle className="w-4 h-4 mr-2" />
-              Adicionar Popup
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-lg">
-            <DialogHeader>
-              <DialogTitle>
-                {selectedPopup ? "Editar Popup de Venda" : "Adicionar Novo Popup de Venda"}
-              </DialogTitle>
-            </DialogHeader>
-            <SalesPopupForm
-              onSubmit={handleFormSubmit}
-              isSubmitting={upsertMutation.isPending}
-              initialData={selectedPopup || undefined}
-              products={products || []}
-              isLoadingProducts={isLoadingProducts}
-            />
-          </DialogContent>
-        </Dialog>
+
+        <div className="flex items-center gap-4 bg-white p-2 rounded-lg border shadow-sm px-4">
+            <div className="flex flex-col">
+                <Label className="text-[10px] font-black uppercase text-muted-foreground flex items-center gap-1">
+                    <Timer className="w-3 h-3" /> Intervalo (Seg)
+                </Label>
+                <div className="flex items-center gap-2 mt-1">
+                    <Input 
+                        type="number" 
+                        value={popupInterval} 
+                        onChange={(e) => setPopupInterval(e.target.value)}
+                        className="w-20 h-8 font-bold"
+                    />
+                    <Button 
+                        size="sm" 
+                        variant="secondary" 
+                        className="h-8 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                        onClick={() => updateIntervalMutation.mutate(popupInterval)}
+                        disabled={updateIntervalMutation.isPending}
+                    >
+                        {updateIntervalMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                    </Button>
+                </div>
+            </div>
+            
+            <div className="border-l pl-4 flex items-center h-full">
+                <Dialog
+                open={isModalOpen}
+                onOpenChange={(isOpen) => {
+                    setIsModalOpen(isOpen);
+                    if (!isOpen) setSelectedPopup(null);
+                }}
+                >
+                <DialogTrigger asChild>
+                    <Button>
+                    <PlusCircle className="w-4 h-4 mr-2" />
+                    Adicionar Popup
+                    </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-lg">
+                    <DialogHeader>
+                    <DialogTitle>
+                        {selectedPopup ? "Editar Popup de Venda" : "Adicionar Novo Popup de Venda"}
+                    </DialogTitle>
+                    </DialogHeader>
+                    <SalesPopupForm
+                    onSubmit={handleFormSubmit}
+                    isSubmitting={upsertMutation.isPending}
+                    initialData={selectedPopup || undefined}
+                    products={products || []}
+                    isLoadingProducts={isLoadingProducts}
+                    />
+                </DialogContent>
+                </Dialog>
+            </div>
+        </div>
       </div>
 
       <div className="bg-white rounded-lg shadow">

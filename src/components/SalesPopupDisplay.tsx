@@ -26,11 +26,28 @@ const fetchActiveSalesPopups = async () => {
   return data as SalesPopup[];
 };
 
+const fetchPopupInterval = async () => {
+  const { data, error } = await supabase
+    .from("app_settings")
+    .select("value")
+    .eq("key", "sales_popup_interval")
+    .single();
+  
+  if (error || !data) return 20; // Default: 20 seconds
+  return parseInt(data.value, 10) || 20;
+};
+
 export const SalesPopupDisplay = () => {
-  const { data: popups, isLoading } = useQuery({
+  const { data: popups, isLoading: isLoadingPopups } = useQuery({
     queryKey: ["activeSalesPopups"],
     queryFn: fetchActiveSalesPopups,
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const { data: intervalSeconds } = useQuery({
+    queryKey: ["salesPopupIntervalSetting"],
+    queryFn: fetchPopupInterval,
+    staleTime: 1000 * 60 * 10,
   });
 
   const isMobile = useIsMobile();
@@ -38,32 +55,32 @@ export const SalesPopupDisplay = () => {
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    if (isLoading || !popups || popups.length === 0) return;
+    if (isLoadingPopups || !popups || popups.length === 0) return;
 
     let showTimeout: ReturnType<typeof setTimeout>;
     let hideTimeout: ReturnType<typeof setTimeout>;
     let interval: ReturnType<typeof setTimeout>;
 
     const displayRandomPopup = () => {
-      // 1. Seleciona um popup aleatório
       const randomIndex = Math.floor(Math.random() * popups.length);
       const selectedPopup = popups[randomIndex];
       setCurrentPopup(selectedPopup);
 
-      // 2. Mostra o popup
       setIsVisible(true);
 
-      // 3. Esconde o popup após 8 segundos
+      // Esconde após 8 segundos
       hideTimeout = setTimeout(() => {
         setIsVisible(false);
       }, 8000);
 
-      // 4. Agenda o próximo popup para aparecer após 15 a 30 segundos
-      const nextDelay = Math.random() * (30000 - 15000) + 15000;
+      // Agenda o próximo baseado na configuração (entre 80% e 120% do tempo definido para variar um pouco)
+      const baseMs = (intervalSeconds || 20) * 1000;
+      const variation = Math.random() * (1.2 - 0.8) + 0.8;
+      const nextDelay = baseMs * variation;
+      
       interval = setTimeout(displayRandomPopup, nextDelay);
     };
 
-    // Inicia o ciclo após um pequeno atraso inicial (5 segundos)
     showTimeout = setTimeout(displayRandomPopup, 5000);
 
     return () => {
@@ -71,9 +88,9 @@ export const SalesPopupDisplay = () => {
       clearTimeout(hideTimeout);
       clearTimeout(interval);
     };
-  }, [popups, isLoading]);
+  }, [popups, isLoadingPopups, intervalSeconds]);
 
-  if (isLoading || !currentPopup) {
+  if (isLoadingPopups || !currentPopup) {
     return null;
   }
 
@@ -82,7 +99,7 @@ export const SalesPopupDisplay = () => {
       className={cn(
         "fixed bottom-4 left-4 z-50 max-w-xs w-full bg-white dark:bg-gray-800 shadow-xl rounded-lg p-3 transition-all duration-500 transform",
         isVisible ? "translate-y-0 opacity-100" : "translate-y-full opacity-0",
-        isMobile ? "bottom-16" : "bottom-4" // Ajusta a posição para não cobrir a barra de navegação móvel, se houver
+        isMobile ? "bottom-16" : "bottom-4"
       )}
       role="alert"
     >
