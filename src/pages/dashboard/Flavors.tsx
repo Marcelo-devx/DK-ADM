@@ -39,7 +39,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { FlavorForm } from "@/components/dashboard/flavor-form";
 import { showSuccess, showError } from "@/utils/toast";
-import { PlusCircle, MoreHorizontal, Palette } from "lucide-react";
+import { PlusCircle, MoreHorizontal, Leaf } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 
@@ -86,7 +86,7 @@ const FlavorsPage = () => {
     ...mutationOptions,
     onSuccess: () => {
       mutationOptions.onSuccess();
-      showSuccess("Sabor/Cor salvo com sucesso!");
+      showSuccess("Sabor salvo com sucesso!");
     },
   });
 
@@ -98,10 +98,10 @@ const FlavorsPage = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["flavors"] });
       setIsDeleteAlertOpen(false);
-      showSuccess("Removido com sucesso!");
+      showSuccess("Sabor removido com sucesso!");
     },
     onError: (error) => {
-      showError(`Erro ao remover: ${error.message}`);
+      showError(`Erro ao remover sabor: ${error.message}`);
     },
   });
 
@@ -122,7 +122,7 @@ const FlavorsPage = () => {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-bold flex items-center gap-2"><Palette className="h-7 w-7" /> Sabores e Cores</h1>
+        <h1 className="text-3xl font-bold flex items-center gap-2"><Leaf className="h-7 w-7" /> Sabores</h1>
         <Dialog
           open={isModalOpen}
           onOpenChange={(isOpen) => {
@@ -133,12 +133,12 @@ const FlavorsPage = () => {
           <DialogTrigger asChild>
             <Button>
               <PlusCircle className="w-4 h-4 mr-2" />
-              Adicionar Novo
+              Adicionar Sabor
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
-              <DialogTitle>{selectedFlavor ? "Editar" : "Adicionar Novo Sabor ou Cor"}</DialogTitle>
+              <DialogTitle>{selectedFlavor ? "Editar Sabor" : "Adicionar Novo Sabor"}</DialogTitle>
             </DialogHeader>
             <FlavorForm
               onSubmit={handleFormSubmit}
@@ -163,7 +163,7 @@ const FlavorsPage = () => {
             {isLoading ? (
               <TableRow>
                 <TableCell colSpan={4} className="text-center">
-                  Carregando...
+                  Carregando sabores...
                 </TableCell>
               </TableRow>
             ) : flavors && flavors.length > 0 ? (
@@ -221,7 +221,7 @@ const FlavorsPage = () => {
             ) : (
               <TableRow>
                 <TableCell colSpan={4} className="text-center">
-                  Nada encontrado.
+                  Nenhum sabor encontrado.
                 </TableCell>
               </TableRow>
             )}
@@ -234,7 +234,7 @@ const FlavorsPage = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
             <AlertDialogDescription>
-              Essa ação removerá permanentemente este atributo do sistema.
+              Essa ação removerá permanentemente o sabor e a associação com todos os produtos.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

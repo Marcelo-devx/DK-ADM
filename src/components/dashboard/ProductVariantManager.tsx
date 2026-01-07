@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Package, Ruler, Palette, Pencil, X, Check, Loader2, RefreshCcw } from "lucide-react";
+import { Plus, Trash2, Package, Ruler, Droplets, Pencil, X, Check, Loader2, Copy, RefreshCcw } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -53,6 +53,7 @@ export const ProductVariantManager = ({
     stock_quantity: 0,
   });
 
+  // Atualiza os valores padrão do novo item quando os props mudam, se o usuário ainda não tiver editado
   useEffect(() => {
     if (!isAdding) {
         setNewVariant(prev => ({
@@ -78,6 +79,7 @@ export const ProductVariantManager = ({
     enabled: !!productId,
   });
 
+  // Função para verificar se um SKU já existe
   const isSkuTaken = async (sku: string, currentVariantId?: string): Promise<boolean> => {
     if (!sku || sku.trim() === "") return false;
     const cleanSku = sku.trim();
@@ -111,6 +113,7 @@ export const ProductVariantManager = ({
       queryClient.invalidateQueries({ queryKey: ["productVariants", productId] });
       showSuccess("Variação adicionada!");
       setIsAdding(false);
+      // Reset using current base prices
       setNewVariant({ flavor_name: "", volume_ml: null, sku: "", price: basePrice, pix_price: basePixPrice, cost_price: baseCostPrice, stock_quantity: 0 });
     },
     onError: (err: any) => showError(err.message),
@@ -143,6 +146,26 @@ export const ProductVariantManager = ({
     },
   });
 
+  const bulkUpdatePricesMutation = useMutation({
+    mutationFn: async () => {
+        if (!productId) throw new Error("Produto não identificado.");
+        const { error } = await supabase
+            .from("product_variants")
+            .update({ 
+                price: basePrice, 
+                pix_price: basePixPrice, 
+                cost_price: baseCostPrice 
+            })
+            .eq("product_id", productId);
+        if (error) throw error;
+    },
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["productVariants", productId] });
+        showSuccess("Preços atualizados em todas as variações!");
+    },
+    onError: (err: any) => showError(`Erro ao atualizar em massa: ${err.message}`),
+  });
+
   const startEditing = (v: Variant) => {
     setEditingId(v.id);
     setEditValues({ ...v, flavor_name: v.flavors?.name || "" });
@@ -152,7 +175,7 @@ export const ProductVariantManager = ({
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
 
   if (!productId) {
-    return <div className="p-4 border-2 border-dashed rounded-lg text-center text-muted-foreground">Salve o produto para habilitar variações (Sabores, Cores, ML).</div>;
+    return <div className="p-4 border-2 border-dashed rounded-lg text-center text-muted-foreground">Salve o produto para habilitar variações (Sabores/ML).</div>;
   }
 
   return (
@@ -162,36 +185,67 @@ export const ProductVariantManager = ({
             <h3 className="text-lg font-bold flex items-center gap-2">
                 <Package className="w-5 h-5" /> Grade de Variações
             </h3>
-            <p className="text-xs text-muted-foreground">Cadastre múltiplos sabores ou cores para este item.</p>
+            <p className="text-xs text-muted-foreground">Gerencie sabores e preços específicos.</p>
         </div>
-        <Button type="button" variant="outline" size="sm" onClick={() => setIsAdding(!isAdding)}>
-          {isAdding ? "Cancelar" : <><Plus className="w-4 h-4 mr-1" /> Adicionar Sabor/Cor</>}
-        </Button>
+        <div className="flex gap-2">
+            <TooltipProvider>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button 
+                            type="button" 
+                            variant="secondary" 
+                            size="sm" 
+                            className="bg-white border text-orange-600 hover:bg-orange-50"
+                            onClick={() => {
+                                if (confirm(`Deseja aplicar os preços base (Venda: ${formatCurrency(basePrice)}, Pix: ${formatCurrency(basePixPrice)}) em TODAS as variações existentes?`)) {
+                                    bulkUpdatePricesMutation.mutate();
+                                }
+                            }}
+                            disabled={bulkUpdatePricesMutation.isPending || !variants || variants.length === 0}
+                        >
+                            {bulkUpdatePricesMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCcw className="w-4 h-4 mr-2" />}
+                            Replicar Preços Base
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>Copia os preços do produto principal para todas as variações abaixo.</p>
+                    </TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+
+            <Button type="button" variant="outline" size="sm" onClick={() => setIsAdding(!isAdding)}>
+            {isAdding ? "Cancelar" : <><Plus className="w-4 h-4 mr-1" /> Adicionar Opção</>}
+            </Button>
+        </div>
       </div>
 
       {isAdding && (
         <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-8 gap-3 p-4 border rounded-lg bg-white shadow-sm animate-in fade-in slide-in-from-top-2">
-          <div className="space-y-1 lg:col-span-2">
-            <Label className="text-[10px] uppercase font-bold">Sabor ou Cor</Label>
+          <div className="space-y-1">
+            <Label className="text-[10px] uppercase font-bold">Escreva o Sabor</Label>
             <Input 
-                placeholder="Ex: Menta / Vermelho" 
+                placeholder="Ex: Menta" 
                 className="h-8" 
                 value={newVariant.flavor_name} 
                 onChange={(e) => setNewVariant({ ...newVariant, flavor_name: e.target.value })} 
             />
           </div>
           <div className="space-y-1">
-            <Label className="text-[10px] uppercase font-bold">Volume (ML)</Label>
-            <Input type="number" className="h-8" value={newVariant.volume_ml || ""} onChange={(e) => setNewVariant({ ...newVariant, volume_ml: Number(e.target.value) || null })} />
+            <Label className="text-[10px] uppercase font-bold">ML</Label>
+            <Input type="number" className="h-8" value={newVariant.volume_ml || ""} onChange={(e) => setNewVariant({ ...newVariant, volume_ml: Number(e.target.value) })} />
           </div>
           <div className="space-y-1">
             <Label className="text-[10px] uppercase font-bold">SKU</Label>
             <Input 
                 className="h-8" 
-                placeholder="Código"
+                placeholder="Código único"
                 value={newVariant.sku || ""} 
                 onChange={(e) => setNewVariant({ ...newVariant, sku: e.target.value.toUpperCase() })} 
             />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-[10px] uppercase font-bold">Custo (R$)</Label>
+            <Input type="number" step="0.01" className="h-8" value={newVariant.cost_price || ""} onChange={(e) => setNewVariant({ ...newVariant, cost_price: Number(e.target.value) })} />
           </div>
           <div className="space-y-1">
             <Label className="text-[10px] uppercase font-bold">Venda (R$)</Label>
@@ -217,7 +271,7 @@ export const ProductVariantManager = ({
         <Table>
           <TableHeader className="bg-gray-50">
             <TableRow>
-              <TableHead>Sabor / Cor / Especificação</TableHead>
+              <TableHead>Especificação</TableHead>
               <TableHead>SKU</TableHead>
               <TableHead className="w-24 text-center">Venda</TableHead>
               <TableHead className="w-24 text-center text-green-600">Pix</TableHead>
@@ -237,19 +291,36 @@ export const ProductVariantManager = ({
                             className="h-7 text-xs font-bold" 
                             value={editValues.flavor_name || ""} 
                             onChange={(e) => setEditValues({ ...editValues, flavor_name: e.target.value })}
-                            placeholder="Sabor ou Cor..."
+                            placeholder="Sabor..."
                         />
                     ) : (
                         <span className="font-bold flex items-center gap-1 text-gray-800 text-xs">
-                            <Palette className="w-3 h-3 text-primary" /> {v.flavors?.name || "Padrão"}
+                            <Droplets className="w-3 h-3 text-primary" /> {v.flavors?.name || "Sem Sabor"}
                         </span>
                     )}
-                    {v.volume_ml && !editingId && <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Ruler className="w-3 h-3" /> {v.volume_ml}ml</span>}
+                    {editingId === v.id ? (
+                        <div className="flex items-center gap-1">
+                            <Ruler className="w-3 h-3 text-muted-foreground" />
+                            <Input 
+                                type="number" 
+                                className="h-7 text-xs w-20" 
+                                value={editValues.volume_ml || ""} 
+                                onChange={(e) => setEditValues({ ...editValues, volume_ml: Number(e.target.value) })}
+                                placeholder="ML"
+                            />
+                        </div>
+                    ) : (
+                        v.volume_ml && <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Ruler className="w-3 h-3" /> {v.volume_ml}ml</span>
+                    )}
                   </div>
                 </TableCell>
                 <TableCell>
                   {editingId === v.id ? (
-                    <Input className="h-7 text-[10px] font-mono p-1" value={editValues.sku || ""} onChange={(e) => setEditValues({ ...editValues, sku: e.target.value.toUpperCase() })} />
+                    <Input 
+                        className="h-7 text-[10px] font-mono p-1" 
+                        value={editValues.sku || ""} 
+                        onChange={(e) => setEditValues({ ...editValues, sku: e.target.value.toUpperCase() })} 
+                    />
                   ) : (
                     <span className="font-mono text-[10px] text-muted-foreground bg-gray-100 px-1 rounded">{v.sku || "-"}</span>
                   )}
