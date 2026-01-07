@@ -65,7 +65,7 @@ interface ProductFormProps {
   brands: { id: number; name: string }[];
   isLoadingBrands: boolean;
   initialData?: ProductFormValues & { is_visible?: boolean };
-  existingProducts?: any[]; // Adicionado para permitir clonagem
+  existingProducts?: any[]; 
 }
 
 const generateRandomSku = () => {
@@ -162,22 +162,21 @@ export const ProductForm = ({
   const handleCloneProduct = (productIdStr: string) => {
     const productToClone = existingProducts.find(p => String(p.id) === productIdStr);
     if (productToClone) {
-        // Remove campos que não devem ser clonados para um novo registro
         const { id, created_at, updated_at, flavor_count, variants: v, variant_prices, variant_costs, ...cloneData } = productToClone;
         
         form.reset({
             ...cloneData,
-            sku: generateRandomSku(), // Sempre gera um novo SKU
-            stock_quantity: 0, // Reseta estoque por segurança
+            name: `${cloneData.name} (Cópia)`,
+            sku: generateRandomSku(), 
+            stock_quantity: 0, 
             is_visible: cloneData.is_visible ?? true,
         });
-        showSuccess(`Dados de "${productToClone.name}" copiados com sucesso!`);
+        showSuccess(`Dados de "${productToClone.name}" copiados! Ajuste o nome e o SKU se desejar.`);
     }
   };
 
   return (
     <div className="space-y-6">
-      {/* Botão de Clonagem (Apenas se for criação de novo produto) */}
       {!initialData && existingProducts.length > 0 && (
         <div className="bg-primary/5 p-4 rounded-xl border border-primary/10 flex flex-col sm:flex-row items-center gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
             <div className="flex items-center gap-3">
@@ -186,7 +185,7 @@ export const ProductForm = ({
                 </div>
                 <div>
                     <p className="text-sm font-bold text-primary">Clonar Produto Existente</p>
-                    <p className="text-[10px] text-muted-foreground uppercase font-medium">Economize tempo copiando dados de outro item</p>
+                    <p className="text-[10px] text-muted-foreground uppercase font-medium">Os dados serão copiados para um novo registro</p>
                 </div>
             </div>
             <div className="flex-1 w-full">
