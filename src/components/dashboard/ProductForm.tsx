@@ -109,6 +109,11 @@ export const ProductForm = ({
   const selectedCategoryName = form.watch("category");
   const productId = initialData?.id;
 
+  // Watch price fields to pass them down
+  const currentPrice = form.watch("price");
+  const currentPixPrice = form.watch("pix_price");
+  const currentCostPrice = form.watch("cost_price");
+
   const { data: variants } = useQuery({
     queryKey: ["productVariants", productId],
     queryFn: async () => {
@@ -261,56 +266,67 @@ export const ProductForm = ({
             )}
           />
 
-          <div className="border-t pt-6">
-              <h4 className="text-sm font-bold flex items-center gap-2 mb-4 text-primary"><Layers className="w-4 h-4" /> Configurações de Variações</h4>
-              <ProductVariantManager productId={productId} />
-          </div>
-
           <Separator />
 
-          {hasVariants ? (
-            <Alert className="bg-primary/5 border-primary/20">
-                <Info className="h-4 w-4 text-primary" />
-                <AlertTitle className="text-primary font-bold">Valores Automáticos</AlertTitle>
-                <AlertDescription className="text-xs text-muted-foreground">
-                    Este produto possui variações. O estoque total e os preços são gerenciados individualmente por cada variação acima.
-                </AlertDescription>
-            </Alert>
-          ) : (
-            <div className="bg-gray-50 p-4 rounded-lg space-y-4">
-                <p className="text-xs font-bold uppercase text-gray-500">Valores Globais (Para produtos simples)</p>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <FormField
-                        control={form.control}
-                        name="price"
-                        render={({ field }) => (
-                        <FormItem><FormLabel>Venda</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>
-                        )}
-                    />
-                    <FormField
-                        control={form.control}
-                        name="pix_price"
-                        render={({ field }) => (
-                        <FormItem><FormLabel>Preço Pix</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>
-                        )}
-                    />
-                    <FormField
-                        control={form.control}
-                        name="cost_price"
-                        render={({ field }) => (
-                        <FormItem><FormLabel>Custo</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>
-                        )}
-                    />
-                    <FormField
-                        control={form.control}
-                        name="stock_quantity"
-                        render={({ field }) => (
-                        <FormItem><FormLabel>Estoque</FormLabel><FormControl><Input type="number" {...field} /></FormControl></FormItem>
-                        )}
-                    />
-                </div>
-            </div>
-          )}
+          <div className="bg-gray-50 p-4 rounded-lg space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold uppercase text-gray-500">Valores Padrão / Base</p>
+                {hasVariants && (
+                    <Badge variant="secondary" className="text-[10px]">Usado como padrão para novas variações</Badge>
+                )}
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <FormField
+                      control={form.control}
+                      name="price"
+                      render={({ field }) => (
+                      <FormItem><FormLabel>Venda</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>
+                      )}
+                  />
+                  <FormField
+                      control={form.control}
+                      name="pix_price"
+                      render={({ field }) => (
+                      <FormItem><FormLabel>Preço Pix</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>
+                      )}
+                  />
+                  <FormField
+                      control={form.control}
+                      name="cost_price"
+                      render={({ field }) => (
+                      <FormItem><FormLabel>Custo</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>
+                      )}
+                  />
+                  <FormField
+                      control={form.control}
+                      name="stock_quantity"
+                      render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Estoque</FormLabel>
+                        <FormControl>
+                            <Input 
+                                type="number" 
+                                {...field} 
+                                disabled={hasVariants} 
+                                className={hasVariants ? "bg-gray-100 opacity-50" : ""}
+                            />
+                        </FormControl>
+                        {hasVariants && <span className="text-[10px] text-muted-foreground">Gerenciado por variação</span>}
+                      </FormItem>
+                      )}
+                  />
+              </div>
+          </div>
+
+          <div className="border-t pt-6">
+              <h4 className="text-sm font-bold flex items-center gap-2 mb-4 text-primary"><Layers className="w-4 h-4" /> Configurações de Variações</h4>
+              <ProductVariantManager 
+                productId={productId} 
+                basePrice={currentPrice}
+                basePixPrice={currentPixPrice || 0}
+                baseCostPrice={currentCostPrice || 0}
+              />
+          </div>
 
           <FormField
             control={form.control}

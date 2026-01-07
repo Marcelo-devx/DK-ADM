@@ -49,7 +49,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
-import { ProductForm } from "../../components/dashboard/ProductForm";
+import { ProductForm } from "../../components/dashboard/product-form";
 import { AddStockForm } from "../../components/dashboard/AddStockForm";
 import { showSuccess, showError } from "../../utils/toast";
 import { PlusCircle, MoreHorizontal, ImageOff, FileDown, DatabaseBackup, Upload, FileUp, Leaf, Star, Search } from "lucide-react";

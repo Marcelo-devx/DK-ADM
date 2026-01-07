@@ -1,16 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Package, Ruler, Droplets, Pencil, X, Check, Loader2, AlertCircle } from "lucide-react";
+import { Plus, Trash2, Package, Ruler, Droplets, Pencil, X, Check, Loader2, Copy, RefreshCcw } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface Variant {
   id: string;
@@ -26,9 +27,17 @@ interface Variant {
 
 interface ProductVariantManagerProps {
   productId: number | undefined;
+  basePrice: number;
+  basePixPrice: number;
+  baseCostPrice: number;
 }
 
-export const ProductVariantManager = ({ productId }: ProductVariantManagerProps) => {
+export const ProductVariantManager = ({ 
+  productId,
+  basePrice,
+  basePixPrice,
+  baseCostPrice
+}: ProductVariantManagerProps) => {
   const queryClient = useQueryClient();
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -38,11 +47,23 @@ export const ProductVariantManager = ({ productId }: ProductVariantManagerProps)
     flavor_name: "",
     volume_ml: null,
     sku: "",
-    price: 0,
-    pix_price: 0,
-    cost_price: 0,
+    price: basePrice || 0,
+    pix_price: basePixPrice || 0,
+    cost_price: baseCostPrice || 0,
     stock_quantity: 0,
   });
+
+  // Atualiza os valores padrão do novo item quando os props mudam, se o usuário ainda não tiver editado
+  useEffect(() => {
+    if (!isAdding) {
+        setNewVariant(prev => ({
+            ...prev,
+            price: basePrice,
+            pix_price: basePixPrice,
+            cost_price: baseCostPrice
+        }));
+    }
+  }, [basePrice, basePixPrice, baseCostPrice, isAdding]);
 
   const { data: variants, isLoading } = useQuery({
     queryKey: ["productVariants", productId],
@@ -58,100 +79,52 @@ export const ProductVariantManager = ({ productId }: ProductVariantManagerProps)
     enabled: !!productId,
   });
 
-  // Função para verificar se um SKU já existe no banco (Produtos ou Outras Variações)
+  // Função para verificar se um SKU já existe
   const isSkuTaken = async (sku: string, currentVariantId?: string): Promise<boolean> => {
     if (!sku || sku.trim() === "") return false;
-    
     const cleanSku = sku.trim();
-
-    // 1. Verifica na tabela de produtos (SKU global do produto)
-    const { data: productWithSku } = await supabase
-      .from("products")
-      .select("id")
-      .eq("sku", cleanSku)
-      .maybeSingle();
-    
+    const { data: productWithSku } = await supabase.from("products").select("id").eq("sku", cleanSku).maybeSingle();
     if (productWithSku) return true;
-
-    // 2. Verifica na tabela de variações
-    const query = supabase
-      .from("product_variants")
-      .select("id")
-      .eq("sku", cleanSku);
-    
-    if (currentVariantId) {
-      query.neq("id", currentVariantId);
-    }
-
+    const query = supabase.from("product_variants").select("id").eq("sku", cleanSku);
+    if (currentVariantId) query.neq("id", currentVariantId);
     const { data: variantWithSku } = await query.maybeSingle();
-    
     return !!variantWithSku;
   };
 
-  // Função auxiliar para encontrar ou criar um sabor pelo nome
   const getOrCreateFlavorId = async (name: string): Promise<number | null> => {
     if (!name || name.trim() === "") return null;
-    
     const cleanName = name.trim();
-    
-    const { data: existing } = await supabase
-      .from("flavors")
-      .select("id")
-      .ilike("name", cleanName)
-      .maybeSingle();
-    
+    const { data: existing } = await supabase.from("flavors").select("id").ilike("name", cleanName).maybeSingle();
     if (existing) return existing.id;
-    
-    const { data: created, error } = await supabase
-      .from("flavors")
-      .insert({ name: cleanName, is_visible: true })
-      .select("id")
-      .single();
-    
+    const { data: created, error } = await supabase.from("flavors").insert({ name: cleanName, is_visible: true }).select("id").single();
     if (error) throw error;
     return created.id;
   };
 
   const addMutation = useMutation({
     mutationFn: async (v: typeof newVariant) => {
-      // Validação de SKU
-      if (v.sku && await isSkuTaken(v.sku)) {
-        throw new Error(`O SKU "${v.sku}" já está em uso por outro produto ou variação.`);
-      }
-
+      if (v.sku && await isSkuTaken(v.sku)) throw new Error(`O SKU "${v.sku}" já está em uso.`);
       const flavorId = await getOrCreateFlavorId(v.flavor_name || "");
-      
       const { flavor_name, ...variantData } = v;
-      const { error } = await supabase.from("product_variants").insert({
-        ...variantData,
-        flavor_id: flavorId,
-        product_id: productId,
-      });
+      const { error } = await supabase.from("product_variants").insert({ ...variantData, flavor_id: flavorId, product_id: productId });
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["productVariants", productId] });
       showSuccess("Variação adicionada!");
       setIsAdding(false);
-      setNewVariant({ flavor_name: "", volume_ml: null, sku: "", price: 0, pix_price: 0, cost_price: 0, stock_quantity: 0 });
+      // Reset using current base prices
+      setNewVariant({ flavor_name: "", volume_ml: null, sku: "", price: basePrice, pix_price: basePixPrice, cost_price: baseCostPrice, stock_quantity: 0 });
     },
     onError: (err: any) => showError(err.message),
   });
 
   const updateMutation = useMutation({
     mutationFn: async (v: typeof editValues) => {
-      // Validação de SKU
-      if (v.sku && await isSkuTaken(v.sku, v.id)) {
-        throw new Error(`O SKU "${v.sku}" já está em uso.`);
-      }
-
+      if (v.sku && await isSkuTaken(v.sku, v.id)) throw new Error(`O SKU "${v.sku}" já está em uso.`);
       const flavorId = await getOrCreateFlavorId(v.flavor_name || "");
-      
       const { id, flavors, flavor_name, ...updateData } = v as any;
-      const { error } = await supabase
-        .from("product_variants")
-        .update({ ...updateData, flavor_id: flavorId })
-        .eq("id", id);
+      const { error } = await supabase.from("product_variants").update({ ...updateData, flavor_id: flavorId }).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -173,12 +146,29 @@ export const ProductVariantManager = ({ productId }: ProductVariantManagerProps)
     },
   });
 
+  const bulkUpdatePricesMutation = useMutation({
+    mutationFn: async () => {
+        if (!productId) throw new Error("Produto não identificado.");
+        const { error } = await supabase
+            .from("product_variants")
+            .update({ 
+                price: basePrice, 
+                pix_price: basePixPrice, 
+                cost_price: baseCostPrice 
+            })
+            .eq("product_id", productId);
+        if (error) throw error;
+    },
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["productVariants", productId] });
+        showSuccess("Preços atualizados em todas as variações!");
+    },
+    onError: (err: any) => showError(`Erro ao atualizar em massa: ${err.message}`),
+  });
+
   const startEditing = (v: Variant) => {
     setEditingId(v.id);
-    setEditValues({
-        ...v,
-        flavor_name: v.flavors?.name || ""
-    });
+    setEditValues({ ...v, flavor_name: v.flavors?.name || "" });
   };
 
   const formatCurrency = (val: number | null) => 
@@ -190,13 +180,43 @@ export const ProductVariantManager = ({ productId }: ProductVariantManagerProps)
 
   return (
     <div className="space-y-4 border rounded-lg p-4 bg-gray-50/50">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-bold flex items-center gap-2">
-            <Package className="w-5 h-5" /> Variações (Grade de Produtos)
-        </h3>
-        <Button type="button" variant="outline" size="sm" onClick={() => setIsAdding(!isAdding)}>
-          {isAdding ? "Cancelar" : <><Plus className="w-4 h-4 mr-1" /> Adicionar Opção</>}
-        </Button>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="space-y-1">
+            <h3 className="text-lg font-bold flex items-center gap-2">
+                <Package className="w-5 h-5" /> Grade de Variações
+            </h3>
+            <p className="text-xs text-muted-foreground">Gerencie sabores e preços específicos.</p>
+        </div>
+        <div className="flex gap-2">
+            <TooltipProvider>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button 
+                            type="button" 
+                            variant="secondary" 
+                            size="sm" 
+                            className="bg-white border text-orange-600 hover:bg-orange-50"
+                            onClick={() => {
+                                if (confirm(`Deseja aplicar os preços base (Venda: ${formatCurrency(basePrice)}, Pix: ${formatCurrency(basePixPrice)}) em TODAS as variações existentes?`)) {
+                                    bulkUpdatePricesMutation.mutate();
+                                }
+                            }}
+                            disabled={bulkUpdatePricesMutation.isPending || !variants || variants.length === 0}
+                        >
+                            {bulkUpdatePricesMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCcw className="w-4 h-4 mr-2" />}
+                            Replicar Preços Base
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>Copia os preços do produto principal para todas as variações abaixo.</p>
+                    </TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+
+            <Button type="button" variant="outline" size="sm" onClick={() => setIsAdding(!isAdding)}>
+            {isAdding ? "Cancelar" : <><Plus className="w-4 h-4 mr-1" /> Adicionar Opção</>}
+            </Button>
+        </div>
       </div>
 
       {isAdding && (

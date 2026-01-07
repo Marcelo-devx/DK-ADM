@@ -26,7 +26,7 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { CategoryForm } from "./category-form";
-import { PlusCircle, Layers, Info } from "lucide-react";
+import { PlusCircle, Layers, Info, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -36,6 +36,7 @@ import { Switch } from "../ui/switch";
 import { ProductVariantManager } from "./ProductVariantManager";
 import { Separator } from "../ui/separator";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
+import { Badge } from "@/components/ui/badge";
 
 const formSchema = z.object({
   id: z.number().optional(),
@@ -67,6 +68,12 @@ interface ProductFormProps {
   initialData?: ProductFormValues & { is_visible?: boolean };
 }
 
+// Função auxiliar para gerar SKU aleatório
+const generateRandomSku = () => {
+  const randomStr = Math.random().toString(36).substring(2, 8).toUpperCase();
+  return `PROD-${randomStr}`;
+};
+
 export const ProductForm = ({
   onSubmit,
   isSubmitting,
@@ -81,7 +88,7 @@ export const ProductForm = ({
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: initialData || {
-      sku: "",
+      sku: generateRandomSku(), // Gera SKU automaticamente se for novo
       name: "",
       description: "",
       price: 0,
@@ -103,6 +110,11 @@ export const ProductForm = ({
   const selectedCategoryName = form.watch("category");
   const productId = initialData?.id;
 
+  // Watch price fields to pass them down
+  const currentPrice = form.watch("price");
+  const currentPixPrice = form.watch("pix_price");
+  const currentCostPrice = form.watch("cost_price");
+
   const { data: variants } = useQuery({
     queryKey: ["productVariants", productId],
     queryFn: async () => {
@@ -117,6 +129,12 @@ export const ProductForm = ({
   useEffect(() => {
     if (initialData) {
       form.reset(initialData);
+    } else {
+      // Se não tem dados iniciais (é criação), garante um SKU novo se estiver vazio
+      const currentSku = form.getValues("sku");
+      if (!currentSku) {
+        form.setValue("sku", generateRandomSku());
+      }
     }
   }, [initialData, form]);
 
@@ -143,6 +161,10 @@ export const ProductForm = ({
     onError: (error) => showError(error.message),
   });
 
+  const handleRegenerateSku = () => {
+    form.setValue("sku", generateRandomSku());
+  };
+
   return (
     <div className="space-y-6">
       <Form {...form}>
@@ -160,6 +182,27 @@ export const ProductForm = ({
               )}
               />
               <FormField
+                control={form.control}
+                name="sku"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>SKU (Código do Produto)</FormLabel>
+                    <div className="flex gap-2">
+                      <FormControl>
+                        <Input placeholder="Gerado Automático" {...field} />
+                      </FormControl>
+                      <Button type="button" variant="outline" size="icon" onClick={handleRegenerateSku} title="Gerar novo código">
+                        <RefreshCw className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
               control={form.control}
               name="brand"
               render={({ field }) => (
@@ -175,38 +218,27 @@ export const ProductForm = ({
                   </FormItem>
               )}
               />
+              
+              <FormField
+                control={form.control}
+                name="category"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Categoria</FormLabel>
+                    <div className="flex items-center gap-2">
+                      <Select onValueChange={(value) => { field.onChange(value); form.setValue("sub_category", ""); }} value={field.value} disabled={isLoadingCategories}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
+                        <SelectContent>{categories.map((c) => (<SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>))}</SelectContent>
+                      </Select>
+                      <Button type="button" variant="outline" size="icon" onClick={() => setIsCategoryModalOpen(true)}><PlusCircle className="h-4 w-4" /></Button>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
           </div>
 
-          <FormField
-            control={form.control}
-            name="description"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Descrição Curta</FormLabel>
-                <FormControl><Textarea placeholder="Detalhes gerais..." {...field} /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormField
-              control={form.control}
-              name="category"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Categoria</FormLabel>
-                  <div className="flex items-center gap-2">
-                    <Select onValueChange={(value) => { field.onChange(value); form.setValue("sub_category", ""); }} value={field.value} disabled={isLoadingCategories}>
-                      <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
-                      <SelectContent>{categories.map((c) => (<SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>))}</SelectContent>
-                    </Select>
-                    <Button type="button" variant="outline" size="icon" onClick={() => setIsCategoryModalOpen(true)}><PlusCircle className="h-4 w-4" /></Button>
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
             <FormField
               control={form.control}
               name="sub_category"
@@ -223,56 +255,79 @@ export const ProductForm = ({
             />
           </div>
 
-          <div className="border-t pt-6">
-              <h4 className="text-sm font-bold flex items-center gap-2 mb-4 text-primary"><Layers className="w-4 h-4" /> Configurações de Variações</h4>
-              <ProductVariantManager productId={productId} />
-          </div>
+          <FormField
+            control={form.control}
+            name="description"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Descrição Curta</FormLabel>
+                <FormControl><Textarea placeholder="Detalhes gerais..." {...field} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
           <Separator />
 
-          {hasVariants ? (
-            <Alert className="bg-primary/5 border-primary/20">
-                <Info className="h-4 w-4 text-primary" />
-                <AlertTitle className="text-primary font-bold">Valores Automáticos</AlertTitle>
-                <AlertDescription className="text-xs text-muted-foreground">
-                    Este produto possui variações. O estoque total e os preços são gerenciados individualmente por cada variação acima.
-                </AlertDescription>
-            </Alert>
-          ) : (
-            <div className="bg-gray-50 p-4 rounded-lg space-y-4">
-                <p className="text-xs font-bold uppercase text-gray-500">Valores Globais (Para produtos simples)</p>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <FormField
-                        control={form.control}
-                        name="price"
-                        render={({ field }) => (
-                        <FormItem><FormLabel>Venda</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>
-                        )}
-                    />
-                    <FormField
-                        control={form.control}
-                        name="pix_price"
-                        render={({ field }) => (
-                        <FormItem><FormLabel>Preço Pix</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>
-                        )}
-                    />
-                    <FormField
-                        control={form.control}
-                        name="cost_price"
-                        render={({ field }) => (
-                        <FormItem><FormLabel>Custo</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>
-                        )}
-                    />
-                    <FormField
-                        control={form.control}
-                        name="stock_quantity"
-                        render={({ field }) => (
-                        <FormItem><FormLabel>Estoque</FormLabel><FormControl><Input type="number" {...field} /></FormControl></FormItem>
-                        )}
-                    />
-                </div>
-            </div>
-          )}
+          <div className="bg-gray-50 p-4 rounded-lg space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold uppercase text-gray-500">Valores Padrão / Base</p>
+                {hasVariants && (
+                    <Badge variant="secondary" className="text-[10px]">Usado como padrão para novas variações</Badge>
+                )}
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <FormField
+                      control={form.control}
+                      name="price"
+                      render={({ field }) => (
+                      <FormItem><FormLabel>Venda</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>
+                      )}
+                  />
+                  <FormField
+                      control={form.control}
+                      name="pix_price"
+                      render={({ field }) => (
+                      <FormItem><FormLabel>Preço Pix</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>
+                      )}
+                  />
+                  <FormField
+                      control={form.control}
+                      name="cost_price"
+                      render={({ field }) => (
+                      <FormItem><FormLabel>Custo</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>
+                      )}
+                  />
+                  <FormField
+                      control={form.control}
+                      name="stock_quantity"
+                      render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Estoque</FormLabel>
+                        <FormControl>
+                            <Input 
+                                type="number" 
+                                {...field} 
+                                disabled={hasVariants} 
+                                className={hasVariants ? "bg-gray-100 opacity-50" : ""}
+                            />
+                        </FormControl>
+                        {hasVariants && <span className="text-[10px] text-muted-foreground">Gerenciado por variação</span>}
+                      </FormItem>
+                      )}
+                  />
+              </div>
+          </div>
+
+          <div className="border-t pt-6">
+              <h4 className="text-sm font-bold flex items-center gap-2 mb-4 text-primary"><Layers className="w-4 h-4" /> Configurações de Variações</h4>
+              <ProductVariantManager 
+                productId={productId} 
+                basePrice={currentPrice}
+                basePixPrice={currentPixPrice || 0}
+                baseCostPrice={currentCostPrice || 0}
+              />
+          </div>
 
           <FormField
             control={form.control}
