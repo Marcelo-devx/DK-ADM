@@ -1,50 +1,56 @@
 import { MadeWithDyad } from "@/components/made-with-dyad";
-import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
-import { Link, useNavigate } from "react-router-dom";
-import { useEffect } from "react";
 import { useUser } from "@/hooks/useUser";
+import { HeroCarousel } from "@/components/HeroCarousel";
+import { ProductGrid } from "@/components/ProductGrid";
+import { ShoppingBag, Flame } from "lucide-react";
 
 const Index = () => {
-  const { user, isAdmin, loading } = useUser();
-  const navigate = useNavigate();
+  const { user, loading } = useUser();
 
-  useEffect(() => {
-    if (!loading && !user) {
-      navigate("/login");
-    }
-  }, [user, loading, navigate]);
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate("/login");
-  };
-
-  if (loading || !user) {
-    return null; // ou um componente de loading
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-50">
+        <div className="animate-pulse flex flex-col items-center gap-4">
+            <ShoppingBag className="w-12 h-12 text-primary/20" />
+            <p className="text-sm font-bold text-gray-400 uppercase tracking-widest">Carregando Vitrine...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-900 relative">
-      <div className="text-center p-8">
-        <h1 className="text-4xl font-bold mb-4">
-          Bem-vindo, {user.email}
-        </h1>
-        <p className="text-xl text-gray-600 dark:text-gray-300 mb-8">
-          Você está logado com sucesso!
-        </p>
-        <div className="space-x-4">
-          {isAdmin && (
-            <Button asChild>
-              <Link to="/dashboard">Acessar Painel</Link>
-            </Button>
-          )}
-          <Button onClick={handleLogout} variant="outline">Sair</Button>
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* Banner Principal */}
+      <section className="w-full">
+        <HeroCarousel />
+      </section>
+
+      {/* Conteúdo Principal */}
+      <main className="container mx-auto px-4 py-12 flex-1">
+        <div className="flex items-center justify-between mb-8">
+            <div className="space-y-1">
+                <h2 className="text-3xl font-black italic uppercase tracking-tight flex items-center gap-2">
+                    <Flame className="text-orange-500 fill-orange-500 w-7 h-7" />
+                    Novidades da Semana
+                </h2>
+                <p className="text-muted-foreground text-sm font-medium">Confira os itens mais procurados que acabaram de chegar.</p>
+            </div>
         </div>
-      </div>
-      <div className="absolute bottom-0 w-full">
-        <MadeWithDyad />
-      </div>
+
+        {/* Grade de Produtos (Filtra estoque automaticamente) */}
+        <ProductGrid />
+      </main>
+
+      {/* Footer / Info */}
+      <footer className="bg-white border-t py-12 mt-12">
+        <div className="container mx-auto px-4 text-center">
+            <h3 className="text-xl font-bold mb-4 italic uppercase">Tabacaria Oficial</h3>
+            <p className="text-sm text-muted-foreground max-w-md mx-auto mb-8">
+                A melhor seleção de itens para sua sessão. Qualidade garantida e entrega rápida em todo o Brasil.
+            </p>
+            <MadeWithDyad />
+        </div>
+      </footer>
     </div>
   );
 };
