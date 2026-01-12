@@ -51,13 +51,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { ProductForm } from "../../components/dashboard/product-form";
 import { showSuccess, showError } from "../../utils/toast";
-import { PlusCircle, MoreHorizontal, ImageOff, FileDown, Upload, FileUp, Leaf, Star, Search, ArrowUpDown, ChevronUp, ChevronDown } from "lucide-react";
+import { PlusCircle, MoreHorizontal, ImageOff, FileDown, Upload, FileUp, Star, Search, ArrowUpDown, ChevronUp, ChevronDown } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import * as XLSX from 'xlsx';
 import { ImportConfirmationModal } from "@/components/dashboard/ImportConfirmationModal";
 import { mapRowKeys } from "@/utils/excel-utils";
-import { ProductFlavorViewer } from "@/components/dashboard/ProductFlavorViewer";
 import { ProductVariantViewer } from "@/components/dashboard/ProductVariantViewer";
 import { cn } from "@/lib/utils";
 
@@ -75,15 +74,11 @@ type Product = {
   brand: string | null;
   image_url: string | null;
   is_visible: boolean;
-  flavor_count: number;
-  flavor_list?: string;
   variant_prices?: number[];
   variant_costs?: (number | null)[];
 };
 
-type ProductImportData = Omit<Product, 'id' | 'flavor_count' | 'variant_prices' | 'variant_costs'> & { 
-    flavor_names?: string | null;
-};
+type ProductImportData = Omit<Product, 'id' | 'variant_prices' | 'variant_costs'>;
 
 type Category = {
   id: number;
@@ -107,8 +102,6 @@ const fetchProducts = async () => {
     .from("products")
     .select(`
         *, 
-        flavor_count:product_flavors(count), 
-        flavors_data:product_flavors(flavors(name)),
         variants:product_variants(price, cost_price)
     `)
     .order("created_at", { ascending: false });
@@ -118,15 +111,8 @@ const fetchProducts = async () => {
   return data.map(p => {
     const variantsList = Array.isArray(p.variants) ? p.variants : [];
     
-    // Mapeia os nomes dos sabores para uma string separada por vírgulas para exportação
-    const flavorNames = Array.isArray(p.flavors_data) 
-        ? p.flavors_data.map((fd: any) => fd.flavors?.name).filter(Boolean).join(", ")
-        : "";
-
     return {
         ...p,
-        flavor_count: Array.isArray(p.flavor_count) ? (p.flavor_count[0]?.count || 0) : 0,
-        flavor_list: flavorNames,
         variant_prices: variantsList.map((v: any) => v.price),
         variant_costs: variantsList.map((v: any) => v.cost_price),
     };
@@ -187,9 +173,6 @@ const ProductsPage = () => {
 
   const [isVariantViewerOpen, setIsVariantViewerOpen] = useState(false);
   const [productToViewVariants, setProductToViewVariants] = useState<{ id: number, name: string } | null>(null);
-
-  const [isFlavorViewerOpen, setIsFlavorViewerOpen] = useState(false);
-  const [productToViewFlavors, setProductToViewFlavors] = useState<{ id: number, name: string } | null>(null);
 
   const [isImportConfirmationModalOpen, setIsImportConfirmationModalOpen] = useState(false);
   const [productsToConfirm, setProductsToConfirm] = useState<ProductImportData[]>([]);
@@ -351,7 +334,7 @@ const ProductsPage = () => {
 
   const handleExportXLSX = () => {
     if (!products?.length) return;
-    const headers = ["SKU", "Nome", "Descrição", "Preço de Custo", "Preço de Venda", "Preço Pix", "Estoque", "Sabores", "Categoria", "Sub-categoria", "Marca", "Imagem", "Publicado (Sim/Não)"];
+    const headers = ["SKU", "Nome", "Descrição", "Preço de Custo", "Preço de Venda", "Preço Pix", "Estoque", "Categoria", "Sub-categoria", "Marca", "Imagem", "Publicado (Sim/Não)"];
     const data = products.map(p => [
         p.sku || '', 
         p.name, 
@@ -360,7 +343,6 @@ const ProductsPage = () => {
         p.price, 
         p.pix_price || 0,
         p.stock_quantity, 
-        p.flavor_list || '',
         p.category || '', 
         p.sub_category || '', 
         p.brand || '', 
@@ -394,7 +376,6 @@ const ProductsPage = () => {
             brand: row.marca || null,
             image_url: row.imagem || null,
             is_visible: row.publicado?.toLowerCase() === 'sim',
-            flavor_names: row.sabores || null,
         }));
         setProductsToConfirm(productsToInsert);
         setIsImportConfirmationModalOpen(true);
@@ -404,7 +385,7 @@ const ProductsPage = () => {
   };
 
   const handleDownloadTemplate = () => {
-    const headers = ["SKU", "Nome", "Descrição", "Preço de Custo", "Preço de Venda", "Preço Pix", "Estoque", "Sabores (Separados por vírgula)", "Categoria", "Sub-categoria", "Marca", "Imagem", "Publicado (Sim/Não)"];
+    const headers = ["SKU", "Nome", "Descrição", "Preço de Custo", "Preço de Venda", "Preço Pix", "Estoque", "Categoria", "Sub-categoria", "Marca", "Imagem", "Publicado (Sim/Não)"];
     const worksheet = XLSX.utils.aoa_to_sheet([headers]);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Template");
@@ -480,13 +461,12 @@ const ProductsPage = () => {
               <TableHead className="text-green-600">Pix</TableHead>
               <TableHead>Estoque</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="text-center w-[60px]">Sabores</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoadingProducts ? (
-              <TableRow><TableCell colSpan={12} className="text-center">Carregando...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={11} className="text-center">Carregando...</TableCell></TableRow>
             ) : filteredProducts && filteredProducts.length > 0 ? (
               filteredProducts.map((product) => (
                 <TableRow key={product.id}>
@@ -508,17 +488,12 @@ const ProductsPage = () => {
                   <TableCell>
                     <Switch checked={product.is_visible} onCheckedChange={(s) => handleVisibilityChange(product, s)} />
                   </TableCell>
-                  <TableCell className="text-center">
-                    {product.flavor_count > 0 ? (
-                        <Button variant="ghost" size="icon" onClick={() => { setProductToViewFlavors({ id: product.id, name: product.name }); setIsFlavorViewerOpen(true); }}><Leaf className="h-4 w-4 text-green-600" /></Button>
-                    ) : <Button variant="ghost" size="icon" disabled><Leaf className="h-4 w-4 text-gray-300" /></Button>}
-                  </TableCell>
                   <TableCell className="text-right">
                     <Button variant="ghost" size="icon" onClick={() => { setSelectedProduct(product); setIsEditModalOpen(true); }}><MoreHorizontal className="h-4 w-4 text-primary" /></Button>
                   </TableCell>
                 </TableRow>
               ))
-            ) : <TableRow><TableCell colSpan={12} className="text-center py-10">Nenhum produto.</TableCell></TableRow>}
+            ) : <TableRow><TableCell colSpan={11} className="text-center py-10">Nenhum produto.</TableCell></TableRow>}
           </TableBody>
         </Table>
       </div>
@@ -545,7 +520,6 @@ const ProductsPage = () => {
       </AlertDialog>
 
       <ImportConfirmationModal isOpen={isImportConfirmationModalOpen} onClose={() => setIsImportConfirmationModalOpen(false)} productsToImport={productsToConfirm} onConfirm={() => bulkInsertMutation.mutate(productsToConfirm)} isSubmitting={bulkInsertMutation.isPending} />
-      {productToViewFlavors && <ProductFlavorViewer productId={productToViewFlavors.id} productName={productToViewFlavors.name} isOpen={isFlavorViewerOpen} onClose={() => setIsFlavorViewerOpen(false)} />}
       {productToViewVariants && <ProductVariantViewer productId={productToViewVariants.id} productName={productToViewVariants.name} isOpen={isVariantViewerOpen} onClose={() => setIsVariantViewerOpen(false)} />}
     </div>
   );

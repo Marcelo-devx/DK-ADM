@@ -26,7 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { CategoryForm } from "./category-form";
-import { PlusCircle, Layers, Copy, RefreshCw, Search } from "lucide-react";
+import { PlusCircle, Layers, Copy, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -162,7 +162,7 @@ export const ProductForm = ({
   const handleCloneProduct = (productIdStr: string) => {
     const productToClone = existingProducts.find(p => String(p.id) === productIdStr);
     if (productToClone) {
-        const { id, created_at, updated_at, flavor_count, variants: v, variant_prices, variant_costs, ...cloneData } = productToClone;
+        const { id, created_at, updated_at, variants: v, variant_prices, variant_costs, ...cloneData } = productToClone;
         
         form.reset({
             ...cloneData,
