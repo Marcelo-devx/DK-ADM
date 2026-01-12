@@ -50,9 +50,8 @@ import {
 } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { ProductForm } from "../../components/dashboard/product-form";
-import { AddStockForm } from "../../components/dashboard/AddStockForm";
 import { showSuccess, showError } from "../../utils/toast";
-import { PlusCircle, MoreHorizontal, ImageOff, FileDown, DatabaseBackup, Upload, FileUp, Leaf, Star, Search, ArrowUpDown, ChevronUp, ChevronDown } from "lucide-react";
+import { PlusCircle, MoreHorizontal, ImageOff, FileDown, Upload, FileUp, Leaf, Star, Search, ArrowUpDown, ChevronUp, ChevronDown } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import * as XLSX from 'xlsx';
@@ -68,6 +67,7 @@ type Product = {
   name: string;
   description: string | null;
   price: number;
+  pix_price: number | null;
   cost_price: number | null;
   stock_quantity: number;
   category: string | null;
@@ -76,6 +76,7 @@ type Product = {
   image_url: string | null;
   is_visible: boolean;
   flavor_count: number;
+  flavor_list?: string;
   variant_prices?: number[];
   variant_costs?: (number | null)[];
 };
@@ -104,7 +105,12 @@ type Brand = {
 const fetchProducts = async () => {
   const { data, error } = await supabase
     .from("products")
-    .select("*, flavor_count:product_flavors(count), variants:product_variants(price, cost_price)")
+    .select(`
+        *, 
+        flavor_count:product_flavors(count), 
+        flavors_data:product_flavors(flavors(name)),
+        variants:product_variants(price, cost_price)
+    `)
     .order("created_at", { ascending: false });
   
   if (error) throw new Error(error.message);
@@ -112,9 +118,15 @@ const fetchProducts = async () => {
   return data.map(p => {
     const variantsList = Array.isArray(p.variants) ? p.variants : [];
     
+    // Mapeia os nomes dos sabores para uma string separada por vírgulas para exportação
+    const flavorNames = Array.isArray(p.flavors_data) 
+        ? p.flavors_data.map((fd: any) => fd.flavors?.name).filter(Boolean).join(", ")
+        : "";
+
     return {
         ...p,
         flavor_count: Array.isArray(p.flavor_count) ? (p.flavor_count[0]?.count || 0) : 0,
+        flavor_list: flavorNames,
         variant_prices: variantsList.map((v: any) => v.price),
         variant_costs: variantsList.map((v: any) => v.cost_price),
     };
@@ -149,23 +161,22 @@ const fetchBrands = async () => {
 };
 
 const cleanAndParseFloat = (value: any): number => {
+    if (value === undefined || value === null || value === '') return 0;
     if (typeof value === 'number') return value;
     if (typeof value === 'string') {
-        const cleaned = value.replace(/\./g, '').replace(/,/g, '.');
+        const cleaned = value.replace(/[R$\s]/g, '').replace(/\./g, '').replace(/,/g, '.');
         return parseFloat(cleaned);
     }
-    return NaN;
+    return 0;
 };
 
 const ProductsPage = () => {
   const queryClient = useQueryClient();
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isAddStockModalOpen, setIsAddStockModalOpen] = useState(false);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   
-  // Filtros e Ordenação
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [brandFilter, setBrandFilter] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
@@ -289,18 +300,6 @@ const ProductsPage = () => {
     },
   });
 
-  const updateStockMutation = useMutation({
-    mutationFn: async ({ productId, quantityToAdd, currentStock }: { productId: number; quantityToAdd: number; currentStock: number; }) => {
-      const { error } = await supabase.from("products").update({ stock_quantity: currentStock + quantityToAdd }).eq("id", productId);
-      if (error) throw new Error(error.message);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["products"] });
-      showSuccess("Estoque atualizado!");
-      setIsAddStockModalOpen(false);
-    },
-  });
-
   const bulkInsertMutation = useMutation({
     mutationFn: async (products: ProductImportData[]) => {
       const { data, error } = await supabase.functions.invoke("bulk-product-upsert", { body: { products } });
@@ -316,7 +315,6 @@ const ProductsPage = () => {
 
   const handleAddProduct = (values: any) => addProductMutation.mutate(values);
   const handleUpdateProduct = (values: any) => selectedProduct && updateProductMutation.mutate({ productId: selectedProduct.id, values });
-  const handleAddStock = (values: { quantity: number }) => selectedProduct && updateStockMutation.mutate({ productId: selectedProduct.id, quantityToAdd: values.quantity, currentStock: selectedProduct.stock_quantity });
   const handleDeleteConfirm = () => selectedProduct && deleteProductMutation.mutate(selectedProduct.id);
   const handleVisibilityChange = (product: Product, newStatus: boolean) => updateProductMutation.mutate({ productId: product.id, values: { is_visible: newStatus } });
 
@@ -353,12 +351,26 @@ const ProductsPage = () => {
 
   const handleExportXLSX = () => {
     if (!products?.length) return;
-    const headers = ["SKU", "Nome", "Descrição", "Preço de Custo", "Preço de Venda", "Estoque", "Categoria", "Sub-categoria", "Marca", "Imagem", "Publicado (Sim/Não)"];
-    const data = products.map(p => [p.sku || '', p.name, p.description || '', p.cost_price || '', p.price, p.stock_quantity, p.category || '', p.sub_category || '', p.brand || '', p.image_url || '', p.is_visible ? 'Sim' : 'Não']);
+    const headers = ["SKU", "Nome", "Descrição", "Preço de Custo", "Preço de Venda", "Preço Pix", "Estoque", "Sabores", "Categoria", "Sub-categoria", "Marca", "Imagem", "Publicado (Sim/Não)"];
+    const data = products.map(p => [
+        p.sku || '', 
+        p.name, 
+        p.description || '', 
+        p.cost_price || 0, 
+        p.price, 
+        p.pix_price || 0,
+        p.stock_quantity, 
+        p.flavor_list || '',
+        p.category || '', 
+        p.sub_category || '', 
+        p.brand || '', 
+        p.image_url || '', 
+        p.is_visible ? 'Sim' : 'Não'
+    ]);
     const worksheet = XLSX.utils.aoa_to_sheet([headers, ...data]);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Produtos");
-    XLSX.writeFile(workbook, "produtos.xlsx");
+    XLSX.writeFile(workbook, "produtos_tabacaria.xlsx");
   };
 
   const handleImportXLSX = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -373,7 +385,8 @@ const ProductsPage = () => {
             sku: row.sku || '',
             name: row.nome,
             price: cleanAndParseFloat(row.preçodevenda),
-            stock_quantity: parseInt(row.estoque, 10),
+            pix_price: cleanAndParseFloat(row.preçopix) || null,
+            stock_quantity: parseInt(row.estoque, 10) || 0,
             description: row.descrição || null,
             cost_price: cleanAndParseFloat(row.preçodecusto) || null,
             category: row.categoria || null,
@@ -391,11 +404,11 @@ const ProductsPage = () => {
   };
 
   const handleDownloadTemplate = () => {
-    const headers = ["SKU", "Nome", "Preço de Custo", "Preço de Venda", "Estoque", "Sabores (Separados por vírgula)", "Categoria", "Sub-categoria", "Marca", "Imagem", "Publicado (Sim/Não)"];
+    const headers = ["SKU", "Nome", "Descrição", "Preço de Custo", "Preço de Venda", "Preço Pix", "Estoque", "Sabores (Separados por vírgula)", "Categoria", "Sub-categoria", "Marca", "Imagem", "Publicado (Sim/Não)"];
     const worksheet = XLSX.utils.aoa_to_sheet([headers]);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Template");
-    XLSX.writeFile(workbook, "template_produtos.xlsx");
+    XLSX.writeFile(workbook, "template_importacao_produtos.xlsx");
   };
 
   const renderSortIcon = (key: keyof Product) => {
@@ -417,9 +430,9 @@ const ProductsPage = () => {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <TooltipProvider>
-              <Tooltip><TooltipTrigger asChild><Button variant="outline" size="icon" onClick={handleDownloadTemplate}><Upload className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent><p>Baixar modelo</p></TooltipContent></Tooltip>
-              <Tooltip><TooltipTrigger asChild><Button variant="outline" size="icon" onClick={() => document.getElementById('import-input')?.click()}><FileUp className="h-4 w-4" /><input type="file" id="import-input" className="hidden" onChange={handleImportXLSX} /></Button></TooltipTrigger><TooltipContent><p>Importar</p></TooltipContent></Tooltip>
-              <Tooltip><TooltipTrigger asChild><Button variant="outline" size="icon" onClick={handleExportXLSX}><FileDown className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent><p>Exportar Excel</p></TooltipContent></Tooltip>
+              <Tooltip><TooltipTrigger asChild><Button variant="outline" size="icon" onClick={handleDownloadTemplate}><Upload className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent><p>Baixar modelo (v2)</p></TooltipContent></Tooltip>
+              <Tooltip><TooltipTrigger asChild><Button variant="outline" size="icon" onClick={() => document.getElementById('import-input')?.click()}><FileUp className="h-4 w-4" /><input type="file" id="import-input" className="hidden" onChange={handleImportXLSX} /></Button></TooltipTrigger><TooltipContent><p>Importar Planilha</p></TooltipContent></Tooltip>
+              <Tooltip><TooltipTrigger asChild><Button variant="outline" size="icon" onClick={handleExportXLSX}><FileDown className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent><p>Exportar Catálogo</p></TooltipContent></Tooltip>
             </TooltipProvider>
             
             <Dialog open={isProductModalOpen} onOpenChange={setIsProductModalOpen}>
@@ -449,7 +462,7 @@ const ProductsPage = () => {
         </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow">
+      <div className="bg-white rounded-lg shadow overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -461,16 +474,12 @@ const ProductsPage = () => {
               <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('category')}>
                 <div className="flex items-center">Categoria {renderSortIcon('category')}</div>
               </TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('sub_category')}>
-                <div className="flex items-center">Sub-categoria {renderSortIcon('sub_category')}</div>
-              </TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('brand')}>
-                <div className="flex items-center">Marca {renderSortIcon('brand')}</div>
-              </TableHead>
-              <TableHead>Preço de Custo</TableHead>
-              <TableHead>Preço de Venda</TableHead>
+              <TableHead>Marca</TableHead>
+              <TableHead>Custo</TableHead>
+              <TableHead>Venda</TableHead>
+              <TableHead className="text-green-600">Pix</TableHead>
               <TableHead>Estoque</TableHead>
-              <TableHead>Visibilidade</TableHead>
+              <TableHead>Status</TableHead>
               <TableHead className="text-center w-[60px]">Sabores</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
@@ -482,19 +491,22 @@ const ProductsPage = () => {
               filteredProducts.map((product) => (
                 <TableRow key={product.id}>
                   <TableCell>{product.image_url ? <img src={product.image_url} alt={product.name} className="h-12 w-12 rounded-md object-cover" /> : <div className="h-12 w-12 rounded-md bg-gray-100 flex items-center justify-center"><ImageOff className="h-5 w-5 text-gray-400" /></div>}</TableCell>
-                  <TableCell className="font-mono text-sm font-bold">#{product.id}</TableCell>
-                  <TableCell className="font-medium">{product.name}</TableCell>
-                  <TableCell>{product.category || "N/A"}</TableCell>
-                  <TableCell>{product.sub_category || "-"}</TableCell>
-                  <TableCell>{product.brand || "N/A"}</TableCell>
-                  <TableCell>{getPriceDisplay(product, true)}</TableCell>
-                  <TableCell>{getPriceDisplay(product)}</TableCell>
-                  <TableCell>{product.stock_quantity}</TableCell>
+                  <TableCell className="font-mono text-[10px] font-bold">#{product.sku || product.id}</TableCell>
+                  <TableCell className="font-medium text-xs max-w-[200px] truncate">{product.name}</TableCell>
+                  <TableCell className="text-xs">{product.category || "N/A"}</TableCell>
+                  <TableCell className="text-xs">{product.brand || "N/A"}</TableCell>
+                  <TableCell className="text-xs">{getPriceDisplay(product, true)}</TableCell>
+                  <TableCell className="text-xs">{getPriceDisplay(product)}</TableCell>
+                  <TableCell className="text-xs font-bold text-green-700">
+                    {product.pix_price ? formatCurrency(product.pix_price) : '-'}
+                  </TableCell>
                   <TableCell>
-                    <div className="flex items-center space-x-2">
-                        <Switch checked={product.is_visible} onCheckedChange={(s) => handleVisibilityChange(product, s)} />
-                        <Badge variant={product.is_visible ? "default" : "outline"}>{product.is_visible ? "Visível" : "Oculto"}</Badge>
-                    </div>
+                    <Badge variant={product.stock_quantity <= 5 ? "destructive" : "secondary"} className="h-5 text-[10px]">
+                        {product.stock_quantity} un
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Switch checked={product.is_visible} onCheckedChange={(s) => handleVisibilityChange(product, s)} />
                   </TableCell>
                   <TableCell className="text-center">
                     {product.flavor_count > 0 ? (
@@ -522,7 +534,7 @@ const ProductsPage = () => {
             isLoadingSubCategories={isLoadingSubCategories} 
             brands={brands || []} 
             isLoadingBrands={isLoadingBrands} 
-            initialData={selectedProduct ? { ...selectedProduct, sku: selectedProduct.sku || '', description: selectedProduct.description || '', category: selectedProduct.category || '', sub_category: selectedProduct.sub_category || '', brand: selectedProduct.brand || '', image_url: selectedProduct.image_url || '', cost_price: selectedProduct.cost_price || 0 } : undefined} 
+            initialData={selectedProduct ? { ...selectedProduct, sku: selectedProduct.sku || '', description: selectedProduct.description || '', category: selectedProduct.category || '', sub_category: selectedProduct.sub_category || '', brand: selectedProduct.brand || '', image_url: selectedProduct.image_url || '', cost_price: selectedProduct.cost_price || 0, pix_price: selectedProduct.pix_price || 0 } : undefined} 
             existingProducts={products}
           />
         </DialogContent>
