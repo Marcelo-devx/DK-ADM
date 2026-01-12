@@ -21,13 +21,13 @@ interface ProductImportData {
   name: string;
   description: string | null;
   price: number;
+  pix_price: number | null;
   stock_quantity: number;
   category: string | null;
   sub_category: string | null;
   brand: string | null;
   image_url: string | null;
   is_visible: boolean;
-  flavor_names?: string | null; // Adicionado
 }
 
 interface ImportConfirmationModalProps {
@@ -53,7 +53,7 @@ export const ImportConfirmationModal = ({
             <Package className="h-6 w-6" /> Confirmar Importação ({productsToImport.length} Produtos)
           </DialogTitle>
           <DialogDescription>
-            Revise os produtos abaixo. Eles serão adicionados ao seu catálogo após a confirmação.
+            Revise os produtos abaixo. Eles serão adicionados ou atualizados no seu catálogo após a confirmação.
           </DialogDescription>
         </DialogHeader>
         
@@ -63,8 +63,8 @@ export const ImportConfirmationModal = ({
               <TableRow>
                 <TableHead>Nome</TableHead>
                 <TableHead>Preço</TableHead>
+                <TableHead className="text-green-600">Pix</TableHead>
                 <TableHead>Estoque</TableHead>
-                <TableHead>Sabores</TableHead>
                 <TableHead>Categoria</TableHead>
                 <TableHead>Marca</TableHead>
                 <TableHead>Visível</TableHead>
@@ -80,8 +80,13 @@ export const ImportConfirmationModal = ({
                       currency: "BRL",
                     }).format(product.price)}
                   </TableCell>
+                  <TableCell className="font-bold text-green-700">
+                    {product.pix_price ? new Intl.NumberFormat("pt-BR", {
+                      style: "currency",
+                      currency: "BRL",
+                    }).format(product.pix_price) : '-'}
+                  </TableCell>
                   <TableCell>{product.stock_quantity}</TableCell>
-                  <TableCell className="max-w-[150px] truncate">{product.flavor_names || '-'}</TableCell>
                   <TableCell>{product.category || '-'}</TableCell>
                   <TableCell>{product.brand || '-'}</TableCell>
                   <TableCell>
@@ -103,10 +108,10 @@ export const ImportConfirmationModal = ({
             {isSubmitting ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Adicionando Produtos...
+                Processando Planilha...
               </>
             ) : (
-              "Confirmar e Adicionar"
+              "Confirmar e Processar"
             )}
           </Button>
         </div>
