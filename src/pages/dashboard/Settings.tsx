@@ -59,8 +59,8 @@ const SettingsPage = () => {
         const today = new Date().toISOString().split('T')[0];
         const { error } = await supabase.functions.invoke("spoke-proxy", {
             body: { 
-              action: "routes", 
-              params: { date: today } 
+              action: "plans", 
+              params: { "filter.startsGte": today } 
             }
         });
 
@@ -117,10 +117,10 @@ const SettingsPage = () => {
           <CardContent className="space-y-4">
             <div className="space-y-2">
                 <Label className="font-bold">Base URL (API)</Label>
-                <Input value={logisticsUrl} onChange={(e) => setLogisticsUrl(e.target.value)} placeholder="Ex: https://api.spoke.services/v1" />
+                <Input value={logisticsUrl} onChange={(e) => setLogisticsUrl(e.target.value)} placeholder="Ex: https://api.getcircuit.com/public/v0.2b" />
                 <p className="text-[10px] text-muted-foreground">
-                  <strong>Atenção:</strong> Insira a URL exata encontrada na documentação da API (procure por 'Base URL').<br/>
-                  Exemplo comum: <code>https://api.spoke.services/v1</code> ou <code>https://api.use-spoke.com</code>.
+                  <strong>Atenção:</strong> Insira a URL exata da documentação da Spoke (Circuit).<br/>
+                  Padrão atual: <code>https://api.getcircuit.com/public/v0.2b</code>
                 </p>
             </div>
             <div className="space-y-2">

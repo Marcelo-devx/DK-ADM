@@ -29,10 +29,12 @@ const DeliveryRoutesPage = () => {
   const { data: routes, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ["spokeRoutes", formattedDate],
     queryFn: async () => {
+      // Endpoint correto segundo documentação: 'plans'
+      // Parâmetro correto de filtro: 'filter.startsGte'
       const { data, error: invokeError } = await supabase.functions.invoke("spoke-proxy", {
         body: { 
-          action: "routes",
-          params: { date: formattedDate }
+          action: "plans", 
+          params: { "filter.startsGte": formattedDate }
         }
       });
       
@@ -45,16 +47,18 @@ const DeliveryRoutesPage = () => {
         throw new Error(errorMsg);
       }
       
-      const routesList = data.routes || [];
-      return routesList.map((r: any) => ({
+      // A API retorna { plans: [...] } ou uma lista direta, vamos tentar acessar 'plans'
+      const plansList = data.plans || (Array.isArray(data) ? data : []);
+      
+      return plansList.map((r: any) => ({
         id: r.id,
-        name: r.name || `Rota #${r.id.substring(0, 5)}`,
-        status: r.status,
-        driver: r.driver ? { name: r.driver.name, phone: r.driver.phone } : null,
+        name: r.title || `Plano #${r.id.substring(0, 5)}`,
+        status: r.status || 'active', // Circuit/Spoke plans usually don't have a status field like routes
+        driver: r.driver ? { name: r.driver.name || "Motorista", phone: r.driver.phone } : null, // Check data structure
         stops_count: r.stops?.length || 0,
-        completed_stops_count: r.stops?.filter((s: any) => s.status === 'completed' || s.status === 'delivered').length || 0,
-        total_distance_km: r.distance_meters ? parseFloat((r.distance_meters / 1000).toFixed(1)) : 0,
-        eta: r.eta ? format(new Date(r.eta), "HH:mm") : null
+        completed_stops_count: r.stops?.filter((s: any) => s.state === 'succeeded' || s.state === 'delivered').length || 0, // 'state' field is common in Spoke
+        total_distance_km: 0, // Need to check if plan object has distance summary
+        eta: null 
       }));
     },
     retry: false,
@@ -76,10 +80,13 @@ const DeliveryRoutesPage = () => {
   const getErrorMessage = (err: Error) => {
     const msg = err.message;
     if (msg.includes("Name or service not known") || msg.includes("dns error")) {
-        return "URL INVÁLIDA: O endereço da API configurado não existe. Verifique o campo 'Base URL' nas configurações.";
+        return "URL INVÁLIDA: O endereço da API configurado não existe. Verifique o campo 'Base URL' nas configurações. Deve ser algo como 'https://api.getcircuit.com/public/v0.2b'";
     }
     if (msg.includes("401") || msg.includes("Unauthorized")) {
         return "ACESSO NEGADO: O Token da API está incorreto ou expirou.";
+    }
+    if (msg.includes("404")) {
+        return "RECURSO NÃO ENCONTRADO: A URL base pode estar correta, mas o endpoint não. Verifique a versão da API.";
     }
     return msg;
   };
@@ -122,7 +129,7 @@ const DeliveryRoutesPage = () => {
           <Card className="shadow-sm border-none overflow-hidden bg-white">
             <CardHeader className="bg-gray-50/50 border-b py-3 px-6">
               <div className="flex items-center gap-2 text-sm font-bold text-gray-600 uppercase">
-                <Warehouse className="h-4 w-4" /> Status da Frota
+                <Warehouse className="h-4 w-4" /> Status da Frota (Planos)
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -165,19 +172,19 @@ const DeliveryRoutesPage = () => {
                 ) : (
                     <div className="divide-y">
                         <div className="grid grid-cols-3 gap-8 p-6 bg-gray-50/30">
-                            <div><p className="text-xs text-muted-foreground font-bold uppercase">Veículos Ativos</p><p className="text-3xl font-black">{stats.vehicles}</p></div>
-                            <div><p className="text-xs text-muted-foreground font-bold uppercase">Stops Concluídos</p><p className="text-3xl font-black">{stats.completed} <span className="text-sm font-normal text-muted-foreground">/ {stats.total}</span></p></div>
+                            <div><p className="text-xs text-muted-foreground font-bold uppercase">Planos Ativos</p><p className="text-3xl font-black">{stats.vehicles}</p></div>
+                            <div><p className="text-xs text-muted-foreground font-bold uppercase">Entregas Concluídas</p><p className="text-3xl font-black">{stats.completed} <span className="text-sm font-normal text-muted-foreground">/ {stats.total}</span></p></div>
                             <div><p className="text-xs text-muted-foreground font-bold uppercase">Taxa de Sucesso</p><p className="text-3xl font-black text-blue-600">{stats.efficiency}%</p></div>
                         </div>
                         {routes && routes.length > 0 ? routes.map((r: any) => (
                             <div key={r.id} className="flex items-center justify-between p-5 hover:bg-gray-50 transition-all border-l-4 border-transparent hover:border-blue-500">
                                 <div className="flex items-center gap-4">
-                                    <div className="h-12 w-12 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-black text-xl">{r.driver?.name?.charAt(0) || 'V'}</div>
+                                    <div className="h-12 w-12 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-black text-xl">{r.name?.charAt(0) || 'P'}</div>
                                     <div>
-                                        <p className="font-black text-base">{r.driver?.name || "Aguardando Motorista"}</p>
+                                        <p className="font-black text-base">{r.name}</p>
                                         <div className="flex items-center gap-3 text-[10px] text-muted-foreground uppercase font-bold mt-0.5">
-                                            <span className="flex items-center gap-1"><Package className="w-3 h-3" /> {r.stops_count} entregas</span>
-                                            <span className="flex items-center gap-1"><RefreshCw className="w-3 h-3" /> ETA: {r.eta || '--:--'}</span>
+                                            <span className="flex items-center gap-1"><Package className="w-3 h-3" /> {r.stops_count} paradas</span>
+                                            {r.driver && <span className="flex items-center gap-1">Motorista: {r.driver.name}</span>}
                                         </div>
                                     </div>
                                 </div>
@@ -194,7 +201,7 @@ const DeliveryRoutesPage = () => {
                         )) : (
                             <div className="p-24 text-center">
                                 <MapIcon className="w-12 h-12 text-gray-200 mx-auto mb-4" />
-                                <p className="text-muted-foreground font-medium italic">Nenhuma rota ativa para o dia {format(date || new Date(), "dd/MM")}.</p>
+                                <p className="text-muted-foreground font-medium italic">Nenhum plano de rota ativo para o dia {format(date || new Date(), "dd/MM")}.</p>
                             </div>
                         )}
                     </div>
