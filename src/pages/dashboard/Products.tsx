@@ -80,23 +80,6 @@ type Product = {
 
 type ProductImportData = Omit<Product, 'id' | 'variant_prices' | 'variant_costs'>;
 
-type Category = {
-  id: number;
-  name: string;
-};
-
-type SubCategory = {
-  id: number;
-  name: string;
-  category_id: number;
-};
-
-type Brand = {
-  id: number;
-  name: string;
-  image_url: string | null;
-};
-
 const fetchProducts = async () => {
   const { data, error } = await supabase
     .from("products")
@@ -119,39 +102,12 @@ const fetchProducts = async () => {
   }) as Product[];
 };
 
-const fetchCategories = async () => {
-  const { data, error } = await supabase
-    .from("categories")
-    .select("id, name")
-    .order("name", { ascending: true });
-  if (error) throw new Error(error.message);
-  return data;
-};
-
-const fetchSubCategories = async () => {
-  const { data, error } = await supabase
-    .from("sub_categories")
-    .select("id, name, category_id")
-    .order("name", { ascending: true });
-  if (error) throw new Error(error.message);
-  return data;
-};
-
-const fetchBrands = async () => {
-  const { data, error } = await supabase
-    .from("brands")
-    .select("id, name, image_url")
-    .order("name", { ascending: true });
-  if (error) throw new Error(error.message);
-  return data;
-};
-
 const cleanAndParseFloat = (value: any): number => {
     if (value === undefined || value === null || value === '') return 0;
     if (typeof value === 'number') return value;
     if (typeof value === 'string') {
         const cleaned = value.replace(/[R$\s]/g, '').replace(/\./g, '').replace(/,/g, '.');
-        return parseFloat(cleaned);
+        return parseFloat(cleaned) || 0;
     }
     return 0;
 };
@@ -183,26 +139,31 @@ const ProductsPage = () => {
     refetchOnWindowFocus: false,
   });
 
-  const { data: categories, isLoading: isLoadingCategories } = useQuery<
-    Category[]
-  >({
+  const { data: categories, isLoading: isLoadingCategories } = useQuery({
     queryKey: ["categories"],
-    queryFn: fetchCategories,
-    refetchOnWindowFocus: false,
+    queryFn: async () => {
+        const { data, error } = await supabase.from("categories").select("id, name").order("name");
+        if (error) throw error;
+        return data;
+    },
   });
 
-  const { data: subCategories, isLoading: isLoadingSubCategories } = useQuery<
-    SubCategory[]
-  >({
+  const { data: subCategories } = useQuery({
     queryKey: ["subCategories"],
-    queryFn: fetchSubCategories,
-    refetchOnWindowFocus: false,
+    queryFn: async () => {
+        const { data, error } = await supabase.from("sub_categories").select("id, name, category_id").order("name");
+        if (error) throw error;
+        return data;
+    },
   });
 
-  const { data: brands, isLoading: isLoadingBrands } = useQuery<Brand[]>({
+  const { data: brands, isLoading: isLoadingBrands } = useQuery({
     queryKey: ["brands"],
-    queryFn: fetchBrands,
-    refetchOnWindowFocus: false,
+    queryFn: async () => {
+        const { data, error } = await supabase.from("brands").select("id, name, image_url").order("name");
+        if (error) throw error;
+        return data;
+    },
   });
 
   const filteredProducts = useMemo(() => {
@@ -221,7 +182,6 @@ const ProductsPage = () => {
         result.sort((a, b) => {
             const aVal = a[sortConfig.key!] ?? "";
             const bVal = b[sortConfig.key!] ?? "";
-            
             if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
             if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
             return 0;
@@ -231,20 +191,9 @@ const ProductsPage = () => {
     return result;
   }, [products, categoryFilter, brandFilter, searchTerm, sortConfig]);
 
-  const handleSort = (key: keyof Product) => {
-    let direction: 'asc' | 'desc' = 'asc';
-    if (sortConfig.key === key && sortConfig.direction === 'asc') {
-      direction = 'desc';
-    }
-    setSortConfig({ key, direction });
-  };
-
   const addProductMutation = useMutation({
     mutationFn: async (newProduct: any) => {
-      const productData = { ...newProduct };
-      if (!productData.sku || productData.sku.trim() === "") delete productData.sku;
-      if (!productData.image_url || productData.image_url.trim() === "") productData.image_url = null;
-      const { error } = await supabase.from("products").insert([productData]);
+      const { error } = await supabase.from("products").insert([newProduct]);
       if (error) throw new Error(error.message);
     },
     onSuccess: () => {
@@ -257,10 +206,7 @@ const ProductsPage = () => {
 
   const updateProductMutation = useMutation({
     mutationFn: async ({ productId, values }: { productId: number; values: any; }) => {
-      const updates = { ...values };
-      if (updates.sku === "") updates.sku = null;
-      if (updates.image_url === "") updates.image_url = null;
-      const { error } = await supabase.from("products").update(updates).eq("id", productId);
+      const { error } = await supabase.from("products").update(values).eq("id", productId);
       if (error) throw new Error(error.message);
     },
     onSuccess: () => {
@@ -269,18 +215,6 @@ const ProductsPage = () => {
       setIsEditModalOpen(false);
     },
     onError: (error) => showError(error.message),
-  });
-
-  const deleteProductMutation = useMutation({
-    mutationFn: async (productId: number) => {
-      const { error } = await supabase.from("products").delete().eq("id", productId);
-      if (error) throw new Error(error.message);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["products"] });
-      showSuccess("Produto removido!");
-      setIsDeleteAlertOpen(false);
-    },
   });
 
   const bulkInsertMutation = useMutation({
@@ -296,40 +230,34 @@ const ProductsPage = () => {
     },
   });
 
-  const handleAddProduct = (values: any) => addProductMutation.mutate(values);
-  const handleUpdateProduct = (values: any) => selectedProduct && updateProductMutation.mutate({ productId: selectedProduct.id, values });
-  const handleDeleteConfirm = () => selectedProduct && deleteProductMutation.mutate(selectedProduct.id);
-  const handleVisibilityChange = (product: Product, newStatus: boolean) => updateProductMutation.mutate({ productId: product.id, values: { is_visible: newStatus } });
-
-  const formatCurrency = (val: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
-
-  const openVariantViewer = (product: Product) => {
-      setProductToViewVariants({ id: product.id, name: product.name });
-      setIsVariantViewerOpen(true);
-  };
-
-  const getPriceDisplay = (product: Product, isCost: boolean = false) => {
-    if (!product) return "-";
-    const costsArray = Array.isArray(product.variant_costs) ? product.variant_costs : [];
-    const pricesArray = Array.isArray(product.variant_prices) ? product.variant_prices : [];
-    const values = isCost ? (costsArray.filter(v => v !== null) as number[]) : (pricesArray.filter(v => v !== null) as number[]);
-    const baseValue = isCost ? (product.cost_price ?? 0) : (product.price ?? 0);
-    if (values.length === 0) return formatCurrency(baseValue);
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button onClick={() => openVariantViewer(product)} className="flex items-center gap-1 hover:bg-primary/5 p-1 rounded-md transition-colors cursor-help group">
-                <Star className="h-3 w-3 fill-yellow-400 text-yellow-400 group-hover:scale-110" />
-                <span className="font-bold text-xs">{min === max ? formatCurrency(min) : `${formatCurrency(min)} - ${formatCurrency(max)}`}</span>
-            </button>
-          </TooltipTrigger>
-          <TooltipContent><p>Clique para ver as {values.length} opções</p></TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
+  const handleImportXLSX = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const data = e.target?.result;
+        const workbook = XLSX.read(data, { type: 'array' });
+        const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]) as any[];
+        
+        const productsToInsert = json.map(mapRowKeys).map((row: any) => ({
+            sku: row.sku || '',
+            name: row.nome,
+            description: row.descricao || null,
+            cost_price: cleanAndParseFloat(row.precodecusto) || null,
+            price: cleanAndParseFloat(row.precodevenda),
+            pix_price: cleanAndParseFloat(row.precopix) || null,
+            stock_quantity: parseInt(row.estoque, 10) || 0,
+            category: row.categoria || null,
+            sub_category: row.subcategoria || null,
+            brand: row.marca || null,
+            image_url: row.imagem || null,
+            is_visible: row.publicadosimnao?.toLowerCase() === 'sim',
+        }));
+        setProductsToConfirm(productsToInsert);
+        setIsImportConfirmationModalOpen(true);
+    };
+    reader.readAsArrayBuffer(file);
+    event.target.value = '';
   };
 
   const handleExportXLSX = () => {
@@ -355,47 +283,30 @@ const ProductsPage = () => {
     XLSX.writeFile(workbook, "produtos_tabacaria.xlsx");
   };
 
-  const handleImportXLSX = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'array' });
-        const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]) as any[];
-        
-        const productsToInsert = json.map(mapRowKeys).map((row: any) => ({
-            sku: row.sku || '',
-            name: row.nome,
-            price: cleanAndParseFloat(row.precodevenda), // "Preço de Venda" -> "precodevenda"
-            pix_price: cleanAndParseFloat(row.precopix) || null, // "Preço Pix" -> "precopix"
-            stock_quantity: parseInt(row.estoque, 10) || 0,
-            description: row.descricao || null, // "Descrição" -> "descricao"
-            cost_price: cleanAndParseFloat(row.precodecusto) || null, // "Preço de Custo" -> "precodecusto"
-            category: row.categoria || null,
-            sub_category: row.subcategoria || null, // "Sub-categoria" -> "subcategoria"
-            brand: row.marca || null,
-            image_url: row.imagem || null,
-            is_visible: row.publicadosimnao?.toLowerCase() === 'sim', // "Publicado (Sim/Não)" -> "publicadosimnao"
-        }));
-        setProductsToConfirm(productsToInsert);
-        setIsImportConfirmationModalOpen(true);
-    };
-    reader.readAsArrayBuffer(file);
-    event.target.value = '';
-  };
+  const formatCurrency = (val: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
 
-  const handleDownloadTemplate = () => {
-    const headers = ["SKU", "Nome", "Descrição", "Preço de Custo", "Preço de Venda", "Preço Pix", "Estoque", "Categoria", "Sub-categoria", "Marca", "Imagem", "Publicado (Sim/Não)"];
-    const worksheet = XLSX.utils.aoa_to_sheet([headers]);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Template");
-    XLSX.writeFile(workbook, "template_importacao_produtos.xlsx");
-  };
-
-  const renderSortIcon = (key: keyof Product) => {
-    if (sortConfig.key !== key) return <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" />;
-    return sortConfig.direction === 'asc' ? <ChevronUp className="ml-2 h-4 w-4 text-primary" /> : <ChevronDown className="ml-2 h-4 w-4 text-primary" />;
+  const getPriceDisplay = (product: Product, isCost: boolean = false) => {
+    if (!product) return "-";
+    const costsArray = Array.isArray(product.variant_costs) ? product.variant_costs : [];
+    const pricesArray = Array.isArray(product.variant_prices) ? product.variant_prices : [];
+    const values = isCost ? (costsArray.filter(v => v !== null) as number[]) : (pricesArray.filter(v => v !== null) as number[]);
+    const baseValue = isCost ? (product.cost_price ?? 0) : (product.price ?? 0);
+    if (values.length === 0) return formatCurrency(baseValue);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button onClick={() => { setProductToViewVariants({ id: product.id, name: product.name }); setIsVariantViewerOpen(true); }} className="flex items-center gap-1 hover:bg-primary/5 p-1 rounded-md transition-colors cursor-help group">
+                <Star className="h-3 w-3 fill-yellow-400 text-yellow-400 group-hover:scale-110" />
+                <span className="font-bold text-xs">{min === max ? formatCurrency(min) : `${formatCurrency(min)} - ${formatCurrency(max)}`}</span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent><p>Clique para ver as {values.length} variações</p></TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
   };
 
   return (
@@ -404,15 +315,17 @@ const ProductsPage = () => {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <h1 className="text-3xl font-bold">Produtos</h1>
-            {!isLoadingProducts && (
-              <Badge variant="secondary" className="h-7 px-3 text-sm font-bold bg-gray-100 text-gray-700">
-                {filteredProducts.length} itens
-              </Badge>
-            )}
+            {!isLoadingProducts && <Badge variant="secondary" className="h-7 px-3 text-sm font-bold bg-gray-100 text-gray-700">{filteredProducts.length} itens</Badge>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <TooltipProvider>
-              <Tooltip><TooltipTrigger asChild><Button variant="outline" size="icon" onClick={handleDownloadTemplate}><Upload className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent><p>Baixar modelo (v2)</p></TooltipContent></Tooltip>
+              <Tooltip><TooltipTrigger asChild><Button variant="outline" size="icon" onClick={() => {
+                const headers = ["SKU", "Nome", "Descrição", "Preço de Custo", "Preço de Venda", "Preço Pix", "Estoque", "Categoria", "Sub-categoria", "Marca", "Imagem", "Publicado (Sim/Não)"];
+                const worksheet = XLSX.utils.aoa_to_sheet([headers]);
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, "Template");
+                XLSX.writeFile(workbook, "template_importacao.xlsx");
+              }}><Upload className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent><p>Baixar Modelo</p></TooltipContent></Tooltip>
               <Tooltip><TooltipTrigger asChild><Button variant="outline" size="icon" onClick={() => document.getElementById('import-input')?.click()}><FileUp className="h-4 w-4" /><input type="file" id="import-input" className="hidden" onChange={handleImportXLSX} /></Button></TooltipTrigger><TooltipContent><p>Importar Planilha</p></TooltipContent></Tooltip>
               <Tooltip><TooltipTrigger asChild><Button variant="outline" size="icon" onClick={handleExportXLSX}><FileDown className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent><p>Exportar Catálogo</p></TooltipContent></Tooltip>
             </TooltipProvider>
@@ -421,12 +334,12 @@ const ProductsPage = () => {
               <DialogTrigger asChild><Button><PlusCircle className="w-4 h-4 mr-2" />Adicionar Produto</Button></DialogTrigger>
               <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>Adicionar Novo Produto</DialogTitle></DialogHeader>
                 <ProductForm 
-                    onSubmit={handleAddProduct} 
+                    onSubmit={(v) => addProductMutation.mutate(v)} 
                     isSubmitting={addProductMutation.isPending} 
                     categories={categories || []} 
                     isLoadingCategories={isLoadingCategories} 
                     subCategories={subCategories || []} 
-                    isLoadingSubCategories={isLoadingSubCategories} 
+                    isLoadingSubCategories={false} 
                     brands={brands || []} 
                     isLoadingBrands={isLoadingBrands}
                     existingProducts={products}
@@ -450,51 +363,35 @@ const ProductsPage = () => {
             <TableRow>
               <TableHead className="w-[64px]">Imagem</TableHead>
               <TableHead>SKU</TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('name')}>
-                <div className="flex items-center">Nome {renderSortIcon('name')}</div>
-              </TableHead>
-              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('category')}>
-                <div className="flex items-center">Categoria {renderSortIcon('category')}</div>
-              </TableHead>
-              <TableHead>Marca</TableHead>
+              <TableHead>Nome</TableHead>
+              <TableHead>Categoria</TableHead>
               <TableHead>Custo</TableHead>
               <TableHead>Venda</TableHead>
               <TableHead className="text-green-600">Pix</TableHead>
               <TableHead>Estoque</TableHead>
-              <TableHead>Status</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoadingProducts ? (
-              <TableRow><TableCell colSpan={11} className="text-center">Carregando...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={10} className="text-center">Carregando...</TableCell></TableRow>
             ) : filteredProducts && filteredProducts.length > 0 ? (
               filteredProducts.map((product) => (
                 <TableRow key={product.id}>
                   <TableCell>{product.image_url ? <img src={product.image_url} alt={product.name} className="h-12 w-12 rounded-md object-cover" /> : <div className="h-12 w-12 rounded-md bg-gray-100 flex items-center justify-center"><ImageOff className="h-5 w-5 text-gray-400" /></div>}</TableCell>
                   <TableCell className="font-mono text-[10px] font-bold">#{product.sku || product.id}</TableCell>
-                  <TableCell className="font-medium text-xs max-w-[200px] truncate">{product.name}</TableCell>
+                  <TableCell className="font-medium text-xs truncate max-w-[200px]">{product.name}</TableCell>
                   <TableCell className="text-xs">{product.category || "N/A"}</TableCell>
-                  <TableCell className="text-xs">{product.brand || "N/A"}</TableCell>
                   <TableCell className="text-xs">{getPriceDisplay(product, true)}</TableCell>
-                  <TableCell className="text-xs">{getPriceDisplay(product)}</TableCell>
-                  <TableCell className="text-xs font-bold text-green-700">
-                    {product.pix_price ? formatCurrency(product.pix_price) : '-'}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={product.stock_quantity <= 5 ? "destructive" : "secondary"} className="h-5 text-[10px]">
-                        {product.stock_quantity} un
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Switch checked={product.is_visible} onCheckedChange={(s) => handleVisibilityChange(product, s)} />
-                  </TableCell>
+                  <TableCell className="text-xs font-medium">{getPriceDisplay(product)}</TableCell>
+                  <TableCell className="text-xs font-bold text-green-700">{product.pix_price ? formatCurrency(product.pix_price) : '-'}</TableCell>
+                  <TableCell><Badge variant={product.stock_quantity <= 5 ? "destructive" : "secondary"} className="h-5 text-[10px]">{product.stock_quantity} un</Badge></TableCell>
                   <TableCell className="text-right">
                     <Button variant="ghost" size="icon" onClick={() => { setSelectedProduct(product); setIsEditModalOpen(true); }}><MoreHorizontal className="h-4 w-4 text-primary" /></Button>
                   </TableCell>
                 </TableRow>
               ))
-            ) : <TableRow><TableCell colSpan={11} className="text-center py-10">Nenhum produto.</TableCell></TableRow>}
+            ) : <TableRow><TableCell colSpan={10} className="text-center py-10">Nenhum produto.</TableCell></TableRow>}
           </TableBody>
         </Table>
       </div>
@@ -502,12 +399,12 @@ const ProductsPage = () => {
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>Editar: {selectedProduct?.name}</DialogTitle></DialogHeader>
           <ProductForm 
-            onSubmit={handleUpdateProduct} 
+            onSubmit={(v) => selectedProduct && updateProductMutation.mutate({ productId: selectedProduct.id, values: v })} 
             isSubmitting={updateProductMutation.isPending} 
             categories={categories || []} 
             isLoadingCategories={isLoadingCategories} 
             subCategories={subCategories || []} 
-            isLoadingSubCategories={isLoadingSubCategories} 
+            isLoadingSubCategories={false} 
             brands={brands || []} 
             isLoadingBrands={isLoadingBrands} 
             initialData={selectedProduct ? { ...selectedProduct, sku: selectedProduct.sku || '', description: selectedProduct.description || '', category: selectedProduct.category || '', sub_category: selectedProduct.sub_category || '', brand: selectedProduct.brand || '', image_url: selectedProduct.image_url || '', cost_price: selectedProduct.cost_price || 0, pix_price: selectedProduct.pix_price || 0 } : undefined} 
@@ -515,13 +412,8 @@ const ProductsPage = () => {
           />
         </DialogContent>
       </Dialog>
-
-      <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
-        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Tem certeza?</AlertDialogTitle><AlertDialogDescription>Essa ação removerá permanentemente o produto.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={handleDeleteConfirm}>Remover</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
-      </AlertDialog>
-
-      <ImportConfirmationModal isOpen={isImportConfirmationModalOpen} onClose={() => setIsImportConfirmationModalOpen(false)} productsToImport={productsToConfirm} onConfirm={() => bulkInsertMutation.mutate(productsToConfirm)} isSubmitting={bulkInsertMutation.isPending} />
       {productToViewVariants && <ProductVariantViewer productId={productToViewVariants.id} productName={productToViewVariants.name} isOpen={isVariantViewerOpen} onClose={() => setIsVariantViewerOpen(false)} />}
+      <ImportConfirmationModal isOpen={isImportConfirmationModalOpen} onClose={() => setIsImportConfirmationModalOpen(false)} productsToImport={productsToConfirm} onConfirm={() => bulkInsertMutation.mutate(productsToConfirm)} isSubmitting={bulkInsertMutation.isPending} />
     </div>
   );
 };
