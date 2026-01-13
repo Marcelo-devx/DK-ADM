@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Key, Save, Trash2, Plus, Lock, Eye, EyeOff, Loader2, Search } from "lucide-react";
+import { Key, Save, Trash2, Plus, Lock, Eye, EyeOff, Loader2, Search, CheckCircle2, AlertCircle, Zap } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -25,6 +25,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 interface AppSetting {
   id: number;
@@ -51,6 +53,25 @@ const SecretsPage = () => {
     },
   });
 
+  // Query para verificar status do Mercado Pago
+  const { data: mpProdStatus } = useQuery({
+    queryKey: ["mp-prod-check"],
+    queryFn: async () => {
+        const { data } = await supabase.functions.invoke("get-mercadopago-status", { body: { type: 'production' } });
+        return data?.connected || false;
+    },
+    enabled: !!settings?.find(s => s.key === 'mercadopago_access_token')?.value
+  });
+
+  const { data: mpTestStatus } = useQuery({
+    queryKey: ["mp-test-check"],
+    queryFn: async () => {
+        const { data } = await supabase.functions.invoke("get-mercadopago-status", { body: { type: 'test' } });
+        return data?.connected || false;
+    },
+    enabled: !!settings?.find(s => s.key === 'mercadopago_test_access_token')?.value
+  });
+
   const upsertMutation = useMutation({
     mutationFn: async ({ key, value }: { key: string; value: string }) => {
       const { error } = await supabase
@@ -60,6 +81,8 @@ const SecretsPage = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["allAppSettings"] });
+      queryClient.invalidateQueries({ queryKey: ["mp-prod-check"] });
+      queryClient.invalidateQueries({ queryKey: ["mp-test-check"] });
       showSuccess("Configuração salva com sucesso!");
       setIsAddModalOpen(false);
       setNewSecret({ key: "", value: "" });
@@ -83,6 +106,26 @@ const SecretsPage = () => {
     setShowValues((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
+  const getStatusBadge = (key: string, value: string | null) => {
+    if (!value) return <Badge variant="outline" className="text-gray-400">Vazio</Badge>;
+
+    // Validação específica para Mercado Pago
+    if (key === 'mercadopago_access_token') {
+        if (mpProdStatus === true) return <Badge className="bg-green-500 gap-1"><CheckCircle2 className="w-3 h-3" /> Validado</Badge>;
+        if (mpProdStatus === false) return <Badge variant="destructive" className="gap-1"><AlertCircle className="w-3 h-3" /> Token Inválido</Badge>;
+        return <Badge variant="secondary" className="animate-pulse">Validando...</Badge>;
+    }
+
+    if (key === 'mercadopago_test_access_token') {
+        if (mpTestStatus === true) return <Badge className="bg-blue-500 gap-1"><CheckCircle2 className="w-3 h-3" /> Teste Ativo</Badge>;
+        if (mpTestStatus === false) return <Badge variant="destructive" className="gap-1"><AlertCircle className="w-3 h-3" /> Token Inválido</Badge>;
+        return <Badge variant="secondary" className="animate-pulse">Validando...</Badge>;
+    }
+
+    // Status geral para chaves preenchidas
+    return <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50">Preenchido</Badge>;
+  };
+
   const filteredSettings = settings?.filter((s) =>
     s.key.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -94,14 +137,14 @@ const SecretsPage = () => {
           <h1 className="text-3xl font-bold flex items-center gap-2">
             <Lock className="h-8 w-8 text-primary" /> Gerenciador de Secrets
           </h1>
-          <p className="text-muted-foreground text-sm">Chaves de API e configurações globais do sistema.</p>
+          <p className="text-muted-foreground text-sm">Controle de chaves de API e status de integração.</p>
         </div>
 
         <div className="flex items-center gap-2">
             <div className="relative w-64">
                 <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input 
-                    placeholder="Filtrar chaves..." 
+                    placeholder="Filtrar por nome..." 
                     className="pl-8 h-9" 
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
@@ -121,7 +164,7 @@ const SecretsPage = () => {
                         <div className="space-y-2">
                             <Label>Identificador (Key)</Label>
                             <Input 
-                                placeholder="ex: api_token_servico" 
+                                placeholder="ex: mercadopago_access_token" 
                                 value={newSecret.key}
                                 onChange={(e) => setNewSecret(prev => ({ ...prev, key: e.target.value.toLowerCase().replace(/\s/g, '_') }))}
                             />
@@ -129,7 +172,7 @@ const SecretsPage = () => {
                         <div className="space-y-2">
                             <Label>Valor (Value)</Label>
                             <Input 
-                                placeholder="Insira o valor ou segredo aqui" 
+                                placeholder="Insira o segredo aqui" 
                                 value={newSecret.value}
                                 onChange={(e) => setNewSecret(prev => ({ ...prev, value: e.target.value }))}
                             />
@@ -142,7 +185,7 @@ const SecretsPage = () => {
                             disabled={!newSecret.key || !newSecret.value || upsertMutation.isPending}
                         >
                             {upsertMutation.isPending ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                            Salvar Secret
+                            Salvar
                         </Button>
                     </DialogFooter>
                 </DialogContent>
@@ -154,44 +197,50 @@ const SecretsPage = () => {
         <Table>
           <TableHeader className="bg-gray-50">
             <TableRow>
-              <TableHead className="w-1/3">Chave (Identificador)</TableHead>
+              <TableHead className="w-1/4">Chave</TableHead>
               <TableHead>Valor</TableHead>
-              <TableHead className="w-[120px] text-right">Ações</TableHead>
+              <TableHead className="w-40 text-center">Status</TableHead>
+              <TableHead className="w-[100px] text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}><TableCell colSpan={3}><Skeleton className="h-10 w-full" /></TableCell></TableRow>
+                    <TableRow key={i}><TableCell colSpan={4}><Skeleton className="h-10 w-full" /></TableCell></TableRow>
                 ))
             ) : filteredSettings?.length === 0 ? (
-                <TableRow><TableCell colSpan={3} className="text-center py-10 text-muted-foreground italic">Nenhuma secret encontrada.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={4} className="text-center py-10 text-muted-foreground italic">Nenhuma chave encontrada.</TableCell></TableRow>
             ) : filteredSettings?.map((setting) => (
                 <TableRow key={setting.id} className="hover:bg-gray-50/50">
-                    <TableCell className="font-mono font-bold text-primary">
+                    <TableCell className="font-mono font-bold text-sm text-primary">
                         {setting.key}
                     </TableCell>
                     <TableCell>
                         <div className="flex items-center gap-2">
-                            <Input 
-                                type={showValues[setting.id] ? "text" : "password"}
-                                defaultValue={setting.value || ""}
-                                className="h-8 font-mono text-xs bg-gray-50 border-dashed"
-                                onBlur={(e) => {
-                                    if (e.target.value !== setting.value) {
-                                        upsertMutation.mutate({ key: setting.key, value: e.target.value });
-                                    }
-                                }}
-                            />
-                            <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-8 w-8 text-muted-foreground"
-                                onClick={() => toggleValueVisibility(setting.id)}
-                            >
-                                {showValues[setting.id] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                            </Button>
+                            <div className="relative flex-1">
+                                <Input 
+                                    type={showValues[setting.id] ? "text" : "password"}
+                                    defaultValue={setting.value || ""}
+                                    className="h-8 font-mono text-xs bg-gray-50 pr-8"
+                                    onBlur={(e) => {
+                                        if (e.target.value !== setting.value) {
+                                            upsertMutation.mutate({ key: setting.key, value: e.target.value });
+                                        }
+                                    }}
+                                />
+                                <Button 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    className="h-6 w-6 absolute right-1 top-1 text-muted-foreground hover:bg-transparent"
+                                    onClick={() => toggleValueVisibility(setting.id)}
+                                >
+                                    {showValues[setting.id] ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                                </Button>
+                            </div>
                         </div>
+                    </TableCell>
+                    <TableCell className="text-center">
+                        {getStatusBadge(setting.key, setting.value)}
                     </TableCell>
                     <TableCell className="text-right">
                         <Button 
