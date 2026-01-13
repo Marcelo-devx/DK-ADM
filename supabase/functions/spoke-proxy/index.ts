@@ -34,20 +34,19 @@ serve(async (req) => {
       throw new Error("API não configurada. Preencha a URL e o Token em Configurações.");
     }
 
-    // 1. Limpeza rigorosa
-    apiUrl = apiUrl.trim().replace(/\s/g, '');
+    // 1. Limpeza básica: remove espaços
+    apiUrl = apiUrl.trim();
     
-    // 2. Garante o protocolo https://
+    // 2. Garante o protocolo https:// se não houver
     if (!apiUrl.startsWith('http://') && !apiUrl.startsWith('https://')) {
         apiUrl = 'https://' + apiUrl;
     }
 
+    // Remove barra final se existir para evitar duplicação
     let cleanUrl = apiUrl.replace(/\/$/, '');
     
-    // 3. Garante o /v1
-    if (!cleanUrl.toLowerCase().includes('/v1')) {
-        cleanUrl += '/v1';
-    }
+    // NOTA: Removida a imposição forçada de '/v1'. 
+    // O sistema agora respeitará a URL base configurada pelo usuário.
     
     let finalUrl = `${cleanUrl}/${action}`;
     
@@ -69,11 +68,21 @@ serve(async (req) => {
             body: body ? JSON.stringify(body) : undefined
         });
 
-        const data = await response.json();
+        // Se a resposta não for JSON (erro de servidor, página HTML, etc)
+        const contentType = response.headers.get("content-type");
+        let data;
+        if (contentType && contentType.includes("application/json")) {
+            data = await response.json();
+        } else {
+            const text = await response.text();
+            if (!response.ok) {
+                throw new Error(`Erro ${response.status}: ${text.substring(0, 100)}...`);
+            }
+            data = { message: text };
+        }
 
         if (!response.ok) {
-            // Se a Spoke respondeu com erro, repassamos o erro dela
-            throw new Error(data.message || data.error || `Erro ${response.status}`);
+            throw new Error(data.message || data.error || `Erro ${response.status} na API Logística`);
         }
 
         return new Response(JSON.stringify(data), {
@@ -81,8 +90,9 @@ serve(async (req) => {
             status: 200,
         });
     } catch (fetchError) {
-        // Erro de rede (DNS, URL inválida, etc)
-        throw new Error(`Falha de Rede: ${fetchError.message} (URL: ${finalUrl})`);
+        console.error("Erro no fetch:", fetchError);
+        // Retorna detalhes úteis para o usuário debugar a URL
+        throw new Error(`Falha ao conectar em: ${finalUrl}. Detalhe: ${fetchError.message}`);
     }
 
   } catch (error) {

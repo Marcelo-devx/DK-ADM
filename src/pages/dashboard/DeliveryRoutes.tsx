@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
 import { 
   Map as MapIcon, 
-  ChevronRight, 
   Warehouse,
   Globe,
   RefreshCw,
@@ -126,15 +125,15 @@ const DeliveryRoutesPage = () => {
                         <AlertTriangle className="h-12 w-12 mx-auto text-red-500 mb-4" />
                         <h3 className="text-xl font-black text-red-800">Conexão Falhou</h3>
                         <p className="text-sm text-red-600 mb-6 max-w-md mx-auto">
-                            O endereço configurado parece estar incorreto ou o serviço está inacessível.
+                            Ocorreu um erro ao tentar buscar as rotas. Verifique a URL configurada.
                         </p>
                         
-                        <div className="p-6 bg-white border border-red-100 rounded-2xl max-w-2xl mx-auto shadow-lg text-left mb-8">
+                        <div className="p-6 bg-white border border-red-100 rounded-2xl max-w-3xl mx-auto shadow-lg text-left mb-8">
                             <div className="flex items-center justify-between mb-3">
-                                <span className="text-[10px] font-black text-red-400 uppercase tracking-widest">Relatório Técnico</span>
-                                <Badge variant="outline" className="text-[9px] border-red-200 text-red-500 bg-red-50 uppercase font-bold">DNS Error</Badge>
+                                <span className="text-[10px] font-black text-red-400 uppercase tracking-widest">Detalhes do Erro</span>
+                                <Badge variant="outline" className="text-[9px] border-red-200 text-red-500 bg-red-50 uppercase font-bold">Debug</Badge>
                             </div>
-                            <p className="text-sm font-mono text-red-600 bg-red-50/50 p-4 rounded-xl border border-red-50 leading-relaxed overflow-x-auto">
+                            <p className="text-xs font-mono text-red-600 bg-red-50/50 p-4 rounded-xl border border-red-50 leading-relaxed overflow-x-auto whitespace-pre-wrap">
                                 { (error as Error).message }
                             </p>
                         </div>
@@ -146,13 +145,9 @@ const DeliveryRoutesPage = () => {
                                 </Button>
                                 <Button asChild className="bg-red-600 hover:bg-red-700 font-bold shadow-md">
                                     <Link to="/dashboard/settings">
-                                        <Settings className="w-4 h-4 mr-2" /> Corrigir Endereço
+                                        <Settings className="w-4 h-4 mr-2" /> Corrigir Configurações
                                     </Link>
                                 </Button>
-                            </div>
-                            <div className="text-[11px] text-muted-foreground mt-4 space-y-1">
-                                <p>• Verifique se a <b>Base URL</b> em Configurações está correta (ex: https://api.spoke.com)</p>
-                                <p>• Certifique-se de que o <b>Token</b> não possui espaços extras.</p>
                             </div>
                         </div>
                     </div>
