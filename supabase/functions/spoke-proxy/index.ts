@@ -8,6 +8,9 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
+// URL Oficial da Circuit/Spoke conforme documentação
+const OFFICIAL_API_URL = "https://api.getcircuit.com/public/v0.2b";
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -30,23 +33,23 @@ serve(async (req) => {
     let apiUrl = settings?.find(s => s.key === 'logistics_api_url')?.value;
     const apiToken = settings?.find(s => s.key === 'logistics_api_token')?.value;
 
-    if (!apiUrl || !apiToken) {
-      throw new Error("API não configurada. Preencha a URL e o Token em Configurações.");
+    if (!apiToken) {
+      throw new Error("Token da API não configurado. Vá em Configurações > Integração Spoke.");
     }
 
-    // 1. Limpeza básica: remove espaços
+    // AUTO-CORREÇÃO: Se a URL estiver vazia ou for antiga/incorreta, usa a oficial
+    if (!apiUrl || apiUrl.includes("spoke.services") || apiUrl.includes("use-spoke") || !apiUrl.includes("getcircuit.com")) {
+        console.warn(`URL configurada (${apiUrl}) parece incorreta/antiga. Usando URL oficial: ${OFFICIAL_API_URL}`);
+        apiUrl = OFFICIAL_API_URL;
+    }
+
+    // Limpeza e formatação da URL
     apiUrl = apiUrl.trim();
-    
-    // 2. Garante o protocolo https:// se não houver
-    if (!apiUrl.startsWith('http://') && !apiUrl.startsWith('https://')) {
+    if (!apiUrl.startsWith('http')) {
         apiUrl = 'https://' + apiUrl;
     }
-
-    // Remove barra final se existir para evitar duplicação
+    // Remove barra final
     let cleanUrl = apiUrl.replace(/\/$/, '');
-    
-    // NOTA: Removida a imposição forçada de '/v1'. 
-    // O sistema agora respeitará a URL base configurada pelo usuário.
     
     let finalUrl = `${cleanUrl}/${action}`;
     
@@ -61,44 +64,48 @@ serve(async (req) => {
         const response = await fetch(finalUrl, {
             method,
             headers: {
-                'Authorization': `Bearer ${apiToken.trim()}`,
+                'Authorization': `Bearer ${apiToken.trim()}`, // Basic auth is implied by just token in Spoke sometimes, but docs say Bearer or Basic. Using Bearer as per updated docs.
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
             },
             body: body ? JSON.stringify(body) : undefined
         });
 
-        // Se a resposta não for JSON (erro de servidor, página HTML, etc)
-        const contentType = response.headers.get("content-type");
+        // Tenta ler o corpo da resposta independentemente do status
+        const responseText = await response.text();
         let data;
-        if (contentType && contentType.includes("application/json")) {
-            data = await response.json();
-        } else {
-            const text = await response.text();
-            if (!response.ok) {
-                throw new Error(`Erro ${response.status}: ${text.substring(0, 100)}...`);
-            }
-            data = { message: text };
+        
+        try {
+            data = JSON.parse(responseText);
+        } catch (e) {
+            // Se não for JSON, retorna o texto como mensagem
+            data = { message: responseText || `Erro ${response.status}` };
         }
 
         if (!response.ok) {
-            throw new Error(data.message || data.error || `Erro ${response.status} na API Logística`);
+            // Repassa o erro da API para o frontend
+            console.error("Erro na API Spoke:", data);
+            throw new Error(data.message || data.error || `Erro ${response.status} na API Externa`);
         }
 
         return new Response(JSON.stringify(data), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 200,
         });
+
     } catch (fetchError) {
-        console.error("Erro no fetch:", fetchError);
-        // Retorna detalhes úteis para o usuário debugar a URL
-        throw new Error(`Falha ao conectar em: ${finalUrl}. Detalhe: ${fetchError.message}`);
+        console.error("Erro de conexão:", fetchError);
+        // Retorna erro amigável se for problema de DNS/Rede
+        if (fetchError.message.includes("dns error") || fetchError.message.includes("Name or service not known")) {
+             throw new Error(`Não foi possível encontrar o servidor em: ${finalUrl}. Verifique a URL.`);
+        }
+        throw fetchError;
     }
 
   } catch (error) {
     return new Response(
       JSON.stringify({ 
-          error: "Erro de Integração", 
+          error: "Falha na Integração", 
           details: error.message 
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
