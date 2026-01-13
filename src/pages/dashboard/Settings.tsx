@@ -117,8 +117,11 @@ const SettingsPage = () => {
           <CardContent className="space-y-4">
             <div className="space-y-2">
                 <Label className="font-bold">Base URL (API)</Label>
-                <Input value={logisticsUrl} onChange={(e) => setLogisticsUrl(e.target.value)} placeholder="Ex: https://spoke.com/dispatch/api" />
-                <p className="text-[10px] text-muted-foreground">Insira a URL completa fornecida pela logística (sem o /v1 se não for necessário).</p>
+                <Input value={logisticsUrl} onChange={(e) => setLogisticsUrl(e.target.value)} placeholder="Ex: https://api.spoke.services/v1" />
+                <p className="text-[10px] text-muted-foreground">
+                  <strong>Atenção:</strong> Insira a URL exata encontrada na documentação da API (procure por 'Base URL').<br/>
+                  Exemplo comum: <code>https://api.spoke.services/v1</code> ou <code>https://api.use-spoke.com</code>.
+                </p>
             </div>
             <div className="space-y-2">
                 <Label className="font-bold">API Key (Token)</Label>

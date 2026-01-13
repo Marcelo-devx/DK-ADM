@@ -73,6 +73,17 @@ const DeliveryRoutesPage = () => {
     };
   }, [routes]);
 
+  const getErrorMessage = (err: Error) => {
+    const msg = err.message;
+    if (msg.includes("Name or service not known") || msg.includes("dns error")) {
+        return "URL INVÁLIDA: O endereço da API configurado não existe. Verifique o campo 'Base URL' nas configurações.";
+    }
+    if (msg.includes("401") || msg.includes("Unauthorized")) {
+        return "ACESSO NEGADO: O Token da API está incorreto ou expirou.";
+    }
+    return msg;
+  };
+
   return (
     <div className="max-w-[1600px] mx-auto space-y-6 text-gray-800">
       <div className="flex items-center justify-between">
@@ -124,17 +135,17 @@ const DeliveryRoutesPage = () => {
                     <div className="p-12 text-center bg-red-50/20">
                         <AlertTriangle className="h-12 w-12 mx-auto text-red-500 mb-4" />
                         <h3 className="text-xl font-black text-red-800">Conexão Falhou</h3>
-                        <p className="text-sm text-red-600 mb-6 max-w-md mx-auto">
-                            Ocorreu um erro ao tentar buscar as rotas. Verifique a URL configurada.
+                        <p className="text-sm text-red-600 mb-6 max-w-md mx-auto font-medium">
+                            Não foi possível buscar as rotas. Ocorreu um erro na comunicação.
                         </p>
                         
                         <div className="p-6 bg-white border border-red-100 rounded-2xl max-w-3xl mx-auto shadow-lg text-left mb-8">
                             <div className="flex items-center justify-between mb-3">
-                                <span className="text-[10px] font-black text-red-400 uppercase tracking-widest">Detalhes do Erro</span>
-                                <Badge variant="outline" className="text-[9px] border-red-200 text-red-500 bg-red-50 uppercase font-bold">Debug</Badge>
+                                <span className="text-[10px] font-black text-red-400 uppercase tracking-widest">Diagnóstico</span>
+                                <Badge variant="outline" className="text-[9px] border-red-200 text-red-500 bg-red-50 uppercase font-bold">Erro</Badge>
                             </div>
-                            <p className="text-xs font-mono text-red-600 bg-red-50/50 p-4 rounded-xl border border-red-50 leading-relaxed overflow-x-auto whitespace-pre-wrap">
-                                { (error as Error).message }
+                            <p className="text-sm font-bold text-red-700 bg-red-50/50 p-4 rounded-xl border border-red-50 leading-relaxed overflow-x-auto whitespace-pre-wrap">
+                                {getErrorMessage(error as Error)}
                             </p>
                         </div>
 
