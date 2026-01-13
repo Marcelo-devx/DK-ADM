@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Key, Save, Trash2, Plus, Lock, Eye, EyeOff, Loader2, Search, CheckCircle2, AlertCircle, Zap, ShieldCheck, Beaker } from "lucide-react";
+import { Key, Save, Trash2, Plus, Lock, Eye, EyeOff, Loader2, Search, CheckCircle2, AlertCircle, Zap, ShieldCheck, Beaker, Info } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -35,6 +35,28 @@ interface AppSetting {
   key: string;
   value: string | null;
 }
+
+const getKeyDescription = (key: string): string => {
+  const descriptions: Record<string, string> = {
+    mercadopago_access_token: "Token oficial para processar vendas reais via Mercado Pago.",
+    mercadopago_test_access_token: "Token de Sandbox para simular pagamentos sem custo real.",
+    pagseguro_token: "Token de produção para integração com checkout PagSeguro.",
+    pagseguro_test_token: "Token de ambiente de testes (Sandbox) do PagSeguro.",
+    pagseguro_email: "E-mail da conta vinculada ao PagSeguro.",
+    logistics_api_token: "Chave de autorização para o sistema de rotas Spoke Dispatch.",
+    logistics_api_url: "Endereço da API do Spoke (ex: https://api.dispatch.spoke.com/v1).",
+    logistics_webhook_secret: "Segredo para validar que atualizações de entrega vêm do Spoke.",
+    logo_url: "Link da imagem do logotipo principal exibido no painel administrativo.",
+    sales_popup_interval: "Intervalo em segundos entre os alertas de 'Alguém comprou'.",
+    whatsapp_contact_number: "Telefone oficial que recebe as mensagens e validações de Pix.",
+    label_sender_name: "Nome da sua loja que aparece como remetente na etiqueta.",
+    label_sender_address: "Endereço de origem impresso nas etiquetas de envio.",
+    label_sender_city: "Cidade e Estado de origem nas etiquetas de envio.",
+    label_logo_url: "Logotipo otimizado (preto e branco) para as etiquetas de transporte.",
+    n8n_webhook_url: "Endpoint para automações de marketing e relatórios externos.",
+  };
+  return descriptions[key] || "Configuração personalizada do sistema.";
+};
 
 const SecretsPage = () => {
   const queryClient = useQueryClient();
@@ -152,7 +174,6 @@ const SecretsPage = () => {
     return <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50 font-bold">Preenchido</Badge>;
   };
 
-  // Filtragem: Remove 'payment_mode' da lista pois ele é controlado pelo toggle no topo
   const filteredSettings = settings?.filter((s) =>
     s.key !== 'payment_mode' && s.key.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -214,7 +235,7 @@ const SecretsPage = () => {
         <Table>
           <TableHeader className="bg-gray-50">
             <TableRow>
-              <TableHead className="w-1/4">Chave de Integração</TableHead>
+              <TableHead className="w-1/3">Chave de Integração</TableHead>
               <TableHead>Valor / Secret</TableHead>
               <TableHead className="w-40 text-center">Validação</TableHead>
               <TableHead className="w-[80px] text-right">Ação</TableHead>
@@ -226,16 +247,21 @@ const SecretsPage = () => {
                     <TableRow key={i}><TableCell colSpan={4}><Skeleton className="h-10 w-full" /></TableCell></TableRow>
                 ))
             ) : filteredSettings?.map((setting) => (
-                <TableRow key={setting.id} className="hover:bg-gray-50/50">
-                    <TableCell className="font-mono font-bold text-sm">
-                        <div className="flex items-center gap-2">
-                            {setting.key.includes('test') ? <Beaker className="w-3 h-3 text-blue-400" /> : <ShieldCheck className="w-3 h-3 text-green-400" />}
-                            <span className={setting.key.includes('test') ? "text-blue-700" : "text-primary"}>
-                                {setting.key}
-                            </span>
+                <TableRow key={setting.id} className="hover:bg-gray-50/50 align-top">
+                    <TableCell className="py-4">
+                        <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2 font-mono font-bold text-sm">
+                                {setting.key.includes('test') ? <Beaker className="w-3 h-3 text-blue-400" /> : <ShieldCheck className="w-3 h-3 text-green-400" />}
+                                <span className={setting.key.includes('test') ? "text-blue-700" : "text-primary"}>
+                                    {setting.key}
+                                </span>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground leading-tight max-w-[250px]">
+                                {getKeyDescription(setting.key)}
+                            </p>
                         </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-4">
                         <div className="flex items-center gap-2">
                             <div className="relative flex-1">
                                 <Input 
@@ -259,10 +285,10 @@ const SecretsPage = () => {
                             </div>
                         </div>
                     </TableCell>
-                    <TableCell className="text-center">
+                    <TableCell className="text-center py-4">
                         {getStatusBadge(setting.key, setting.value)}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right py-4">
                         <Button 
                             variant="ghost" 
                             size="icon" 
@@ -289,9 +315,9 @@ const SecretsPage = () => {
             </DialogHeader>
             <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                    <Label className="text-xs uppercase font-bold">Chave Sugerida</Label>
+                    <Label className="text-xs uppercase font-bold">Sugestões comuns</Label>
                     <div className="flex flex-wrap gap-2">
-                        {['mercadopago_access_token', 'pagseguro_token', 'pagseguro_email', 'n8n_webhook_url'].map(k => (
+                        {['mercadopago_access_token', 'pagseguro_token', 'n8n_webhook_url', 'whatsapp_contact_number'].map(k => (
                             <Badge key={k} variant="secondary" className="cursor-pointer hover:bg-primary hover:text-white" onClick={() => setNewSecret({ ...newSecret, key: k })}>
                                 {k}
                             </Badge>
