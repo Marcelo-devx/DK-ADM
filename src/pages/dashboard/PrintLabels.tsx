@@ -99,12 +99,15 @@ const PrintLabelsPage = () => {
     }
   });
 
-  // Filtro: Apenas pedidos Pagos ou Finalizados
+  // Filtro: Apenas pedidos Pagos E com Entrega Pendente
   const filteredOrders = useMemo(() => {
     return orders?.filter(o => {
-      // Regra: Só pode imprimir etiqueta se estiver PAGO ou FINALIZADO
+      // Regra 1: Pagamento confirmado
       const isPaid = o.status === "Finalizada" || o.status === "Pago";
-      if (!isPaid) return false;
+      // Regra 2: Entrega ainda não realizada (Pendente)
+      const isDeliveryPending = o.delivery_status === "Pendente";
+
+      if (!isPaid || !isDeliveryPending) return false;
 
       const term = searchTerm.toLowerCase();
       const matchesSearch = 
@@ -158,7 +161,9 @@ const PrintLabelsPage = () => {
               onChange={(e) => setSearchTerm(e.target.value)}
               className="mt-2 h-9 text-xs"
             />
-            <p className="text-[10px] text-muted-foreground mt-1 font-medium">Apenas pedidos pagos são listados aqui.</p>
+            <p className="text-[10px] text-muted-foreground mt-1 font-medium">
+              Listando apenas pedidos <strong>Pagos</strong> com entrega <strong>Pendente</strong>.
+            </p>
           </CardHeader>
           <CardContent className="p-0 flex-1 overflow-y-auto max-h-[600px]">
             {isLoadingOrders ? (
@@ -175,17 +180,22 @@ const PrintLabelsPage = () => {
                 >
                   <div className="space-y-0.5">
                     <p className="font-bold text-sm">#{order.id}</p>
-                    <p className="text-[10px] text-muted-foreground uppercase truncate w-40">
+                    <p className="text-[10px] text-muted-foreground uppercase truncate w-32">
                       {order.profiles?.first_name} {order.profiles?.last_name}
                     </p>
                   </div>
-                  <Badge className="bg-green-500 text-[9px] h-4">PAGO</Badge>
+                  <div className="flex flex-col items-end gap-1">
+                    <Badge className="bg-green-500 text-[9px] h-4">PAGO</Badge>
+                    <Badge variant="outline" className="text-[9px] h-4 text-blue-600 border-blue-200 bg-blue-50">PENDENTE</Badge>
+                  </div>
                 </button>
               ))
             ) : (
               <div className="p-8 text-center space-y-3">
                  <AlertCircle className="w-8 h-8 text-gray-300 mx-auto" />
-                 <p className="text-xs text-muted-foreground font-medium italic">Nenhum pedido pago encontrado para impressão.</p>
+                 <p className="text-xs text-muted-foreground font-medium italic">
+                   Nenhum pedido pago aguardando envio encontrado.
+                 </p>
               </div>
             )}
           </CardContent>
@@ -305,7 +315,7 @@ const PrintLabelsPage = () => {
                 <div className="bg-white p-6 rounded-full shadow-sm w-fit mx-auto border-2 border-dashed">
                     <Printer className="w-12 h-12 text-gray-200" />
                 </div>
-                <p className="text-muted-foreground font-medium">Selecione um pedido pago para visualizar a etiqueta</p>
+                <p className="text-muted-foreground font-medium">Selecione um pedido para visualizar a etiqueta</p>
              </div>
           </div>
         )}
