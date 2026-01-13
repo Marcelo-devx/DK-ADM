@@ -37,6 +37,7 @@ import SupplierOrdersPage from "./pages/dashboard/SupplierOrders";
 import PriceManagementPage from "./pages/dashboard/PriceManagement";
 import PrintLabelsPage from "./pages/dashboard/PrintLabels";
 import DeliveryRoutesPage from "./pages/dashboard/DeliveryRoutes";
+import SecretsPage from "./pages/dashboard/Secrets";
 
 const queryClient = new QueryClient();
 
@@ -77,6 +78,7 @@ const AppContent = () => {
           <Route path="reviews" element={<ReviewsPage />} />
           <Route path="cloudinary-stats" element={<CloudinaryStatsPage />} />
           <Route path="integrations" element={<IntegrationsPage />} />
+          <Route path="secrets" element={<SecretsPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
 
