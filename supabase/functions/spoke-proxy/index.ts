@@ -8,7 +8,7 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-// URL Oficial da Circuit/Spoke conforme documentação
+// URL Oficial da Documentação (v0.2b)
 const OFFICIAL_API_URL = "https://api.getcircuit.com/public/v0.2b";
 
 serve(async (req) => {
@@ -37,70 +37,58 @@ serve(async (req) => {
       throw new Error("Token da API não configurado. Vá em Configurações > Integração Spoke.");
     }
 
-    // AUTO-CORREÇÃO: Se a URL estiver vazia ou for antiga/incorreta, usa a oficial
-    if (!apiUrl || apiUrl.includes("spoke.services") || apiUrl.includes("use-spoke") || !apiUrl.includes("getcircuit.com")) {
-        console.warn(`URL configurada (${apiUrl}) parece incorreta/antiga. Usando URL oficial: ${OFFICIAL_API_URL}`);
+    // Se a URL não estiver configurada ou parecer errada, usa a oficial da documentação
+    if (!apiUrl || !apiUrl.includes("api.getcircuit.com/public/v0.2b")) {
+        console.warn(`URL configurada (${apiUrl}) difere da oficial. Usando: ${OFFICIAL_API_URL}`);
         apiUrl = OFFICIAL_API_URL;
     }
 
-    // Limpeza e formatação da URL
-    apiUrl = apiUrl.trim();
-    if (!apiUrl.startsWith('http')) {
-        apiUrl = 'https://' + apiUrl;
-    }
-    // Remove barra final
-    let cleanUrl = apiUrl.replace(/\/$/, '');
+    // Limpeza da URL
+    apiUrl = apiUrl.trim().replace(/\/$/, '');
     
-    let finalUrl = `${cleanUrl}/${action}`;
+    // A API retorna IDs como "plans/abc". Se a action já vier assim, concatenamos direto.
+    // Se a action for só "plans", também funciona.
+    let finalUrl = `${apiUrl}/${action}`;
     
     if (params) {
       const queryString = new URLSearchParams(params).toString();
       finalUrl += `?${queryString}`;
     }
 
-    console.log("Conectando em:", finalUrl);
+    console.log(`[spoke-proxy] Requesting: ${method} ${finalUrl}`);
 
+    const response = await fetch(finalUrl, {
+        method,
+        headers: {
+            'Authorization': `Bearer ${apiToken.trim()}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        },
+        body: body ? JSON.stringify(body) : undefined
+    });
+
+    const responseText = await response.text();
+    let data;
+    
     try {
-        const response = await fetch(finalUrl, {
-            method,
-            headers: {
-                'Authorization': `Bearer ${apiToken.trim()}`, // Basic auth is implied by just token in Spoke sometimes, but docs say Bearer or Basic. Using Bearer as per updated docs.
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            body: body ? JSON.stringify(body) : undefined
-        });
-
-        // Tenta ler o corpo da resposta independentemente do status
-        const responseText = await response.text();
-        let data;
-        
-        try {
-            data = JSON.parse(responseText);
-        } catch (e) {
-            // Se não for JSON, retorna o texto como mensagem
-            data = { message: responseText || `Erro ${response.status}` };
-        }
-
-        if (!response.ok) {
-            // Repassa o erro da API para o frontend
-            console.error("Erro na API Spoke:", data);
-            throw new Error(data.message || data.error || `Erro ${response.status} na API Externa`);
-        }
-
-        return new Response(JSON.stringify(data), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: 200,
-        });
-
-    } catch (fetchError) {
-        console.error("Erro de conexão:", fetchError);
-        // Retorna erro amigável se for problema de DNS/Rede
-        if (fetchError.message.includes("dns error") || fetchError.message.includes("Name or service not known")) {
-             throw new Error(`Não foi possível encontrar o servidor em: ${finalUrl}. Verifique a URL.`);
-        }
-        throw fetchError;
+        data = JSON.parse(responseText);
+    } catch (e) {
+        data = { message: responseText || `Status ${response.status}` };
     }
+
+    if (!response.ok) {
+        console.error("[spoke-proxy] Error:", data);
+        // Tratamento específico para Rate Limiting (429) mencionado na doc
+        if (response.status === 429) {
+            throw new Error("Limite de requisições excedido (Rate Limit). Tente novamente em alguns instantes.");
+        }
+        throw new Error(data.message || data.error || `Erro ${response.status} na API Spoke`);
+    }
+
+    return new Response(JSON.stringify(data), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+    });
 
   } catch (error) {
     return new Response(

@@ -27,7 +27,7 @@ const SettingsPage = () => {
 
   useEffect(() => {
     if (settings) {
-      setLogisticsUrl(settings.find(s => s.key === "logistics_api_url")?.value || "");
+      setLogisticsUrl(settings.find(s => s.key === "logistics_api_url")?.value || "https://api.getcircuit.com/public/v0.2b");
       setLogisticsToken(settings.find(s => s.key === "logistics_api_token")?.value || "");
       setWebhookSecret(settings.find(s => s.key === "logistics_webhook_secret")?.value || "");
     }
@@ -52,20 +52,19 @@ const SettingsPage = () => {
 
   const handleTestConnection = async () => {
     setIsTesting(true);
-    // Primeiro salvamos para garantir que a função use os dados mais recentes
     try {
         await saveMutation.mutateAsync();
         
+        // Testa buscando os planos, como na doc "List Plans"
         const today = new Date().toISOString().split('T')[0];
         const { error } = await supabase.functions.invoke("spoke-proxy", {
             body: { 
               action: "plans", 
-              params: { "filter.startsGte": today } 
+              params: { "filter.startsGte": today, "maxPageSize": 1 } 
             }
         });
 
         if (error) {
-            // Tenta extrair a mensagem de erro detalhada da função
             let errorMsg = error.message;
             try {
                 const body = await error.context.json();
@@ -74,7 +73,7 @@ const SettingsPage = () => {
             throw new Error(errorMsg);
         }
 
-        showSuccess("Sucesso! Conexão estabelecida com a API.");
+        showSuccess("Conexão com Spoke/Circuit estabelecida com sucesso!");
     } catch (err: any) {
         showError(`Falha no teste: ${err.message}`);
     } finally {
@@ -110,30 +109,32 @@ const SettingsPage = () => {
         <Card className="border-blue-100 bg-blue-50/10 shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-                <Globe className="w-5 h-5 text-blue-600" /> Integração Spoke Dispatch
+                <Globe className="w-5 h-5 text-blue-600" /> Integração Spoke (Circuit)
             </CardTitle>
-            <CardDescription>Configure a comunicação com o sistema de rotas.</CardDescription>
+            <CardDescription>Configure a comunicação com a API v0.2b.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-                <Label className="font-bold">Base URL (API)</Label>
-                <Input value={logisticsUrl} onChange={(e) => setLogisticsUrl(e.target.value)} placeholder="Ex: https://api.getcircuit.com/public/v0.2b" />
+                <Label className="font-bold">Base URL (API v0.2b)</Label>
+                <Input value={logisticsUrl} onChange={(e) => setLogisticsUrl(e.target.value)} placeholder="https://api.getcircuit.com/public/v0.2b" />
                 <p className="text-[10px] text-muted-foreground">
-                  <strong>Atenção:</strong> Insira a URL exata da documentação da Spoke (Circuit).<br/>
-                  Padrão atual: <code>https://api.getcircuit.com/public/v0.2b</code>
+                  URL Padrão: <code>https://api.getcircuit.com/public/v0.2b</code>
                 </p>
             </div>
             <div className="space-y-2">
-                <Label className="font-bold">API Key (Token)</Label>
+                <Label className="font-bold">API Key (Bearer Token)</Label>
                 <Input type="password" value={logisticsToken} onChange={(e) => setLogisticsToken(e.target.value)} />
+                <p className="text-[10px] text-muted-foreground">
+                  Gere em: Configurações &gt; API no painel do Spoke/Circuit.
+                </p>
             </div>
             <div className="space-y-2 pt-4 border-t">
                 <Label className="font-bold flex items-center gap-2 text-emerald-700">
-                    <ShieldCheck className="w-4 h-4" /> Chave Secreta do Webhook
+                    <ShieldCheck className="w-4 h-4" /> Webhook Secret
                 </Label>
                 <Input 
                     type="password"
-                    placeholder="Cole a Chave Secreta gerada no painel da Spoke" 
+                    placeholder="Chave secreta do Webhook (opcional)" 
                     value={webhookSecret} 
                     onChange={(e) => setWebhookSecret(e.target.value)}
                 />
@@ -143,7 +144,7 @@ const SettingsPage = () => {
                     <Save className="w-4 h-4 mr-2" /> Salvar
                 </Button>
                 <Button onClick={handleTestConnection} disabled={isTesting || saveMutation.isPending} variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50">
-                    {isTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                    {isTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />} Testar
                 </Button>
             </div>
           </CardContent>
