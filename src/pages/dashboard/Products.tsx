@@ -363,19 +363,20 @@ const ProductsPage = () => {
         const data = e.target?.result;
         const workbook = XLSX.read(data, { type: 'array' });
         const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]) as any[];
+        
         const productsToInsert = json.map(mapRowKeys).map((row: any) => ({
             sku: row.sku || '',
             name: row.nome,
-            price: cleanAndParseFloat(row.preçodevenda),
-            pix_price: cleanAndParseFloat(row.preçopix) || null,
+            price: cleanAndParseFloat(row.precodevenda), // "Preço de Venda" -> "precodevenda"
+            pix_price: cleanAndParseFloat(row.precopix) || null, // "Preço Pix" -> "precopix"
             stock_quantity: parseInt(row.estoque, 10) || 0,
-            description: row.descrição || null,
-            cost_price: cleanAndParseFloat(row.preçodecusto) || null,
+            description: row.descricao || null, // "Descrição" -> "descricao"
+            cost_price: cleanAndParseFloat(row.precodecusto) || null, // "Preço de Custo" -> "precodecusto"
             category: row.categoria || null,
-            sub_category: row.subcategoria || null,
+            sub_category: row.subcategoria || null, // "Sub-categoria" -> "subcategoria"
             brand: row.marca || null,
             image_url: row.imagem || null,
-            is_visible: row.publicado?.toLowerCase() === 'sim',
+            is_visible: row.publicadosimnao?.toLowerCase() === 'sim', // "Publicado (Sim/Não)" -> "publicadosimnao"
         }));
         setProductsToConfirm(productsToInsert);
         setIsImportConfirmationModalOpen(true);
