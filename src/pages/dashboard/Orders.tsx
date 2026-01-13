@@ -19,7 +19,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Share2, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Share2, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { showSuccess, showError } from "@/utils/toast";
 import { OrderDetailModal } from "@/components/dashboard/OrderDetailModal";
@@ -102,14 +102,29 @@ const OrdersPage = () => {
     },
     onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
-        showSuccess("Pagamento validado com sucesso! Pedido liberado para envio.");
+        showSuccess("Pagamento validado! Pedido liberado.");
     },
     onError: (err: any) => showError(`Erro ao validar: ${err.message}`),
   });
 
+  const updateDeliveryStatusMutation = useMutation({
+    mutationFn: async ({ orderId, status, info }: { orderId: number, status: string, info: string }) => {
+        const { error } = await supabase
+            .from('orders')
+            .update({ delivery_status: status, delivery_info: info })
+            .eq('id', orderId);
+        if (error) throw error;
+    },
+    onSuccess: (_, variables) => {
+        queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
+        showSuccess(`Status de entrega atualizado para: ${variables.status}`);
+    },
+    onError: (err: any) => showError(`Erro: ${err.message}`),
+  });
+
   const sendToSpokeMutation = useMutation({
     mutationFn: async (order: Order) => {
-        const { data, error } = await supabase.functions.invoke("spoke-proxy", {
+        const { error } = await supabase.functions.invoke("spoke-proxy", {
             body: {
                 action: "stops",
                 method: "POST",
@@ -213,6 +228,7 @@ const OrdersPage = () => {
                 const needsValidation = isPix && !isPaid;
                 const isPendingDelivery = order.delivery_status === "Pendente";
                 const canSendToSpoke = isPaid && isPendingDelivery;
+                const isInRoute = order.delivery_status === "Despachado";
 
                 return (
                   <TableRow key={order.id} className={cn(needsValidation ? "bg-orange-50/30" : canSendToSpoke ? "bg-blue-50/10" : "")}>
@@ -237,7 +253,10 @@ const OrdersPage = () => {
                         </div>
                     </TableCell>
                     <TableCell>
-                        <Badge variant="secondary" className={cn(order.delivery_status === 'Entregue' && "bg-green-100 text-green-800")}>
+                        <Badge variant="secondary" className={cn(
+                            order.delivery_status === 'Entregue' && "bg-green-100 text-green-800",
+                            order.delivery_status === 'Despachado' && "bg-blue-100 text-blue-800 animate-pulse"
+                        )}>
                             {order.delivery_status}
                         </Badge>
                     </TableCell>
@@ -258,6 +277,25 @@ const OrdersPage = () => {
                                         </Button>
                                     </TooltipTrigger>
                                     <TooltipContent>Confirmar recebimento do Pix</TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                        )}
+
+                        {isInRoute && (
+                             <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button 
+                                            size="sm" 
+                                            variant="outline"
+                                            className="text-green-600 border-green-200 bg-green-50 hover:bg-green-100 font-bold h-8 px-3 text-xs"
+                                            onClick={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: 'Entregue', info: 'Confirmado pelo painel' })}
+                                            disabled={updateDeliveryStatusMutation.isPending}
+                                        >
+                                            <CheckCircle2 className="w-3 h-3 mr-1" /> Entregue
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Marcar pedido como entregue</TooltipContent>
                                 </Tooltip>
                             </TooltipProvider>
                         )}
@@ -294,6 +332,13 @@ const OrdersPage = () => {
                                 )}
                                 <DropdownMenuItem onSelect={() => { setSelectedOrder(order); setIsLabelModalOpen(true); }} disabled={!isPaid}>
                                     <Printer className="w-4 h-4 mr-2" /> Imprimir Etiqueta
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: 'Despachado', info: 'Despachado manualmente' })} disabled={!isPaid || isInRoute || order.delivery_status === 'Entregue'}>
+                                    <Truck className="w-4 h-4 mr-2" /> Marcar como Despachado
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: 'Entregue', info: 'Entregue manualmente' })} disabled={order.delivery_status === 'Entregue'}>
+                                    <CheckCircle2 className="w-4 h-4 mr-2" /> Marcar como Entregue
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem onSelect={() => { setSelectedOrder(order); setIsDeleteAlertOpen(true); }} className="text-red-600">
