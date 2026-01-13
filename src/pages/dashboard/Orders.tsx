@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../../integrations/supabase/client";
 import {
@@ -19,7 +19,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Share2, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck } from "lucide-react";
+import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Share2, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { showSuccess, showError } from "@/utils/toast";
 import { OrderDetailModal } from "@/components/dashboard/OrderDetailModal";
@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface Order {
   id: number;
@@ -88,12 +89,27 @@ const OrdersPage = () => {
   
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [readyToShipOnly, setReadyToShipOnly] = useState(false);
+  
+  // Estado para seleção múltipla
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [isProcessingBulk, setIsProcessingBulk] = useState(false);
 
   const { data: orders, isLoading, refetch, isRefetching } = useQuery<Order[]>({
     queryKey: ["ordersAdmin"],
     queryFn: fetchOrders,
     refetchInterval: 30000, 
   });
+
+  const filteredOrders = useMemo(() => {
+    return orders?.filter(order => {
+      if (readyToShipOnly) {
+          const isPaid = order.status === "Finalizada" || order.status === "Pago";
+          const isPendingDelivery = order.delivery_status === "Pendente";
+          return isPaid && isPendingDelivery;
+      }
+      return true;
+    }) || [];
+  }, [orders, readyToShipOnly]);
 
   const validatePaymentMutation = useMutation({
     mutationFn: async (orderId: number) => {
@@ -102,9 +118,7 @@ const OrdersPage = () => {
     },
     onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
-        showSuccess("Pagamento validado! Pedido liberado.");
     },
-    onError: (err: any) => showError(`Erro ao validar: ${err.message}`),
   });
 
   const updateDeliveryStatusMutation = useMutation({
@@ -115,11 +129,9 @@ const OrdersPage = () => {
             .eq('id', orderId);
         if (error) throw error;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
-        showSuccess(`Status de entrega atualizado para: ${variables.status}`);
     },
-    onError: (err: any) => showError(`Erro: ${err.message}`),
   });
 
   const sendToSpokeMutation = useMutation({
@@ -152,9 +164,7 @@ const OrdersPage = () => {
     },
     onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
-        showSuccess("Pedido enviado com sucesso para o Spoke!");
     },
-    onError: (err: any) => showError(err.message),
   });
 
   const deleteOrderMutation = useMutation({
@@ -170,19 +180,71 @@ const OrdersPage = () => {
     onError: (err: any) => showError(`Erro ao deletar: ${err.message}`),
   });
 
+  // Funções de Ação em Massa
+  const handleBulkValidate = async () => {
+    setIsProcessingBulk(true);
+    let successCount = 0;
+    
+    for (const id of Array.from(selectedIds)) {
+        const order = orders?.find(o => o.id === id);
+        // Só tenta validar se for Pix e não estiver pago
+        if (order && order.payment_method?.toLowerCase().includes('pix') && order.status !== "Finalizada" && order.status !== "Pago") {
+            try {
+                await validatePaymentMutation.mutateAsync(id);
+                successCount++;
+            } catch (e) {}
+        }
+    }
+    
+    setIsProcessingBulk(false);
+    setSelectedIds(new Set());
+    if (successCount > 0) showSuccess(`${successCount} pagamentos validados com sucesso!`);
+    else showError("Nenhum pedido apto para validação foi processado.");
+  };
+
+  const handleBulkSendToSpoke = async () => {
+    setIsProcessingBulk(true);
+    let successCount = 0;
+    
+    for (const id of Array.from(selectedIds)) {
+        const order = orders?.find(o => o.id === id);
+        // Só envia se estiver pago e pendente de entrega
+        const isPaid = order?.status === "Finalizada" || order?.status === "Pago";
+        const isPending = order?.delivery_status === "Pendente";
+        
+        if (order && isPaid && isPending) {
+            try {
+                await sendToSpokeMutation.mutateAsync(order);
+                successCount++;
+            } catch (e) {}
+        }
+    }
+    
+    setIsProcessingBulk(false);
+    setSelectedIds(new Set());
+    if (successCount > 0) showSuccess(`${successCount} pedidos enviados para o Spoke!`);
+    else showError("Nenhum pedido apto para envio (pago e pendente) foi processado.");
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredOrders.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredOrders.map(o => o.id)));
+    }
+  };
+
+  const toggleSelectOne = (id: number) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedIds(next);
+  };
+
   const formatCurrency = (val: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
 
-  const filteredOrders = orders?.filter(order => {
-    if (readyToShipOnly) {
-        const isPaid = order.status === "Finalizada" || order.status === "Pago";
-        const isPendingDelivery = order.delivery_status === "Pendente";
-        return isPaid && isPendingDelivery;
-    }
-    return true;
-  });
-
   return (
-    <div>
+    <div className="relative pb-24">
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
         <div className="flex items-center gap-3">
           <h1 className="text-3xl font-bold flex items-center gap-2">
@@ -199,7 +261,10 @@ const OrdersPage = () => {
             variant={readyToShipOnly ? "default" : "outline"} 
             size="sm" 
             className={cn("h-8 gap-2", readyToShipOnly && "bg-blue-600")}
-            onClick={() => setReadyToShipOnly(!readyToShipOnly)}
+            onClick={() => {
+                setReadyToShipOnly(!readyToShipOnly);
+                setSelectedIds(new Set()); // Limpa seleção ao trocar filtro
+            }}
           >
             <Package className="w-4 h-4" /> Somente Prontos para Envio
           </Button>
@@ -210,6 +275,12 @@ const OrdersPage = () => {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-12 text-center">
+                <Checkbox 
+                  checked={filteredOrders.length > 0 && selectedIds.size === filteredOrders.length}
+                  onCheckedChange={toggleSelectAll}
+                />
+              </TableHead>
               <TableHead>Pedido ID</TableHead>
               <TableHead>Data</TableHead>
               <TableHead>Cliente</TableHead>
@@ -221,17 +292,27 @@ const OrdersPage = () => {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-                <TableRow><TableCell colSpan={8}><Skeleton className="h-10 w-full" /></TableCell></TableRow>
-            ) : filteredOrders?.map((order) => {
+                <TableRow><TableCell colSpan={9}><Skeleton className="h-10 w-full" /></TableCell></TableRow>
+            ) : filteredOrders.map((order) => {
                 const isPaid = order.status === "Finalizada" || order.status === "Pago";
                 const isPix = order.payment_method?.toLowerCase().includes('pix');
                 const needsValidation = isPix && !isPaid;
                 const isPendingDelivery = order.delivery_status === "Pendente";
                 const canSendToSpoke = isPaid && isPendingDelivery;
                 const isInRoute = order.delivery_status === "Despachado";
+                const isSelected = selectedIds.has(order.id);
 
                 return (
-                  <TableRow key={order.id} className={cn(needsValidation ? "bg-orange-50/30" : canSendToSpoke ? "bg-blue-50/10" : "")}>
+                  <TableRow key={order.id} className={cn(
+                    needsValidation ? "bg-orange-50/30" : canSendToSpoke ? "bg-blue-50/10" : "",
+                    isSelected && "bg-primary/5 border-l-4 border-l-primary"
+                  )}>
+                    <TableCell className="text-center">
+                        <Checkbox 
+                            checked={isSelected}
+                            onCheckedChange={() => toggleSelectOne(order.id)}
+                        />
+                    </TableCell>
                     <TableCell className="font-mono text-sm font-bold">#{order.id}</TableCell>
                     <TableCell className="text-xs">{new Date(order.created_at).toLocaleDateString("pt-BR")}</TableCell>
                     <TableCell className="font-medium text-sm">{order.profiles?.first_name} {order.profiles?.last_name}</TableCell>
@@ -354,6 +435,52 @@ const OrdersPage = () => {
           </TableBody>
         </Table>
       </div>
+
+      {/* BARRA DE AÇÕES EM MASSA (FIXA NO RODAPÉ) */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-10 duration-300">
+            <div className="bg-primary text-white shadow-2xl rounded-2xl p-4 flex items-center gap-6 border-4 border-white">
+                <div className="flex items-center gap-3 pr-6 border-r border-white/20">
+                    <div className="bg-white/20 p-2 rounded-lg">
+                        <CheckboxIcon className="w-6 h-6" />
+                    </div>
+                    <div>
+                        <p className="text-lg font-black leading-none">{selectedIds.size}</p>
+                        <p className="text-[10px] uppercase font-bold opacity-70">Selecionados</p>
+                    </div>
+                </div>
+
+                <div className="flex gap-2">
+                    <Button 
+                        onClick={handleBulkValidate} 
+                        disabled={isProcessingBulk}
+                        className="bg-green-600 hover:bg-green-700 font-black h-12 px-6 rounded-xl shadow-lg"
+                    >
+                        {isProcessingBulk ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <CheckCircle2 className="w-5 h-5 mr-2" />}
+                        Validar Pagamentos
+                    </Button>
+                    
+                    <Button 
+                        onClick={handleBulkSendToSpoke} 
+                        disabled={isProcessingBulk}
+                        className="bg-blue-600 hover:bg-blue-700 font-black h-12 px-6 rounded-xl shadow-lg"
+                    >
+                        {isProcessingBulk ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Share2 className="w-5 h-5 mr-2" />}
+                        Mandar p/ Spoke
+                    </Button>
+                    
+                    <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => setSelectedIds(new Set())}
+                        className="h-12 w-12 hover:bg-white/10 text-white rounded-xl"
+                    >
+                        <X className="w-6 h-6" />
+                    </Button>
+                </div>
+            </div>
+        </div>
+      )}
 
       {selectedOrder && <OrderDetailModal order={selectedOrder} isOpen={isDetailModalOpen} onClose={() => setIsDetailModalOpen(false)} />}
       {selectedOrder && <ShippingLabelModal order={selectedOrder} isOpen={isLabelModalOpen} onClose={() => { setIsLabelModalOpen(false); setSelectedOrder(null); }} />}
