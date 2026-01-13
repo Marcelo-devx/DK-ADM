@@ -152,8 +152,9 @@ const SecretsPage = () => {
     return <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50 font-bold">Preenchido</Badge>;
   };
 
+  // Filtragem: Remove 'payment_mode' da lista pois ele é controlado pelo toggle no topo
   const filteredSettings = settings?.filter((s) =>
-    s.key.toLowerCase().includes(searchTerm.toLowerCase())
+    s.key !== 'payment_mode' && s.key.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -167,11 +168,17 @@ const SecretsPage = () => {
         </div>
 
         <div className="flex items-center gap-3">
-            <Card className={currentMode === 'production' ? "bg-red-50 border-red-200" : "bg-blue-50 border-blue-200"}>
+            <Card className={cn(
+                "transition-colors duration-500 shadow-sm",
+                currentMode === 'production' ? "bg-red-50 border-red-200" : "bg-blue-50 border-blue-200"
+            )}>
                 <CardContent className="p-2 px-4 flex items-center gap-4">
                     <div className="flex flex-col">
-                        <span className="text-[10px] font-black uppercase text-gray-500">Ambiente Atual</span>
-                        <span className={`text-sm font-black uppercase ${currentMode === 'production' ? 'text-red-600' : 'text-blue-600'}`}>
+                        <span className="text-[10px] font-black uppercase text-gray-500">Ambiente do Site</span>
+                        <span className={cn(
+                            "text-sm font-black uppercase tracking-tight",
+                            currentMode === 'production' ? 'text-red-600' : 'text-blue-600'
+                        )}>
                             {currentMode === 'production' ? 'PRODUÇÃO (LIVE)' : 'HOMOLOGAÇÃO (TEST)'}
                         </span>
                     </div>
@@ -188,7 +195,7 @@ const SecretsPage = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white p-4 rounded-xl border border-dashed flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-gray-50" onClick={() => setIsAddModalOpen(true)}>
+          <div className="bg-white p-4 rounded-xl border border-dashed flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => setIsAddModalOpen(true)}>
              <Plus className="w-6 h-6 text-primary" />
              <span className="text-xs font-bold text-primary uppercase">Adicionar Outra Secret</span>
           </div>
@@ -219,7 +226,7 @@ const SecretsPage = () => {
                     <TableRow key={i}><TableCell colSpan={4}><Skeleton className="h-10 w-full" /></TableCell></TableRow>
                 ))
             ) : filteredSettings?.map((setting) => (
-                <TableRow key={setting.id} className={cn("hover:bg-gray-50/50", setting.key === 'payment_mode' && "bg-muted/30")}>
+                <TableRow key={setting.id} className="hover:bg-gray-50/50">
                     <TableCell className="font-mono font-bold text-sm">
                         <div className="flex items-center gap-2">
                             {setting.key.includes('test') ? <Beaker className="w-3 h-3 text-blue-400" /> : <ShieldCheck className="w-3 h-3 text-green-400" />}
