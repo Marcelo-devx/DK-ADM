@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Globe, Save, ShieldCheck } from "lucide-react";
+import { Globe, Save, ShieldCheck, Loader2, RefreshCw } from "lucide-react";
 import { useState, useEffect } from "react";
 
 const SettingsPage = () => {
@@ -15,6 +15,7 @@ const SettingsPage = () => {
   const [logisticsUrl, setLogisticsUrl] = useState("");
   const [logisticsToken, setLogisticsToken] = useState("");
   const [webhookSecret, setWebhookSecret] = useState("");
+  const [isTesting, setIsTesting] = useState(false);
 
   const { data: settings, isLoading } = useQuery({
     queryKey: ["appSettings"],
@@ -48,6 +49,38 @@ const SettingsPage = () => {
     },
     onError: (err: any) => showError(err.message),
   });
+
+  const handleTestConnection = async () => {
+    setIsTesting(true);
+    // Primeiro salvamos para garantir que a função use os dados mais recentes
+    try {
+        await saveMutation.mutateAsync();
+        
+        const today = new Date().toISOString().split('T')[0];
+        const { error } = await supabase.functions.invoke("spoke-proxy", {
+            body: { 
+              action: "routes", 
+              params: { date: today } 
+            }
+        });
+
+        if (error) {
+            // Tenta extrair a mensagem de erro detalhada da função
+            let errorMsg = error.message;
+            try {
+                const body = await error.context.json();
+                errorMsg = body.details || body.error || error.message;
+            } catch (e) {}
+            throw new Error(errorMsg);
+        }
+
+        showSuccess("Sucesso! Conexão estabelecida com a API.");
+    } catch (err: any) {
+        showError(`Falha no teste: ${err.message}`);
+    } finally {
+        setIsTesting(false);
+    }
+  };
 
   const logoUrl = settings?.find(s => s.key === "logo_url")?.value || null;
 
@@ -84,7 +117,8 @@ const SettingsPage = () => {
           <CardContent className="space-y-4">
             <div className="space-y-2">
                 <Label className="font-bold">Base URL (API)</Label>
-                <Input value={logisticsUrl} onChange={(e) => setLogisticsUrl(e.target.value)} placeholder="https://api.dispatch.spoke.com/v1" />
+                <Input value={logisticsUrl} onChange={(e) => setLogisticsUrl(e.target.value)} placeholder="Ex: https://spoke.com/dispatch/api" />
+                <p className="text-[10px] text-muted-foreground">Insira a URL completa fornecida pela logística (sem o /v1 se não for necessário).</p>
             </div>
             <div className="space-y-2">
                 <Label className="font-bold">API Key (Token)</Label>
@@ -100,11 +134,13 @@ const SettingsPage = () => {
                     value={webhookSecret} 
                     onChange={(e) => setWebhookSecret(e.target.value)}
                 />
-                <p className="text-[10px] text-muted-foreground">Isso garante que apenas a Spoke possa atualizar seus pedidos.</p>
             </div>
-            <div className="pt-2">
-                <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} className="w-full bg-blue-600 hover:bg-blue-700 font-bold">
-                    <Save className="w-4 h-4 mr-2" /> Salvar Tudo
+            <div className="pt-2 flex gap-2">
+                <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || isTesting} className="flex-1 bg-blue-600 hover:bg-blue-700 font-bold">
+                    <Save className="w-4 h-4 mr-2" /> Salvar
+                </Button>
+                <Button onClick={handleTestConnection} disabled={isTesting || saveMutation.isPending} variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50">
+                    {isTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
                 </Button>
             </div>
           </CardContent>
