@@ -19,7 +19,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Share2, Printer, RefreshCw } from "lucide-react";
+import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Share2, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { showSuccess, showError } from "@/utils/toast";
 import { OrderDetailModal } from "@/components/dashboard/OrderDetailModal";
@@ -92,7 +92,19 @@ const OrdersPage = () => {
   const { data: orders, isLoading, refetch, isRefetching } = useQuery<Order[]>({
     queryKey: ["ordersAdmin"],
     queryFn: fetchOrders,
-    refetchInterval: 30000, // Atualiza automaticamente a cada 30 segundos
+    refetchInterval: 30000, 
+  });
+
+  const validatePaymentMutation = useMutation({
+    mutationFn: async (orderId: number) => {
+        const { error } = await supabase.rpc('finalize_order_payment', { p_order_id: orderId });
+        if (error) throw error;
+    },
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
+        showSuccess("Pagamento validado com sucesso! Pedido liberado para envio.");
+    },
+    onError: (err: any) => showError(`Erro ao validar: ${err.message}`),
   });
 
   const sendToSpokeMutation = useMutation({
@@ -187,7 +199,7 @@ const OrdersPage = () => {
               <TableHead>Data</TableHead>
               <TableHead>Cliente</TableHead>
               <TableHead>Valor Total</TableHead>
-              <TableHead>Pagamento</TableHead>
+              <TableHead>Status Pagto</TableHead>
               <TableHead>Entrega</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
@@ -197,19 +209,32 @@ const OrdersPage = () => {
                 <TableRow><TableCell colSpan={8}><Skeleton className="h-10 w-full" /></TableCell></TableRow>
             ) : filteredOrders?.map((order) => {
                 const isPaid = order.status === "Finalizada" || order.status === "Pago";
+                const isPix = order.payment_method?.toLowerCase().includes('pix');
+                const needsValidation = isPix && !isPaid;
                 const isPendingDelivery = order.delivery_status === "Pendente";
                 const canSendToSpoke = isPaid && isPendingDelivery;
 
                 return (
-                  <TableRow key={order.id} className={cn(canSendToSpoke && "bg-blue-50/10")}>
+                  <TableRow key={order.id} className={cn(needsValidation ? "bg-orange-50/30" : canSendToSpoke ? "bg-blue-50/10" : "")}>
                     <TableCell className="font-mono text-sm font-bold">#{order.id}</TableCell>
                     <TableCell className="text-xs">{new Date(order.created_at).toLocaleDateString("pt-BR")}</TableCell>
                     <TableCell className="font-medium text-sm">{order.profiles?.first_name} {order.profiles?.last_name}</TableCell>
                     <TableCell className="font-bold">{formatCurrency(order.total_price)}</TableCell>
                     <TableCell>
-                        <Badge variant="outline" className={cn(order.payment_method?.includes('Pix') ? "bg-cyan-50" : "bg-purple-50")}>
-                            {order.payment_method || 'Pix'}
-                        </Badge>
+                        <div className="flex flex-col gap-1">
+                            <Badge variant="outline" className={cn(isPix ? "bg-cyan-50 text-cyan-700 border-cyan-200" : "bg-purple-50 text-purple-700 border-purple-200")}>
+                                {order.payment_method || 'Pix'}
+                            </Badge>
+                            {needsValidation ? (
+                                <Badge variant="default" className="bg-orange-500 hover:bg-orange-600 text-[10px] gap-1">
+                                    <AlertCircle className="w-3 h-3" /> Conferir Whats
+                                </Badge>
+                            ) : (
+                                <Badge variant="secondary" className={cn("text-[10px]", isPaid && "bg-green-100 text-green-800")}>
+                                    {order.status}
+                                </Badge>
+                            )}
+                        </div>
                     </TableCell>
                     <TableCell>
                         <Badge variant="secondary" className={cn(order.delivery_status === 'Entregue' && "bg-green-100 text-green-800")}>
@@ -218,6 +243,25 @@ const OrdersPage = () => {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
+                        {needsValidation && (
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button 
+                                            size="sm" 
+                                            className="bg-green-600 hover:bg-green-700 font-bold h-8 px-3 text-xs"
+                                            onClick={() => validatePaymentMutation.mutate(order.id)}
+                                            disabled={validatePaymentMutation.isPending}
+                                        >
+                                            {validatePaymentMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <CheckCircle2 className="w-3 h-3 mr-1" />}
+                                            Validar
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Confirmar recebimento do Pix</TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                        )}
+
                         {canSendToSpoke && (
                             <TooltipProvider>
                                 <Tooltip>
@@ -242,9 +286,19 @@ const OrdersPage = () => {
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                                <DropdownMenuItem onSelect={() => { setSelectedOrder(order); setIsLabelModalOpen(true); }}>Imprimir Etiqueta</DropdownMenuItem>
+                                <DropdownMenuLabel>Ações do Pedido</DropdownMenuLabel>
+                                {needsValidation && (
+                                    <DropdownMenuItem onSelect={() => validatePaymentMutation.mutate(order.id)} className="text-green-600 font-bold">
+                                        <CheckCircle2 className="w-4 h-4 mr-2" /> Validar Pagamento
+                                    </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem onSelect={() => { setSelectedOrder(order); setIsLabelModalOpen(true); }} disabled={!isPaid}>
+                                    <Printer className="w-4 h-4 mr-2" /> Imprimir Etiqueta
+                                </DropdownMenuItem>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem onSelect={() => { setSelectedOrder(order); setIsDeleteAlertOpen(true); }} className="text-red-600">Excluir Pedido</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => { setSelectedOrder(order); setIsDeleteAlertOpen(true); }} className="text-red-600">
+                                    <Trash2 className="w-4 h-4 mr-2" /> Excluir Pedido
+                                </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
