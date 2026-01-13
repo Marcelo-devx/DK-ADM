@@ -19,7 +19,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Share2, Printer } from "lucide-react";
+import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Share2, Printer, RefreshCw } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { showSuccess, showError } from "@/utils/toast";
 import { OrderDetailModal } from "@/components/dashboard/OrderDetailModal";
@@ -89,9 +89,10 @@ const OrdersPage = () => {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [readyToShipOnly, setReadyToShipOnly] = useState(false);
 
-  const { data: orders, isLoading } = useQuery<Order[]>({
+  const { data: orders, isLoading, refetch, isRefetching } = useQuery<Order[]>({
     queryKey: ["ordersAdmin"],
     queryFn: fetchOrders,
+    refetchInterval: 30000, // Atualiza automaticamente a cada 30 segundos
   });
 
   const sendToSpokeMutation = useMutation({
@@ -156,10 +157,15 @@ const OrdersPage = () => {
   return (
     <div>
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
-        <h1 className="text-3xl font-bold flex items-center gap-2">
-          <DollarSign className="h-7 w-7 text-green-600" />
-          Vendas (Clientes)
-        </h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-3xl font-bold flex items-center gap-2">
+            <DollarSign className="h-7 w-7 text-green-600" />
+            Vendas (Clientes)
+          </h1>
+          <Button variant="ghost" size="icon" onClick={() => refetch()} className={cn("h-8 w-8", isRefetching && "animate-spin")}>
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+        </div>
 
         <div className="flex flex-wrap items-center gap-3 bg-white p-3 rounded-lg border shadow-sm">
           <Button 
