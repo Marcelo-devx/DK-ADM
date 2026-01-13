@@ -1,19 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Printer, QrCode, Phone, Truck, Package, Settings2, Image as ImageIcon, MapPin, Save, Search, CheckCircle2 } from "lucide-react";
+import { Printer, QrCode, Phone, Truck, Package, Settings2, Save, Search, AlertCircle, Loader2 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ImageUploader } from "@/components/dashboard/ImageUploader";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge"; // Importação adicionada
+import { Badge } from "@/components/ui/badge";
 
 // Types
 interface Order {
@@ -41,7 +40,7 @@ const PrintLabelsPage = () => {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Configurações do Remetente (Mapeamento)
+  // Configurações do Remetente
   const [senderInfo, setSenderInfo] = useState({
     name: "Sua Loja",
     address: "Rua Exemplo, 100",
@@ -100,6 +99,23 @@ const PrintLabelsPage = () => {
     }
   });
 
+  // Filtro: Apenas pedidos Pagos ou Finalizados
+  const filteredOrders = useMemo(() => {
+    return orders?.filter(o => {
+      // Regra: Só pode imprimir etiqueta se estiver PAGO ou FINALIZADO
+      const isPaid = o.status === "Finalizada" || o.status === "Pago";
+      if (!isPaid) return false;
+
+      const term = searchTerm.toLowerCase();
+      const matchesSearch = 
+        o.id.toString().includes(term) || 
+        o.profiles?.first_name?.toLowerCase().includes(term) ||
+        o.profiles?.last_name?.toLowerCase().includes(term);
+      
+      return matchesSearch;
+    });
+  }, [orders, searchTerm]);
+
   // Mutations
   const saveSettingsMutation = useMutation({
     mutationFn: async () => {
@@ -126,53 +142,52 @@ const PrintLabelsPage = () => {
     window.print();
   };
 
-  const filteredOrders = orders?.filter(o => 
-    o.id.toString().includes(searchTerm) || 
-    o.profiles?.first_name?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
   return (
     <div className="flex flex-col lg:flex-row gap-6 min-h-[calc(100vh-120px)]">
       
-      {/* COLUNA ESQUERDA: LISTA DE PEDIDOS */}
+      {/* COLUNA ESQUERDA: LISTA DE PEDIDOS PAGOS */}
       <div className="w-full lg:w-80 space-y-4 print:hidden">
-        <Card className="h-full flex flex-col">
-          <CardHeader className="p-4 border-b">
-            <CardTitle className="text-sm font-bold flex items-center gap-2">
+        <Card className="h-full flex flex-col shadow-md">
+          <CardHeader className="p-4 border-b bg-gray-50/50">
+            <CardTitle className="text-sm font-black uppercase flex items-center gap-2 text-primary">
               <Search className="w-4 h-4" /> Selecionar Pedido
             </CardTitle>
             <Input 
-              placeholder="Buscar por ID ou Nome..." 
+              placeholder="ID ou Nome do Cliente..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="mt-2 h-8 text-xs"
+              className="mt-2 h-9 text-xs"
             />
+            <p className="text-[10px] text-muted-foreground mt-1 font-medium">Apenas pedidos pagos são listados aqui.</p>
           </CardHeader>
           <CardContent className="p-0 flex-1 overflow-y-auto max-h-[600px]">
             {isLoadingOrders ? (
               <div className="p-4 space-y-2"><Skeleton className="h-10 w-full" /><Skeleton className="h-10 w-full" /></div>
-            ) : filteredOrders?.map((order) => (
-              <button
-                key={order.id}
-                onClick={() => setSelectedOrderId(String(order.id))}
-                className={cn(
-                  "w-full text-left p-3 border-b hover:bg-gray-50 transition-colors flex items-center justify-between",
-                  selectedOrderId === String(order.id) && "bg-primary/5 border-l-4 border-l-primary"
-                )}
-              >
-                <div className="space-y-0.5">
-                  <p className="font-bold text-sm">#{order.id}</p>
-                  <p className="text-[10px] text-muted-foreground uppercase truncate w-40">
-                    {order.profiles?.first_name} {order.profiles?.last_name}
-                  </p>
-                </div>
-                <div className="flex flex-col items-end">
-                    <Badge variant="outline" className="text-[9px] h-4">
-                        {order.status}
-                    </Badge>
-                </div>
-              </button>
-            ))}
+            ) : filteredOrders && filteredOrders.length > 0 ? (
+              filteredOrders.map((order) => (
+                <button
+                  key={order.id}
+                  onClick={() => setSelectedOrderId(String(order.id))}
+                  className={cn(
+                    "w-full text-left p-3 border-b hover:bg-gray-50 transition-colors flex items-center justify-between",
+                    selectedOrderId === String(order.id) && "bg-primary/5 border-l-4 border-l-primary"
+                  )}
+                >
+                  <div className="space-y-0.5">
+                    <p className="font-bold text-sm">#{order.id}</p>
+                    <p className="text-[10px] text-muted-foreground uppercase truncate w-40">
+                      {order.profiles?.first_name} {order.profiles?.last_name}
+                    </p>
+                  </div>
+                  <Badge className="bg-green-500 text-[9px] h-4">PAGO</Badge>
+                </button>
+              ))
+            ) : (
+              <div className="p-8 text-center space-y-3">
+                 <AlertCircle className="w-8 h-8 text-gray-300 mx-auto" />
+                 <p className="text-xs text-muted-foreground font-medium italic">Nenhum pedido pago encontrado para impressão.</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -181,14 +196,13 @@ const PrintLabelsPage = () => {
       <div className="flex-1 flex flex-col items-center gap-4">
         <div className="w-full flex items-center justify-between print:hidden">
             <h2 className="text-lg font-bold flex items-center gap-2"><Printer className="w-5 h-5 text-primary" /> Visualização da Etiqueta</h2>
-            <Button onClick={handlePrint} disabled={!selectedOrderId} className="bg-black hover:bg-gray-800 font-bold">
-                <Printer className="w-4 h-4 mr-2" /> Imprimir Selecionado
+            <Button onClick={handlePrint} disabled={!selectedOrderId} className="bg-black hover:bg-gray-800 font-black h-11 px-8 rounded-xl shadow-lg">
+                <Printer className="w-5 h-5 mr-2" /> Imprimir Agora
             </Button>
         </div>
 
         {selectedOrder ? (
-          <div className="bg-white p-8 rounded-xl shadow-2xl border w-full max-w-[450px] print:p-0 print:shadow-none print:border-none print:m-0" id="label-container">
-            {/* ETIQUETA PROFISSIONAL */}
+          <div className="bg-white p-8 rounded-2xl shadow-2xl border w-full max-w-[450px] print:p-0 print:shadow-none print:border-none print:m-0" id="label-container">
             <div className="border-2 border-black p-4 w-full text-black font-sans bg-white" id="shipping-label">
               <div className="flex justify-between items-start mb-4">
                 <div className="flex flex-col">
@@ -261,7 +275,7 @@ const PrintLabelsPage = () => {
 
               <div className="border border-black border-dashed p-2 mb-4 bg-gray-50">
                  <p className="text-[9px] font-black uppercase mb-1 flex items-center gap-1">
-                    <Package className="w-3 h-3" /> Conferência de Conteúdo:
+                    <Package className="w-3 h-3" /> Conteúdo do Volume:
                  </p>
                  <div className="space-y-1">
                     {isLoadingItems ? (
@@ -286,23 +300,24 @@ const PrintLabelsPage = () => {
             </div>
           </div>
         ) : (
-          <div className="flex-1 flex items-center justify-center border-2 border-dashed rounded-xl w-full max-w-[450px] bg-gray-50 min-h-[500px]">
-             <div className="text-center space-y-2">
-                <Printer className="w-12 h-12 text-muted-foreground mx-auto opacity-20" />
-                <p className="text-muted-foreground">Selecione um pedido na lista para pré-visualizar a etiqueta</p>
+          <div className="flex-1 flex items-center justify-center border-2 border-dashed rounded-3xl w-full max-w-[450px] bg-gray-50/50 min-h-[500px]">
+             <div className="text-center space-y-4">
+                <div className="bg-white p-6 rounded-full shadow-sm w-fit mx-auto border-2 border-dashed">
+                    <Printer className="w-12 h-12 text-gray-200" />
+                </div>
+                <p className="text-muted-foreground font-medium">Selecione um pedido pago para visualizar a etiqueta</p>
              </div>
           </div>
         )}
       </div>
 
-      {/* COLUNA DIREITA: CONFIGURAÇÕES (MAPEAMENTO) */}
+      {/* COLUNA DIREITA: CONFIGURAÇÕES */}
       <div className="w-full lg:w-80 space-y-4 print:hidden">
-        <Card>
-          <CardHeader className="p-4 border-b">
-            <CardTitle className="text-sm font-bold flex items-center gap-2">
-              <Settings2 className="w-4 h-4" /> Mapear Remetente
+        <Card className="shadow-md">
+          <CardHeader className="p-4 border-b bg-gray-50/50">
+            <CardTitle className="text-sm font-black uppercase flex items-center gap-2 text-primary">
+              <Settings2 className="w-4 h-4" /> Configurar Remetente
             </CardTitle>
-            <CardDescription className="text-[10px]">Configure como os dados da sua loja aparecem na etiqueta.</CardDescription>
           </CardHeader>
           <CardContent className="p-4 space-y-4">
              <div className="space-y-2">
@@ -318,7 +333,7 @@ const PrintLabelsPage = () => {
                 <Input 
                     value={senderInfo.name} 
                     onChange={(e) => setSenderInfo(prev => ({ ...prev, name: e.target.value }))}
-                    className="h-8 text-xs"
+                    className="h-9 text-xs"
                 />
              </div>
 
@@ -327,7 +342,7 @@ const PrintLabelsPage = () => {
                 <Input 
                     value={senderInfo.address} 
                     onChange={(e) => setSenderInfo(prev => ({ ...prev, address: e.target.value }))}
-                    className="h-8 text-xs"
+                    className="h-9 text-xs"
                 />
              </div>
 
@@ -336,33 +351,23 @@ const PrintLabelsPage = () => {
                 <Input 
                     value={senderInfo.city} 
                     onChange={(e) => setSenderInfo(prev => ({ ...prev, city: e.target.value }))}
-                    className="h-8 text-xs"
+                    className="h-9 text-xs"
                 />
              </div>
 
              <Button 
                 onClick={() => saveSettingsMutation.mutate()} 
                 disabled={saveSettingsMutation.isPending}
-                className="w-full h-8 text-xs"
+                className="w-full h-10 text-xs font-bold"
                 variant="outline"
              >
-                <Save className="w-3 h-3 mr-2" /> {saveSettingsMutation.isPending ? "Salvando..." : "Salvar Configurações"}
+                {saveSettingsMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+                Salvar Configurações
              </Button>
           </CardContent>
         </Card>
-
-        <Card className="bg-primary/5 border-primary/20">
-            <CardContent className="p-4 flex gap-3">
-                <MapPin className="w-8 h-8 text-primary opacity-50 shrink-0" />
-                <div className="space-y-1">
-                    <p className="text-[10px] font-bold uppercase text-primary">Dica Profissional</p>
-                    <p className="text-[10px] leading-tight text-primary/80">Use este logotipo para versões simplificadas em preto e branco para economizar tinta na impressão térmica.</p>
-                </div>
-            </CardContent>
-        </Card>
       </div>
 
-      {/* CSS PARA IMPRESSÃO */}
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
           body * {
