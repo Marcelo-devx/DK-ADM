@@ -1,4 +1,3 @@
-import { MadeWithDyad } from "@/components/made-with-dyad";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { Link, useNavigate } from "react-router-dom";
@@ -41,9 +40,6 @@ const Index = () => {
           )}
           <Button onClick={handleLogout} variant="outline">Sair</Button>
         </div>
-      </div>
-      <div className="absolute bottom-0 w-full">
-        <MadeWithDyad />
       </div>
     </div>
   );
