@@ -1,15 +1,23 @@
 "use client";
 
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { 
   Package, Home, LayoutGrid, Cloud, Image, Tags, Settings, Percent, 
   MessageSquare, Users, ListTree, GalleryHorizontal, Star, Ticket, Plug, 
   ShoppingCart, DollarSign, Truck, Coins, Printer, Map as MapIcon, 
-  Lock, FileOutput, FileUp, Workflow, BarChart3, Box
+  Lock, FileOutput, FileUp, Workflow, BarChart3, Box, LogOut
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
 
 const Sidebar = () => {
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate("/login");
+  };
+
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     cn(
       "flex items-center px-3 py-2 text-gray-600 rounded-lg transition-all duration-200 text-sm font-medium hover:bg-gray-100 hover:text-gray-900",
@@ -157,6 +165,17 @@ const Sidebar = () => {
           Configurações
         </NavLink>
       </nav>
+
+      {/* FOOTER COM LOGOUT */}
+      <div className="p-4 border-t border-gray-200 bg-white/50">
+        <button
+          onClick={handleLogout}
+          className="flex items-center w-full px-3 py-2 text-sm font-medium text-red-600 rounded-lg hover:bg-red-50 transition-colors group"
+        >
+          <LogOut className="w-4 h-4 mr-3 group-hover:scale-110 transition-transform" />
+          Sair do Sistema
+        </button>
+      </div>
     </aside>
   );
 };
