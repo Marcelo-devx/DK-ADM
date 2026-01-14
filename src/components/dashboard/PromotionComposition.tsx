@@ -187,6 +187,8 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
     onError: (err: any) => showError(err.message),
   });
 
+  const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+
   if (!promotionId) return null;
 
   const selectedProduct = products?.find(p => String(p.id) === selectedProductId);
@@ -270,40 +272,49 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
               <TableHead className="h-8 text-xs">Produto</TableHead>
               <TableHead className="h-8 text-xs">Detalhe</TableHead>
               <TableHead className="h-8 text-xs text-center">Qtd</TableHead>
+              <TableHead className="h-8 text-xs text-center">Valor Unit.</TableHead>
               <TableHead className="h-8 text-xs text-right"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-               <TableRow><TableCell colSpan={4} className="text-center text-xs py-4">Carregando...</TableCell></TableRow>
+               <TableRow><TableCell colSpan={5} className="text-center text-xs py-4">Carregando...</TableCell></TableRow>
             ) : items?.length === 0 ? (
-               <TableRow><TableCell colSpan={4} className="text-center text-xs text-muted-foreground py-4">Adicione produtos para compor este kit.</TableCell></TableRow>
+               <TableRow><TableCell colSpan={5} className="text-center text-xs text-muted-foreground py-4">Adicione produtos para compor este kit.</TableCell></TableRow>
             ) : (
-              items?.map(item => (
-                <TableRow key={item.id} className="h-10">
-                  <TableCell className="text-xs font-medium py-1">{item.products.name}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground py-1">
-                    {item.product_variants ? (
-                      <span>{item.product_variants.flavors?.name} {item.product_variants.volume_ml ? `(${item.product_variants.volume_ml}ml)` : ""}</span>
-                    ) : (
-                      <Badge variant="outline" className="text-[9px] h-4 px-1">Produto Base</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-center font-bold text-xs py-1">{item.quantity}</TableCell>
-                  <TableCell className="text-right py-1">
-                    <Button 
-                        type="button"
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-6 w-6 text-red-500"
-                        onClick={() => removeItemMutation.mutate(item.id)}
-                        disabled={removeItemMutation.isPending}
-                    >
-                        <Trash2 className="w-3 h-3" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
+              items?.map(item => {
+                const entity = item.product_variants || item.products;
+                const unitPrice = entity.price || 0;
+
+                return (
+                  <TableRow key={item.id} className="h-10">
+                    <TableCell className="text-xs font-medium py-1">{item.products.name}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground py-1">
+                      {item.product_variants ? (
+                        <span>{item.product_variants.flavors?.name} {item.product_variants.volume_ml ? `(${item.product_variants.volume_ml}ml)` : ""}</span>
+                      ) : (
+                        <Badge variant="outline" className="text-[9px] h-4 px-1">Produto Base</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center font-bold text-xs py-1">{item.quantity}</TableCell>
+                    <TableCell className="text-center text-xs py-1 text-muted-foreground">
+                        {formatCurrency(unitPrice)}
+                    </TableCell>
+                    <TableCell className="text-right py-1">
+                      <Button 
+                          type="button"
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-6 w-6 text-red-500"
+                          onClick={() => removeItemMutation.mutate(item.id)}
+                          disabled={removeItemMutation.isPending}
+                      >
+                          <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                )
+              })
             )}
           </TableBody>
         </Table>
