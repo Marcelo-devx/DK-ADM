@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
 import { 
-  Map as MapIcon, 
+  Map as MapIcon,
   Warehouse,
   Globe,
   RefreshCw,
@@ -41,17 +41,25 @@ const DeliveryRoutesPage = () => {
   const [date, setDate] = useState<Date | undefined>(new Date());
   const formattedDate = date ? format(date, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd");
   const [expandedRoutes, setExpandedRoutes] = useState<Record<string, boolean>>({});
+  
+  // Estado para feedback de progresso
+  const [loadingProgress, setLoadingProgress] = useState<string>("");
 
   const { data: routes, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ["spokeRoutesDeep", formattedDate],
     queryFn: async () => {
-      // FUNÇÃO AUXILIAR DE PAGINAÇÃO ROBUSTA
+      setLoadingProgress("Iniciando conexão...");
+
+      // FUNÇÃO AUXILIAR DE PAGINAÇÃO (Busca recursiva até acabar os itens)
       const fetchAllPages = async (action: string, initialParams: any, listKey: string) => {
         let allItems: any[] = [];
         let nextToken = null;
-        let safetyCounter = 0;
+        let pageCount = 0;
         
         do {
+          // Pequeno delay para não flodar a API
+          if (pageCount > 0) await new Promise(r => setTimeout(r, 200));
+
           const { data, error } = await supabase.functions.invoke("spoke-proxy", {
             body: { 
               action, 
@@ -59,12 +67,9 @@ const DeliveryRoutesPage = () => {
             }
           });
           
-          if (error) {
-             console.error("Erro na paginação:", error);
-             throw error;
-          }
+          if (error) throw error;
           
-          // Tenta encontrar a lista de itens na resposta
+          // Detecta onde está a lista no JSON de resposta
           let items = [];
           if (data[listKey] && Array.isArray(data[listKey])) {
              items = data[listKey];
@@ -74,32 +79,35 @@ const DeliveryRoutesPage = () => {
 
           allItems = [...allItems, ...items];
           nextToken = data.nextPageToken;
-          safetyCounter++;
+          pageCount++;
 
-          // Delay pequeno para não sobrecarregar
-          if (nextToken) await new Promise(r => setTimeout(r, 100));
-
-        } while (nextToken && safetyCounter < 50); // Limite de segurança
+        } while (nextToken && pageCount < 50); // Limite de segurança para loop infinito
         
         return allItems;
       };
 
-      // PASSO 0: Buscar Lista de Motoristas (Paginado)
-      const driversList = await fetchAllPages("drivers", { maxPageSize: 100 }, "drivers");
-      const driversMap = new Map();
-      driversList.forEach((d: any) => {
-        driversMap.set(d.id, d);
-      });
+      try {
+        // 1. Buscar Motoristas (Drivers)
+        setLoadingProgress("Baixando lista de motoristas...");
+        const driversList = await fetchAllPages("drivers", { maxPageSize: 100 }, "drivers");
+        const driversMap = new Map();
+        driversList.forEach((d: any) => driversMap.set(d.id, d));
 
-      // PASSO 1: Buscar os planos (Plans) do dia
-      const rawPlans = await fetchAllPages("plans", { "filter.startsGte": formattedDate, maxPageSize: 50 }, "plans");
+        // 2. Buscar Planos (Plans) do dia
+        setLoadingProgress("Buscando rotas do dia...");
+        const rawPlans = await fetchAllPages("plans", { "filter.startsGte": formattedDate, maxPageSize: 20 }, "plans");
 
-      // PASSO 2: Processar Planos SEQUENCIALMENTE para evitar erro de conexão
-      const detailedRoutesArray = [];
+        if (rawPlans.length === 0) return [];
 
-      for (const plan of rawPlans) {
-        try {
-            // Filtro de data extra para garantir
+        // 3. Processar Planos SEQUENCIALMENTE (Um por um para não explodir a conexão)
+        const detailedRoutesArray = [];
+        let processedCount = 0;
+
+        for (const plan of rawPlans) {
+            processedCount++;
+            setLoadingProgress(`Processando rota ${processedCount} de ${rawPlans.length}...`);
+
+            // Filtro de segurança de data
             if (plan.starts && !plan.starts.startsWith(formattedDate)) {
                continue;
             }
@@ -107,10 +115,10 @@ const DeliveryRoutesPage = () => {
             const planIdPath = plan.id.startsWith('plans/') ? plan.id : `plans/${plan.id}`;
             const stopsAction = `${planIdPath}/stops`;
 
-            // Busca TODAS as paradas do plano (Paginado)
+            // Busca TODAS as paradas deste plano
             const stops = await fetchAllPages(stopsAction, { maxPageSize: 100 }, "stops");
             
-            // AGRUPAMENTO POR MOTORISTA
+            // Agrupar paradas por Motorista (Driver ID)
             const stopsByDriver: Record<string, any[]> = {};
             
             stops.forEach((stop: any) => {
@@ -121,8 +129,8 @@ const DeliveryRoutesPage = () => {
                 stopsByDriver[driverId].push(stop);
             });
 
-            // Criar "Rota Virtual" por motorista
-            const driverRoutes = Object.keys(stopsByDriver).map((driverId) => {
+            // Cria objetos de rota separados por motorista
+            for (const driverId of Object.keys(stopsByDriver)) {
                 const driverStops = stopsByDriver[driverId];
                 const totalStops = driverStops.length;
                 
@@ -140,48 +148,42 @@ const DeliveryRoutesPage = () => {
                 if (driverId !== "unassigned") {
                     const driverData = driversMap.get(driverId);
                     if (driverData) {
-                        driverName = driverData.name || driverData.displayName || "Motorista Desconhecido";
+                        driverName = driverData.name || driverData.displayName || "Motorista";
                         driverPhone = driverData.phone;
                     } else {
-                        // Tentar pegar info basica que as vezes vem no objeto driver do plano (se existir)
+                        // Tenta pegar nome do driver embutido no plano se existir
                         const planDriver = Array.isArray(plan.drivers) ? plan.drivers.find((pd:any) => pd.id === driverId) : null;
-                        if (planDriver && planDriver.name) {
-                            driverName = planDriver.name;
-                        } else {
-                            driverName = "Motorista ID: " + driverId.substring(0, 5);
-                        }
+                        driverName = planDriver?.name || `Motorista ${driverId.substring(0,4)}`;
                     }
                 }
 
-                return {
+                detailedRoutesArray.push({
                     id: `${plan.id}-${driverId}`, 
                     planId: plan.id,
-                    name: driverId === "unassigned" ? "Paradas sem Motorista" : `Rota de ${driverName}`,
+                    name: driverId === "unassigned" ? "Sem Motorista" : `Rota de ${driverName}`,
+                    status: completedStops === totalStops && totalStops > 0 ? 'completed' : 'active',
                     driver: { 
                         id: driverId,
                         name: driverName, 
                         phone: driverPhone 
                     },
-                    status: completedStops === totalStops && totalStops > 0 ? 'completed' : 'active',
                     stops_count: totalStops,
                     completed_stops_count: completedStops,
                     failed_stops_count: failedStops,
                     stops_list: driverStops
-                };
-            });
-
-            detailedRoutesArray.push(...driverRoutes);
-
-        } catch (err) {
-            console.error(`Erro ao processar plano ${plan.id}:`, err);
-            // Continua para o próximo plano mesmo com erro
+                });
+            }
         }
+        
+        return detailedRoutesArray;
+
+      } catch (err) {
+        console.error("Erro no processamento:", err);
+        throw err;
       }
-      
-      return detailedRoutesArray;
     },
     retry: 1,
-    refetchInterval: 60000,
+    refetchOnWindowFocus: false,
   });
 
   const stats = useMemo(() => {
@@ -212,18 +214,26 @@ const DeliveryRoutesPage = () => {
     return <Badge variant="outline" className="text-gray-500">Pendente</Badge>;
   };
 
+  const getErrorMessage = (err: Error) => {
+    const msg = err.message;
+    if (msg.includes("Name or service not known")) return "URL da API inválida nas configurações.";
+    if (msg.includes("401") || msg.includes("Unauthorized")) return "Token da API inválido ou expirado.";
+    return msg;
+  };
+
   return (
     <div className="max-w-[1600px] mx-auto space-y-6 text-gray-800 pb-20">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold">Logística Spoke (Circuit)</h1>
             <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 gap-1">
-                <Globe className="w-3 h-3" /> Monitoramento em Tempo Real
+                <Globe className="w-3 h-3" /> API v0.2b
             </Badge>
         </div>
         <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isRefetching} className="gap-2">
-                <RefreshCw className={cn("h-4 w-4", isRefetching && "animate-spin")} /> Atualizar
+            <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isRefetching || isLoading} className="gap-2">
+                <RefreshCw className={cn("h-4 w-4", (isRefetching || isLoading) && "animate-spin")} /> 
+                {isLoading ? "Carregando..." : "Atualizar"}
             </Button>
         </div>
       </div>
@@ -257,14 +267,14 @@ const DeliveryRoutesPage = () => {
                 {isLoading ? (
                     <div className="p-20 text-center space-y-4">
                         <RefreshCw className="h-10 w-10 animate-spin mx-auto text-primary opacity-50" />
-                        <p className="text-muted-foreground animate-pulse">Sincronizando todas as paradas...</p>
+                        <p className="text-muted-foreground font-medium animate-pulse">{loadingProgress || "Conectando..."}</p>
                     </div>
                 ) : isError ? (
                     <div className="p-12 text-center bg-red-50/20">
                         <AlertTriangle className="h-12 w-12 mx-auto text-red-500 mb-4" />
                         <h3 className="text-xl font-black text-red-800">Conexão Falhou</h3>
                         <p className="text-sm text-red-600 mb-6 max-w-md mx-auto font-medium">
-                            {(error as Error).message || "Verifique sua conexão e tente novamente."}
+                            {getErrorMessage(error as Error)}
                         </p>
                         <div className="flex justify-center gap-3">
                             <Button onClick={() => refetch()} variant="outline">Tentar Novamente</Button>
@@ -276,9 +286,9 @@ const DeliveryRoutesPage = () => {
                 ) : (
                     <div className="divide-y">
                         <div className="grid grid-cols-3 gap-8 p-6 bg-gray-50/30">
-                            <div><p className="text-xs text-muted-foreground font-bold uppercase">Motoboys Ativos</p><p className="text-3xl font-black">{stats.drivers}</p></div>
-                            <div><p className="text-xs text-muted-foreground font-bold uppercase">Entregas Totais</p><p className="text-3xl font-black">{stats.completed} <span className="text-sm font-normal text-muted-foreground">/ {stats.total_stops}</span></p></div>
-                            <div><p className="text-xs text-muted-foreground font-bold uppercase">Progresso Geral</p><p className="text-3xl font-black text-blue-600">{stats.efficiency}%</p></div>
+                            <div><p className="text-xs text-muted-foreground font-bold uppercase">Motoboys</p><p className="text-3xl font-black">{stats.drivers}</p></div>
+                            <div><p className="text-xs text-muted-foreground font-bold uppercase">Entregas</p><p className="text-3xl font-black">{stats.completed} <span className="text-sm font-normal text-muted-foreground">/ {stats.total_stops}</span></p></div>
+                            <div><p className="text-xs text-muted-foreground font-bold uppercase">Progresso</p><p className="text-3xl font-black text-blue-600">{stats.efficiency}%</p></div>
                         </div>
                         {routes && routes.length > 0 ? routes.map((r: any) => {
                             const progress = r.stops_count > 0 ? (r.completed_stops_count / r.stops_count) * 100 : 0;
