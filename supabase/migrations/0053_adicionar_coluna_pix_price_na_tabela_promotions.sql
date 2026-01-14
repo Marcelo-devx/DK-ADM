@@ -1,0 +1,2 @@
+ALTER TABLE public.promotions 
+ADD COLUMN IF NOT EXISTS pix_price NUMERIC DEFAULT 0;

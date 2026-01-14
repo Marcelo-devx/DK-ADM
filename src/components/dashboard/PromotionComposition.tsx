@@ -14,7 +14,8 @@ import { Badge } from "@/components/ui/badge";
 
 interface PromotionCompositionProps {
   promotionId: number | undefined;
-  onStatsChange?: (maxStock: number, totalBasePrice: number) => void;
+  // Atualizado para enviar também o totalBasePix
+  onStatsChange?: (maxStock: number, totalBasePrice: number, totalBasePixPrice: number) => void;
 }
 
 interface ProductOption {
@@ -35,13 +36,15 @@ interface PromotionItem {
   quantity: number;
   products: { 
     name: string; 
-    price: number; 
+    price: number;
+    pix_price: number | null; 
     stock_quantity: number;
   };
   product_variants?: {
     flavors?: { name: string } | null;
     volume_ml: number | null;
     price: number;
+    pix_price: number | null;
     stock_quantity: number;
   } | null;
 }
@@ -77,8 +80,8 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
         .from("promotion_items")
         .select(`
           id, product_id, variant_id, quantity,
-          products(name, price, stock_quantity),
-          product_variants(volume_ml, flavors(name), price, stock_quantity)
+          products(name, price, pix_price, stock_quantity),
+          product_variants(volume_ml, flavors(name), price, pix_price, stock_quantity)
         `)
         .eq("promotion_id", promotionId);
       if (error) throw error;
@@ -92,25 +95,26 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
     if (!items || !onStatsChange) return;
 
     let totalBase = 0;
+    let totalBasePix = 0;
     let minStockLimit = Number.MAX_SAFE_INTEGER;
     let hasItems = false;
 
     items.forEach(item => {
         hasItems = true;
-        const price = item.product_variants ? item.product_variants.price : item.products.price;
-        const currentStock = item.product_variants ? item.product_variants.stock_quantity : item.products.stock_quantity;
+        
+        // Determina qual entidade usar (Variação ou Produto Pai)
+        const entity = item.product_variants || item.products;
+        
+        const price = entity.price || 0;
+        // Se não tiver preço pix específico, usa o preço normal como base
+        const pixPrice = entity.pix_price || price; 
+        const currentStock = entity.stock_quantity;
         
         // Custo total dos itens
         totalBase += (price * item.quantity);
+        totalBasePix += (pixPrice * item.quantity);
 
-        // O limite é quantos kits eu posso montar com o estoque ATUAL deste item
-        // Ex: Tenho 10 cocas. O kit leva 2 cocas. Posso montar 5 kits.
-        // Importante: No banco, o estoque JÁ ESTÁ deduzido se o kit já existe. 
-        // Mas para calcular o "máximo possível" para NOVOS kits, usamos o que tem lá.
-        // Se eu quiser aumentar o estoque do kit, preciso ter margem.
-        // OBS: A lógica complexa de "travar" estoque é feita no backend. 
-        // Aqui vamos apenas informar o *teto* atual baseado no que sobrou no estoque.
-        
+        // Cálculo de estoque máximo possível
         const possibleKitsWithThisItem = Math.floor(currentStock / item.quantity);
         if (possibleKitsWithThisItem < minStockLimit) {
             minStockLimit = possibleKitsWithThisItem;
@@ -118,15 +122,8 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
     });
 
     if (!hasItems) minStockLimit = 0;
-
-    // Mas espera! O estoque do Kit já "comeu" os produtos.
-    // Se eu tenho 5 kits criados, os produtos desses 5 kits já saíram do estoque_quantity do produto.
-    // Então o "Máximo Real" que o usuário vê é: (Kits Atuais) + (Quantos mais posso fazer com o que sobrou).
-    // Como esse componente não sabe quantos kits JÁ existem (isso tá no form pai), 
-    // vamos passar apenas o "Adicional Possível" (minStockLimit calculado acima) e o pai soma.
-    // Ou melhor: Vamos passar o minStockLimit puro (o que tem na prateleira AGORA). 
     
-    onStatsChange(minStockLimit, totalBase);
+    onStatsChange(minStockLimit, totalBase, totalBasePix);
 
   }, [items, onStatsChange]);
 
