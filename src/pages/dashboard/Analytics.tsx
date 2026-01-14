@@ -281,14 +281,14 @@ const AnalyticsPage = () => {
                 <Button variant={getVariant(90)} size="sm" onClick={() => handlePresetChange(90)} className={getButtonClass(90)}>90D</Button>
             </div>
             
-            <div className="flex items-center gap-2 border-l pl-4">
+            <div className="flex items-center gap-3 border-l pl-4 border-gray-200">
                 <div className="grid gap-1">
                     <span className="text-[10px] font-bold uppercase text-gray-500">Início</span>
                     <Input 
                         type="date" 
                         value={format(dateRange.from, "yyyy-MM-dd")} 
                         onChange={(e) => setDateRange(prev => ({ ...prev, from: new Date(e.target.value) }))}
-                        className="h-8 w-32 text-xs"
+                        className="h-9 w-auto min-w-[130px] text-sm font-medium"
                     />
                 </div>
                 <div className="grid gap-1">
@@ -297,7 +297,7 @@ const AnalyticsPage = () => {
                         type="date" 
                         value={format(dateRange.to, "yyyy-MM-dd")} 
                         onChange={(e) => setDateRange(prev => ({ ...prev, to: new Date(e.target.value) }))}
-                        className="h-8 w-32 text-xs"
+                        className="h-9 w-auto min-w-[130px] text-sm font-medium"
                     />
                 </div>
             </div>
