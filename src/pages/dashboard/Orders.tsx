@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../../integrations/supabase/client";
@@ -19,7 +21,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X } from "lucide-react";
+import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { showSuccess, showError } from "@/utils/toast";
 import { OrderDetailModal } from "@/components/dashboard/OrderDetailModal";
@@ -79,6 +81,31 @@ const fetchOrders = async (): Promise<Order[]> => {
     ...order,
     profiles: profilesMap.get(order.user_id) || null,
   })) as Order[];
+};
+
+// Função para verificar se o pedido caiu na próxima rota
+const checkIsNextRoute = (dateString: string) => {
+  const orderDate = new Date(dateString);
+  const day = orderDate.getDay(); // 0 = Domingo, 1 = Segunda, ..., 6 = Sábado
+
+  // Cria data de corte baseada no dia do pedido
+  const cutoff = new Date(orderDate);
+  cutoff.setSeconds(0);
+  cutoff.setMilliseconds(0);
+
+  if (day === 0) {
+    // Domingo: Tudo vai para próxima rota (Segunda)
+    return true;
+  } else if (day === 6) {
+    // Sábado: Corte às 12:30
+    cutoff.setHours(12, 30, 0);
+  } else {
+    // Segunda a Sexta: Corte às 14:00
+    cutoff.setHours(14, 0, 0);
+  }
+
+  // Se o pedido foi feito DEPOIS do corte, é próxima rota
+  return orderDate > cutoff;
 };
 
 const OrdersPage = () => {
@@ -242,11 +269,14 @@ const OrdersPage = () => {
                 const needsValidation = isPix && !isPaid;
                 const isInRoute = order.delivery_status === "Despachado";
                 const isSelected = selectedIds.has(order.id);
+                const isNextRoute = checkIsNextRoute(order.created_at);
 
                 return (
                   <TableRow key={order.id} className={cn(
-                    needsValidation ? "bg-orange-50/30" : "",
-                    isSelected && "bg-primary/5 border-l-4 border-l-primary"
+                    // Prioridade de cores: Selecionado > Validação > Próxima Rota > Padrão
+                    isSelected ? "bg-primary/5 border-l-4 border-l-primary" : 
+                    needsValidation ? "bg-orange-50/40" : 
+                    (isNextRoute && order.delivery_status === 'Pendente') ? "bg-yellow-50/60 border-l-4 border-l-yellow-400" : ""
                   )}>
                     <TableCell className="text-center">
                         <Checkbox 
@@ -255,7 +285,18 @@ const OrdersPage = () => {
                         />
                     </TableCell>
                     <TableCell className="font-mono text-sm font-bold">#{order.id}</TableCell>
-                    <TableCell className="text-xs">{new Date(order.created_at).toLocaleDateString("pt-BR")}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="text-xs">{new Date(order.created_at).toLocaleDateString("pt-BR")}</span>
+                        <span className="text-[10px] text-muted-foreground">{new Date(order.created_at).toLocaleTimeString("pt-BR", { hour: '2-digit', minute: '2-digit' })}</span>
+                        
+                        {isNextRoute && order.delivery_status === 'Pendente' && (
+                          <Badge variant="outline" className="mt-1 w-fit text-[9px] bg-yellow-100 text-yellow-800 border-yellow-300 gap-1 px-1">
+                            <CalendarClock className="w-3 h-3" /> Próx. Dia
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell className="font-medium text-sm">{order.profiles?.first_name} {order.profiles?.last_name}</TableCell>
                     <TableCell className="font-bold">{formatCurrency(order.total_price)}</TableCell>
                     <TableCell>
