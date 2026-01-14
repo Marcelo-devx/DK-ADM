@@ -23,10 +23,6 @@ const Sidebar = () => {
           <DollarSign className="w-4 h-4 mr-3" />
           Vendas (Clientes)
         </NavLink>
-        <NavLink to="/dashboard/n8n" className={navLinkClass}>
-          <Workflow className="w-4 h-4 mr-3 text-orange-600" />
-          Automação (N8N)
-        </NavLink>
         <NavLink to="/dashboard/delivery-routes" className={navLinkClass}>
           <MapIcon className="w-4 h-4 mr-3" />
           Rotas de Entrega
@@ -106,6 +102,10 @@ const Sidebar = () => {
         <NavLink to="/dashboard/integrations" className={navLinkClass}>
           <Plug className="w-4 h-4 mr-3" />
           Integrações
+        </NavLink>
+        <NavLink to="/dashboard/n8n" className={navLinkClass}>
+          <Workflow className="w-4 h-4 mr-3 text-orange-600" />
+          Automação (N8N)
         </NavLink>
         <NavLink to="/dashboard/secrets" className={navLinkClass}>
           <Lock className="w-4 h-4 mr-3" />
