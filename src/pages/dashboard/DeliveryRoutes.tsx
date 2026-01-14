@@ -18,7 +18,8 @@ import {
   Package,
   Users,
   CheckCircle2,
-  Clock
+  Clock,
+  Phone
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -33,6 +34,19 @@ const DeliveryRoutesPage = () => {
   const { data: routes, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ["spokeRoutesDeep", formattedDate],
     queryFn: async () => {
+      // PASSO 0: Buscar Lista de Motoristas para Mapeamento (ID -> Nome)
+      // Isso é necessário pois o plano pode retornar apenas IDs ou objetos parciais
+      const { data: driversResponse } = await supabase.functions.invoke("spoke-proxy", {
+        body: { action: "drivers", params: { maxPageSize: 100 } }
+      });
+      
+      const driversList = driversResponse?.drivers || [];
+      const driversMap = new Map();
+      driversList.forEach((d: any) => {
+        // Mapeia tanto o ID completo "drivers/123" quanto o sufixo "123" se necessário
+        driversMap.set(d.id, d);
+      });
+
       // PASSO 1: Buscar os planos (Plans) do dia
       const { data: plansResponse, error: plansError } = await supabase.functions.invoke("spoke-proxy", {
         body: { 
@@ -53,11 +67,8 @@ const DeliveryRoutesPage = () => {
       const rawPlans = plansResponse.plans || (Array.isArray(plansResponse) ? plansResponse : []);
 
       // PASSO 2: Para cada plano, buscar as paradas (Stops) detalhadas
-      // A API retorna IDs como "plans/plan_id". O endpoint de paradas é "plans/plan_id/stops".
       const detailedPlans = await Promise.all(rawPlans.map(async (plan: any) => {
         try {
-            // Se o ID já vier como "plans/xyz", usamos ele + "/stops".
-            // Se o ID for só "xyz", construímos "plans/xyz/stops".
             const planIdPath = plan.id.startsWith('plans/') ? plan.id : `plans/${plan.id}`;
             const stopsAction = `${planIdPath}/stops`;
 
@@ -67,41 +78,56 @@ const DeliveryRoutesPage = () => {
 
             const stops = stopsResponse.stops || (Array.isArray(stopsResponse) ? stopsResponse : []);
             
-            // Calcular métricas reais baseadas nas paradas
+            // MÉTRICAS BASEADAS NO MODELO DE STOP (deliveryInfo)
             const totalStops = stops.length;
-            const completedStops = stops.filter((s: any) => 
-                // Estados comuns de sucesso no Spoke/Circuit
-                s.state === 'succeeded' || s.state === 'delivered' || s.status === 'completed' || s.succeeded === true
-            ).length;
             
-            const failedStops = stops.filter((s: any) => 
-                s.state === 'failed' || s.attempted === true
-            ).length;
+            const completedStops = stops.filter((s: any) => {
+                // Verifica deliveryInfo.succeeded conforme documentação
+                return s.deliveryInfo?.succeeded === true || s.deliveryInfo?.state === 'delivered_to_recipient';
+            }).length;
+            
+            const failedStops = stops.filter((s: any) => {
+                // Verifica tentativas falhas
+                return s.deliveryInfo?.attempted === true && s.deliveryInfo?.succeeded === false;
+            }).length;
+
+            // Identificar Motorista
+            let driverInfo = { name: "Aguardando Atribuição", phone: null };
+            
+            // O modelo de plano retorna "drivers": [ { id: "..." } ]
+            if (plan.drivers && plan.drivers.length > 0) {
+                const driverId = plan.drivers[0].id || plan.drivers[0]; // Pode ser objeto ou string
+                const fullDriverData = driversMap.get(driverId);
+                
+                if (fullDriverData) {
+                    driverInfo = { name: fullDriverData.name || fullDriverData.displayName || "Motorista", phone: fullDriverData.phone };
+                } else if (typeof plan.drivers[0] === 'object' && (plan.drivers[0].name || plan.drivers[0].displayName)) {
+                     // Fallback se o objeto do plano já tiver o nome
+                     driverInfo = { name: plan.drivers[0].name || plan.drivers[0].displayName, phone: plan.drivers[0].phone };
+                }
+            }
 
             return {
                 id: plan.id,
-                name: plan.title || `Plano ${plan.id.split('/').pop().substring(0,6)}`,
-                status: plan.status || 'active',
-                driver: { name: plan.driver?.name || "Motorista não atríbuido", phone: plan.driver?.phone },
+                name: plan.title || `Rota ${plan.id.split('/').pop().substring(0,6)}`,
+                status: completedStops === totalStops && totalStops > 0 ? 'completed' : 'active',
+                driver: driverInfo,
                 stops_count: totalStops,
                 completed_stops_count: completedStops,
                 failed_stops_count: failedStops,
-                vehicle_count: 1, 
-                stops_list: stops // Opcional: guardar para uso futuro (mapa, lista detalhada)
+                stops_list: stops
             };
 
         } catch (err) {
             console.error(`Erro ao buscar detalhes do plano ${plan.id}:`, err);
-            // Retorna o plano com dados zerados em caso de erro no fetch de detalhes
             return {
                 id: plan.id,
-                name: plan.title || "Plano (Erro)",
+                name: plan.title || "Erro ao carregar",
                 status: 'error',
-                driver: { name: "Erro ao carregar", phone: null },
+                driver: { name: "N/A", phone: null },
                 stops_count: 0,
                 completed_stops_count: 0,
-                failed_stops_count: 0,
-                vehicle_count: 0
+                failed_stops_count: 0
             };
         }
       }));
@@ -109,7 +135,7 @@ const DeliveryRoutesPage = () => {
       return detailedPlans;
     },
     retry: 1,
-    refetchInterval: 60000, // Atualiza a cada 1 minuto
+    refetchInterval: 30000, // Atualiza a cada 30 segundos
   });
 
   const stats = useMemo(() => {
@@ -139,9 +165,9 @@ const DeliveryRoutesPage = () => {
     <div className="max-w-[1600px] mx-auto space-y-6 text-gray-800">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold">Logística Spoke</h1>
+            <h1 className="text-2xl font-bold">Logística Spoke (Circuit)</h1>
             <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 gap-1">
-                <Globe className="w-3 h-3" /> Monitor Real-time
+                <Globe className="w-3 h-3" /> Monitoramento v0.2b
             </Badge>
         </div>
         <div className="flex gap-2">
@@ -173,14 +199,14 @@ const DeliveryRoutesPage = () => {
           <Card className="shadow-sm border-none overflow-hidden bg-white">
             <CardHeader className="bg-gray-50/50 border-b py-3 px-6">
               <div className="flex items-center gap-2 text-sm font-bold text-gray-600 uppercase">
-                <Warehouse className="h-4 w-4" /> Status da Frota (Planos)
+                <Warehouse className="h-4 w-4" /> Visão Geral da Frota
               </div>
             </CardHeader>
             <CardContent className="p-0">
                 {isLoading ? (
                     <div className="p-20 text-center space-y-4">
                         <RefreshCw className="h-10 w-10 animate-spin mx-auto text-primary opacity-50" />
-                        <p className="text-muted-foreground animate-pulse">Conectando ao Dispatcher...</p>
+                        <p className="text-muted-foreground animate-pulse">Sincronizando com Spoke API...</p>
                     </div>
                 ) : isError ? (
                     <div className="p-12 text-center bg-red-50/20">
@@ -191,7 +217,7 @@ const DeliveryRoutesPage = () => {
                         </p>
                         <div className="flex justify-center gap-3">
                             <Button onClick={() => refetch()} variant="outline">Tentar Novamente</Button>
-                            <Button asChild className="bg-red-600 hover:bg-red-700">
+                            <Button asChild className="bg-red-600 hover:bg-red-700 text-white">
                                 <Link to="/dashboard/settings"><Settings className="w-4 h-4 mr-2" /> Configurações</Link>
                             </Button>
                         </div>
@@ -209,30 +235,35 @@ const DeliveryRoutesPage = () => {
                                 <div key={r.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-5 hover:bg-gray-50 transition-all border-l-4 border-transparent hover:border-blue-500 gap-4 sm:gap-0">
                                     <div className="flex items-center gap-4">
                                         <div className="h-12 w-12 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-black text-xl flex-shrink-0">
-                                            {r.name?.charAt(0) || 'P'}
+                                            {r.name?.charAt(0).toUpperCase() || 'R'}
                                         </div>
                                         <div>
                                             <div className="flex items-center gap-2">
                                                 <p className="font-black text-base">{r.name}</p>
-                                                {r.status === 'active' && <Badge className="text-[9px] bg-green-500 h-4 px-1">ATIVO</Badge>}
+                                                {r.status === 'completed' ? (
+                                                    <Badge className="text-[9px] bg-green-500 h-4 px-1">CONCLUÍDO</Badge>
+                                                ) : (
+                                                    <Badge variant="outline" className="text-[9px] bg-blue-50 text-blue-700 border-blue-200 h-4 px-1">ATIVO</Badge>
+                                                )}
                                             </div>
                                             <div className="flex items-center gap-3 text-[10px] text-muted-foreground uppercase font-bold mt-0.5">
                                                 <span className="flex items-center gap-1"><Package className="w-3 h-3" /> {r.stops_count} paradas</span>
                                                 <span className="flex items-center gap-1"><Users className="w-3 h-3" /> {r.driver.name}</span>
+                                                {r.driver.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" /> {r.driver.phone}</span>}
                                             </div>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-4 w-full sm:w-1/3">
                                         <div className="flex-1 space-y-1">
                                             <div className="flex justify-between text-xs font-bold text-muted-foreground">
-                                                <span>Progresso</span>
+                                                <span>Entregas</span>
                                                 <span>{r.completed_stops_count}/{r.stops_count}</span>
                                             </div>
                                             <Progress value={progress} className="h-2" />
                                         </div>
-                                        <div className="text-right">
+                                        <div className="text-right w-12">
                                             {progress === 100 ? (
-                                                <CheckCircle2 className="h-6 w-6 text-green-500" />
+                                                <CheckCircle2 className="h-6 w-6 text-green-500 mx-auto" />
                                             ) : (
                                                 <span className="text-lg font-bold text-blue-600">{Math.round(progress)}%</span>
                                             )}
