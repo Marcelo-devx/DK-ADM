@@ -1,7 +1,7 @@
 "use client";
 
 import { NavLink } from "react-router-dom";
-import { Package, Home, LayoutGrid, Cloud, Image, Tags, Settings, Percent, MessageSquare, Users, ListTree, GalleryHorizontal, Star, Ticket, Plug, ShoppingCart, DollarSign, Truck, Coins, Printer, Map as MapIcon, Lock, FileOutput, FileUp, Workflow } from "lucide-react";
+import { Package, Home, LayoutGrid, Cloud, Image, Tags, Settings, Percent, MessageSquare, Users, ListTree, GalleryHorizontal, Star, Ticket, Plug, ShoppingCart, DollarSign, Truck, Coins, Printer, Map as MapIcon, Lock, FileOutput, FileUp, Workflow, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const Sidebar = () => {
@@ -18,6 +18,10 @@ const Sidebar = () => {
         <NavLink to="/dashboard" end className={navLinkClass}>
           <Home className="w-4 h-4 mr-3" />
           Dashboard
+        </NavLink>
+        <NavLink to="/dashboard/analytics" className={navLinkClass}>
+          <BarChart3 className="w-4 h-4 mr-3" />
+          Analytics
         </NavLink>
         <NavLink to="/dashboard/orders" className={navLinkClass}>
           <DollarSign className="w-4 h-4 mr-3" />

@@ -41,6 +41,7 @@ import SpokeExportPage from "./pages/dashboard/SpokeExport";
 import SecretsPage from "./pages/dashboard/Secrets";
 import ImportClientsPage from "./pages/dashboard/ImportClients";
 import N8nIntegrationPage from "./pages/dashboard/N8nIntegration";
+import AnalyticsPage from "./pages/dashboard/Analytics";
 
 const queryClient = new QueryClient();
 
@@ -61,6 +62,7 @@ const AppContent = () => {
         
         <Route path="/dashboard" element={<DashboardLayout />}>
           <Route index element={<DashboardPage />} />
+          <Route path="analytics" element={<AnalyticsPage />} />
           <Route path="orders" element={<OrdersPage />} />
           <Route path="n8n" element={<N8nIntegrationPage />} />
           <Route path="delivery-routes" element={<DeliveryRoutesPage />} />
