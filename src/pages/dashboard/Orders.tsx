@@ -19,7 +19,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Share2, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X } from "lucide-react";
+import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { showSuccess, showError } from "@/utils/toast";
 import { OrderDetailModal } from "@/components/dashboard/OrderDetailModal";
@@ -134,39 +134,6 @@ const OrdersPage = () => {
     },
   });
 
-  const sendToSpokeMutation = useMutation({
-    mutationFn: async (order: Order) => {
-        const { error } = await supabase.functions.invoke("spoke-proxy", {
-            body: {
-                action: "stops",
-                method: "POST",
-                body: {
-                    external_id: `ORDER-${order.id}`,
-                    name: `${order.profiles?.first_name} ${order.profiles?.last_name}`.trim(),
-                    phone_number: order.profiles?.phone || "",
-                    address: `${order.shipping_address.street}, ${order.shipping_address.number}${order.shipping_address.complement ? ` - ${order.shipping_address.complement}` : ""}`,
-                    city: order.shipping_address.city,
-                    state: order.shipping_address.state,
-                    postal_code: order.shipping_address.cep,
-                    notes: `Venda #${order.id} | Valor: R$ ${order.total_price}`,
-                }
-            }
-        });
-
-        if (error) throw new Error(error.message || "Erro ao comunicar com a ponte do Spoke.");
-
-        const { error: updateError } = await supabase
-            .from('orders')
-            .update({ delivery_status: 'Despachado', delivery_info: 'Enviado para Logística Spoke' })
-            .eq('id', order.id);
-        
-        if (updateError) throw updateError;
-    },
-    onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
-    },
-  });
-
   const deleteOrderMutation = useMutation({
     mutationFn: async (orderId: number) => {
       const { error } = await supabase.from("orders").delete().eq("id", orderId);
@@ -200,30 +167,6 @@ const OrdersPage = () => {
     setSelectedIds(new Set());
     if (successCount > 0) showSuccess(`${successCount} pagamentos validados com sucesso!`);
     else showError("Nenhum pedido apto para validação foi processado.");
-  };
-
-  const handleBulkSendToSpoke = async () => {
-    setIsProcessingBulk(true);
-    let successCount = 0;
-    
-    for (const id of Array.from(selectedIds)) {
-        const order = orders?.find(o => o.id === id);
-        // Só envia se estiver pago e pendente de entrega
-        const isPaid = order?.status === "Finalizada" || order?.status === "Pago";
-        const isPending = order?.delivery_status === "Pendente";
-        
-        if (order && isPaid && isPending) {
-            try {
-                await sendToSpokeMutation.mutateAsync(order);
-                successCount++;
-            } catch (e) {}
-        }
-    }
-    
-    setIsProcessingBulk(false);
-    setSelectedIds(new Set());
-    if (successCount > 0) showSuccess(`${successCount} pedidos enviados para o Spoke!`);
-    else showError("Nenhum pedido apto para envio (pago e pendente) foi processado.");
   };
 
   const toggleSelectAll = () => {
@@ -297,14 +240,12 @@ const OrdersPage = () => {
                 const isPaid = order.status === "Finalizada" || order.status === "Pago";
                 const isPix = order.payment_method?.toLowerCase().includes('pix');
                 const needsValidation = isPix && !isPaid;
-                const isPendingDelivery = order.delivery_status === "Pendente";
-                const canSendToSpoke = isPaid && isPendingDelivery;
                 const isInRoute = order.delivery_status === "Despachado";
                 const isSelected = selectedIds.has(order.id);
 
                 return (
                   <TableRow key={order.id} className={cn(
-                    needsValidation ? "bg-orange-50/30" : canSendToSpoke ? "bg-blue-50/10" : "",
+                    needsValidation ? "bg-orange-50/30" : "",
                     isSelected && "bg-primary/5 border-l-4 border-l-primary"
                   )}>
                     <TableCell className="text-center">
@@ -380,25 +321,6 @@ const OrdersPage = () => {
                                 </Tooltip>
                             </TooltipProvider>
                         )}
-
-                        {canSendToSpoke && (
-                            <TooltipProvider>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Button 
-                                            variant="outline" 
-                                            size="icon" 
-                                            className="h-8 w-8 text-blue-600 border-blue-200 bg-blue-50 hover:bg-blue-100"
-                                            onClick={() => sendToSpokeMutation.mutate(order)}
-                                            disabled={sendToSpokeMutation.isPending}
-                                        >
-                                            {sendToSpokeMutation.isPending ? <Skeleton className="w-4 h-4 rounded-full" /> : <Share2 className="h-4 w-4" />}
-                                        </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Enviar p/ Spoke Dispatch</TooltipContent>
-                                </Tooltip>
-                            </TooltipProvider>
-                        )}
                         
                         <Button variant="ghost" size="icon" onClick={() => { setSelectedOrder(order); setIsDetailModalOpen(true); }}><Eye className="h-4 w-4 text-primary" /></Button>
                         
@@ -458,15 +380,6 @@ const OrdersPage = () => {
                     >
                         {isProcessingBulk ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <CheckCircle2 className="w-5 h-5 mr-2" />}
                         Validar Pagamentos
-                    </Button>
-                    
-                    <Button 
-                        onClick={handleBulkSendToSpoke} 
-                        disabled={isProcessingBulk}
-                        className="bg-blue-600 hover:bg-blue-700 font-black h-12 px-6 rounded-xl shadow-lg"
-                    >
-                        {isProcessingBulk ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Share2 className="w-5 h-5 mr-2" />}
-                        Mandar p/ Spoke
                     </Button>
                     
                     <Button 
