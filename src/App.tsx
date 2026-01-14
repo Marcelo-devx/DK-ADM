@@ -37,6 +37,7 @@ import SupplierOrdersPage from "./pages/dashboard/SupplierOrders";
 import PriceManagementPage from "./pages/dashboard/PriceManagement";
 import PrintLabelsPage from "./pages/dashboard/PrintLabels";
 import DeliveryRoutesPage from "./pages/dashboard/DeliveryRoutes";
+import SpokeExportPage from "./pages/dashboard/SpokeExport";
 import SecretsPage from "./pages/dashboard/Secrets";
 
 const queryClient = new QueryClient();
@@ -60,6 +61,7 @@ const AppContent = () => {
           <Route index element={<DashboardPage />} />
           <Route path="orders" element={<OrdersPage />} />
           <Route path="delivery-routes" element={<DeliveryRoutesPage />} />
+          <Route path="spoke-export" element={<SpokeExportPage />} />
           <Route path="print-labels" element={<PrintLabelsPage />} />
           <Route path="prices" element={<PriceManagementPage />} />
           <Route path="supplier-orders" element={<SupplierOrdersPage />} />
