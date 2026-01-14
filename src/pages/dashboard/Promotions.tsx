@@ -75,14 +75,23 @@ const PromotionsPage = () => {
       if (values.stock_quantity === 0) {
         values.is_active = false;
       }
-      const { error } = await supabase.from('promotions').upsert(values);
+      const { data, error } = await supabase.from('promotions').upsert(values).select().single();
       if (error) throw error;
+      return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["promotions"] });
-      setIsModalOpen(false);
-      setSelectedPromotion(null);
-      showSuccess("Kit salvo com sucesso!");
+      
+      if (!selectedPromotion) {
+        // Se estava criando um novo, mantém aberto e define como selecionado para mostrar a composição
+        setSelectedPromotion(data);
+        showSuccess("Kit criado! Agora adicione os produtos abaixo.");
+      } else {
+        // Se estava editando, fecha
+        setIsModalOpen(false);
+        setSelectedPromotion(null);
+        showSuccess("Kit atualizado com sucesso!");
+      }
     },
     onError: (error: Error) => {
       showError(`Erro ao salvar kit: ${error.message}`);
@@ -138,7 +147,7 @@ const PromotionsPage = () => {
               Adicionar Kit
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-lg">
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
                 {selectedPromotion ? "Editar Kit" : "Adicionar Novo Kit"}
@@ -221,7 +230,7 @@ const PromotionsPage = () => {
                             setIsModalOpen(true);
                           }}
                         >
-                          Editar
+                          Editar / Composição
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
@@ -254,7 +263,7 @@ const PromotionsPage = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
             <AlertDialogDescription>
-              Essa ação não pode ser desfeita. Isso removerá permanentemente o kit.
+              Essa ação não pode ser desfeita. Isso removerá permanentemente o kit e devolverá os itens ao estoque.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
