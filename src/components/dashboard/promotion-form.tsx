@@ -15,6 +15,8 @@ import { Textarea } from "../ui/textarea";
 import { ImageUploader } from "./ImageUploader";
 import { useEffect } from "react";
 import { Switch } from "../ui/switch";
+import { PromotionComposition } from "./PromotionComposition";
+import { Separator } from "../ui/separator";
 
 const formSchema = z.object({
   id: z.number().optional(),
@@ -52,6 +54,7 @@ export const PromotionForm = ({
   });
 
   const stockQuantity = form.watch("stock_quantity");
+  const promotionId = initialData?.id;
 
   useEffect(() => {
     if (initialData) {
@@ -66,102 +69,123 @@ export const PromotionForm = ({
   }, [stockQuantity, form]);
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <FormField
-          control={form.control}
-          name="name"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Nome do Kit/Promoção</FormLabel>
-              <FormControl>
-                <Input placeholder="Ex: Kit Verão" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="description"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Descrição</FormLabel>
-              <FormControl>
-                <Textarea placeholder="Detalhes do kit (opcional)" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        
-        <FormField
-          control={form.control}
-          name="image_url"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Imagem do Kit</FormLabel>
-              <ImageUploader
-                onUploadSuccess={(url) => field.onChange(url)}
-                initialUrl={field.value}
-              />
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="price"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Preço de Venda</FormLabel>
-                <FormControl>
-                  <Input type="number" step="0.01" placeholder="Ex: 89.90" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="stock_quantity"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Estoque</FormLabel>
-                <FormControl>
-                  <Input type="number" min="0" placeholder="Quantos kits estão disponíveis?" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-
-        <FormField
-          control={form.control}
-          name="is_active"
-          render={({ field }) => (
-            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
-              <div className="space-y-0.5">
-                <FormLabel>Kit Ativo</FormLabel>
-              </div>
-              <FormControl>
-                <Switch
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                  disabled={stockQuantity === 0}
+    <div className="space-y-6">
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Coluna da Esquerda: Dados Básicos */}
+            <div className="space-y-4">
+                <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                    <FormItem>
+                    <FormLabel>Nome do Kit/Promoção</FormLabel>
+                    <FormControl>
+                        <Input placeholder="Ex: Combo Iniciante Zomo" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                    </FormItem>
+                )}
                 />
-              </FormControl>
-            </FormItem>
-          )}
-        />
-        <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? "Salvando..." : (initialData ? "Salvar Alterações" : "Adicionar Kit")}
-        </Button>
-      </form>
-    </Form>
+
+                <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                    <FormItem>
+                    <FormLabel>Descrição Comercial</FormLabel>
+                    <FormControl>
+                        <Textarea placeholder="Descreva os benefícios deste kit..." className="min-h-[100px]" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                    </FormItem>
+                )}
+                />
+
+                <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                        control={form.control}
+                        name="price"
+                        render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Preço do Kit (R$)</FormLabel>
+                            <FormControl>
+                            <Input type="number" step="0.01" placeholder="Ex: 89.90" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+                    <FormField
+                        control={form.control}
+                        name="stock_quantity"
+                        render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Kits Disponíveis</FormLabel>
+                            <FormControl>
+                            <Input type="number" min="0" placeholder="Limite de vendas" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+                </div>
+
+                <FormField
+                control={form.control}
+                name="is_active"
+                render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm bg-white">
+                    <div className="space-y-0.5">
+                        <FormLabel>Ativar no Site</FormLabel>
+                    </div>
+                    <FormControl>
+                        <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        disabled={stockQuantity === 0}
+                        />
+                    </FormControl>
+                    </FormItem>
+                )}
+                />
+            </div>
+
+            {/* Coluna da Direita: Imagem */}
+            <div className="space-y-4">
+                <FormField
+                control={form.control}
+                name="image_url"
+                render={({ field }) => (
+                    <FormItem>
+                    <FormLabel>Imagem Exclusiva do Kit</FormLabel>
+                    <ImageUploader
+                        onUploadSuccess={(url) => field.onChange(url)}
+                        initialUrl={field.value}
+                        label="Capa da Promoção"
+                        className="h-[320px] max-w-full"
+                    />
+                    <FormMessage />
+                    </FormItem>
+                )}
+                />
+            </div>
+          </div>
+
+          <Button type="submit" disabled={isSubmitting} className="w-full h-12 font-bold text-lg">
+            {isSubmitting ? "Salvando..." : (initialData?.id ? "Salvar Dados Básicos" : "Criar Kit (Para Adicionar Itens)")}
+          </Button>
+        </form>
+      </Form>
+
+      {/* Seção de Composição (Só aparece se já salvou a promoção) */}
+      {promotionId && (
+        <>
+            <Separator className="my-6" />
+            <PromotionComposition promotionId={promotionId} />
+        </>
+      )}
+    </div>
   );
 };
