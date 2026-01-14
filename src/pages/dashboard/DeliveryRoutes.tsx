@@ -47,47 +47,47 @@ const DeliveryRoutesPage = () => {
   const { data: routes, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ["spokeRoutesDeep", formattedDate],
     queryFn: async () => {
-      // PASSO 0: Buscar Lista de Motoristas
-      const { data: driversResponse } = await supabase.functions.invoke("spoke-proxy", {
-        body: { action: "drivers", params: { maxPageSize: 100 } }
-      });
-      
-      const driversList = driversResponse?.drivers || [];
+      // FUNÇÃO AUXILIAR PARA BUSCAR TODAS AS PÁGINAS (PAGINAÇÃO)
+      const fetchAllPages = async (action: string, initialParams: any, listKey: string) => {
+        let allItems: any[] = [];
+        let nextToken = null;
+        
+        do {
+          const { data, error } = await supabase.functions.invoke("spoke-proxy", {
+            body: { 
+              action, 
+              params: { ...initialParams, pageToken: nextToken || undefined } 
+            }
+          });
+          
+          if (error) throw error;
+          
+          const items = data[listKey] || (Array.isArray(data) ? data : []);
+          allItems = [...allItems, ...items];
+          nextToken = data.nextPageToken;
+        } while (nextToken);
+        
+        return allItems;
+      };
+
+      // PASSO 0: Buscar Lista de Motoristas (Paginado)
+      const driversList = await fetchAllPages("drivers", { maxPageSize: 50 }, "drivers");
       const driversMap = new Map();
       driversList.forEach((d: any) => {
         driversMap.set(d.id, d);
       });
 
-      // PASSO 1: Buscar os planos (Plans) do dia
-      const { data: plansResponse, error: plansError } = await supabase.functions.invoke("spoke-proxy", {
-        body: { 
-          action: "plans", 
-          params: { "filter.startsGte": formattedDate }
-        }
-      });
-      
-      if (plansError) {
-        let errorMsg = plansError.message;
-        try {
-            const body = await plansError.context.json();
-            errorMsg = body.details || body.error || plansError.message;
-        } catch (e) {}
-        throw new Error(errorMsg);
-      }
-      
-      const rawPlans = plansResponse.plans || (Array.isArray(plansResponse) ? plansResponse : []);
+      // PASSO 1: Buscar os planos (Plans) do dia (Paginado)
+      const rawPlans = await fetchAllPages("plans", { "filter.startsGte": formattedDate, maxPageSize: 20 }, "plans");
 
-      // PASSO 2: Para cada plano, buscar as paradas (Stops) detalhadas
+      // PASSO 2: Para cada plano, buscar as paradas (Stops) detalhadas (Paginado)
       const detailedPlans = await Promise.all(rawPlans.map(async (plan: any) => {
         try {
             const planIdPath = plan.id.startsWith('plans/') ? plan.id : `plans/${plan.id}`;
             const stopsAction = `${planIdPath}/stops`;
 
-            const { data: stopsResponse } = await supabase.functions.invoke("spoke-proxy", {
-                body: { action: stopsAction }
-            });
-
-            const stops = stopsResponse.stops || (Array.isArray(stopsResponse) ? stopsResponse : []);
+            // Busca todas as paradas do plano lidando com a paginação interna
+            const stops = await fetchAllPages(stopsAction, { maxPageSize: 10 }, "stops");
             
             const totalStops = stops.length;
             
@@ -141,7 +141,7 @@ const DeliveryRoutesPage = () => {
       return detailedPlans;
     },
     retry: 1,
-    refetchInterval: 30000,
+    refetchInterval: 60000, // Aumentado para 1 min para evitar excesso de requisições paginadas
   });
 
   const stats = useMemo(() => {
@@ -173,7 +173,7 @@ const DeliveryRoutesPage = () => {
   const getErrorMessage = (err: Error) => {
     const msg = err.message;
     if (msg.includes("Name or service not known") || msg.includes("dns error")) {
-        return "URL INVÁLIDA: O endereço da API configurado não existe. Verifique o campo 'Base URL' nas configurações.";
+        return "URL INVÁLIDA: O endereço da API configurado não existe.";
     }
     if (msg.includes("401") || msg.includes("Unauthorized")) {
         return "ACESSO NEGADO: O Token da API está incorreto ou expirou.";
@@ -187,7 +187,7 @@ const DeliveryRoutesPage = () => {
         <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold">Logística Spoke (Circuit)</h1>
             <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 gap-1">
-                <Globe className="w-3 h-3" /> Monitoramento v0.2b
+                <Globe className="w-3 h-3" /> Monitoramento Ilimitado
             </Badge>
         </div>
         <div className="flex gap-2">
@@ -226,7 +226,7 @@ const DeliveryRoutesPage = () => {
                 {isLoading ? (
                     <div className="p-20 text-center space-y-4">
                         <RefreshCw className="h-10 w-10 animate-spin mx-auto text-primary opacity-50" />
-                        <p className="text-muted-foreground animate-pulse">Sincronizando com Spoke API...</p>
+                        <p className="text-muted-foreground animate-pulse">Carregando todas as paradas (Paginado)...</p>
                     </div>
                 ) : isError ? (
                     <div className="p-12 text-center bg-red-50/20">
@@ -237,9 +237,6 @@ const DeliveryRoutesPage = () => {
                         </p>
                         <div className="flex justify-center gap-3">
                             <Button onClick={() => refetch()} variant="outline">Tentar Novamente</Button>
-                            <Button asChild className="bg-red-600 hover:bg-red-700 text-white">
-                                <Link to="/dashboard/settings"><Settings className="w-4 h-4 mr-2" /> Configurações</Link>
-                            </Button>
                         </div>
                     </div>
                 ) : (
@@ -273,9 +270,8 @@ const DeliveryRoutesPage = () => {
                                                     )}
                                                 </div>
                                                 <div className="flex items-center gap-3 text-[10px] text-muted-foreground uppercase font-bold mt-0.5">
-                                                    <span className="flex items-center gap-1"><Package className="w-3 h-3" /> {r.stops_count} paradas</span>
+                                                    <span className="flex items-center gap-1"><Package className="w-3 h-3" /> {r.stops_count} paradas totais</span>
                                                     <span className="flex items-center gap-1"><Users className="w-3 h-3" /> {r.driver.name}</span>
-                                                    {r.driver.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" /> {r.driver.phone}</span>}
                                                 </div>
                                             </div>
                                         </div>
@@ -296,7 +292,6 @@ const DeliveryRoutesPage = () => {
                                         </div>
                                     </div>
 
-                                    {/* LISTA DETALHADA DE PARADAS */}
                                     {isExpanded && (
                                         <div className="border-t bg-gray-50 p-4 animate-in slide-in-from-top-2 duration-300">
                                             <div className="bg-white rounded-lg border overflow-hidden">
@@ -362,7 +357,7 @@ const DeliveryRoutesPage = () => {
                         }) : (
                             <div className="p-24 text-center">
                                 <MapIcon className="w-12 h-12 text-gray-200 mx-auto mb-4" />
-                                <p className="text-muted-foreground font-medium italic">Nenhum plano de rota encontrado para {format(date || new Date(), "dd/MM")}.</p>
+                                <p className="text-muted-foreground font-medium italic">Nenhum plano de rota encontrado para esta data.</p>
                             </div>
                         )}
                     </div>
