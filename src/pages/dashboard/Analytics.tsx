@@ -23,6 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 import * as XLSX from 'xlsx';
 import { showSuccess } from "@/utils/toast";
+import { useNavigate } from "react-router-dom";
 
 // --- Types ---
 type DateRange = {
@@ -118,6 +119,7 @@ const KPICard = ({ title, value, change, icon: Icon, prefix = "" }: KPICardProps
 };
 
 const AnalyticsPage = () => {
+  const navigate = useNavigate();
   // State for Date Range
   const [dateRange, setDateRange] = useState<DateRange>({
     from: subDays(new Date(), 30),
@@ -480,7 +482,7 @@ const AnalyticsPage = () => {
                                 </p>
                             </div>
                         </div>
-                        <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={() => window.location.href = '/dashboard/promotions'}>
+                        <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={() => navigate('/dashboard/promotions')}>
                             Criar Promoção Agora
                         </Button>
                     </CardContent>
