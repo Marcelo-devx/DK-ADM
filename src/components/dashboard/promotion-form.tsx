@@ -13,22 +13,23 @@ import {
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
 import { ImageUploader } from "./ImageUploader";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Switch } from "../ui/switch";
 import { PromotionComposition } from "./PromotionComposition";
 import { Separator } from "../ui/separator";
 import { supabase } from "@/integrations/supabase/client";
-import { DollarSign, Tag, Archive } from "lucide-react";
+import { DollarSign, Tag, Archive, Calculator } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 const formSchema = z.object({
   id: z.number().optional(),
   name: z.string().min(2, "O nome é obrigatório."),
   description: z.string().optional(),
   image_url: z.string().url("URL da imagem inválida.").optional().or(z.literal('')),
-  // Alterado de 0.01 para 0 para permitir a criação inicial sem definir preço
   price: z.coerce.number().min(0, "O preço não pode ser negativo."), 
   stock_quantity: z.coerce.number().int().min(0, "O estoque não pode ser negativo."),
-  is_active: z.boolean().default(false), // Padrão false para não ativar sem querer
+  is_active: z.boolean().default(false),
+  discount_percent: z.coerce.number().min(0).max(100).optional(),
 });
 
 type PromotionFormValues = z.infer<typeof formSchema>;
@@ -53,14 +54,21 @@ export const PromotionForm = ({
       price: 0,
       stock_quantity: 0,
       is_active: false,
+      discount_percent: 0,
     },
   });
 
-  const stockQuantity = form.watch("stock_quantity");
+  const [maxPossibleStock, setMaxPossibleStock] = useState(0);
+  const [itemsTotalBasePrice, setItemsTotalBasePrice] = useState(0);
+  const [stockSurplus, setStockSurplus] = useState(0); // O quanto tem sobrando na prateleira
+
+  const currentStock = form.watch("stock_quantity");
+  const currentDiscount = form.watch("discount_percent");
   const promotionId = initialData?.id;
 
   useEffect(() => {
     if (initialData) {
+      // Se já existe, o initialData tem o estoque ATUAL do kit.
       form.reset(initialData);
     }
   }, [initialData, form]);
@@ -69,12 +77,41 @@ export const PromotionForm = ({
     if (stockQuantity === 0) {
       form.setValue("is_active", false);
     }
-  }, [stockQuantity, form]);
+  }, [currentStock, form]);
+
+  const stockQuantity = form.watch("stock_quantity");
+
+  // Função chamada pelo componente filho quando os itens mudam
+  const handleStatsUpdate = (surplus: number, totalBase: number) => {
+    setStockSurplus(surplus);
+    setItemsTotalBasePrice(totalBase);
+    
+    // O máximo que podemos ter é o que já temos (initialData.stock) + o que sobra (surplus)
+    const currentKitStock = initialData?.stock_quantity || 0;
+    setMaxPossibleStock(currentKitStock + surplus);
+    
+    // Se o novo máximo for menor que o atual (ex: alguém deletou itens do estoque), avisa ou ajusta?
+    // Por enquanto deixamos o usuário ver o erro na validação se tentar salvar.
+  };
+
+  // Auto-calcular preço quando muda o desconto
+  useEffect(() => {
+    if (itemsTotalBasePrice > 0) {
+        const discount = currentDiscount || 0;
+        const newPrice = itemsTotalBasePrice * (1 - (discount / 100));
+        form.setValue("price", parseFloat(newPrice.toFixed(2)));
+    }
+  }, [currentDiscount, itemsTotalBasePrice, form]);
 
   const handleSmartSubmit = async (values: PromotionFormValues) => {
+    if (values.stock_quantity > maxPossibleStock) {
+        alert(`Erro: Você só tem produtos suficientes para montar ${maxPossibleStock} kits no total.`);
+        return;
+    }
+
     if (initialData?.id && values.stock_quantity !== initialData.stock_quantity) {
         try {
-            const { stock_quantity, ...basicData } = values;
+            const { stock_quantity, discount_percent, ...basicData } = values;
             const { error: basicError } = await supabase
                 .from('promotions')
                 .update(basicData)
@@ -104,7 +141,7 @@ export const PromotionForm = ({
       <Form {...form}>
         <form onSubmit={form.handleSubmit(handleSmartSubmit)} className="space-y-6">
           
-          {/* PASSO 1: DADOS BÁSICOS (Sempre visível) */}
+          {/* PASSO 1: DADOS BÁSICOS */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="space-y-4">
                 <div className="flex items-center gap-2 mb-2 pb-2 border-b">
@@ -152,7 +189,7 @@ export const PromotionForm = ({
                         onUploadSuccess={(url) => field.onChange(url)}
                         initialUrl={field.value}
                         label="Capa da Promoção"
-                        className="h-[240px] max-w-full"
+                        className="h-[200px] max-w-full"
                     />
                     <FormMessage />
                     </FormItem>
@@ -168,79 +205,115 @@ export const PromotionForm = ({
              </Button>
           )}
 
-          {/* PASSO 2: COMPOSIÇÃO (Só aparece se já salvou) */}
+          {/* PASSO 2 & 3: COMPOSIÇÃO E ESTOQUE */}
           {promotionId && (
             <>
                 <Separator className="my-6" />
-                <PromotionComposition promotionId={promotionId} />
+                <PromotionComposition 
+                    promotionId={promotionId} 
+                    onStatsChange={handleStatsUpdate}
+                />
 
-                {/* PASSO 3: PREÇO E ESTOQUE (Só depois de ter o kit) */}
-                <div className="space-y-4 bg-gray-50 p-4 rounded-lg border mt-6">
-                    <div className="flex items-center gap-2 mb-2 pb-2 border-b">
+                <div className="space-y-4 bg-gray-50 p-6 rounded-lg border mt-6">
+                    <div className="flex items-center gap-2 mb-4 pb-2 border-b">
                         <DollarSign className="w-4 h-4 text-gray-500" />
-                        <h3 className="text-sm font-bold text-gray-700 uppercase">3. Precificação e Estoque</h3>
+                        <h3 className="text-sm font-bold text-gray-700 uppercase">3. Precificação Inteligente e Estoque</h3>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <FormField
-                            control={form.control}
-                            name="price"
-                            render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Preço Final do Kit (R$)</FormLabel>
-                                <FormControl>
-                                <Input type="number" step="0.01" placeholder="Ex: 89.90" {...field} className="bg-white" />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                            )}
-                        />
-                        <FormField
-                            control={form.control}
-                            name="stock_quantity"
-                            render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Kits Disponíveis</FormLabel>
-                                <FormControl>
-                                <Input 
-                                    type="number" 
-                                    min="0" 
-                                    placeholder="Ao aumentar, consome estoque dos itens" 
-                                    {...field}
-                                    className="bg-white" 
-                                />
-                                </FormControl>
-                                <div className="text-[10px] text-muted-foreground flex items-center gap-1 mt-1">
-                                    <Archive className="w-3 h-3" /> Ao salvar, o sistema reservará o estoque dos itens acima.
-                                </div>
-                                <FormMessage />
-                            </FormItem>
-                            )}
-                        />
-                    </div>
-
-                    <FormField
-                    control={form.control}
-                    name="is_active"
-                    render={({ field }) => (
-                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm bg-white">
-                        <div className="space-y-0.5">
-                            <FormLabel>Ativar no Site</FormLabel>
-                        </div>
-                        <FormControl>
-                            <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                            disabled={stockQuantity === 0}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        
+                        {/* CARD DE PREÇO */}
+                        <div className="bg-white p-4 rounded border shadow-sm space-y-4">
+                            <div className="flex justify-between text-xs text-muted-foreground">
+                                <span>Soma dos Itens:</span>
+                                <span className="font-bold">R$ {itemsTotalBasePrice.toFixed(2)}</span>
+                            </div>
+                            
+                            <FormField
+                                control={form.control}
+                                name="discount_percent"
+                                render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel className="flex items-center gap-1"><Calculator className="w-3 h-3" /> Desconto %</FormLabel>
+                                    <FormControl>
+                                    <Input type="number" min="0" max="100" placeholder="0" {...field} />
+                                    </FormControl>
+                                </FormItem>
+                                )}
                             />
-                        </FormControl>
-                        </FormItem>
-                    )}
-                    />
+
+                            <FormField
+                                control={form.control}
+                                name="price"
+                                render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Preço Final (R$)</FormLabel>
+                                    <FormControl>
+                                    <Input type="number" step="0.01" {...field} readOnly className="bg-gray-100 font-bold text-green-700" />
+                                    </FormControl>
+                                </FormItem>
+                                )}
+                            />
+                        </div>
+
+                        {/* CARD DE ESTOQUE */}
+                        <div className="bg-white p-4 rounded border shadow-sm space-y-4 md:col-span-2">
+                            <div className="flex justify-between items-center bg-blue-50 p-2 rounded text-xs text-blue-800 border border-blue-100">
+                                <span className="font-bold">Kits Atuais: {initialData?.stock_quantity || 0}</span>
+                                <span className="font-bold">+</span>
+                                <span className="font-bold">Capacidade Extra: {stockSurplus}</span>
+                                <span className="font-bold">=</span>
+                                <Badge variant="default" className="bg-blue-600">Máximo Possível: {maxPossibleStock}</Badge>
+                            </div>
+
+                            <FormField
+                                control={form.control}
+                                name="stock_quantity"
+                                render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Kits Disponíveis para Venda</FormLabel>
+                                    <FormControl>
+                                    <Input 
+                                        type="number" 
+                                        min="0" 
+                                        max={maxPossibleStock}
+                                        {...field}
+                                        className="font-bold text-lg h-12"
+                                    />
+                                    </FormControl>
+                                    <FormMessage />
+                                    <p className="text-[10px] text-muted-foreground mt-1">
+                                        Você não pode definir um valor maior que {maxPossibleStock} pois faltariam produtos no estoque.
+                                    </p>
+                                </FormItem>
+                                )}
+                            />
+
+                            <FormField
+                                control={form.control}
+                                name="is_active"
+                                render={({ field }) => (
+                                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 bg-gray-50">
+                                    <div className="space-y-0.5">
+                                        <FormLabel>Ativar no Site</FormLabel>
+                                        <p className="text-[10px] text-muted-foreground">O kit só aparece se estiver ativo e com estoque.</p>
+                                    </div>
+                                    <FormControl>
+                                        <Switch
+                                        checked={field.value}
+                                        onCheckedChange={field.onChange}
+                                        disabled={stockQuantity === 0}
+                                        />
+                                    </FormControl>
+                                    </FormItem>
+                                )}
+                            />
+                        </div>
+                    </div>
                 </div>
 
-                <Button type="submit" disabled={isSubmitting} className="w-full h-12 font-bold text-lg mt-4">
-                    {isSubmitting ? "Salvando e Ajustando Estoque..." : "Salvar Alterações do Kit"}
+                <Button type="submit" disabled={isSubmitting} className="w-full h-14 font-black text-lg mt-6 shadow-lg bg-green-600 hover:bg-green-700">
+                    {isSubmitting ? "Processando..." : "Salvar Alterações e Reservar Estoque"}
                 </Button>
             </>
           )}

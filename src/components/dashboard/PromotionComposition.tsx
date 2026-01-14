@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -8,12 +8,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Package, AlertCircle, Loader2, Lock } from "lucide-react";
+import { Plus, Trash2, Package, Lock, Loader2 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Badge } from "@/components/ui/badge";
 
 interface PromotionCompositionProps {
   promotionId: number | undefined;
+  onStatsChange?: (maxStock: number, totalBasePrice: number) => void;
 }
 
 interface ProductOption {
@@ -32,14 +33,20 @@ interface PromotionItem {
   product_id: number;
   variant_id: string | null;
   quantity: number;
-  products: { name: string };
+  products: { 
+    name: string; 
+    price: number; 
+    stock_quantity: number;
+  };
   product_variants?: {
     flavors?: { name: string } | null;
     volume_ml: number | null;
+    price: number;
+    stock_quantity: number;
   } | null;
 }
 
-export const PromotionComposition = ({ promotionId }: PromotionCompositionProps) => {
+export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCompositionProps) => {
   const queryClient = useQueryClient();
   const [selectedProductId, setSelectedProductId] = useState<string>("");
   const [selectedVariantId, setSelectedVariantId] = useState<string>("none");
@@ -61,7 +68,7 @@ export const PromotionComposition = ({ promotionId }: PromotionCompositionProps)
     },
   });
 
-  // 2. Buscar Itens já no Kit
+  // 2. Buscar Itens já no Kit com Preços e Estoques
   const { data: items, isLoading } = useQuery({
     queryKey: ["promotionItems", promotionId],
     queryFn: async () => {
@@ -70,8 +77,8 @@ export const PromotionComposition = ({ promotionId }: PromotionCompositionProps)
         .from("promotion_items")
         .select(`
           id, product_id, variant_id, quantity,
-          products(name),
-          product_variants(volume_ml, flavors(name))
+          products(name, price, stock_quantity),
+          product_variants(volume_ml, flavors(name), price, stock_quantity)
         `)
         .eq("promotion_id", promotionId);
       if (error) throw error;
@@ -79,6 +86,49 @@ export const PromotionComposition = ({ promotionId }: PromotionCompositionProps)
     },
     enabled: !!promotionId,
   });
+
+  // Calcular Estatísticas (Preço Base e Estoque Máximo Possível)
+  useEffect(() => {
+    if (!items || !onStatsChange) return;
+
+    let totalBase = 0;
+    let minStockLimit = Number.MAX_SAFE_INTEGER;
+    let hasItems = false;
+
+    items.forEach(item => {
+        hasItems = true;
+        const price = item.product_variants ? item.product_variants.price : item.products.price;
+        const currentStock = item.product_variants ? item.product_variants.stock_quantity : item.products.stock_quantity;
+        
+        // Custo total dos itens
+        totalBase += (price * item.quantity);
+
+        // O limite é quantos kits eu posso montar com o estoque ATUAL deste item
+        // Ex: Tenho 10 cocas. O kit leva 2 cocas. Posso montar 5 kits.
+        // Importante: No banco, o estoque JÁ ESTÁ deduzido se o kit já existe. 
+        // Mas para calcular o "máximo possível" para NOVOS kits, usamos o que tem lá.
+        // Se eu quiser aumentar o estoque do kit, preciso ter margem.
+        // OBS: A lógica complexa de "travar" estoque é feita no backend. 
+        // Aqui vamos apenas informar o *teto* atual baseado no que sobrou no estoque.
+        
+        const possibleKitsWithThisItem = Math.floor(currentStock / item.quantity);
+        if (possibleKitsWithThisItem < minStockLimit) {
+            minStockLimit = possibleKitsWithThisItem;
+        }
+    });
+
+    if (!hasItems) minStockLimit = 0;
+
+    // Mas espera! O estoque do Kit já "comeu" os produtos.
+    // Se eu tenho 5 kits criados, os produtos desses 5 kits já saíram do estoque_quantity do produto.
+    // Então o "Máximo Real" que o usuário vê é: (Kits Atuais) + (Quantos mais posso fazer com o que sobrou).
+    // Como esse componente não sabe quantos kits JÁ existem (isso tá no form pai), 
+    // vamos passar apenas o "Adicional Possível" (minStockLimit calculado acima) e o pai soma.
+    // Ou melhor: Vamos passar o minStockLimit puro (o que tem na prateleira AGORA). 
+    
+    onStatsChange(minStockLimit, totalBase);
+
+  }, [items, onStatsChange]);
 
   // Mutations
   const addItemMutation = useMutation({
@@ -96,7 +146,7 @@ export const PromotionComposition = ({ promotionId }: PromotionCompositionProps)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["promotionItems", promotionId] });
-      queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] }); // Atualiza estoques
       showSuccess("Item adicionado e estoque reservado!");
       setQuantity(1);
     },

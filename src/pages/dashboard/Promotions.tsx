@@ -147,7 +147,8 @@ const PromotionsPage = () => {
               Adicionar Kit
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+          {/* MUDANÇA AQUI: sm:max-w-5xl para alargar o modal */}
+          <DialogContent className="sm:max-w-5xl max-h-[95vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
                 {selectedPromotion ? "Editar Kit" : "Adicionar Novo Kit"}
