@@ -25,9 +25,10 @@ const formSchema = z.object({
   name: z.string().min(2, "O nome é obrigatório."),
   description: z.string().optional(),
   image_url: z.string().url("URL da imagem inválida.").optional().or(z.literal('')),
-  price: z.coerce.number().min(0.01, "O preço deve ser positivo."),
+  // Alterado de 0.01 para 0 para permitir a criação inicial sem definir preço
+  price: z.coerce.number().min(0, "O preço não pode ser negativo."), 
   stock_quantity: z.coerce.number().int().min(0, "O estoque não pode ser negativo."),
-  is_active: z.boolean().default(true),
+  is_active: z.boolean().default(false), // Padrão false para não ativar sem querer
 });
 
 type PromotionFormValues = z.infer<typeof formSchema>;
@@ -51,7 +52,7 @@ export const PromotionForm = ({
       image_url: "",
       price: 0,
       stock_quantity: 0,
-      is_active: true,
+      is_active: false,
     },
   });
 
@@ -151,7 +152,7 @@ export const PromotionForm = ({
                         onUploadSuccess={(url) => field.onChange(url)}
                         initialUrl={field.value}
                         label="Capa da Promoção"
-                        className="h-[320px] max-w-full"
+                        className="h-[240px] max-w-full"
                     />
                     <FormMessage />
                     </FormItem>
@@ -170,10 +171,11 @@ export const PromotionForm = ({
           {/* PASSO 2: COMPOSIÇÃO (Só aparece se já salvou) */}
           {promotionId && (
             <>
+                <Separator className="my-6" />
                 <PromotionComposition promotionId={promotionId} />
 
                 {/* PASSO 3: PREÇO E ESTOQUE (Só depois de ter o kit) */}
-                <div className="space-y-4 bg-gray-50 p-4 rounded-lg border">
+                <div className="space-y-4 bg-gray-50 p-4 rounded-lg border mt-6">
                     <div className="flex items-center gap-2 mb-2 pb-2 border-b">
                         <DollarSign className="w-4 h-4 text-gray-500" />
                         <h3 className="text-sm font-bold text-gray-700 uppercase">3. Precificação e Estoque</h3>
@@ -237,7 +239,7 @@ export const PromotionForm = ({
                     />
                 </div>
 
-                <Button type="submit" disabled={isSubmitting} className="w-full h-12 font-bold text-lg">
+                <Button type="submit" disabled={isSubmitting} className="w-full h-12 font-bold text-lg mt-4">
                     {isSubmitting ? "Salvando e Ajustando Estoque..." : "Salvar Alterações do Kit"}
                 </Button>
             </>
