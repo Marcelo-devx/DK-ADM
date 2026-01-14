@@ -54,10 +54,18 @@ serve(async (req) => {
         throw new Error(`User with ID ${targetUserId} does not have an email.`);
     }
 
+    // Fetch dynamic redirect URL from settings if available
+    const { data: setting } = await supabaseAdmin
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'auth_redirect_url')
+      .single();
+
+    // Priority: DB Setting > Payload Param > Undefined
+    const finalRedirectUrl = setting?.value || redirectTo;
+    const options = finalRedirectUrl ? { redirectTo: finalRedirectUrl } : undefined;
+
     let responseMessage = '';
-    
-    // Define as opções de redirecionamento se fornecidas
-    const options = redirectTo ? { redirectTo } : undefined;
 
     // 5. Perform action
     if (action === 'resend_confirmation') {
@@ -65,13 +73,11 @@ serve(async (req) => {
         type: 'signup',
         email: targetUserEmail,
         options: {
-            emailRedirectTo: redirectTo
+            emailRedirectTo: finalRedirectUrl
         }
       });
-      // Fallback para invite se resend não for o caso exato, mas geralmente inviteUserByEmail é para novos.
-      // Vamos manter a lógica original mas usando a API correta de resend ou invite
+      // Fallback para invite se resend não for o caso exato
       if (error) {
-          // Tenta reenviar convite se o resend falhar
           const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(targetUserEmail, options);
           if (inviteError) throw error; 
       }
@@ -88,7 +94,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ message: responseMessage }),
+      JSON.stringify({ message: responseMessage, debug_redirect: finalRedirectUrl }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,

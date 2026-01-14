@@ -54,6 +54,7 @@ const getKeyDescription = (key: string): string => {
     label_sender_city: "Cidade e Estado de origem nas etiquetas de envio.",
     label_logo_url: "Logotipo otimizado (preto e branco) para as etiquetas de transporte.",
     n8n_webhook_url: "Endpoint para automações de marketing e relatórios externos.",
+    auth_redirect_url: "URL para onde o usuário será enviado após redefinir a senha (ex: https://seusite.com/login).",
   };
   return descriptions[key] || "Configuração personalizada do sistema.";
 };
@@ -317,7 +318,7 @@ const SecretsPage = () => {
                 <div className="space-y-2">
                     <Label className="text-xs uppercase font-bold">Sugestões comuns</Label>
                     <div className="flex flex-wrap gap-2">
-                        {['mercadopago_access_token', 'pagseguro_token', 'n8n_webhook_url', 'whatsapp_contact_number'].map(k => (
+                        {['auth_redirect_url', 'mercadopago_access_token', 'pagseguro_token', 'n8n_webhook_url'].map(k => (
                             <Badge key={k} variant="secondary" className="cursor-pointer hover:bg-primary hover:text-white" onClick={() => setNewSecret({ ...newSecret, key: k })}>
                                 {k}
                             </Badge>
