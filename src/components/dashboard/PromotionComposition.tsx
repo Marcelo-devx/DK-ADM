@@ -80,7 +80,7 @@ export const PromotionComposition = ({ promotionId }: PromotionCompositionProps)
     enabled: !!promotionId,
   });
 
-  // Mutations usando RPC (Funções de Banco) para garantir a trava de estoque
+  // Mutations
   const addItemMutation = useMutation({
     mutationFn: async () => {
       if (!promotionId) throw new Error("Salve a promoção antes de adicionar itens.");
@@ -96,7 +96,7 @@ export const PromotionComposition = ({ promotionId }: PromotionCompositionProps)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["promotionItems", promotionId] });
-      queryClient.invalidateQueries({ queryKey: ["products"] }); // Atualiza lista geral de produtos para refletir novo estoque
+      queryClient.invalidateQueries({ queryKey: ["products"] });
       showSuccess("Item adicionado e estoque reservado!");
       setQuantity(1);
     },
@@ -118,32 +118,22 @@ export const PromotionComposition = ({ promotionId }: PromotionCompositionProps)
     onError: (err: any) => showError(err.message),
   });
 
-  if (!promotionId) {
-    return (
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
-        <AlertCircle className="w-6 h-6 text-yellow-600 mx-auto mb-2" />
-        <p className="text-sm text-yellow-700 font-medium">
-          Salve os dados básicos da promoção primeiro para começar a adicionar os produtos do kit.
-        </p>
-      </div>
-    );
-  }
+  if (!promotionId) return null;
 
   const selectedProduct = products?.find(p => String(p.id) === selectedProductId);
   const hasVariants = selectedProduct && selectedProduct.variants && selectedProduct.variants.length > 0;
 
   return (
-    <div className="space-y-4 border rounded-lg p-4 bg-blue-50/30 border-blue-100">
+    <div className="space-y-4 border rounded-lg p-4 bg-blue-50/30 border-blue-100 my-6">
       <div className="flex justify-between items-center">
         <h3 className="text-sm font-bold uppercase flex items-center gap-2 text-blue-800">
-            <Package className="w-4 h-4" /> Composição (Estoque Travado)
+            <Package className="w-4 h-4" /> 2. Composição do Kit
         </h3>
         <Badge variant="outline" className="text-[10px] border-blue-200 text-blue-700 bg-white">
             <Lock className="w-3 h-3 mr-1" /> Reserva Automática
         </Badge>
       </div>
 
-      {/* Formulário de Adição */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-white p-3 rounded-md border shadow-sm">
         <div className="md:col-span-5 space-y-1">
           <Label className="text-xs">Produto</Label>
@@ -193,6 +183,7 @@ export const PromotionComposition = ({ promotionId }: PromotionCompositionProps)
 
         <div className="md:col-span-1">
           <Button 
+            type="button"
             size="sm" 
             className="w-full h-8 bg-blue-600 hover:bg-blue-700"
             disabled={!selectedProductId || addItemMutation.isPending}
@@ -203,7 +194,6 @@ export const PromotionComposition = ({ promotionId }: PromotionCompositionProps)
         </div>
       </div>
 
-      {/* Lista de Itens */}
       <div className="border rounded-md bg-white overflow-hidden">
         <Table>
           <TableHeader className="bg-gray-100">
@@ -218,7 +208,7 @@ export const PromotionComposition = ({ promotionId }: PromotionCompositionProps)
             {isLoading ? (
                <TableRow><TableCell colSpan={4} className="text-center text-xs py-4">Carregando...</TableCell></TableRow>
             ) : items?.length === 0 ? (
-               <TableRow><TableCell colSpan={4} className="text-center text-xs text-muted-foreground py-4">Nenhum item adicionado. Adicione produtos para reservar estoque.</TableCell></TableRow>
+               <TableRow><TableCell colSpan={4} className="text-center text-xs text-muted-foreground py-4">Adicione produtos para compor este kit.</TableCell></TableRow>
             ) : (
               items?.map(item => (
                 <TableRow key={item.id} className="h-10">
@@ -233,6 +223,7 @@ export const PromotionComposition = ({ promotionId }: PromotionCompositionProps)
                   <TableCell className="text-center font-bold text-xs py-1">{item.quantity}</TableCell>
                   <TableCell className="text-right py-1">
                     <Button 
+                        type="button"
                         variant="ghost" 
                         size="icon" 
                         className="h-6 w-6 text-red-500"

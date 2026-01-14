@@ -18,6 +18,7 @@ import { Switch } from "../ui/switch";
 import { PromotionComposition } from "./PromotionComposition";
 import { Separator } from "../ui/separator";
 import { supabase } from "@/integrations/supabase/client";
+import { DollarSign, Tag, Archive } from "lucide-react";
 
 const formSchema = z.object({
   id: z.number().optional(),
@@ -101,8 +102,15 @@ export const PromotionForm = ({
     <div className="space-y-6">
       <Form {...form}>
         <form onSubmit={form.handleSubmit(handleSmartSubmit)} className="space-y-6">
+          
+          {/* PASSO 1: DADOS BÁSICOS (Sempre visível) */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="space-y-4">
+                <div className="flex items-center gap-2 mb-2 pb-2 border-b">
+                    <Tag className="w-4 h-4 text-gray-500" />
+                    <h3 className="text-sm font-bold text-gray-700 uppercase">1. Dados Básicos</h3>
+                </div>
+
                 <FormField
                 control={form.control}
                 name="name"
@@ -130,59 +138,6 @@ export const PromotionForm = ({
                     </FormItem>
                 )}
                 />
-
-                <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                        control={form.control}
-                        name="price"
-                        render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Preço do Kit (R$)</FormLabel>
-                            <FormControl>
-                            <Input type="number" step="0.01" placeholder="Ex: 89.90" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                        </FormItem>
-                        )}
-                    />
-                    <FormField
-                        control={form.control}
-                        name="stock_quantity"
-                        render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Kits Disponíveis</FormLabel>
-                            <FormControl>
-                            <Input 
-                                type="number" 
-                                min="0" 
-                                placeholder="Limite de vendas" 
-                                {...field} 
-                            />
-                            </FormControl>
-                            <FormMessage />
-                        </FormItem>
-                        )}
-                    />
-                </div>
-
-                <FormField
-                control={form.control}
-                name="is_active"
-                render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm bg-white">
-                    <div className="space-y-0.5">
-                        <FormLabel>Ativar no Site</FormLabel>
-                    </div>
-                    <FormControl>
-                        <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                        disabled={stockQuantity === 0}
-                        />
-                    </FormControl>
-                    </FormItem>
-                )}
-                />
             </div>
 
             <div className="space-y-4">
@@ -205,16 +160,90 @@ export const PromotionForm = ({
             </div>
           </div>
 
-          <Button type="submit" disabled={isSubmitting} className="w-full h-12 font-bold text-lg">
-            {isSubmitting ? "Salvando..." : (initialData?.id ? "Salvar Dados Básicos" : "Criar Kit (Para Liberar Composição)")}
-          </Button>
+          {/* Se não tem ID, mostra botão para criar e liberar o resto */}
+          {!promotionId && (
+             <Button type="submit" disabled={isSubmitting} className="w-full h-12 font-bold text-lg bg-blue-600 hover:bg-blue-700">
+                {isSubmitting ? "Criando..." : "Criar Kit & Avançar para Composição"}
+             </Button>
+          )}
+
+          {/* PASSO 2: COMPOSIÇÃO (Só aparece se já salvou) */}
+          {promotionId && (
+            <>
+                <PromotionComposition promotionId={promotionId} />
+
+                {/* PASSO 3: PREÇO E ESTOQUE (Só depois de ter o kit) */}
+                <div className="space-y-4 bg-gray-50 p-4 rounded-lg border">
+                    <div className="flex items-center gap-2 mb-2 pb-2 border-b">
+                        <DollarSign className="w-4 h-4 text-gray-500" />
+                        <h3 className="text-sm font-bold text-gray-700 uppercase">3. Precificação e Estoque</h3>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                            control={form.control}
+                            name="price"
+                            render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Preço Final do Kit (R$)</FormLabel>
+                                <FormControl>
+                                <Input type="number" step="0.01" placeholder="Ex: 89.90" {...field} className="bg-white" />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="stock_quantity"
+                            render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Kits Disponíveis</FormLabel>
+                                <FormControl>
+                                <Input 
+                                    type="number" 
+                                    min="0" 
+                                    placeholder="Ao aumentar, consome estoque dos itens" 
+                                    {...field}
+                                    className="bg-white" 
+                                />
+                                </FormControl>
+                                <div className="text-[10px] text-muted-foreground flex items-center gap-1 mt-1">
+                                    <Archive className="w-3 h-3" /> Ao salvar, o sistema reservará o estoque dos itens acima.
+                                </div>
+                                <FormMessage />
+                            </FormItem>
+                            )}
+                        />
+                    </div>
+
+                    <FormField
+                    control={form.control}
+                    name="is_active"
+                    render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm bg-white">
+                        <div className="space-y-0.5">
+                            <FormLabel>Ativar no Site</FormLabel>
+                        </div>
+                        <FormControl>
+                            <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                            disabled={stockQuantity === 0}
+                            />
+                        </FormControl>
+                        </FormItem>
+                    )}
+                    />
+                </div>
+
+                <Button type="submit" disabled={isSubmitting} className="w-full h-12 font-bold text-lg">
+                    {isSubmitting ? "Salvando e Ajustando Estoque..." : "Salvar Alterações do Kit"}
+                </Button>
+            </>
+          )}
         </form>
       </Form>
-
-      <Separator className="my-6" />
-      
-      {/* Sempre renderiza, mas o componente trata o estado nulo com uma mensagem */}
-      <PromotionComposition promotionId={promotionId} />
     </div>
   );
 };
