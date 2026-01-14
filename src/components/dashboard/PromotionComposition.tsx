@@ -12,10 +12,18 @@ import { Plus, Trash2, Package, Lock, Loader2 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Badge } from "@/components/ui/badge";
 
+export interface BreakdownItem {
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  unitPixPrice: number;
+  totalPixPrice: number;
+}
+
 interface PromotionCompositionProps {
   promotionId: number | undefined;
-  // Atualizado para enviar também o totalBasePix
-  onStatsChange?: (maxStock: number, totalBasePrice: number, totalBasePixPrice: number) => void;
+  onStatsChange?: (maxStock: number, totalBasePrice: number, totalBasePixPrice: number, breakdown: BreakdownItem[]) => void;
 }
 
 interface ProductOption {
@@ -98,6 +106,7 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
     let totalBasePix = 0;
     let minStockLimit = Number.MAX_SAFE_INTEGER;
     let hasItems = false;
+    const currentBreakdown: BreakdownItem[] = [];
 
     items.forEach(item => {
         hasItems = true;
@@ -110,9 +119,22 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
         const pixPrice = entity.pix_price || price; 
         const currentStock = entity.stock_quantity;
         
+        const itemName = item.product_variants 
+            ? `${item.products.name} - ${item.product_variants.flavors?.name || "Padrão"}`
+            : item.products.name;
+
         // Custo total dos itens
         totalBase += (price * item.quantity);
         totalBasePix += (pixPrice * item.quantity);
+
+        currentBreakdown.push({
+            name: itemName,
+            quantity: item.quantity,
+            unitPrice: price,
+            totalPrice: price * item.quantity,
+            unitPixPrice: pixPrice,
+            totalPixPrice: pixPrice * item.quantity
+        });
 
         // Cálculo de estoque máximo possível
         const possibleKitsWithThisItem = Math.floor(currentStock / item.quantity);
@@ -123,7 +145,7 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
 
     if (!hasItems) minStockLimit = 0;
     
-    onStatsChange(minStockLimit, totalBase, totalBasePix);
+    onStatsChange(minStockLimit, totalBase, totalBasePix, currentBreakdown);
 
   }, [items, onStatsChange]);
 

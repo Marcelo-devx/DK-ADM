@@ -15,11 +15,12 @@ import { Textarea } from "../ui/textarea";
 import { ImageUploader } from "./ImageUploader";
 import { useEffect, useState } from "react";
 import { Switch } from "../ui/switch";
-import { PromotionComposition } from "./PromotionComposition";
+import { PromotionComposition, BreakdownItem } from "./PromotionComposition";
 import { Separator } from "../ui/separator";
 import { supabase } from "@/integrations/supabase/client";
-import { DollarSign, Tag, Archive, Calculator, QrCode, CreditCard } from "lucide-react";
+import { DollarSign, Tag, Calculator, QrCode, CreditCard, Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 
 const formSchema = z.object({
   id: z.number().optional(),
@@ -64,6 +65,7 @@ export const PromotionForm = ({
   const [itemsTotalBasePrice, setItemsTotalBasePrice] = useState(0);
   const [itemsTotalBasePixPrice, setItemsTotalBasePixPrice] = useState(0);
   const [stockSurplus, setStockSurplus] = useState(0); 
+  const [breakdown, setBreakdown] = useState<BreakdownItem[]>([]);
 
   const currentStock = form.watch("stock_quantity");
   const currentDiscount = form.watch("discount_percent");
@@ -84,19 +86,19 @@ export const PromotionForm = ({
   const stockQuantity = form.watch("stock_quantity");
 
   // Recebe os dados calculados da composição
-  const handleStatsUpdate = (surplus: number, totalBase: number, totalBasePix: number) => {
+  const handleStatsUpdate = (surplus: number, totalBase: number, totalBasePix: number, itemsBreakdown: BreakdownItem[]) => {
     setStockSurplus(surplus);
     setItemsTotalBasePrice(totalBase);
     setItemsTotalBasePixPrice(totalBasePix);
+    setBreakdown(itemsBreakdown);
     
     // O máximo que podemos ter é o que já temos (initialData.stock) + o que sobra (surplus)
     const currentKitStock = initialData?.stock_quantity || 0;
     setMaxPossibleStock(currentKitStock + surplus);
   };
 
-  // Auto-calcular preço quando muda o desconto ou a base
+  // Auto-calcular preço quando muda o desconto
   useEffect(() => {
-    // Só calcula automaticamente se houver itens
     if (itemsTotalBasePrice > 0 || itemsTotalBasePixPrice > 0) {
         const discount = currentDiscount || 0;
         const factor = (1 - (discount / 100));
@@ -104,8 +106,8 @@ export const PromotionForm = ({
         const newPrice = itemsTotalBasePrice * factor;
         const newPixPrice = itemsTotalBasePixPrice * factor;
 
-        // Se o usuário ainda não editou manualmente ou se está aplicando desconto, atualiza
-        // (Aqui estamos forçando a atualização baseada no desconto para simplificar)
+        // Só atualiza se o valor calculado for diferente para evitar loops (ou se quiser forçar, ok)
+        // Aqui estamos forçando a atualização baseada no desconto.
         form.setValue("price", parseFloat(newPrice.toFixed(2)));
         form.setValue("pix_price", parseFloat(newPixPrice.toFixed(2)));
     }
@@ -143,6 +145,8 @@ export const PromotionForm = ({
         onSubmit(values);
     }
   };
+
+  const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
   return (
     <div className="space-y-6">
@@ -197,7 +201,7 @@ export const PromotionForm = ({
                         onUploadSuccess={(url) => field.onChange(url)}
                         initialUrl={field.value}
                         label="Capa da Promoção"
-                        className="h-[240px] max-w-full"
+                        className="h-[200px] max-w-full"
                     />
                     <FormMessage />
                     </FormItem>
@@ -251,9 +255,33 @@ export const PromotionForm = ({
                             <div className="grid grid-cols-2 gap-4">
                                 {/* CARTÃO */}
                                 <div className="space-y-2">
-                                    <div className="flex justify-between text-xs text-muted-foreground">
-                                        <span>Soma Itens:</span>
-                                        <span className="font-bold">R$ {itemsTotalBasePrice.toFixed(2)}</span>
+                                    <div className="flex justify-between items-center text-xs text-muted-foreground">
+                                        <div className="flex items-center gap-1">
+                                            <span>Soma Itens:</span>
+                                            <HoverCard>
+                                                <HoverCardTrigger>
+                                                    <Info className="w-3 h-3 cursor-help text-blue-500" />
+                                                </HoverCardTrigger>
+                                                <HoverCardContent className="w-80">
+                                                    <div className="space-y-2">
+                                                        <h4 className="text-sm font-semibold flex items-center gap-2"><CreditCard className="w-4 h-4" /> Detalhamento (Cartão)</h4>
+                                                        <div className="text-xs space-y-1">
+                                                            {breakdown.map((item, idx) => (
+                                                                <div key={idx} className="flex justify-between border-b pb-1 last:border-0">
+                                                                    <span className="truncate max-w-[150px]" title={item.name}>{item.quantity}x {item.name}</span>
+                                                                    <span>{formatCurrency(item.totalPrice)}</span>
+                                                                </div>
+                                                            ))}
+                                                            <div className="border-t pt-2 mt-1 flex justify-between font-bold text-sm">
+                                                                <span>Total Base</span>
+                                                                <span>{formatCurrency(itemsTotalBasePrice)}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </HoverCardContent>
+                                            </HoverCard>
+                                        </div>
+                                        <span className="font-bold">{formatCurrency(itemsTotalBasePrice)}</span>
                                     </div>
                                     <FormField
                                         control={form.control}
@@ -271,9 +299,33 @@ export const PromotionForm = ({
 
                                 {/* PIX */}
                                 <div className="space-y-2">
-                                    <div className="flex justify-between text-xs text-muted-foreground">
-                                        <span>Soma Itens:</span>
-                                        <span className="font-bold">R$ {itemsTotalBasePixPrice.toFixed(2)}</span>
+                                    <div className="flex justify-between items-center text-xs text-muted-foreground">
+                                        <div className="flex items-center gap-1">
+                                            <span>Soma Itens:</span>
+                                            <HoverCard>
+                                                <HoverCardTrigger>
+                                                    <Info className="w-3 h-3 cursor-help text-green-600" />
+                                                </HoverCardTrigger>
+                                                <HoverCardContent className="w-80">
+                                                    <div className="space-y-2">
+                                                        <h4 className="text-sm font-semibold flex items-center gap-2 text-green-700"><QrCode className="w-4 h-4" /> Detalhamento (Pix)</h4>
+                                                        <div className="text-xs space-y-1">
+                                                            {breakdown.map((item, idx) => (
+                                                                <div key={idx} className="flex justify-between border-b pb-1 last:border-0">
+                                                                    <span className="truncate max-w-[150px]" title={item.name}>{item.quantity}x {item.name}</span>
+                                                                    <span>{formatCurrency(item.totalPixPrice)}</span>
+                                                                </div>
+                                                            ))}
+                                                            <div className="border-t pt-2 mt-1 flex justify-between font-bold text-sm text-green-700">
+                                                                <span>Total Base</span>
+                                                                <span>{formatCurrency(itemsTotalBasePixPrice)}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </HoverCardContent>
+                                            </HoverCard>
+                                        </div>
+                                        <span className="font-bold">{formatCurrency(itemsTotalBasePixPrice)}</span>
                                     </div>
                                     <FormField
                                         control={form.control}
@@ -317,6 +369,9 @@ export const PromotionForm = ({
                                     />
                                     </FormControl>
                                     <FormMessage />
+                                    <p className="text-[10px] text-muted-foreground mt-1">
+                                        Você não pode definir um valor maior que {maxPossibleStock} pois faltariam produtos no estoque.
+                                    </p>
                                 </FormItem>
                                 )}
                             />
