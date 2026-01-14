@@ -11,6 +11,9 @@ const corsHeaders = {
 // URL Oficial da Documentação (v0.2b)
 const OFFICIAL_API_URL = "https://api.getcircuit.com/public/v0.2b";
 
+// Função auxiliar para delay
+const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -37,17 +40,12 @@ serve(async (req) => {
       throw new Error("Token da API não configurado. Vá em Configurações > Integração Spoke.");
     }
 
-    // Se a URL não estiver configurada ou parecer errada, usa a oficial da documentação
     if (!apiUrl || !apiUrl.includes("api.getcircuit.com/public/v0.2b")) {
-        console.warn(`URL configurada (${apiUrl}) difere da oficial. Usando: ${OFFICIAL_API_URL}`);
+        // console.warn(`URL configurada (${apiUrl}) difere da oficial. Usando: ${OFFICIAL_API_URL}`);
         apiUrl = OFFICIAL_API_URL;
     }
 
-    // Limpeza da URL
     apiUrl = apiUrl.trim().replace(/\/$/, '');
-    
-    // A API retorna IDs como "plans/abc". Se a action já vier assim, concatenamos direto.
-    // Se a action for só "plans", também funciona.
     let finalUrl = `${apiUrl}/${action}`;
     
     if (params) {
@@ -57,32 +55,55 @@ serve(async (req) => {
 
     console.log(`[spoke-proxy] Requesting: ${method} ${finalUrl}`);
 
-    const response = await fetch(finalUrl, {
-        method,
-        headers: {
-            'Authorization': `Bearer ${apiToken.trim()}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-        },
-        body: body ? JSON.stringify(body) : undefined
-    });
-
-    const responseText = await response.text();
+    // Lógica de Retry com Exponential Backoff
+    let attempt = 0;
+    const maxAttempts = 3;
+    let response;
     let data;
-    
-    try {
-        data = JSON.parse(responseText);
-    } catch (e) {
-        data = { message: responseText || `Status ${response.status}` };
-    }
 
-    if (!response.ok) {
-        console.error("[spoke-proxy] Error:", data);
-        // Tratamento específico para Rate Limiting (429) mencionado na doc
+    while (attempt < maxAttempts) {
+      try {
+        response = await fetch(finalUrl, {
+            method,
+            headers: {
+                'Authorization': `Bearer ${apiToken.trim()}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: body ? JSON.stringify(body) : undefined
+        });
+
         if (response.status === 429) {
-            throw new Error("Limite de requisições excedido (Rate Limit). Tente novamente em alguns instantes.");
+            attempt++;
+            const waitTime = Math.pow(2, attempt) * 1000 + Math.random() * 500; // 2s, 4s, 8s + jitter
+            console.warn(`[spoke-proxy] Rate limit hit (429). Retrying in ${waitTime}ms (Attempt ${attempt}/${maxAttempts})`);
+            await delay(waitTime);
+            continue;
         }
-        throw new Error(data.message || data.error || `Erro ${response.status} na API Spoke`);
+
+        const responseText = await response.text();
+        
+        try {
+            data = JSON.parse(responseText);
+        } catch (e) {
+            data = { message: responseText || `Status ${response.status}` };
+        }
+
+        if (!response.ok) {
+            console.error("[spoke-proxy] API Error:", data);
+            throw new Error(data.message || data.error || `Erro ${response.status} na API Spoke`);
+        }
+
+        // Sucesso
+        break;
+
+      } catch (err) {
+        // Se for erro de rede ou timeout, também pode tentar retry se quiser, 
+        // mas aqui estamos focando no 429 ou erros finais.
+        if (attempt === maxAttempts - 1 || (response && response.status !== 429)) {
+            throw err;
+        }
+      }
     }
 
     return new Response(JSON.stringify(data), {
