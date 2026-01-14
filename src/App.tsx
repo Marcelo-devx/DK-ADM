@@ -39,6 +39,7 @@ import PrintLabelsPage from "./pages/dashboard/PrintLabels";
 import DeliveryRoutesPage from "./pages/dashboard/DeliveryRoutes";
 import SpokeExportPage from "./pages/dashboard/SpokeExport";
 import SecretsPage from "./pages/dashboard/Secrets";
+import ImportClientsPage from "./pages/dashboard/ImportClients";
 
 const queryClient = new QueryClient();
 
@@ -66,6 +67,8 @@ const AppContent = () => {
           <Route path="prices" element={<PriceManagementPage />} />
           <Route path="supplier-orders" element={<SupplierOrdersPage />} />
           <Route path="products" element={<ProductsPage />} />
+          <Route path="clients" element={<ClientsPage />} />
+          <Route path="import-clients" element={<ImportClientsPage />} />
           <Route path="categories" element={<CategoriesPage />} />
           <Route path="sub-categories" element={<SubCategoriesPage />} />
           <Route path="brands" element={<BrandsPage />} />
@@ -74,7 +77,6 @@ const AppContent = () => {
           <Route path="coupons" element={<CouponsPage />} />
           <Route path="hero-slides" element={<HeroSlidesPage />} />
           <Route path="home-content" element={<HomeContentPage />} />
-          <Route path="clients" element={<ClientsPage />} />
           <Route path="popups" element={<PopupsPage />} />
           <Route path="sales-popups" element={<SalesPopupsPage />} />
           <Route path="reviews" element={<ReviewsPage />} />

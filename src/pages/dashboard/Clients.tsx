@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { ShieldAlert, Edit, MoreHorizontal, Mail, KeyRound, ShoppingCart, RotateCcw, CheckCircle, Lock, Unlock, UserPlus, Upload, FileUp, FileDown } from "lucide-react";
+import { MoreHorizontal, Mail, KeyRound, RotateCcw, CheckCircle, Lock, Unlock, UserPlus } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -39,17 +39,8 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { showSuccess, showError } from "@/utils/toast";
 import { CreateClientForm } from "@/components/dashboard/CreateClientForm";
-import * as XLSX from 'xlsx';
-import { mapRowKeys } from "@/utils/excel-utils";
-import { ClientImportModal } from "@/components/dashboard/ClientImportModal";
 
 interface Client {
   id: string;
@@ -81,10 +72,6 @@ const ClientsPage = () => {
     client: Client;
   } | null>(null);
 
-  // States for Import
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [clientsToImport, setClientsToImport] = useState<any[]>([]);
-
   const { data: clients, isLoading, error } = useQuery<Client[]>({
     queryKey: ["clients"],
     queryFn: fetchClients,
@@ -111,26 +98,6 @@ const ClientsPage = () => {
     },
     onError: (error: Error) => {
         showError(`Erro ao criar cliente: ${error.message}`);
-    },
-  });
-
-  const bulkImportMutation = useMutation({
-    mutationFn: async (clients: any[]) => {
-      const { data, error } = await supabase.functions.invoke("bulk-import-clients", { 
-        body: { clients } 
-      });
-      
-      if (error) throw new Error(error.message);
-      return data;
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
-      showSuccess(data.message);
-      setIsImportModalOpen(false);
-      setClientsToImport([]);
-    },
-    onError: (error: Error) => {
-      showError(`Erro na importação: ${error.message}`);
     },
   });
 
@@ -197,53 +164,6 @@ const ClientsPage = () => {
     }
   };
 
-  const handleImportXLSX = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'array' });
-        const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]) as any[];
-        
-        // Mapeia as chaves do Excel para o formato esperado
-        const mappedClients = json.map(mapRowKeys).map((row: any) => ({
-            email: row.email,
-            first_name: row.nome || '',
-            last_name: row.sobrenome || '',
-            phone: row.telefone ? String(row.telefone) : '',
-            cep: row.cep ? String(row.cep) : '',
-            street: row.rua || '',
-            number: row.numero ? String(row.numero) : '',
-            complement: row.complemento || '',
-            neighborhood: row.bairro || '',
-            city: row.cidade || '',
-            state: row.estado || '',
-            password: row.senha ? String(row.senha) : undefined, // Opcional
-        })).filter((c: any) => c.email && c.email.includes('@')); // Filtro básico
-
-        if (mappedClients.length === 0) {
-            showError("Nenhum cliente válido encontrado na planilha. Verifique a coluna 'Email'.");
-            return;
-        }
-
-        setClientsToImport(mappedClients);
-        setIsImportModalOpen(true);
-    };
-    reader.readAsArrayBuffer(file);
-    event.target.value = '';
-  };
-
-  const handleDownloadTemplate = () => {
-    const headers = [
-        "Email", "Senha", "Nome", "Sobrenome", "Telefone", "CEP", "Rua", "Numero", "Complemento", "Bairro", "Cidade", "Estado"
-    ];
-    const worksheet = XLSX.utils.aoa_to_sheet([headers]);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Clientes");
-    XLSX.writeFile(workbook, "modelo_importacao_clientes.xlsx");
-  };
-
   const filteredClients = clients?.filter(client => {
     if (client.role === 'adm') return false;
     return !showOnlyFlagged || client.force_pix_on_next_purchase;
@@ -255,29 +175,6 @@ const ClientsPage = () => {
         <h1 className="text-3xl font-bold">Clientes</h1>
         
         <div className="flex flex-wrap items-center gap-2">
-          {/* Botões de Importação */}
-          <div className="flex items-center gap-2 mr-4">
-            <TooltipProvider>
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button variant="outline" size="icon" onClick={handleDownloadTemplate}>
-                            <FileDown className="h-4 w-4" />
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Baixar Modelo de Planilha</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button variant="outline" size="icon" onClick={() => document.getElementById('client-import-input')?.click()}>
-                            <FileUp className="h-4 w-4" />
-                            <input type="file" id="client-import-input" className="hidden" onChange={handleImportXLSX} accept=".xlsx, .xls" />
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Importar Excel</TooltipContent>
-                </Tooltip>
-            </TooltipProvider>
-          </div>
-
           <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
             <DialogTrigger asChild>
                 <Button className="bg-primary hover:bg-primary/90">
@@ -461,15 +358,6 @@ const ClientsPage = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Modal de Importação */}
-      <ClientImportModal 
-        isOpen={isImportModalOpen} 
-        onClose={() => setIsImportModalOpen(false)} 
-        clientsToImport={clientsToImport} 
-        onConfirm={() => bulkImportMutation.mutate(clientsToImport)}
-        isSubmitting={bulkImportMutation.isPending}
-      />
     </div>
   );
 };
