@@ -21,8 +21,7 @@ import {
   ChevronUp,
   MapPin,
   XCircle,
-  User,
-  ExternalLink
+  User
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -43,86 +42,99 @@ const DeliveryRoutesPage = () => {
   const [expandedRoutes, setExpandedRoutes] = useState<Record<string, boolean>>({});
 
   const { data: activeRoutes, isLoading, isError, error, refetch, isRefetching } = useQuery({
-    queryKey: ["spokeRoutesSafe", formattedDate],
+    queryKey: ["spokeRoutesFixed", formattedDate],
     queryFn: async () => {
+      // FUNÇÃO PARA BUSCAR TODAS AS PÁGINAS COM TRATAMENTO DE ERRO
+      const fetchAllPages = async (action: string, initialParams: any, listKey: string) => {
+        let allItems: any[] = [];
+        let nextToken = null;
+        let pageCount = 0;
+        
+        do {
+          // Prepara os parâmetros, removendo undefined/null
+          const params: any = { ...initialParams };
+          if (nextToken) {
+            params.pageToken = nextToken;
+          }
+
+          const { data, error } = await supabase.functions.invoke("spoke-proxy", {
+            body: { action, params }
+          });
+          
+          if (error) throw error;
+          
+          // Se data[listKey] não existir, tenta usar data diretamente se for array, ou array vazio
+          const items = data[listKey] || (Array.isArray(data) ? data : []);
+          allItems = [...allItems, ...items];
+          
+          nextToken = data.nextPageToken;
+          pageCount++;
+
+          // Proteção contra loops infinitos (máximo 10 páginas por segurança)
+          if (pageCount > 10) break;
+
+        } while (nextToken);
+        
+        return allItems;
+      };
+
       try {
-        // 1. Buscar Lista de Motoristas (com limite alto para pegar todos)
-        const { data: driversData, error: driversError } = await supabase.functions.invoke("spoke-proxy", {
-          body: { action: "drivers", params: { maxPageSize: 100 } }
-        });
+        // 1. Buscar Drivers (com tratamento específico se falhar)
+        let driversList = [];
+        try {
+            driversList = await fetchAllPages("drivers", { maxPageSize: 100 }, "drivers");
+        } catch (err) {
+            console.warn("Falha ao buscar lista de motoristas, continuando sem nomes...", err);
+        }
         
-        if (driversError) throw new Error("Falha ao buscar motoristas: " + driversError.message);
-        
-        const driversList = driversData?.drivers || [];
-        const driversMap = new Map();
-        driversList.forEach((d: any) => driversMap.set(d.id, d));
+        const driversMap = new Map(driversList.map((d: any) => [d.id, d]));
 
         // 2. Buscar Planos do dia
-        const { data: plansData, error: plansError } = await supabase.functions.invoke("spoke-proxy", {
-          body: { 
-            action: "plans", 
-            params: { "filter.startsGte": formattedDate, maxPageSize: 20 }
-          }
-        });
+        const plans = await fetchAllPages("plans", { "filter.startsGte": formattedDate, maxPageSize: 20 }, "plans");
 
-        if (plansError) throw new Error("Falha ao buscar planos: " + plansError.message);
-        const rawPlans = plansData?.plans || [];
+        // 3. Para cada Plano, buscar as Rotas
+        const allIndividualRoutes: any[] = [];
 
-        // 3. Processar Rotas dentro dos Planos
-        const allRoutes: any[] = [];
-
-        for (const plan of rawPlans) {
+        for (const plan of plans) {
           try {
-            // Buscar rotas do plano (que são divididas por motorista)
-            const planId = plan.id.includes('/') ? plan.id : `plans/${plan.id}`;
-            const { data: routesData } = await supabase.functions.invoke("spoke-proxy", {
-                body: { action: `${planId}/routes`, params: { maxPageSize: 50 } }
-            });
-
-            const routesInPlan = routesData?.routes || [];
+            const planIdPath = plan.id.startsWith('plans/') ? plan.id : `plans/${plan.id}`;
+            
+            // Busca as rotas dentro do plano
+            const routesInPlan = await fetchAllPages(`${planIdPath}/routes`, { maxPageSize: 20 }, "routes");
 
             for (const route of routesInPlan) {
-                // Buscar paradas da rota
-                const routeId = route.id.includes('/') ? route.id : `routes/${route.id}`;
-                const { data: stopsData } = await supabase.functions.invoke("spoke-proxy", {
-                    body: { action: `${routeId}/stops`, params: { maxPageSize: 100 } }
-                });
+              const driverId = route.driverId;
+              const fullDriverData = driversMap.get(driverId);
+              
+              // Busca as paradas desta rota específica
+              const stops = await fetchAllPages(`${route.id}/stops`, { maxPageSize: 50 }, "stops");
+              
+              const completed = stops.filter((s: any) => s.deliveryInfo?.succeeded === true).length;
+              const failed = stops.filter((s: any) => s.deliveryInfo?.attempted === true && !s.deliveryInfo?.succeeded).length;
 
-                const stops = stopsData?.stops || [];
-                
-                // Calcular status
-                const total = stops.length;
-                const completed = stops.filter((s: any) => s.deliveryInfo?.succeeded).length;
-                const failed = stops.filter((s: any) => s.deliveryInfo?.attempted && !s.deliveryInfo?.succeeded).length;
-
-                // Identificar motorista
-                const driverId = route.driverId;
-                const driverDetails = driversMap.get(driverId);
-                const driverName = driverDetails?.name || driverDetails?.displayName || "Motorista não identificado";
-                const driverPhone = driverDetails?.phone || null;
-
-                allRoutes.push({
-                    id: route.id,
-                    planName: plan.title || "Plano Geral",
-                    routeName: route.title,
-                    driver: { name: driverName, phone: driverPhone },
-                    stops_count: total,
-                    completed_stops_count: completed,
-                    failed_stops_count: failed,
-                    status: (completed + failed) === total && total > 0 ? 'completed' : 'active',
-                    stops_list: stops
-                });
+              allIndividualRoutes.push({
+                id: route.id,
+                planName: plan.title || "Plano Geral",
+                driver: {
+                  name: fullDriverData?.name || fullDriverData?.displayName || "Motorista não identificado",
+                  phone: fullDriverData?.phone || null
+                },
+                stops_count: stops.length,
+                completed_stops_count: completed,
+                failed_stops_count: failed,
+                stops_list: stops,
+                status: (completed + failed) === stops.length && stops.length > 0 ? 'completed' : 'active'
+              });
             }
-          } catch (innerErr) {
-            console.error("Erro ao processar plano específico:", innerErr);
-            // Continua para o próximo plano em vez de quebrar tudo
+          } catch (err) {
+            console.error(`Erro ao processar rotas do plano ${plan.id}:`, err);
           }
         }
-
-        return allRoutes;
+        
+        return allIndividualRoutes;
 
       } catch (err: any) {
-        console.error("Erro fatal na busca de rotas:", err);
+        console.error("Erro geral na busca:", err);
         throw err;
       }
     },
@@ -148,8 +160,8 @@ const DeliveryRoutesPage = () => {
 
   const getStopStatusBadge = (stop: any) => {
     if (stop.deliveryInfo?.succeeded) return <Badge className="bg-green-500 hover:bg-green-600"><CheckCircle2 className="w-3 h-3 mr-1" /> Entregue</Badge>;
-    if (stop.deliveryInfo?.attempted) return <Badge variant="destructive"><XCircle className="w-3 h-3 mr-1" /> Falhou</Badge>;
-    return <Badge variant="outline" className="text-gray-500">Pendente</Badge>;
+    if (stop.deliveryInfo?.attempted) return <Badge variant="destructive"><XCircle className="w-3 h-3 mr-1" /> Falha</Badge>;
+    return <Badge variant="outline" className="text-gray-400">Pendente</Badge>;
   };
 
   return (
@@ -161,11 +173,9 @@ const DeliveryRoutesPage = () => {
                 <Globe className="w-3 h-3" /> Integração Spoke
             </Badge>
         </div>
-        <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isRefetching} className="gap-2">
-                <RefreshCw className={cn("h-4 w-4", isRefetching && "animate-spin")} /> Atualizar
-            </Button>
-        </div>
+        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isRefetching} className="gap-2">
+            <RefreshCw className={cn("h-4 w-4", isRefetching && "animate-spin")} /> Atualizar
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -175,166 +185,131 @@ const DeliveryRoutesPage = () => {
               <CardTitle className="text-lg font-bold">Filtrar Data</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              <Calendar
-                mode="single"
-                selected={date}
-                onSelect={setDate}
-                locale={ptBR}
-                className="w-full"
-              />
+              <Calendar mode="single" selected={date} onSelect={setDate} locale={ptBR} className="w-full" />
             </CardContent>
           </Card>
         </div>
 
         <div className="lg:col-span-9 space-y-6">
-          <Card className="shadow-sm border-none overflow-hidden bg-white">
-            <CardHeader className="bg-gray-50/50 border-b py-3 px-6">
-              <div className="flex items-center gap-2 text-sm font-bold text-gray-600 uppercase">
-                <Warehouse className="h-4 w-4" /> Visão Geral da Frota
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-                {isLoading ? (
-                    <div className="p-20 text-center space-y-4">
-                        <RefreshCw className="h-10 w-10 animate-spin mx-auto text-primary opacity-50" />
-                        <p className="text-muted-foreground animate-pulse font-bold uppercase text-xs tracking-widest">Carregando dados da logística...</p>
-                    </div>
-                ) : isError ? (
-                    <div className="p-12 text-center bg-red-50/20">
-                        <AlertTriangle className="h-12 w-12 mx-auto text-red-500 mb-4" />
-                        <h3 className="text-xl font-black text-red-800">Erro ao carregar</h3>
-                        <p className="text-sm text-red-600 mb-6 max-w-md mx-auto font-medium">
-                            {(error as Error)?.message || "Não foi possível conectar à API de logística."}
-                        </p>
-                        <Button onClick={() => refetch()} variant="outline">Tentar Novamente</Button>
-                    </div>
-                ) : (
-                    <div className="divide-y">
-                        <div className="grid grid-cols-3 gap-8 p-6 bg-gray-50/30">
-                            <div><p className="text-xs text-muted-foreground font-bold uppercase">Motoristas</p><p className="text-3xl font-black">{stats.drivers}</p></div>
-                            <div><p className="text-xs text-muted-foreground font-bold uppercase">Entregas</p><p className="text-3xl font-black">{stats.completed} <span className="text-sm font-normal text-muted-foreground">/ {stats.total_stops}</span></p></div>
-                            <div><p className="text-xs text-muted-foreground font-bold uppercase">Eficiência</p><p className="text-3xl font-black text-blue-600">{stats.efficiency}%</p></div>
-                        </div>
-                        
-                        {activeRoutes && activeRoutes.length > 0 ? activeRoutes.map((r: any) => {
-                            const progress = r.stops_count > 0 ? (r.completed_stops_count / r.stops_count) * 100 : 0;
-                            const isExpanded = expandedRoutes[r.id];
+          {isLoading ? (
+            <div className="p-20 text-center space-y-4">
+                <RefreshCw className="h-10 w-10 animate-spin mx-auto text-primary opacity-50" />
+                <p className="text-muted-foreground animate-pulse font-bold uppercase text-xs tracking-widest">Carregando rotas...</p>
+            </div>
+          ) : isError ? (
+            <div className="p-12 text-center bg-red-50/20 rounded-xl border border-red-100">
+                <AlertTriangle className="h-12 w-12 mx-auto text-red-500 mb-4" />
+                <h3 className="text-xl font-black text-red-800">Falha na Comunicação</h3>
+                <p className="text-sm text-red-600 mb-6 max-w-md mx-auto font-medium">
+                    {(error as Error)?.message || "Não foi possível conectar à API de logística."}
+                </p>
+                <Button onClick={() => refetch()} variant="outline" className="border-red-200 hover:bg-red-50">Tentar Novamente</Button>
+            </div>
+          ) : activeRoutes && activeRoutes.length > 0 ? (
+            <div className="space-y-4">
+                <div className="grid grid-cols-3 gap-4 mb-4">
+                    <Card className="bg-white border-none shadow-sm"><CardContent className="p-4">
+                        <p className="text-[10px] font-black text-muted-foreground uppercase">Motoristas na Rua</p>
+                        <p className="text-2xl font-black">{stats.drivers}</p>
+                    </CardContent></Card>
+                    <Card className="bg-white border-none shadow-sm"><CardContent className="p-4">
+                        <p className="text-[10px] font-black text-muted-foreground uppercase">Paradas Totais</p>
+                        <p className="text-2xl font-black">{stats.completed} <span className="text-sm opacity-40">/ {stats.total_stops}</span></p>
+                    </CardContent></Card>
+                    <Card className="bg-white border-none shadow-sm"><CardContent className="p-4">
+                        <p className="text-[10px] font-black text-muted-foreground uppercase">Conclusão Geral</p>
+                        <p className="text-2xl font-black text-blue-600">{stats.efficiency}%</p>
+                    </CardContent></Card>
+                </div>
 
-                            return (
-                                <div key={r.id} className="transition-all border-l-4 border-transparent hover:border-blue-500 bg-white">
-                                    <div 
-                                        className="flex flex-col sm:flex-row sm:items-center justify-between p-5 hover:bg-gray-50 cursor-pointer gap-4 sm:gap-0"
-                                        onClick={() => toggleRoute(r.id)}
-                                    >
-                                        <div className="flex items-center gap-4">
-                                            <div className="h-12 w-12 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-black text-xl flex-shrink-0 uppercase">
-                                                {r.driver.name.charAt(0)}
-                                            </div>
-                                            <div>
-                                                <div className="flex items-center gap-2">
-                                                    <p className="font-black text-base">{r.driver.name}</p>
-                                                    {r.status === 'completed' ? (
-                                                        <Badge className="text-[9px] bg-green-500 h-4 px-1">CONCLUÍDO</Badge>
-                                                    ) : (
-                                                        <Badge variant="outline" className="text-[9px] bg-blue-50 text-blue-700 border-blue-200 h-4 px-1">EM ROTA</Badge>
-                                                    )}
-                                                </div>
-                                                <div className="flex items-center gap-3 text-[10px] text-muted-foreground uppercase font-bold mt-0.5">
-                                                    <span className="flex items-center gap-1"><Package className="w-3 h-3" /> {r.stops_count} paradas</span>
-                                                    <span className="flex items-center gap-1"><Globe className="w-3 h-3" /> {r.planName}</span>
-                                                    {r.driver.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" /> {r.driver.phone}</span>}
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-6 w-full sm:w-1/3 justify-end">
-                                            <div className="flex-1 space-y-1">
-                                                <div className="flex justify-between text-xs font-bold text-muted-foreground">
-                                                    <span>Progresso</span>
-                                                    <span>{r.completed_stops_count}/{r.stops_count}</span>
-                                                </div>
-                                                <Progress value={progress} className="h-2" />
-                                            </div>
-                                            <div className="text-right w-12">
-                                                <span className="text-lg font-bold text-blue-600">{Math.round(progress)}%</span>
-                                            </div>
-                                            <Button variant="ghost" size="icon" className="shrink-0">
-                                                {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-                                            </Button>
-                                        </div>
+                {activeRoutes.map((route: any) => {
+                    const progress = route.stops_count > 0 ? (route.completed_stops_count / route.stops_count) * 100 : 0;
+                    const isExpanded = expandedRoutes[route.id];
+
+                    return (
+                        <Card key={route.id} className={cn(
+                            "border-none shadow-sm overflow-hidden transition-all",
+                            route.status === 'completed' ? "opacity-70" : "ring-1 ring-black/5"
+                        )}>
+                            <div 
+                                className="p-5 flex flex-col sm:flex-row items-center justify-between cursor-pointer hover:bg-gray-50 gap-4"
+                                onClick={() => toggleRoute(route.id)}
+                            >
+                                <div className="flex items-center gap-4 w-full sm:w-auto">
+                                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary uppercase font-black text-xl">
+                                        {route.driver.name.charAt(0)}
                                     </div>
-
-                                    {isExpanded && (
-                                        <div className="border-t bg-gray-50 p-4 animate-in slide-in-from-top-2 duration-300">
-                                            <div className="bg-white rounded-lg border overflow-hidden">
-                                                <Table>
-                                                    <TableHeader className="bg-gray-100">
-                                                        <TableRow>
-                                                            <TableHead className="w-12 text-center text-[10px] font-black uppercase">Seq</TableHead>
-                                                            <TableHead className="text-[10px] font-black uppercase">Endereço</TableHead>
-                                                            <TableHead className="text-[10px] font-black uppercase">Destinatário</TableHead>
-                                                            <TableHead className="text-right text-[10px] font-black uppercase">Status</TableHead>
-                                                        </TableRow>
-                                                    </TableHeader>
-                                                    <TableBody>
-                                                        {r.stops_list.map((stop: any, index: number) => (
-                                                            <TableRow key={stop.id} className="hover:bg-gray-50">
-                                                                <TableCell className="text-center font-mono font-bold text-muted-foreground text-xs">
-                                                                    {index + 1}
-                                                                </TableCell>
-                                                                <TableCell>
-                                                                    <div className="flex flex-col">
-                                                                        <span className="font-medium text-sm flex items-center gap-1">
-                                                                            <MapPin className="w-3 h-3 text-gray-400" /> 
-                                                                            {stop.address?.address || stop.address?.addressLineOne || "Endereço não disponível"}
-                                                                        </span>
-                                                                        {(stop.address?.city || stop.address?.state) && (
-                                                                            <span className="text-[10px] text-muted-foreground pl-4">
-                                                                                {[stop.address.city, stop.address.state].filter(Boolean).join(" - ")}
-                                                                            </span>
-                                                                        )}
-                                                                    </div>
-                                                                </TableCell>
-                                                                <TableCell>
-                                                                    <div className="flex flex-col">
-                                                                        <span className="font-bold text-sm">
-                                                                            {stop.recipient?.name || "Cliente"}
-                                                                        </span>
-                                                                        {stop.recipient?.phone && (
-                                                                            <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                                                                                <Phone className="w-3 h-3" /> {stop.recipient.phone}
-                                                                            </span>
-                                                                        )}
-                                                                    </div>
-                                                                </TableCell>
-                                                                <TableCell className="text-right">
-                                                                    {getStopStatusBadge(stop)}
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        ))}
-                                                        {r.stops_list.length === 0 && (
-                                                            <TableRow>
-                                                                <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
-                                                                    Nenhuma parada registrada.
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        )}
-                                                    </TableBody>
-                                                </Table>
-                                            </div>
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <p className="font-black text-lg">{route.driver.name}</p>
+                                            {route.status === 'completed' && <Badge className="bg-green-500">FINALIZADA</Badge>}
                                         </div>
-                                    )}
+                                        <p className="text-[10px] text-muted-foreground font-bold uppercase flex items-center gap-2">
+                                            {route.planName} • <Phone className="w-3 h-3" /> {route.driver.phone || "Sem Telefone"}
+                                        </p>
+                                    </div>
                                 </div>
-                            );
-                        }) : (
-                            <div className="p-24 text-center">
-                                <MapIcon className="w-12 h-12 text-gray-200 mx-auto mb-4" />
-                                <p className="text-muted-foreground font-medium italic">Nenhuma rota ativa encontrada para esta data.</p>
+
+                                <div className="flex items-center gap-6 w-full sm:w-1/2 justify-end">
+                                    <div className="flex-1 space-y-1">
+                                        <div className="flex justify-between text-[10px] font-black uppercase text-muted-foreground">
+                                            <span>Progresso da Rota</span>
+                                            <span>{route.completed_stops_count}/{route.stops_count}</span>
+                                        </div>
+                                        <Progress value={progress} className="h-1.5" />
+                                    </div>
+                                    <Button variant="ghost" size="icon">
+                                        {isExpanded ? <ChevronUp /> : <ChevronDown />}
+                                    </Button>
+                                </div>
                             </div>
-                        )}
-                    </div>
-                )}
-            </CardContent>
-          </Card>
+
+                            {isExpanded && (
+                                <div className="border-t bg-gray-50/50 p-4 animate-in slide-in-from-top-1 duration-200">
+                                    <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+                                        <Table>
+                                            <TableHeader className="bg-gray-50">
+                                                <TableRow>
+                                                    <TableHead className="w-12 text-center text-[10px] font-black uppercase">Seq</TableHead>
+                                                    <TableHead className="text-[10px] font-black uppercase">Endereço de Entrega</TableHead>
+                                                    <TableHead className="text-[10px] font-black uppercase">Destinatário</TableHead>
+                                                    <TableHead className="text-right text-[10px] font-black uppercase">Status</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {route.stops_list.map((stop: any, idx: number) => (
+                                                    <TableRow key={stop.id} className="hover:bg-gray-50">
+                                                        <TableCell className="text-center font-black text-muted-foreground text-xs">{idx + 1}</TableCell>
+                                                        <TableCell>
+                                                            <p className="text-xs font-bold flex items-center gap-1">
+                                                                <MapPin className="w-3 h-3 text-primary" /> {stop.address?.address || stop.address?.addressLineOne || "N/A"}
+                                                            </p>
+                                                            <p className="text-[10px] text-muted-foreground pl-4">{stop.address?.city} - {stop.address?.state}</p>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <p className="text-xs font-black">{stop.recipient?.name || "N/A"}</p>
+                                                            {stop.recipient?.phone && <p className="text-[10px] text-muted-foreground">{stop.recipient.phone}</p>}
+                                                        </TableCell>
+                                                        <TableCell className="text-right">
+                                                            {getStopStatusBadge(stop)}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                </div>
+                            )}
+                        </Card>
+                    );
+                })}
+            </div>
+          ) : (
+            <div className="p-24 text-center bg-white rounded-3xl border-2 border-dashed">
+                <MapIcon className="w-12 h-12 text-gray-200 mx-auto mb-4" />
+                <p className="text-muted-foreground font-bold uppercase text-xs tracking-widest">Nenhuma rota ativa encontrada para esta data.</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
