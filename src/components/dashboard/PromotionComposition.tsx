@@ -8,9 +8,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Package, Lock, Loader2 } from "lucide-react";
+import { Plus, Trash2, Package, Lock, Loader2, Check, ChevronsUpDown } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 export interface BreakdownItem {
   name: string;
@@ -62,6 +76,7 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
   const [selectedProductId, setSelectedProductId] = useState<string>("");
   const [selectedVariantId, setSelectedVariantId] = useState<string>("none");
   const [quantity, setQuantity] = useState<number>(1);
+  const [openProductSearch, setOpenProductSearch] = useState(false);
 
   // 1. Buscar Produtos Disponíveis
   const { data: products } = useQuery({
@@ -208,16 +223,51 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
       <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-white p-3 rounded-md border shadow-sm">
         <div className="md:col-span-5 space-y-1">
           <Label className="text-xs">Produto</Label>
-          <Select value={selectedProductId} onValueChange={(val) => { setSelectedProductId(val); setSelectedVariantId("none"); }}>
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue placeholder="Selecione..." />
-            </SelectTrigger>
-            <SelectContent>
-              {products?.map(p => (
-                <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          
+          <Popover open={openProductSearch} onOpenChange={setOpenProductSearch}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={openProductSearch}
+                className="w-full h-8 justify-between text-xs"
+              >
+                {selectedProductId
+                  ? products?.find((p) => String(p.id) === selectedProductId)?.name
+                  : "Buscar produto..."}
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[300px] p-0" align="start">
+              <Command>
+                <CommandInput placeholder="Digite para buscar..." />
+                <CommandList>
+                  <CommandEmpty>Nenhum produto encontrado.</CommandEmpty>
+                  <CommandGroup>
+                    {products?.map((p) => (
+                      <CommandItem
+                        key={p.id}
+                        value={p.name}
+                        onSelect={() => {
+                          setSelectedProductId(String(p.id));
+                          setSelectedVariantId("none");
+                          setOpenProductSearch(false);
+                        }}
+                      >
+                        <Check
+                          className={cn(
+                            "mr-2 h-4 w-4",
+                            selectedProductId === String(p.id) ? "opacity-100" : "opacity-0"
+                          )}
+                        />
+                        {p.name}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
         </div>
 
         <div className="md:col-span-4 space-y-1">
