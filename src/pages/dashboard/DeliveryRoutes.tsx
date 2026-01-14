@@ -19,23 +19,35 @@ import {
   Users,
   CheckCircle2,
   Clock,
-  Phone
+  Phone,
+  ChevronDown,
+  ChevronUp,
+  MapPin,
+  XCircle
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
 import { Progress } from "@/components/ui/progress";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 const DeliveryRoutesPage = () => {
   const [date, setDate] = useState<Date | undefined>(new Date());
   const formattedDate = date ? format(date, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd");
+  const [expandedRoutes, setExpandedRoutes] = useState<Record<string, boolean>>({});
 
   const { data: routes, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ["spokeRoutesDeep", formattedDate],
     queryFn: async () => {
-      // PASSO 0: Buscar Lista de Motoristas para Mapeamento (ID -> Nome)
-      // Isso é necessário pois o plano pode retornar apenas IDs ou objetos parciais
+      // PASSO 0: Buscar Lista de Motoristas
       const { data: driversResponse } = await supabase.functions.invoke("spoke-proxy", {
         body: { action: "drivers", params: { maxPageSize: 100 } }
       });
@@ -43,7 +55,6 @@ const DeliveryRoutesPage = () => {
       const driversList = driversResponse?.drivers || [];
       const driversMap = new Map();
       driversList.forEach((d: any) => {
-        // Mapeia tanto o ID completo "drivers/123" quanto o sufixo "123" se necessário
         driversMap.set(d.id, d);
       });
 
@@ -78,31 +89,25 @@ const DeliveryRoutesPage = () => {
 
             const stops = stopsResponse.stops || (Array.isArray(stopsResponse) ? stopsResponse : []);
             
-            // MÉTRICAS BASEADAS NO MODELO DE STOP (deliveryInfo)
             const totalStops = stops.length;
             
             const completedStops = stops.filter((s: any) => {
-                // Verifica deliveryInfo.succeeded conforme documentação
                 return s.deliveryInfo?.succeeded === true || s.deliveryInfo?.state === 'delivered_to_recipient';
             }).length;
             
             const failedStops = stops.filter((s: any) => {
-                // Verifica tentativas falhas
                 return s.deliveryInfo?.attempted === true && s.deliveryInfo?.succeeded === false;
             }).length;
 
-            // Identificar Motorista
             let driverInfo = { name: "Aguardando Atribuição", phone: null };
             
-            // O modelo de plano retorna "drivers": [ { id: "..." } ]
             if (plan.drivers && plan.drivers.length > 0) {
-                const driverId = plan.drivers[0].id || plan.drivers[0]; // Pode ser objeto ou string
+                const driverId = plan.drivers[0].id || plan.drivers[0];
                 const fullDriverData = driversMap.get(driverId);
                 
                 if (fullDriverData) {
                     driverInfo = { name: fullDriverData.name || fullDriverData.displayName || "Motorista", phone: fullDriverData.phone };
                 } else if (typeof plan.drivers[0] === 'object' && (plan.drivers[0].name || plan.drivers[0].displayName)) {
-                     // Fallback se o objeto do plano já tiver o nome
                      driverInfo = { name: plan.drivers[0].name || plan.drivers[0].displayName, phone: plan.drivers[0].phone };
                 }
             }
@@ -127,7 +132,8 @@ const DeliveryRoutesPage = () => {
                 driver: { name: "N/A", phone: null },
                 stops_count: 0,
                 completed_stops_count: 0,
-                failed_stops_count: 0
+                failed_stops_count: 0,
+                stops_list: []
             };
         }
       }));
@@ -135,7 +141,7 @@ const DeliveryRoutesPage = () => {
       return detailedPlans;
     },
     retry: 1,
-    refetchInterval: 30000, // Atualiza a cada 30 segundos
+    refetchInterval: 30000,
   });
 
   const stats = useMemo(() => {
@@ -150,6 +156,20 @@ const DeliveryRoutesPage = () => {
     };
   }, [routes]);
 
+  const toggleRoute = (id: string) => {
+    setExpandedRoutes(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const getStopStatusBadge = (stop: any) => {
+    if (stop.deliveryInfo?.succeeded) {
+      return <Badge className="bg-green-500 hover:bg-green-600"><CheckCircle2 className="w-3 h-3 mr-1" /> Entregue</Badge>;
+    }
+    if (stop.deliveryInfo?.attempted && !stop.deliveryInfo?.succeeded) {
+      return <Badge variant="destructive"><XCircle className="w-3 h-3 mr-1" /> Falhou</Badge>;
+    }
+    return <Badge variant="outline" className="text-gray-500">Pendente</Badge>;
+  };
+
   const getErrorMessage = (err: Error) => {
     const msg = err.message;
     if (msg.includes("Name or service not known") || msg.includes("dns error")) {
@@ -162,7 +182,7 @@ const DeliveryRoutesPage = () => {
   };
 
   return (
-    <div className="max-w-[1600px] mx-auto space-y-6 text-gray-800">
+    <div className="max-w-[1600px] mx-auto space-y-6 text-gray-800 pb-20">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold">Logística Spoke (Circuit)</h1>
@@ -179,7 +199,7 @@ const DeliveryRoutesPage = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-3">
-          <Card className="shadow-sm border-none bg-white">
+          <Card className="shadow-sm border-none bg-white sticky top-6">
             <CardHeader className="pb-2">
               <CardTitle className="text-lg font-bold">Data das Rotas</CardTitle>
             </CardHeader>
@@ -231,44 +251,112 @@ const DeliveryRoutesPage = () => {
                         </div>
                         {routes && routes.length > 0 ? routes.map((r: any) => {
                             const progress = r.stops_count > 0 ? (r.completed_stops_count / r.stops_count) * 100 : 0;
+                            const isExpanded = expandedRoutes[r.id];
+
                             return (
-                                <div key={r.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-5 hover:bg-gray-50 transition-all border-l-4 border-transparent hover:border-blue-500 gap-4 sm:gap-0">
-                                    <div className="flex items-center gap-4">
-                                        <div className="h-12 w-12 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-black text-xl flex-shrink-0">
-                                            {r.name?.charAt(0).toUpperCase() || 'R'}
-                                        </div>
-                                        <div>
-                                            <div className="flex items-center gap-2">
-                                                <p className="font-black text-base">{r.name}</p>
-                                                {r.status === 'completed' ? (
-                                                    <Badge className="text-[9px] bg-green-500 h-4 px-1">CONCLUÍDO</Badge>
-                                                ) : (
-                                                    <Badge variant="outline" className="text-[9px] bg-blue-50 text-blue-700 border-blue-200 h-4 px-1">ATIVO</Badge>
-                                                )}
+                                <div key={r.id} className="transition-all border-l-4 border-transparent hover:border-blue-500 bg-white">
+                                    <div 
+                                        className="flex flex-col sm:flex-row sm:items-center justify-between p-5 hover:bg-gray-50 cursor-pointer gap-4 sm:gap-0"
+                                        onClick={() => toggleRoute(r.id)}
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <div className="h-12 w-12 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-black text-xl flex-shrink-0">
+                                                {r.name?.charAt(0).toUpperCase() || 'R'}
                                             </div>
-                                            <div className="flex items-center gap-3 text-[10px] text-muted-foreground uppercase font-bold mt-0.5">
-                                                <span className="flex items-center gap-1"><Package className="w-3 h-3" /> {r.stops_count} paradas</span>
-                                                <span className="flex items-center gap-1"><Users className="w-3 h-3" /> {r.driver.name}</span>
-                                                {r.driver.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" /> {r.driver.phone}</span>}
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <p className="font-black text-base">{r.name}</p>
+                                                    {r.status === 'completed' ? (
+                                                        <Badge className="text-[9px] bg-green-500 h-4 px-1">CONCLUÍDO</Badge>
+                                                    ) : (
+                                                        <Badge variant="outline" className="text-[9px] bg-blue-50 text-blue-700 border-blue-200 h-4 px-1">ATIVO</Badge>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center gap-3 text-[10px] text-muted-foreground uppercase font-bold mt-0.5">
+                                                    <span className="flex items-center gap-1"><Package className="w-3 h-3" /> {r.stops_count} paradas</span>
+                                                    <span className="flex items-center gap-1"><Users className="w-3 h-3" /> {r.driver.name}</span>
+                                                    {r.driver.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" /> {r.driver.phone}</span>}
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                    <div className="flex items-center gap-4 w-full sm:w-1/3">
-                                        <div className="flex-1 space-y-1">
-                                            <div className="flex justify-between text-xs font-bold text-muted-foreground">
-                                                <span>Entregas</span>
-                                                <span>{r.completed_stops_count}/{r.stops_count}</span>
+                                        <div className="flex items-center gap-6 w-full sm:w-1/3 justify-end">
+                                            <div className="flex-1 space-y-1">
+                                                <div className="flex justify-between text-xs font-bold text-muted-foreground">
+                                                    <span>Progresso</span>
+                                                    <span>{r.completed_stops_count}/{r.stops_count}</span>
+                                                </div>
+                                                <Progress value={progress} className="h-2" />
                                             </div>
-                                            <Progress value={progress} className="h-2" />
-                                        </div>
-                                        <div className="text-right w-12">
-                                            {progress === 100 ? (
-                                                <CheckCircle2 className="h-6 w-6 text-green-500 mx-auto" />
-                                            ) : (
+                                            <div className="text-right w-12">
                                                 <span className="text-lg font-bold text-blue-600">{Math.round(progress)}%</span>
-                                            )}
+                                            </div>
+                                            <Button variant="ghost" size="icon" className="shrink-0">
+                                                {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                                            </Button>
                                         </div>
                                     </div>
+
+                                    {/* LISTA DETALHADA DE PARADAS */}
+                                    {isExpanded && (
+                                        <div className="border-t bg-gray-50 p-4 animate-in slide-in-from-top-2 duration-300">
+                                            <div className="bg-white rounded-lg border overflow-hidden">
+                                                <Table>
+                                                    <TableHeader className="bg-gray-100">
+                                                        <TableRow>
+                                                            <TableHead className="w-12 text-center">Seq</TableHead>
+                                                            <TableHead>Endereço</TableHead>
+                                                            <TableHead>Cliente</TableHead>
+                                                            <TableHead className="text-right">Status</TableHead>
+                                                        </TableRow>
+                                                    </TableHeader>
+                                                    <TableBody>
+                                                        {r.stops_list.map((stop: any, index: number) => (
+                                                            <TableRow key={stop.id} className="hover:bg-gray-50">
+                                                                <TableCell className="text-center font-mono font-bold text-muted-foreground">
+                                                                    {index + 1}
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    <div className="flex flex-col">
+                                                                        <span className="font-medium text-sm flex items-center gap-1">
+                                                                            <MapPin className="w-3 h-3 text-gray-400" /> 
+                                                                            {stop.address?.address || stop.address?.addressLineOne || "Endereço não disponível"}
+                                                                        </span>
+                                                                        {stop.address?.city && (
+                                                                            <span className="text-xs text-muted-foreground pl-4">
+                                                                                {stop.address.city} - {stop.address.state}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    <div className="flex flex-col">
+                                                                        <span className="font-bold text-sm">
+                                                                            {stop.recipient?.name || "Cliente sem nome"}
+                                                                        </span>
+                                                                        {stop.recipient?.phone && (
+                                                                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                                                                <Phone className="w-3 h-3" /> {stop.recipient.phone}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                </TableCell>
+                                                                <TableCell className="text-right">
+                                                                    {getStopStatusBadge(stop)}
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        ))}
+                                                        {r.stops_list.length === 0 && (
+                                                            <TableRow>
+                                                                <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                                                                    Nenhuma parada registrada nesta rota.
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        )}
+                                                    </TableBody>
+                                                </Table>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             );
                         }) : (
