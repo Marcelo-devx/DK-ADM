@@ -133,10 +133,6 @@ const Sidebar = () => {
           <MessageSquare className="w-4 h-4 mr-3 text-violet-500" />
           Avisos Informativos
         </NavLink>
-        <NavLink to="/dashboard/flavors" className={navLinkClass}>
-          <Cloud className="w-4 h-4 mr-3 text-violet-400" />
-          Sabores
-        </NavLink>
 
         {/* SISTEMA */}
         <p className={sectionTitleClass}>Sistema</p>
