@@ -13,12 +13,27 @@ serve(async (req) => {
   }
 
   try {
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      { auth: { persistSession: false } }
+    );
+
+    // 1. Buscar token de segurança no banco de dados
+    const { data: setting } = await supabaseAdmin
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'n8n_integration_token')
+        .single();
+    
+    const configuredSecret = setting?.value;
+
+    // 2. Verificação de Segurança
     const authHeader = req.headers.get('Authorization');
     const secretToken = authHeader?.replace('Bearer ', '');
-    const configuredSecret = Deno.env.get('N8N_SECRET_TOKEN');
 
     if (!configuredSecret || secretToken !== configuredSecret) {
-      return new Response(JSON.stringify({ error: 'Unauthorized. Invalid N8N_SECRET_TOKEN.' }), {
+      return new Response(JSON.stringify({ error: 'Unauthorized. Token inválido ou não configurado no painel.' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -30,22 +45,19 @@ serve(async (req) => {
       throw new Error("Formato inválido. Necessário: customer.email e items (array).");
     }
 
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      { auth: { persistSession: false } }
-    );
-
+    // 3. Gerenciar Cliente (Busca ou Cria)
     let userId;
     const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
     const user = existingUsers.users.find(u => u.email === customer.email);
 
     if (user) {
       userId = user.id;
+      // Atualiza telefone se enviado e não existente
       if (customer.phone) {
         await supabaseAdmin.from('profiles').update({ phone: customer.phone }).eq('id', userId);
       }
     } else {
+      // Cria novo usuário com senha aleatória
       const tempPassword = Math.random().toString(36).slice(-8) + "Aa1!";
       const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
         email: customer.email,
@@ -59,6 +71,7 @@ serve(async (req) => {
       if (createError) throw createError;
       userId = newUser.user.id;
       
+      // Atualiza perfil imediatamente
       await supabaseAdmin.from('profiles').update({ 
         phone: customer.phone,
         first_name: customer.name?.split(' ')[0] || 'Cliente',
@@ -66,6 +79,7 @@ serve(async (req) => {
       }).eq('id', userId);
     }
 
+    // 4. Processar Itens e Calcular Totais
     let totalOrderPrice = 0;
     const orderItemsToInsert = [];
 
@@ -73,7 +87,9 @@ serve(async (req) => {
       let productData;
       let variantData;
 
+      // Tenta achar por SKU
       if (itemRequest.sku) {
+        // Tenta achar variação primeiro
         const { data: variant } = await supabaseAdmin
             .from('product_variants')
             .select('id, price, product_id, flavors(name), volume_ml')
@@ -85,6 +101,7 @@ serve(async (req) => {
             const { data: prod } = await supabaseAdmin.from('products').select('name, image_url').eq('id', variant.product_id).single();
             productData = prod;
         } else {
+            // Tenta achar produto base
             const { data: prod } = await supabaseAdmin
                 .from('products')
                 .select('id, price, name, image_url')
@@ -94,6 +111,7 @@ serve(async (req) => {
         }
       } 
       
+      // Se não achou por SKU ou não tem SKU, tenta por Nome
       if (!productData && itemRequest.name) {
          const { data: prod } = await supabaseAdmin
             .from('products')
@@ -114,18 +132,17 @@ serve(async (req) => {
 
         orderItemsToInsert.push({
             item_id: variantData ? variantData.product_id : productData.id,
-            item_type: 'product',
+            item_type: 'product', // Assumindo produto por enquanto
             quantity: quantity,
             price_at_purchase: price,
             name_at_purchase: name,
             image_url_at_purchase: productData.image_url
         });
 
+        // Deduz Estoque
         if (variantData) {
-            // Usa a função específica para UUID
             await supabaseAdmin.rpc('decrement_variant_stock', { variant_id: variantData.id, quantity });
         } else {
-            // Usa a função genérica (agora apenas para products bigint)
             await supabaseAdmin.rpc('decrement_stock', { table_name: 'products', row_id: productData.id, quantity });
         }
       }
@@ -135,12 +152,13 @@ serve(async (req) => {
         throw new Error("Nenhum produto encontrado com os SKUs ou Nomes fornecidos.");
     }
 
+    // 5. Criar Pedido
     const { data: order, error: orderError } = await supabaseAdmin
       .from('orders')
       .insert({
         user_id: userId,
         total_price: totalOrderPrice,
-        shipping_cost: 0,
+        shipping_cost: 0, 
         status: 'Pendente',
         payment_method: payment_method || 'Pix',
         delivery_status: 'Pendente',
@@ -158,6 +176,7 @@ serve(async (req) => {
 
     if (orderError) throw orderError;
 
+    // 6. Inserir Itens do Pedido
     const itemsWithOrderId = orderItemsToInsert.map(i => ({ ...i, order_id: order.id }));
     const { error: itemsError } = await supabaseAdmin.from('order_items').insert(itemsWithOrderId);
     if (itemsError) throw itemsError;
