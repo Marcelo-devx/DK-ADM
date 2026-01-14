@@ -23,7 +23,8 @@ import {
   ChevronDown,
   ChevronUp,
   MapPin,
-  XCircle
+  XCircle,
+  User
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -70,86 +71,109 @@ const DeliveryRoutesPage = () => {
         return allItems;
       };
 
-      // PASSO 0: Buscar Lista de Motoristas (Paginado)
-      const driversList = await fetchAllPages("drivers", { maxPageSize: 50 }, "drivers");
+      // PASSO 0: Buscar Lista de Motoristas
+      const driversList = await fetchAllPages("drivers", { maxPageSize: 100 }, "drivers");
       const driversMap = new Map();
       driversList.forEach((d: any) => {
         driversMap.set(d.id, d);
       });
 
-      // PASSO 1: Buscar os planos (Plans) do dia (Paginado)
+      // PASSO 1: Buscar os planos (Plans) do dia
+      // Nota: A API retorna planos que COMEÇAM na data ou depois. Filtramos depois para garantir.
       const rawPlans = await fetchAllPages("plans", { "filter.startsGte": formattedDate, maxPageSize: 20 }, "plans");
 
-      // PASSO 2: Para cada plano, buscar as paradas (Stops) detalhadas (Paginado)
-      const detailedPlans = await Promise.all(rawPlans.map(async (plan: any) => {
+      // PASSO 2: Para cada plano, buscar as paradas e AGRUPAR POR MOTORISTA
+      const detailedRoutesArray = await Promise.all(rawPlans.map(async (plan: any) => {
         try {
+            // Filtro básico para não pegar planos de dias futuros se a API retornar
+            if (plan.starts && !plan.starts.startsWith(formattedDate)) {
+               return [];
+            }
+
             const planIdPath = plan.id.startsWith('plans/') ? plan.id : `plans/${plan.id}`;
             const stopsAction = `${planIdPath}/stops`;
 
-            // Busca todas as paradas do plano lidando com a paginação interna
-            const stops = await fetchAllPages(stopsAction, { maxPageSize: 10 }, "stops");
+            const stops = await fetchAllPages(stopsAction, { maxPageSize: 50 }, "stops");
             
-            const totalStops = stops.length;
+            // AGRUPAMENTO POR MOTORISTA
+            const stopsByDriver: Record<string, any[]> = {};
             
-            const completedStops = stops.filter((s: any) => {
-                return s.deliveryInfo?.succeeded === true || s.deliveryInfo?.state === 'delivered_to_recipient';
-            }).length;
-            
-            const failedStops = stops.filter((s: any) => {
-                return s.deliveryInfo?.attempted === true && s.deliveryInfo?.succeeded === false;
-            }).length;
-
-            let driverInfo = { name: "Aguardando Atribuição", phone: null };
-            
-            if (plan.drivers && plan.drivers.length > 0) {
-                const driverId = plan.drivers[0].id || plan.drivers[0];
-                const fullDriverData = driversMap.get(driverId);
-                
-                if (fullDriverData) {
-                    driverInfo = { name: fullDriverData.name || fullDriverData.displayName || "Motorista", phone: fullDriverData.phone };
-                } else if (typeof plan.drivers[0] === 'object' && (plan.drivers[0].name || plan.drivers[0].displayName)) {
-                     driverInfo = { name: plan.drivers[0].name || plan.drivers[0].displayName, phone: plan.drivers[0].phone };
+            stops.forEach((stop: any) => {
+                const driverId = stop.driverId || "unassigned";
+                if (!stopsByDriver[driverId]) {
+                    stopsByDriver[driverId] = [];
                 }
-            }
+                stopsByDriver[driverId].push(stop);
+            });
 
-            return {
-                id: plan.id,
-                name: plan.title || `Rota ${plan.id.split('/').pop().substring(0,6)}`,
-                status: completedStops === totalStops && totalStops > 0 ? 'completed' : 'active',
-                driver: driverInfo,
-                stops_count: totalStops,
-                completed_stops_count: completedStops,
-                failed_stops_count: failedStops,
-                stops_list: stops
-            };
+            // Criar uma "Rota Virtual" para cada motorista dentro do plano
+            const driverRoutes = Object.keys(stopsByDriver).map((driverId) => {
+                const driverStops = stopsByDriver[driverId];
+                const totalStops = driverStops.length;
+                
+                const completedStops = driverStops.filter((s: any) => {
+                    return s.deliveryInfo?.succeeded === true || s.deliveryInfo?.state === 'delivered_to_recipient';
+                }).length;
+                
+                const failedStops = driverStops.filter((s: any) => {
+                    return s.deliveryInfo?.attempted === true && s.deliveryInfo?.succeeded === false;
+                }).length;
+
+                let driverName = "Não Atribuído";
+                let driverPhone = null;
+
+                if (driverId !== "unassigned") {
+                    const driverData = driversMap.get(driverId);
+                    if (driverData) {
+                        driverName = driverData.name || driverData.displayName || "Motorista Desconhecido";
+                        driverPhone = driverData.phone;
+                    } else {
+                        driverName = "Motorista ID: " + driverId.substring(0, 5);
+                    }
+                }
+
+                return {
+                    id: `${plan.id}-${driverId}`, // ID único combinado
+                    planId: plan.id,
+                    planName: plan.title || `Rota ${plan.id.split('/').pop().substring(0,6)}`,
+                    name: driverId === "unassigned" ? "Paradas sem Motorista" : `Rota de ${driverName}`,
+                    status: completedStops === totalStops && totalStops > 0 ? 'completed' : 'active',
+                    driver: { 
+                        id: driverId,
+                        name: driverName, 
+                        phone: driverPhone 
+                    },
+                    stops_count: totalStops,
+                    completed_stops_count: completedStops,
+                    failed_stops_count: failedStops,
+                    stops_list: driverStops
+                };
+            });
+
+            return driverRoutes;
 
         } catch (err) {
             console.error(`Erro ao buscar detalhes do plano ${plan.id}:`, err);
-            return {
-                id: plan.id,
-                name: plan.title || "Erro ao carregar",
-                status: 'error',
-                driver: { name: "N/A", phone: null },
-                stops_count: 0,
-                completed_stops_count: 0,
-                failed_stops_count: 0,
-                stops_list: []
-            };
+            return [];
         }
       }));
       
-      return detailedPlans;
+      // Flatten o array de arrays (Planos -> Rotas de Motoristas)
+      return detailedRoutesArray.flat();
     },
     retry: 1,
-    refetchInterval: 60000, // Aumentado para 1 min para evitar excesso de requisições paginadas
+    refetchInterval: 60000,
   });
 
   const stats = useMemo(() => {
-    if (!routes) return { plans: 0, total_stops: 0, completed: 0, efficiency: 0 };
+    if (!routes) return { drivers: 0, total_stops: 0, completed: 0, efficiency: 0 };
     const total = routes.reduce((acc: number, r: any) => acc + r.stops_count, 0);
     const completed = routes.reduce((acc: number, r: any) => acc + r.completed_stops_count, 0);
+    // Conta quantos motoristas únicos (excluindo rotas vazias ou não atribuídas se quiser, aqui conta rotas ativas)
+    const drivers = routes.filter((r: any) => r.driver.id !== 'unassigned').length;
+    
     return {
-      plans: routes.length,
+      drivers,
       total_stops: total,
       completed,
       efficiency: total > 0 ? Math.round((completed / total) * 100) : 0
@@ -173,7 +197,7 @@ const DeliveryRoutesPage = () => {
   const getErrorMessage = (err: Error) => {
     const msg = err.message;
     if (msg.includes("Name or service not known") || msg.includes("dns error")) {
-        return "URL INVÁLIDA: O endereço da API configurado não existe.";
+        return "URL INVÁLIDA: O endereço da API configurado não existe. Verifique o campo 'Base URL' nas configurações.";
     }
     if (msg.includes("401") || msg.includes("Unauthorized")) {
         return "ACESSO NEGADO: O Token da API está incorreto ou expirou.";
@@ -187,7 +211,7 @@ const DeliveryRoutesPage = () => {
         <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold">Logística Spoke (Circuit)</h1>
             <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 gap-1">
-                <Globe className="w-3 h-3" /> Monitoramento Ilimitado
+                <Globe className="w-3 h-3" /> Monitoramento v0.2b
             </Badge>
         </div>
         <div className="flex gap-2">
@@ -226,7 +250,7 @@ const DeliveryRoutesPage = () => {
                 {isLoading ? (
                     <div className="p-20 text-center space-y-4">
                         <RefreshCw className="h-10 w-10 animate-spin mx-auto text-primary opacity-50" />
-                        <p className="text-muted-foreground animate-pulse">Carregando todas as paradas (Paginado)...</p>
+                        <p className="text-muted-foreground animate-pulse">Sincronizando com Spoke API...</p>
                     </div>
                 ) : isError ? (
                     <div className="p-12 text-center bg-red-50/20">
@@ -237,12 +261,15 @@ const DeliveryRoutesPage = () => {
                         </p>
                         <div className="flex justify-center gap-3">
                             <Button onClick={() => refetch()} variant="outline">Tentar Novamente</Button>
+                            <Button asChild className="bg-red-600 hover:bg-red-700 text-white">
+                                <Link to="/dashboard/settings"><Settings className="w-4 h-4 mr-2" /> Configurações</Link>
+                            </Button>
                         </div>
                     </div>
                 ) : (
                     <div className="divide-y">
                         <div className="grid grid-cols-3 gap-8 p-6 bg-gray-50/30">
-                            <div><p className="text-xs text-muted-foreground font-bold uppercase">Planos Ativos</p><p className="text-3xl font-black">{stats.plans}</p></div>
+                            <div><p className="text-xs text-muted-foreground font-bold uppercase">Motoboys Ativos</p><p className="text-3xl font-black">{stats.drivers}</p></div>
                             <div><p className="text-xs text-muted-foreground font-bold uppercase">Entregas Totais</p><p className="text-3xl font-black">{stats.completed} <span className="text-sm font-normal text-muted-foreground">/ {stats.total_stops}</span></p></div>
                             <div><p className="text-xs text-muted-foreground font-bold uppercase">Progresso Geral</p><p className="text-3xl font-black text-blue-600">{stats.efficiency}%</p></div>
                         </div>
@@ -258,7 +285,7 @@ const DeliveryRoutesPage = () => {
                                     >
                                         <div className="flex items-center gap-4">
                                             <div className="h-12 w-12 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-black text-xl flex-shrink-0">
-                                                {r.name?.charAt(0).toUpperCase() || 'R'}
+                                                {r.driver.name.charAt(0).toUpperCase()}
                                             </div>
                                             <div>
                                                 <div className="flex items-center gap-2">
@@ -270,8 +297,13 @@ const DeliveryRoutesPage = () => {
                                                     )}
                                                 </div>
                                                 <div className="flex items-center gap-3 text-[10px] text-muted-foreground uppercase font-bold mt-0.5">
-                                                    <span className="flex items-center gap-1"><Package className="w-3 h-3" /> {r.stops_count} paradas totais</span>
-                                                    <span className="flex items-center gap-1"><Users className="w-3 h-3" /> {r.driver.name}</span>
+                                                    <span className="flex items-center gap-1"><Package className="w-3 h-3" /> {r.stops_count} paradas</span>
+                                                    {r.driver.id !== "unassigned" ? (
+                                                        <span className="flex items-center gap-1"><Users className="w-3 h-3" /> {r.driver.name}</span>
+                                                    ) : (
+                                                        <span className="flex items-center gap-1 text-orange-600"><AlertTriangle className="w-3 h-3" /> Sem Motorista</span>
+                                                    )}
+                                                    {r.driver.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" /> {r.driver.phone}</span>}
                                                 </div>
                                             </div>
                                         </div>
@@ -292,6 +324,7 @@ const DeliveryRoutesPage = () => {
                                         </div>
                                     </div>
 
+                                    {/* LISTA DETALHADA DE PARADAS */}
                                     {isExpanded && (
                                         <div className="border-t bg-gray-50 p-4 animate-in slide-in-from-top-2 duration-300">
                                             <div className="bg-white rounded-lg border overflow-hidden">
@@ -343,7 +376,7 @@ const DeliveryRoutesPage = () => {
                                                         {r.stops_list.length === 0 && (
                                                             <TableRow>
                                                                 <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
-                                                                    Nenhuma parada registrada nesta rota.
+                                                                    Nenhuma parada registrada para este motorista.
                                                                 </TableCell>
                                                             </TableRow>
                                                         )}
@@ -357,7 +390,7 @@ const DeliveryRoutesPage = () => {
                         }) : (
                             <div className="p-24 text-center">
                                 <MapIcon className="w-12 h-12 text-gray-200 mx-auto mb-4" />
-                                <p className="text-muted-foreground font-medium italic">Nenhum plano de rota encontrado para esta data.</p>
+                                <p className="text-muted-foreground font-medium italic">Nenhum plano de rota encontrado para {format(date || new Date(), "dd/MM")}.</p>
                             </div>
                         )}
                     </div>
