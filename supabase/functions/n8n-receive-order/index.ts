@@ -19,7 +19,7 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    // 1. Configurações e Segurança
+    // --- 1. SEGURANÇA E CONFIG ---
     const { data: settingsData } = await supabaseAdmin
         .from('app_settings')
         .select('key, value')
@@ -40,42 +40,90 @@ serve(async (req) => {
 
     const { customer, items, payment_method } = await req.json();
 
-    if (!customer?.email || !items || !Array.isArray(items)) {
-      throw new Error("Formato inválido. Necessário: customer.email e items (array).");
+    if (!items || !Array.isArray(items)) {
+      throw new Error("Formato inválido. Necessário enviar 'items' (array).");
     }
 
-    // 2. Gerenciar Cliente
-    let userId;
-    const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
-    const user = existingUsers.users.find(u => u.email === customer.email);
+    // --- 2. IDENTIFICAÇÃO DO CLIENTE (PRIORIDADE: ZAP) ---
+    let userId = null;
+    
+    // Limpa o telefone para garantir busca correta (remove tudo que não for número)
+    const phoneRaw = customer.phone ? String(customer.phone) : "";
+    const phoneClean = phoneRaw.replace(/\D/g, ""); 
 
-    if (user) {
-      userId = user.id;
-      if (customer.phone) {
-        await supabaseAdmin.from('profiles').update({ phone: customer.phone }).eq('id', userId);
-      }
-    } else {
-      const tempPassword = Math.random().toString(36).slice(-8) + "Aa1!";
-      const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-        email: customer.email,
-        password: tempPassword,
-        email_confirm: true,
-        user_metadata: {
-          first_name: customer.name?.split(' ')[0] || 'Cliente',
-          last_name: customer.name?.split(' ').slice(1).join(' ') || 'Whatsapp'
+    // A. Tenta achar pelo Telefone na tabela de perfis
+    if (phoneClean.length >= 8) {
+        // Busca flexível: Tenta match exato OU match contendo o número (ex: com ou sem 55)
+        const { data: profiles } = await supabaseAdmin
+            .from('profiles')
+            .select('id, phone')
+            .or(`phone.eq.${phoneClean},phone.eq.${phoneRaw},phone.ilike.%${phoneClean}%`)
+            .limit(1);
+        
+        if (profiles && profiles.length > 0) {
+            userId = profiles[0].id;
+            console.log(`[n8n] Cliente identificado pelo telefone: ${phoneClean}`);
         }
-      });
-      if (createError) throw createError;
-      userId = newUser.user.id;
-      
-      await supabaseAdmin.from('profiles').update({ 
-        phone: customer.phone,
-        first_name: customer.name?.split(' ')[0] || 'Cliente',
-        last_name: customer.name?.split(' ').slice(1).join(' ') || 'Whatsapp'
-      }).eq('id', userId);
     }
 
-    // 3. Processar Itens
+    // B. Se não achou pelo telefone, tenta pelo E-mail
+    if (!userId && customer.email) {
+        const { data: uid } = await supabaseAdmin.rpc('get_user_id_by_email', { user_email: customer.email });
+        if (uid) {
+            userId = uid;
+            console.log(`[n8n] Cliente identificado pelo e-mail: ${customer.email}`);
+            
+            // Aproveita para salvar o telefone nesse perfil se não tiver
+            if (phoneClean) {
+                await supabaseAdmin.from('profiles').update({ phone: phoneClean }).eq('id', userId);
+            }
+        }
+    }
+
+    // C. Se não achou de jeito nenhum, CRIA UM NOVO
+    if (!userId) {
+        // Se não veio e-mail, gera um fictício com o telefone para permitir o cadastro
+        const emailToUse = customer.email || `${phoneClean || Math.floor(Math.random()*1000000)}@whatsapp.loja`;
+        const tempPassword = Math.random().toString(36).slice(-8) + "Aa1!";
+        
+        console.log(`[n8n] Criando novo cliente: ${emailToUse}`);
+
+        const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+            email: emailToUse,
+            password: tempPassword,
+            email_confirm: true,
+            user_metadata: {
+                first_name: customer.name?.split(' ')[0] || 'Cliente',
+                last_name: customer.name?.split(' ').slice(1).join(' ') || 'Whatsapp'
+            }
+        });
+
+        if (createError) {
+            // Se der erro de e-mail duplicado (caso raro de concorrência), tenta buscar ID de novo
+            if (createError.message.includes("registered")) {
+                 const { data: retryUid } = await supabaseAdmin.rpc('get_user_id_by_email', { user_email: emailToUse });
+                 userId = retryUid;
+            } else {
+                throw createError;
+            }
+        } else {
+            userId = newUser.user.id;
+        }
+
+        // Cria/Atualiza perfil com telefone
+        if (userId) {
+            await supabaseAdmin.from('profiles').upsert({ 
+                id: userId,
+                phone: phoneClean || phoneRaw,
+                first_name: customer.name?.split(' ')[0] || 'Cliente',
+                last_name: customer.name?.split(' ').slice(1).join(' ') || 'Whatsapp'
+            });
+        }
+    }
+
+    if (!userId) throw new Error("Falha crítica ao identificar ou criar usuário.");
+
+    // --- 3. PROCESSAR ITENS E ESTOQUE ---
     let totalOrderPrice = 0;
     const orderItemsToInsert = [];
 
@@ -84,6 +132,7 @@ serve(async (req) => {
       let variantData;
 
       if (itemRequest.sku) {
+        // Busca Variação
         const { data: variant } = await supabaseAdmin
             .from('product_variants')
             .select('id, price, product_id, flavors(name), volume_ml')
@@ -95,13 +144,15 @@ serve(async (req) => {
             const { data: prod } = await supabaseAdmin.from('products').select('name, image_url').eq('id', variant.product_id).single();
             productData = prod;
         } else {
+            // Busca Produto Base
             const { data: prod } = await supabaseAdmin.from('products').select('id, price, name, image_url').eq('sku', itemRequest.sku).maybeSingle();
             productData = prod;
         }
       } 
       
+      // Fallback: Busca por Nome (Aproximado)
       if (!productData && itemRequest.name) {
-         const { data: prod } = await supabaseAdmin.from('products').select('id, price, name, image_url').ilike('name', `%${itemRequest.name}%`).maybeSingle();
+         const { data: prod } = await supabaseAdmin.from('products').select('id, price, name, image_url').ilike('name', `%${itemRequest.name}%`).limit(1).maybeSingle();
          productData = prod;
       }
 
@@ -123,6 +174,7 @@ serve(async (req) => {
             image_url_at_purchase: productData.image_url
         });
 
+        // Deduz Estoque
         if (variantData) {
             await supabaseAdmin.rpc('decrement_variant_stock', { variant_id: variantData.id, quantity });
         } else {
@@ -132,10 +184,10 @@ serve(async (req) => {
     }
 
     if (orderItemsToInsert.length === 0) {
-        throw new Error("Nenhum produto encontrado.");
+        throw new Error("Nenhum produto encontrado. Verifique SKUs ou Nomes.");
     }
 
-    // 4. Criar Pedido
+    // --- 4. CRIAR PEDIDO ---
     const { data: order, error: orderError } = await supabaseAdmin
       .from('orders')
       .insert({
@@ -148,8 +200,8 @@ serve(async (req) => {
         shipping_address: { 
             street: "Whatsapp Order", 
             number: "S/N", 
-            neighborhood: "Whatsapp", 
-            city: "Whatsapp", 
+            neighborhood: "A verificar", 
+            city: "A verificar", 
             state: "UF", 
             cep: "00000-000" 
         }
@@ -162,29 +214,31 @@ serve(async (req) => {
     const itemsWithOrderId = orderItemsToInsert.map(i => ({ ...i, order_id: order.id }));
     await supabaseAdmin.from('order_items').insert(itemsWithOrderId);
 
-    // 5. Gerar Pagamento Pix (Mercado Pago)
+    // --- 5. GERAR PIX (MERCADO PAGO) ---
     let paymentData = null;
     const mpToken = settings.mercadopago_access_token;
     const isPix = (payment_method || '').toLowerCase().includes('pix');
 
     if (isPix && mpToken && totalOrderPrice > 0) {
         try {
+            const payerEmail = customer.email || `${phoneClean}@whatsapp.loja`;
+            
             const mpResponse = await fetch('https://api.mercadopago.com/v1/payments', {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${mpToken}`,
                     'Content-Type': 'application/json',
-                    'X-Idempotency-Key': `order-${order.id}`
+                    'X-Idempotency-Key': `order-${order.id}-${Date.now()}`
                 },
                 body: JSON.stringify({
                     transaction_amount: totalOrderPrice,
-                    description: `Pedido #${order.id}`,
+                    description: `Pedido #${order.id} - ${customer.name || 'Cliente'}`,
                     payment_method_id: 'pix',
                     payer: {
-                        email: customer.email,
+                        email: payerEmail,
                         first_name: customer.name?.split(' ')[0] || 'Cliente',
                     },
-                    notification_url: `${Deno.env.get('SUPABASE_URL')}/functions/v1/mp-webhook` // Opcional se tiver webhook configurado
+                    notification_url: `${Deno.env.get('SUPABASE_URL')}/functions/v1/mp-webhook`
                 })
             });
 
