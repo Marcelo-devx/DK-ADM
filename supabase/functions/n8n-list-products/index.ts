@@ -19,73 +19,53 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    // 1. Segurança
     const authHeader = req.headers.get('Authorization');
     const secretToken = authHeader?.replace('Bearer ', '');
+    const { data: setting } = await supabaseAdmin.from('app_settings').select('value').eq('key', 'n8n_integration_token').single();
     
-    const { data: setting } = await supabaseAdmin
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'n8n_integration_token')
-        .single();
-    
-    const configuredSecret = setting?.value;
-
-    if (!configuredSecret || secretToken !== configuredSecret) {
-      return new Response(JSON.stringify({ error: 'Unauthorized.' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    if (!setting?.value || secretToken !== setting.value) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // 2. Buscar Produtos e Variações
+    // Busca Produtos e Variações
     const { data: products, error } = await supabaseAdmin
         .from('products')
         .select(`
-            id, 
-            name, 
-            sku, 
-            price, 
-            stock_quantity,
-            image_url,
-            product_variants (
-                id,
-                sku,
-                price,
-                stock_quantity,
-                flavors(name),
-                volume_ml,
-                color
-            )
+            id, name, sku, price, stock_quantity, image_url, category, brand,
+            product_variants (id, sku, price, stock_quantity, flavors(name), volume_ml, color)
         `)
-        .eq('is_visible', true)
-        .gt('stock_quantity', 0); // Opcional: trazer apenas com estoque > 0
+        .eq('is_visible', true);
 
     if (error) throw error;
 
-    // 3. Formatar para o Bot (Simplificado)
     const formatted = products.map(p => {
         const variants = p.product_variants || [];
-        
-        // Se tiver variações, retorna elas como itens individuais ou agrupados
         if (variants.length > 0) {
             return {
+                id: p.id,
                 type: 'variations',
                 base_product: p.name,
-                options: variants.filter(v => v.stock_quantity > 0).map(v => ({
+                category: p.category,
+                brand: p.brand,
+                options: variants.map(v => ({
+                    variant_id: v.id,
                     sku: v.sku,
-                    name: `${p.name} - ${v.flavors?.name || ''} ${v.volume_ml ? v.volume_ml + 'ml' : ''}`.trim(),
+                    name: `${p.name} - ${v.flavors?.name || ''} ${v.volume_ml ? v.volume_ml + 'ml' : ''} ${v.color || ''}`.trim(),
                     price: v.price,
                     stock: v.stock_quantity
                 }))
             };
         }
-
-        // Produto Simples
         return {
+            id: p.id,
             type: 'simple',
             sku: p.sku,
             name: p.name,
             price: p.price,
             stock: p.stock_quantity,
-            image: p.image_url
+            image: p.image_url,
+            category: p.category,
+            brand: p.brand
         };
     });
 
