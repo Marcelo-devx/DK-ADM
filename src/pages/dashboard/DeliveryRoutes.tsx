@@ -23,7 +23,8 @@ import {
   ChevronDown,
   ChevronUp,
   MapPin,
-  XCircle
+  XCircle,
+  CalendarClock
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -38,6 +39,32 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+
+// Função para verificar se o pedido caiu na próxima rota (Cópia da lógica de Orders.tsx)
+const checkIsNextRoute = (dateString: string | null | undefined) => {
+  if (!dateString) return false;
+  const orderDate = new Date(dateString);
+  const day = orderDate.getDay(); // 0 = Domingo, 1 = Segunda, ..., 6 = Sábado
+
+  // Cria data de corte baseada no dia do pedido
+  const cutoff = new Date(orderDate);
+  cutoff.setSeconds(0);
+  cutoff.setMilliseconds(0);
+
+  if (day === 0) {
+    // Domingo: Tudo vai para próxima rota (Segunda)
+    return true;
+  } else if (day === 6) {
+    // Sábado: Corte às 12:30
+    cutoff.setHours(12, 30, 0);
+  } else {
+    // Segunda a Sexta: Corte às 14:00
+    cutoff.setHours(14, 0, 0);
+  }
+
+  // Se o pedido foi feito DEPOIS do corte, é próxima rota
+  return orderDate > cutoff;
+};
 
 const DeliveryRoutesPage = () => {
   const [date, setDate] = useState<Date | undefined>(new Date());
@@ -89,6 +116,33 @@ const DeliveryRoutesPage = () => {
             // Busca todas as paradas do plano lidando com a paginação interna
             const stops = await fetchAllPages(stopsAction, { maxPageSize: 10 }, "stops");
             
+            // --- INÍCIO DA LÓGICA DE ENRIQUECIMENTO COM DADOS DO SUPABASE ---
+            // Coletar External IDs (que devem corresponder aos IDs de pedido)
+            const orderIds = stops
+                .map((s: any) => s.externalId)
+                .filter((id: any) => id); // Filtra nulos/vazios
+
+            // Buscar dados dos pedidos no Supabase se houver IDs
+            const ordersDataMap = new Map();
+            if (orderIds.length > 0) {
+                const { data: ordersData } = await supabase
+                    .from('orders')
+                    .select('id, created_at')
+                    .in('id', orderIds);
+                
+                if (ordersData) {
+                    ordersData.forEach(o => ordersDataMap.set(String(o.id), o.created_at));
+                }
+            }
+
+            // Anexar data de criação aos stops
+            stops.forEach((s: any) => {
+                if (s.externalId) {
+                    s.orderCreatedAt = ordersDataMap.get(String(s.externalId));
+                }
+            });
+            // --- FIM DA LÓGICA DE ENRIQUECIMENTO ---
+
             const totalStops = stops.length;
             
             const completedStops = stops.filter((s: any) => {
@@ -141,7 +195,7 @@ const DeliveryRoutesPage = () => {
       return detailedPlans;
     },
     retry: 1,
-    refetchInterval: 60000, // Aumentado para 1 min para evitar excesso de requisições paginadas
+    refetchInterval: 60000, 
   });
 
   const stats = useMemo(() => {
@@ -226,7 +280,7 @@ const DeliveryRoutesPage = () => {
                 {isLoading ? (
                     <div className="p-20 text-center space-y-4">
                         <RefreshCw className="h-10 w-10 animate-spin mx-auto text-primary opacity-50" />
-                        <p className="text-muted-foreground animate-pulse">Carregando todas as paradas (Paginado)...</p>
+                        <p className="text-muted-foreground animate-pulse">Sincronizando rotas e pedidos...</p>
                     </div>
                 ) : isError ? (
                     <div className="p-12 text-center bg-red-50/20">
@@ -299,50 +353,71 @@ const DeliveryRoutesPage = () => {
                                                     <TableHeader className="bg-gray-100">
                                                         <TableRow>
                                                             <TableHead className="w-12 text-center">Seq</TableHead>
+                                                            <TableHead className="w-[200px]">Pedido & Data</TableHead>
                                                             <TableHead>Endereço</TableHead>
                                                             <TableHead>Cliente</TableHead>
                                                             <TableHead className="text-right">Status</TableHead>
                                                         </TableRow>
                                                     </TableHeader>
                                                     <TableBody>
-                                                        {r.stops_list.map((stop: any, index: number) => (
-                                                            <TableRow key={stop.id} className="hover:bg-gray-50">
-                                                                <TableCell className="text-center font-mono font-bold text-muted-foreground">
-                                                                    {index + 1}
-                                                                </TableCell>
-                                                                <TableCell>
+                                                        {r.stops_list.map((stop: any, index: number) => {
+                                                            const isNextRoute = checkIsNextRoute(stop.orderCreatedAt);
+                                                            return (
+                                                              <TableRow key={stop.id} className={cn("hover:bg-gray-50", isNextRoute && "bg-yellow-50/60 border-l-4 border-l-yellow-400")}>
+                                                                  <TableCell className="text-center font-mono font-bold text-muted-foreground">
+                                                                      {index + 1}
+                                                                  </TableCell>
+                                                                  <TableCell>
                                                                     <div className="flex flex-col">
-                                                                        <span className="font-medium text-sm flex items-center gap-1">
-                                                                            <MapPin className="w-3 h-3 text-gray-400" /> 
-                                                                            {stop.address?.address || stop.address?.addressLineOne || "Endereço não disponível"}
-                                                                        </span>
-                                                                        {stop.address?.city && (
-                                                                            <span className="text-xs text-muted-foreground pl-4">
-                                                                                {stop.address.city} - {stop.address.state}
+                                                                        <span className="font-bold text-xs">{stop.externalId ? `#${stop.externalId}` : "Sem ID"}</span>
+                                                                        {stop.orderCreatedAt ? (
+                                                                            <span className="text-[10px] text-muted-foreground">
+                                                                                {new Date(stop.orderCreatedAt).toLocaleString("pt-BR")}
                                                                             </span>
+                                                                        ) : (
+                                                                            <span className="text-[10px] text-muted-foreground italic">Sem data</span>
+                                                                        )}
+                                                                        {isNextRoute && (
+                                                                            <Badge variant="outline" className="mt-1 w-fit text-[9px] bg-yellow-100 text-yellow-800 border-yellow-300 gap-1 px-1">
+                                                                                <CalendarClock className="w-3 h-3" /> Próx. Dia
+                                                                            </Badge>
                                                                         )}
                                                                     </div>
-                                                                </TableCell>
-                                                                <TableCell>
-                                                                    <div className="flex flex-col">
-                                                                        <span className="font-bold text-sm">
-                                                                            {stop.recipient?.name || "Cliente sem nome"}
-                                                                        </span>
-                                                                        {stop.recipient?.phone && (
-                                                                            <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                                                                <Phone className="w-3 h-3" /> {stop.recipient.phone}
-                                                                            </span>
-                                                                        )}
-                                                                    </div>
-                                                                </TableCell>
-                                                                <TableCell className="text-right">
-                                                                    {getStopStatusBadge(stop)}
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        ))}
+                                                                  </TableCell>
+                                                                  <TableCell>
+                                                                      <div className="flex flex-col">
+                                                                          <span className="font-medium text-sm flex items-center gap-1">
+                                                                              <MapPin className="w-3 h-3 text-gray-400" /> 
+                                                                              {stop.address?.address || stop.address?.addressLineOne || "Endereço não disponível"}
+                                                                          </span>
+                                                                          {stop.address?.city && (
+                                                                              <span className="text-xs text-muted-foreground pl-4">
+                                                                                  {stop.address.city} - {stop.address.state}
+                                                                              </span>
+                                                                          )}
+                                                                      </div>
+                                                                  </TableCell>
+                                                                  <TableCell>
+                                                                      <div className="flex flex-col">
+                                                                          <span className="font-bold text-sm">
+                                                                              {stop.recipient?.name || "Cliente sem nome"}
+                                                                          </span>
+                                                                          {stop.recipient?.phone && (
+                                                                              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                                                                  <Phone className="w-3 h-3" /> {stop.recipient.phone}
+                                                                              </span>
+                                                                          )}
+                                                                      </div>
+                                                                  </TableCell>
+                                                                  <TableCell className="text-right">
+                                                                      {getStopStatusBadge(stop)}
+                                                                  </TableCell>
+                                                              </TableRow>
+                                                            );
+                                                        })}
                                                         {r.stops_list.length === 0 && (
                                                             <TableRow>
-                                                                <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                                                                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                                                                     Nenhuma parada registrada nesta rota.
                                                                 </TableCell>
                                                             </TableRow>
