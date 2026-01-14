@@ -29,6 +29,7 @@ interface Order {
   delivery_status: string;
   shipping_address: any;
   user_id: string;
+  email?: string;
   profiles: {
     first_name: string | null;
     last_name: string | null;
@@ -57,8 +58,22 @@ const fetchOrdersToExport = async (): Promise<Order[]> => {
   if (profilesError) throw new Error(profilesError.message);
   const profilesMap = new Map(profiles.map(p => [p.id, p]));
 
+  // Busca emails usando a função existente
+  let emailsMap = new Map<string, string>();
+  try {
+      const { data: usersData, error: usersError } = await supabase.functions.invoke("get-users");
+      if (!usersError && usersData) {
+          usersData.forEach((u: any) => {
+              emailsMap.set(u.id, u.email);
+          });
+      }
+  } catch (e) {
+      console.error("Failed to fetch emails", e);
+  }
+
   return orders.map(order => ({
     ...order,
+    email: emailsMap.get(order.user_id) || "",
     profiles: profilesMap.get(order.user_id) || null,
   })) as Order[];
 };
@@ -87,6 +102,11 @@ const SpokeExportPage = () => {
     setSelectedIds(next);
   };
 
+  const cleanDigits = (val: string | null | undefined) => {
+    if (!val) return "";
+    return val.replace(/\D/g, "");
+  };
+
   const handleExport = () => {
     if (selectedIds.size === 0) {
       showError("Selecione pelo menos um pedido para exportar.");
@@ -97,28 +117,33 @@ const SpokeExportPage = () => {
     try {
       const selectedOrders = orders?.filter(o => selectedIds.has(o.id)) || [];
 
-      // Mapeia os dados para o formato que o Spoke/Circuit entende bem
+      // Mapeia os dados para o formato exato solicitado
       const exportData = selectedOrders.map(order => {
         const address = order.shipping_address || {};
         const profile = order.profiles;
         
         const firstName = profile?.first_name || '';
         const lastName = profile?.last_name || '';
-        const phone = profile?.phone || '';
+        const phoneRaw = profile?.phone || '';
+        const phoneClean = cleanDigits(phoneRaw);
         
         const fullName = `${firstName} ${lastName}`.trim();
-        const fullAddress = `${address.street}, ${address.number}`;
+        const addressLine1 = `${address.street}, ${address.number}`;
+        const zipClean = cleanDigits(address.cep);
         
+        // Formato: wa.me/55 + numero (apenas digitos)
+        const notes = phoneClean ? `wa.me/55${phoneClean}` : "";
+
         return {
-          "Endereço": fullAddress,
-          "Complemento": address.complement || "",
-          "Cidade": address.city || "",
-          "Estado": address.state || "",
-          "CEP": address.cep || "",
-          "Nome do Destinatário": fullName || "Cliente",
-          "Telefone": phone,
-          "Notas": `Pedido #${order.id} | Valor: R$ ${order.total_price.toFixed(2)} | Bairro: ${address.neighborhood || ''}`,
-          "Email": "" // Opcional
+          "Address Line 1": addressLine1,
+          "Address Line 2": address.complement || "",
+          "City": address.city || "",
+          "Zip": zipClean,
+          "Notes": notes,
+          "Recipient Name": fullName || "Cliente",
+          "Recipient Email Address": order.email || "",
+          "Recipient Phone Number": phoneClean,
+          "Id": order.id
         };
       });
 
