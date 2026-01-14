@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { FileDown, Map as MapIcon, Loader2, RefreshCw, Filter, Truck } from "lucide-react";
+import { FileDown, Map as MapIcon, Loader2, RefreshCw, Filter, Truck, CalendarClock } from "lucide-react";
 import * as XLSX from 'xlsx';
 import { showSuccess, showError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
@@ -36,6 +36,31 @@ interface Order {
     phone: string | null;
   } | null;
 }
+
+// Função para verificar se o pedido caiu na próxima rota
+const checkIsNextRoute = (dateString: string) => {
+  const orderDate = new Date(dateString);
+  const day = orderDate.getDay(); // 0 = Domingo, 1 = Segunda, ..., 6 = Sábado
+
+  // Cria data de corte baseada no dia do pedido
+  const cutoff = new Date(orderDate);
+  cutoff.setSeconds(0);
+  cutoff.setMilliseconds(0);
+
+  if (day === 0) {
+    // Domingo: Tudo vai para próxima rota (Segunda)
+    return true;
+  } else if (day === 6) {
+    // Sábado: Corte às 12:30
+    cutoff.setHours(12, 30, 0);
+  } else {
+    // Segunda a Sexta: Corte às 14:00
+    cutoff.setHours(14, 0, 0);
+  }
+
+  // Se o pedido foi feito DEPOIS do corte, é próxima rota
+  return orderDate > cutoff;
+};
 
 const fetchOrdersToExport = async (): Promise<Order[]> => {
   // Busca apenas pedidos que já foram pagos/finalizados e ainda não foram entregues
@@ -204,7 +229,7 @@ const SpokeExportPage = () => {
                                             onCheckedChange={toggleSelectAll}
                                         />
                                     </TableHead>
-                                    <TableHead>Pedido</TableHead>
+                                    <TableHead>Pedido & Data</TableHead>
                                     <TableHead>Destinatário</TableHead>
                                     <TableHead>Bairro/Cidade</TableHead>
                                     <TableHead className="text-right">Valor</TableHead>
@@ -214,36 +239,57 @@ const SpokeExportPage = () => {
                                 {isLoading ? (
                                     <TableRow><TableCell colSpan={5} className="h-24 text-center">Carregando pedidos...</TableCell></TableRow>
                                 ) : orders && orders.length > 0 ? (
-                                    orders.map(order => (
-                                        <TableRow 
-                                            key={order.id} 
-                                            className={cn("cursor-pointer hover:bg-blue-50/50", selectedIds.has(order.id) && "bg-blue-50")}
-                                            onClick={() => toggleSelectOne(order.id)}
-                                        >
-                                            <TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
-                                                <Checkbox 
-                                                    checked={selectedIds.has(order.id)}
-                                                    onCheckedChange={() => toggleSelectOne(order.id)}
-                                                />
-                                            </TableCell>
-                                            <TableCell className="font-mono font-bold">#{order.id}</TableCell>
-                                            <TableCell>
-                                                <div className="flex flex-col">
-                                                    <span className="font-medium text-sm">{order.profiles?.first_name} {order.profiles?.last_name}</span>
-                                                    <span className="text-xs text-muted-foreground">{order.profiles?.phone || "-"}</span>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex flex-col">
-                                                    <span className="text-sm">{order.shipping_address?.neighborhood}</span>
-                                                    <span className="text-xs text-muted-foreground">{order.shipping_address?.city}</span>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell className="text-right font-bold text-xs">
-                                                R$ {order.total_price.toFixed(2)}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
+                                    orders.map(order => {
+                                        const isNextRoute = checkIsNextRoute(order.created_at);
+                                        const isSelected = selectedIds.has(order.id);
+
+                                        return (
+                                            <TableRow 
+                                                key={order.id} 
+                                                className={cn(
+                                                    "cursor-pointer hover:bg-blue-50/50",
+                                                    isSelected ? "bg-blue-50" : "",
+                                                    isNextRoute ? "bg-yellow-50/60 border-l-4 border-l-yellow-400" : ""
+                                                )}
+                                                onClick={() => toggleSelectOne(order.id)}
+                                            >
+                                                <TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
+                                                    <Checkbox 
+                                                        checked={isSelected}
+                                                        onCheckedChange={() => toggleSelectOne(order.id)}
+                                                    />
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex flex-col">
+                                                        <span className="font-mono font-bold text-sm">#{order.id}</span>
+                                                        <span className="text-[10px] text-muted-foreground">
+                                                            {new Date(order.created_at).toLocaleString("pt-BR")}
+                                                        </span>
+                                                        {isNextRoute && (
+                                                            <Badge variant="outline" className="mt-1 w-fit text-[9px] bg-yellow-100 text-yellow-800 border-yellow-300 gap-1 px-1">
+                                                                <CalendarClock className="w-3 h-3" /> Próx. Dia
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex flex-col">
+                                                        <span className="font-medium text-sm">{order.profiles?.first_name} {order.profiles?.last_name}</span>
+                                                        <span className="text-xs text-muted-foreground">{order.profiles?.phone || "-"}</span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex flex-col">
+                                                        <span className="text-sm">{order.shipping_address?.neighborhood}</span>
+                                                        <span className="text-xs text-muted-foreground">{order.shipping_address?.city}</span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-right font-bold text-xs">
+                                                    R$ {order.total_price.toFixed(2)}
+                                                </TableCell>
+                                            </TableRow>
+                                        );
+                                    })
                                 ) : (
                                     <TableRow><TableCell colSpan={5} className="h-24 text-center text-muted-foreground">Nenhum pedido pendente encontrado.</TableCell></TableRow>
                                 )}
