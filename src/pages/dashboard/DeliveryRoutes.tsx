@@ -14,14 +14,14 @@ import {
   RefreshCw,
   AlertTriangle,
   Package,
-  Users,
   CheckCircle2,
   Phone,
   ChevronDown,
   ChevronUp,
   MapPin,
   XCircle,
-  User
+  User,
+  Loader2
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -42,104 +42,102 @@ const DeliveryRoutesPage = () => {
   const [expandedRoutes, setExpandedRoutes] = useState<Record<string, boolean>>({});
 
   const { data: activeRoutes, isLoading, isError, error, refetch, isRefetching } = useQuery({
-    queryKey: ["spokeRoutesFixed", formattedDate],
+    queryKey: ["spokeRoutesFinal", formattedDate],
     queryFn: async () => {
-      // FUNÇÃO PARA BUSCAR TODAS AS PÁGINAS COM TRATAMENTO DE ERRO
-      const fetchAllPages = async (action: string, initialParams: any, listKey: string) => {
+      // Função auxiliar para buscar páginas com segurança (limite de 5 páginas para evitar travamento)
+      const fetchAllSafe = async (action: string, params: any = {}, listKey: string) => {
         let allItems: any[] = [];
-        let nextToken = null;
-        let pageCount = 0;
-        
+        let pageToken: string | undefined = undefined;
+        let safetyLimit = 5; 
+
         do {
-          // Prepara os parâmetros, removendo undefined/null
-          const params: any = { ...initialParams };
-          if (nextToken) {
-            params.pageToken = nextToken;
-          }
+          const requestParams = { ...params };
+          if (pageToken) requestParams.pageToken = pageToken;
 
           const { data, error } = await supabase.functions.invoke("spoke-proxy", {
-            body: { action, params }
+            body: { action, params: requestParams }
           });
-          
-          if (error) throw error;
-          
-          // Se data[listKey] não existir, tenta usar data diretamente se for array, ou array vazio
-          const items = data[listKey] || (Array.isArray(data) ? data : []);
+
+          if (error) {
+            console.error(`Erro ao buscar ${action}:`, error);
+            break; 
+          }
+
+          const items = data?.[listKey] || (Array.isArray(data) ? data : []);
           allItems = [...allItems, ...items];
           
-          nextToken = data.nextPageToken;
-          pageCount++;
+          pageToken = data?.nextPageToken;
+          safetyLimit--;
+        } while (pageToken && safetyLimit > 0);
 
-          // Proteção contra loops infinitos (máximo 10 páginas por segurança)
-          if (pageCount > 10) break;
-
-        } while (nextToken);
-        
         return allItems;
       };
 
       try {
-        // 1. Buscar Drivers (com tratamento específico se falhar)
-        let driversList = [];
-        try {
-            driversList = await fetchAllPages("drivers", { maxPageSize: 100 }, "drivers");
-        } catch (err) {
-            console.warn("Falha ao buscar lista de motoristas, continuando sem nomes...", err);
-        }
-        
+        console.log("Iniciando busca de rotas...");
+
+        // 1. Buscar Motoristas (Cache simples em memória)
+        const driversList = await fetchAllSafe("drivers", { maxPageSize: 100 }, "drivers");
         const driversMap = new Map(driversList.map((d: any) => [d.id, d]));
 
         // 2. Buscar Planos do dia
-        const plans = await fetchAllPages("plans", { "filter.startsGte": formattedDate, maxPageSize: 20 }, "plans");
+        const rawPlans = await fetchAllSafe("plans", { "filter.startsGte": formattedDate, maxPageSize: 50 }, "plans");
+        console.log(`Planos encontrados: ${rawPlans.length}`);
 
-        // 3. Para cada Plano, buscar as Rotas
-        const allIndividualRoutes: any[] = [];
+        const allRoutes: any[] = [];
 
-        for (const plan of plans) {
+        // 3. Para cada plano, buscar rotas e paradas
+        for (const plan of rawPlans) {
           try {
-            const planIdPath = plan.id.startsWith('plans/') ? plan.id : `plans/${plan.id}`;
+            // Normaliza o ID do plano (alguns vêm como "plans/ID", outros só "ID")
+            const planId = plan.id.includes('/') ? plan.id : `plans/${plan.id}`;
             
-            // Busca as rotas dentro do plano
-            const routesInPlan = await fetchAllPages(`${planIdPath}/routes`, { maxPageSize: 20 }, "routes");
+            // Busca as rotas deste plano
+            const routesInPlan = await fetchAllSafe(`${planId}/routes`, { maxPageSize: 50 }, "routes");
 
             for (const route of routesInPlan) {
-              const driverId = route.driverId;
-              const fullDriverData = driversMap.get(driverId);
+              const routeId = route.id.includes('/') ? route.id : `routes/${route.id}`;
               
-              // Busca as paradas desta rota específica
-              const stops = await fetchAllPages(`${route.id}/stops`, { maxPageSize: 50 }, "stops");
-              
-              const completed = stops.filter((s: any) => s.deliveryInfo?.succeeded === true).length;
-              const failed = stops.filter((s: any) => s.deliveryInfo?.attempted === true && !s.deliveryInfo?.succeeded).length;
+              // Busca as paradas desta rota
+              const stops = await fetchAllSafe(`${routeId}/stops`, { maxPageSize: 100 }, "stops");
 
-              allIndividualRoutes.push({
+              // Calcular métricas
+              const total = stops.length;
+              const completed = stops.filter((s: any) => s.deliveryInfo?.succeeded).length;
+              const failed = stops.filter((s: any) => s.deliveryInfo?.attempted && !s.deliveryInfo?.succeeded).length;
+
+              // Dados do Motorista
+              const driverDetails = driversMap.get(route.driverId);
+              const driverName = driverDetails?.name || driverDetails?.displayName || "Motorista não identificado";
+              const driverPhone = driverDetails?.phone || null;
+
+              allRoutes.push({
                 id: route.id,
                 planName: plan.title || "Plano Geral",
-                driver: {
-                  name: fullDriverData?.name || fullDriverData?.displayName || "Motorista não identificado",
-                  phone: fullDriverData?.phone || null
-                },
-                stops_count: stops.length,
+                routeName: route.title,
+                driver: { name: driverName, phone: driverPhone },
+                stops_count: total,
                 completed_stops_count: completed,
                 failed_stops_count: failed,
-                stops_list: stops,
-                status: (completed + failed) === stops.length && stops.length > 0 ? 'completed' : 'active'
+                status: (completed + failed) === total && total > 0 ? 'completed' : 'active',
+                stops_list: stops
               });
             }
-          } catch (err) {
-            console.error(`Erro ao processar rotas do plano ${plan.id}:`, err);
+          } catch (innerError) {
+            console.error(`Erro ao processar plano ${plan.id}:`, innerError);
           }
         }
-        
-        return allIndividualRoutes;
+
+        console.log(`Total de rotas processadas: ${allRoutes.length}`);
+        return allRoutes;
 
       } catch (err: any) {
-        console.error("Erro geral na busca:", err);
-        throw err;
+        console.error("Erro fatal no fetch de rotas:", err);
+        throw new Error(err.message || "Falha ao carregar dados do Spoke.");
       }
     },
-    retry: 1,
-    refetchInterval: 60000,
+    retry: 1, // Tenta mais uma vez se falhar
+    refetchInterval: 60000, // Atualiza a cada 1 minuto
   });
 
   const stats = useMemo(() => {
@@ -160,8 +158,8 @@ const DeliveryRoutesPage = () => {
 
   const getStopStatusBadge = (stop: any) => {
     if (stop.deliveryInfo?.succeeded) return <Badge className="bg-green-500 hover:bg-green-600"><CheckCircle2 className="w-3 h-3 mr-1" /> Entregue</Badge>;
-    if (stop.deliveryInfo?.attempted) return <Badge variant="destructive"><XCircle className="w-3 h-3 mr-1" /> Falha</Badge>;
-    return <Badge variant="outline" className="text-gray-400">Pendente</Badge>;
+    if (stop.deliveryInfo?.attempted) return <Badge variant="destructive"><XCircle className="w-3 h-3 mr-1" /> Falhou</Badge>;
+    return <Badge variant="outline" className="text-gray-500">Pendente</Badge>;
   };
 
   return (
@@ -169,7 +167,7 @@ const DeliveryRoutesPage = () => {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold">Monitoramento por Motorista</h1>
-            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 gap-1">
+            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 gap-1">
                 <Globe className="w-3 h-3" /> Integração Spoke
             </Badge>
         </div>
@@ -193,8 +191,8 @@ const DeliveryRoutesPage = () => {
         <div className="lg:col-span-9 space-y-6">
           {isLoading ? (
             <div className="p-20 text-center space-y-4">
-                <RefreshCw className="h-10 w-10 animate-spin mx-auto text-primary opacity-50" />
-                <p className="text-muted-foreground animate-pulse font-bold uppercase text-xs tracking-widest">Carregando rotas...</p>
+                <Loader2 className="h-10 w-10 animate-spin mx-auto text-primary opacity-50" />
+                <p className="text-muted-foreground font-bold uppercase text-xs tracking-widest">Sincronizando rotas e paradas...</p>
             </div>
           ) : isError ? (
             <div className="p-12 text-center bg-red-50/20 rounded-xl border border-red-100">
@@ -209,7 +207,7 @@ const DeliveryRoutesPage = () => {
             <div className="space-y-4">
                 <div className="grid grid-cols-3 gap-4 mb-4">
                     <Card className="bg-white border-none shadow-sm"><CardContent className="p-4">
-                        <p className="text-[10px] font-black text-muted-foreground uppercase">Motoristas na Rua</p>
+                        <p className="text-[10px] font-black text-muted-foreground uppercase">Motoristas Ativos</p>
                         <p className="text-2xl font-black">{stats.drivers}</p>
                     </CardContent></Card>
                     <Card className="bg-white border-none shadow-sm"><CardContent className="p-4">
@@ -217,7 +215,7 @@ const DeliveryRoutesPage = () => {
                         <p className="text-2xl font-black">{stats.completed} <span className="text-sm opacity-40">/ {stats.total_stops}</span></p>
                     </CardContent></Card>
                     <Card className="bg-white border-none shadow-sm"><CardContent className="p-4">
-                        <p className="text-[10px] font-black text-muted-foreground uppercase">Conclusão Geral</p>
+                        <p className="text-[10px] font-black text-muted-foreground uppercase">Eficiência</p>
                         <p className="text-2xl font-black text-blue-600">{stats.efficiency}%</p>
                     </CardContent></Card>
                 </div>
@@ -236,8 +234,8 @@ const DeliveryRoutesPage = () => {
                                 onClick={() => toggleRoute(route.id)}
                             >
                                 <div className="flex items-center gap-4 w-full sm:w-auto">
-                                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary uppercase font-black text-xl">
-                                        {route.driver.name.charAt(0)}
+                                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                                        <User className="w-6 h-6" />
                                     </div>
                                     <div>
                                         <div className="flex items-center gap-2">
