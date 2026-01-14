@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Workflow, Copy, Eye, EyeOff, Save, Check, Key, Webhook, Plus, Trash2, Globe, Database } from "lucide-react";
+import { Workflow, Copy, Eye, EyeOff, Save, Check, Key, Webhook, Plus, Trash2, Globe, ChevronDown, ChevronRight, FileJson } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +28,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 const N8nIntegrationPage = () => {
   const queryClient = useQueryClient();
@@ -35,14 +40,105 @@ const N8nIntegrationPage = () => {
   const [showToken, setShowToken] = useState(false);
   const [webhookUrl, setWebhookUrl] = useState("");
   const [selectedEvent, setSelectedEvent] = useState("order_created");
+  const [openEndpoints, setOpenEndpoints] = useState<number[]>([]);
   
   const baseUrl = "https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1";
 
-  const apiEndpoints = [
-    { method: "POST", name: "Receber Pedido", url: `${baseUrl}/n8n-receive-order`, desc: "Cria um novo pedido (checkout)." },
-    { method: "POST", name: "Listar Produtos", url: `${baseUrl}/n8n-list-products`, desc: "Retorna catálogo com variações." },
-    { method: "POST", name: "Listar Clientes", url: `${baseUrl}/n8n-list-clients`, desc: "Retorna todos os clientes." },
-    { method: "POST", name: "Criar Cliente", url: `${baseUrl}/n8n-create-client`, desc: "Cadastra novo usuário." },
+  // --- Documentação dos Payloads ---
+  const apiDocs = [
+    { 
+      method: "POST", 
+      name: "Listar Produtos", 
+      url: `${baseUrl}/n8n-list-products`, 
+      desc: "Retorna o catálogo completo, incluindo variações (sabores, tamanhos).",
+      request: null,
+      response: `[
+  {
+    "id": "uuid-do-produto",
+    "type": "simple",
+    "name": "Whey Protein Isolado",
+    "sku": "WHEY-ISO",
+    "price": 149.90,
+    "stock": 50,
+    "image": "url-da-imagem"
+  },
+  {
+    "id": "uuid-do-produto-2",
+    "type": "variations",
+    "base_product": "Camiseta Treino",
+    "options": [
+       { "variant_id": "v1", "name": "Camiseta - Azul P", "price": 89.90, "stock": 10 },
+       { "variant_id": "v2", "name": "Camiseta - Azul M", "price": 89.90, "stock": 5 }
+    ]
+  }
+]`
+    },
+    { 
+        method: "POST", 
+        name: "Listar Clientes", 
+        url: `${baseUrl}/n8n-list-clients`, 
+        desc: "Lista todos os clientes cadastrados com pontos e estatísticas.",
+        request: null,
+        response: `[
+  {
+    "id": "uuid-do-usuario",
+    "name": "João da Silva",
+    "email": "joao@email.com",
+    "phone": "11999999999",
+    "points": 150,
+    "role": "customer",
+    "created_at": "2024-03-20T10:00:00Z"
+  }
+]` 
+      },
+    { 
+      method: "POST", 
+      name: "Criar Cliente", 
+      url: `${baseUrl}/n8n-create-client`, 
+      desc: "Cadastra um novo usuário no sistema (Auth + Profile).",
+      request: `{
+  "email": "novo.cliente@email.com",
+  "name": "Maria Souza",
+  "phone": "11988888888",
+  "password": "SenhaSegura123!" // Opcional (será gerada se omitida)
+}`,
+      response: `{
+  "success": true,
+  "id": "uuid-gerado",
+  "email": "novo.cliente@email.com"
+}`
+    },
+    { 
+        method: "POST", 
+        name: "Receber Pedido (Checkout)", 
+        url: `${baseUrl}/n8n-receive-order`, 
+        desc: "Cria um pedido completo e gera o pagamento.",
+        request: `{
+  "email": "cliente@email.com", // Se não existir, tenta criar ou falha
+  "payment_method": "pix", // ou 'credit_card'
+  "products": [
+    { 
+      "id": "uuid-do-produto", 
+      "quantity": 2, 
+      "variant_id": "uuid-variacao" // Opcional se for produto simples
+    }
+  ],
+  "shipping_address": {
+    "street": "Rua das Flores",
+    "number": "123",
+    "neighborhood": "Centro",
+    "city": "São Paulo",
+    "state": "SP",
+    "zip_code": "01000-000"
+  }
+}`,
+        response: `{
+  "success": true,
+  "order_id": 1050,
+  "total": 299.80,
+  "status": "pending"
+}`
+      },
   ];
 
   // --- Queries ---
@@ -123,6 +219,12 @@ const N8nIntegrationPage = () => {
   // --- Helpers ---
   const generateToken = () => setToken("n8n_" + Math.random().toString(36).slice(2).toUpperCase() + Math.random().toString(36).slice(2).toUpperCase());
   const copyToClipboard = (text: string) => { navigator.clipboard.writeText(text); showSuccess("Copiado!"); };
+  
+  const toggleEndpoint = (index: number) => {
+    setOpenEndpoints(prev => 
+      prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
+    );
+  };
 
   return (
     <div className="space-y-6 pb-20">
@@ -130,7 +232,7 @@ const N8nIntegrationPage = () => {
         <h1 className="text-3xl font-bold flex items-center gap-2">
           <Workflow className="h-8 w-8 text-orange-600" /> Automação & API
         </h1>
-        <p className="text-muted-foreground">Conecte seu sistema ao N8n, Typebot ou qualquer ferramenta externa.</p>
+        <p className="text-muted-foreground">Documentação técnica e configuração de integração com N8n/Typebot.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -158,7 +260,7 @@ const N8nIntegrationPage = () => {
             <Alert className="bg-blue-50 border-blue-200">
                 <Check className="h-4 w-4 text-blue-600" />
                 <AlertTitle className="text-blue-800 font-bold">Autenticação</AlertTitle>
-                <AlertDescription className="text-blue-700 text-xs">Todos os endpoints exigem o header: <br/><code>Authorization: Bearer SEU_TOKEN</code></AlertDescription>
+                <AlertDescription className="text-blue-700 text-xs">Todos os endpoints exigem o header: <br/><code className="bg-blue-100 px-1 rounded">Authorization: Bearer SEU_TOKEN</code></AlertDescription>
             </Alert>
         </div>
 
@@ -166,27 +268,70 @@ const N8nIntegrationPage = () => {
         <div className="lg:col-span-2">
             <Tabs defaultValue="endpoints">
                 <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="endpoints"><Globe className="w-4 h-4 mr-2" /> Endpoints API</TabsTrigger>
-                    <TabsTrigger value="webhooks"><Webhook className="w-4 h-4 mr-2" /> Configurar Webhooks</TabsTrigger>
+                    <TabsTrigger value="endpoints"><Globe className="w-4 h-4 mr-2" /> Swagger / Docs</TabsTrigger>
+                    <TabsTrigger value="webhooks"><Webhook className="w-4 h-4 mr-2" /> Webhooks</TabsTrigger>
                 </TabsList>
 
-                {/* ABA ENDPOINTS */}
+                {/* ABA ENDPOINTS (Estilo Swagger) */}
                 <TabsContent value="endpoints">
                     <Card>
-                        <CardHeader><CardTitle>Endpoints Disponíveis</CardTitle><CardDescription>Use estas URLs no nó "HTTP Request" do N8n/Typebot.</CardDescription></CardHeader>
+                        <CardHeader className="pb-4">
+                            <CardTitle>Endpoints Disponíveis</CardTitle>
+                            <CardDescription>Clique para expandir e ver o Schema (JSON) de envio e resposta.</CardDescription>
+                        </CardHeader>
                         <CardContent className="space-y-4">
-                            {apiEndpoints.map((ep, i) => (
-                                <div key={i} className="border rounded-lg p-3 bg-gray-50 flex flex-col gap-2">
-                                    <div className="flex justify-between items-center">
-                                        <div className="flex items-center gap-2">
-                                            <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-200">{ep.method}</Badge>
-                                            <span className="font-bold text-sm">{ep.name}</span>
+                            {apiDocs.map((ep, i) => (
+                                <Collapsible 
+                                    key={i} 
+                                    open={openEndpoints.includes(i)}
+                                    onOpenChange={() => toggleEndpoint(i)}
+                                    className="border rounded-lg overflow-hidden bg-white shadow-sm"
+                                >
+                                    <div className="flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 cursor-pointer transition-colors" onClick={() => toggleEndpoint(i)}>
+                                        <div className="flex items-center gap-3 overflow-hidden">
+                                            <Badge className={`uppercase w-16 justify-center ${ep.method === 'GET' ? 'bg-blue-600' : 'bg-emerald-600'}`}>{ep.method}</Badge>
+                                            <span className="font-semibold text-sm truncate">{ep.url.replace(baseUrl, '')}</span>
+                                            <span className="text-xs text-muted-foreground hidden sm:inline-block">- {ep.name}</span>
                                         </div>
-                                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => copyToClipboard(ep.url)}><Copy className="w-3 h-3" /></Button>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-muted-foreground hidden sm:block">{ep.desc}</span>
+                                            {openEndpoints.includes(i) ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
+                                        </div>
                                     </div>
-                                    <div className="bg-white border rounded px-2 py-1 text-xs font-mono text-gray-600 truncate">{ep.url}</div>
-                                    <p className="text-xs text-gray-500 italic">{ep.desc}</p>
-                                </div>
+
+                                    <CollapsibleContent>
+                                        <div className="p-4 bg-slate-50 border-t space-y-4">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-xs font-mono bg-white border px-2 py-1 rounded text-gray-600 w-full truncate select-all">{ep.url}</span>
+                                                <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); copyToClipboard(ep.url); }}><Copy className="w-3 h-3" /></Button>
+                                            </div>
+
+                                            {ep.request && (
+                                                <div className="space-y-1">
+                                                    <div className="flex justify-between items-center">
+                                                        <Label className="text-xs font-bold text-gray-700">Request Body (JSON)</Label>
+                                                        <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => copyToClipboard(ep.request!)}>Copiar</Button>
+                                                    </div>
+                                                    <div className="bg-slate-900 text-slate-50 p-3 rounded-md font-mono text-xs overflow-x-auto">
+                                                        <pre>{ep.request}</pre>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {ep.response && (
+                                                <div className="space-y-1">
+                                                    <div className="flex justify-between items-center">
+                                                        <Label className="text-xs font-bold text-gray-700">Response Example</Label>
+                                                        <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => copyToClipboard(ep.response!)}>Copiar</Button>
+                                                    </div>
+                                                    <div className="bg-slate-800 text-green-400 p-3 rounded-md font-mono text-xs overflow-x-auto">
+                                                        <pre>{ep.response}</pre>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </CollapsibleContent>
+                                </Collapsible>
                             ))}
                         </CardContent>
                     </Card>
