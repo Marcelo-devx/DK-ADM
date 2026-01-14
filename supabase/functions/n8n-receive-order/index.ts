@@ -19,21 +19,20 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    // 1. Buscar token de segurança no banco de dados
-    const { data: setting } = await supabaseAdmin
+    // 1. Configurações e Segurança
+    const { data: settingsData } = await supabaseAdmin
         .from('app_settings')
-        .select('value')
-        .eq('key', 'n8n_integration_token')
-        .single();
+        .select('key, value')
+        .in('key', ['n8n_integration_token', 'mercadopago_access_token', 'payment_mode']);
     
-    const configuredSecret = setting?.value;
+    const settings = {};
+    settingsData?.forEach(s => settings[s.key] = s.value);
 
-    // 2. Verificação de Segurança
     const authHeader = req.headers.get('Authorization');
     const secretToken = authHeader?.replace('Bearer ', '');
 
-    if (!configuredSecret || secretToken !== configuredSecret) {
-      return new Response(JSON.stringify({ error: 'Unauthorized. Token inválido ou não configurado no painel.' }), {
+    if (!settings.n8n_integration_token || secretToken !== settings.n8n_integration_token) {
+      return new Response(JSON.stringify({ error: 'Unauthorized.' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -45,19 +44,17 @@ serve(async (req) => {
       throw new Error("Formato inválido. Necessário: customer.email e items (array).");
     }
 
-    // 3. Gerenciar Cliente (Busca ou Cria)
+    // 2. Gerenciar Cliente
     let userId;
     const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
     const user = existingUsers.users.find(u => u.email === customer.email);
 
     if (user) {
       userId = user.id;
-      // Atualiza telefone se enviado e não existente
       if (customer.phone) {
         await supabaseAdmin.from('profiles').update({ phone: customer.phone }).eq('id', userId);
       }
     } else {
-      // Cria novo usuário com senha aleatória
       const tempPassword = Math.random().toString(36).slice(-8) + "Aa1!";
       const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
         email: customer.email,
@@ -71,7 +68,6 @@ serve(async (req) => {
       if (createError) throw createError;
       userId = newUser.user.id;
       
-      // Atualiza perfil imediatamente
       await supabaseAdmin.from('profiles').update({ 
         phone: customer.phone,
         first_name: customer.name?.split(' ')[0] || 'Cliente',
@@ -79,7 +75,7 @@ serve(async (req) => {
       }).eq('id', userId);
     }
 
-    // 4. Processar Itens e Calcular Totais
+    // 3. Processar Itens
     let totalOrderPrice = 0;
     const orderItemsToInsert = [];
 
@@ -87,9 +83,7 @@ serve(async (req) => {
       let productData;
       let variantData;
 
-      // Tenta achar por SKU
       if (itemRequest.sku) {
-        // Tenta achar variação primeiro
         const { data: variant } = await supabaseAdmin
             .from('product_variants')
             .select('id, price, product_id, flavors(name), volume_ml')
@@ -101,23 +95,13 @@ serve(async (req) => {
             const { data: prod } = await supabaseAdmin.from('products').select('name, image_url').eq('id', variant.product_id).single();
             productData = prod;
         } else {
-            // Tenta achar produto base
-            const { data: prod } = await supabaseAdmin
-                .from('products')
-                .select('id, price, name, image_url')
-                .eq('sku', itemRequest.sku)
-                .maybeSingle();
+            const { data: prod } = await supabaseAdmin.from('products').select('id, price, name, image_url').eq('sku', itemRequest.sku).maybeSingle();
             productData = prod;
         }
       } 
       
-      // Se não achou por SKU ou não tem SKU, tenta por Nome
       if (!productData && itemRequest.name) {
-         const { data: prod } = await supabaseAdmin
-            .from('products')
-            .select('id, price, name, image_url')
-            .ilike('name', itemRequest.name)
-            .maybeSingle();
+         const { data: prod } = await supabaseAdmin.from('products').select('id, price, name, image_url').ilike('name', `%${itemRequest.name}%`).maybeSingle();
          productData = prod;
       }
 
@@ -132,14 +116,13 @@ serve(async (req) => {
 
         orderItemsToInsert.push({
             item_id: variantData ? variantData.product_id : productData.id,
-            item_type: 'product', // Assumindo produto por enquanto
+            item_type: 'product',
             quantity: quantity,
             price_at_purchase: price,
             name_at_purchase: name,
             image_url_at_purchase: productData.image_url
         });
 
-        // Deduz Estoque
         if (variantData) {
             await supabaseAdmin.rpc('decrement_variant_stock', { variant_id: variantData.id, quantity });
         } else {
@@ -149,24 +132,24 @@ serve(async (req) => {
     }
 
     if (orderItemsToInsert.length === 0) {
-        throw new Error("Nenhum produto encontrado com os SKUs ou Nomes fornecidos.");
+        throw new Error("Nenhum produto encontrado.");
     }
 
-    // 5. Criar Pedido
+    // 4. Criar Pedido
     const { data: order, error: orderError } = await supabaseAdmin
       .from('orders')
       .insert({
         user_id: userId,
         total_price: totalOrderPrice,
-        shipping_cost: 0, 
+        shipping_cost: 0,
         status: 'Pendente',
         payment_method: payment_method || 'Pix',
         delivery_status: 'Pendente',
         shipping_address: { 
-            street: "Endereço via WhatsApp", 
+            street: "Whatsapp Order", 
             number: "S/N", 
-            neighborhood: "A verificar", 
-            city: "A verificar", 
+            neighborhood: "Whatsapp", 
+            city: "Whatsapp", 
             state: "UF", 
             cep: "00000-000" 
         }
@@ -176,31 +159,65 @@ serve(async (req) => {
 
     if (orderError) throw orderError;
 
-    // 6. Inserir Itens do Pedido
     const itemsWithOrderId = orderItemsToInsert.map(i => ({ ...i, order_id: order.id }));
-    const { error: itemsError } = await supabaseAdmin.from('order_items').insert(itemsWithOrderId);
-    if (itemsError) throw itemsError;
+    await supabaseAdmin.from('order_items').insert(itemsWithOrderId);
+
+    // 5. Gerar Pagamento Pix (Mercado Pago)
+    let paymentData = null;
+    const mpToken = settings.mercadopago_access_token;
+    const isPix = (payment_method || '').toLowerCase().includes('pix');
+
+    if (isPix && mpToken && totalOrderPrice > 0) {
+        try {
+            const mpResponse = await fetch('https://api.mercadopago.com/v1/payments', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${mpToken}`,
+                    'Content-Type': 'application/json',
+                    'X-Idempotency-Key': `order-${order.id}`
+                },
+                body: JSON.stringify({
+                    transaction_amount: totalOrderPrice,
+                    description: `Pedido #${order.id}`,
+                    payment_method_id: 'pix',
+                    payer: {
+                        email: customer.email,
+                        first_name: customer.name?.split(' ')[0] || 'Cliente',
+                    },
+                    notification_url: `${Deno.env.get('SUPABASE_URL')}/functions/v1/mp-webhook` // Opcional se tiver webhook configurado
+                })
+            });
+
+            if (mpResponse.ok) {
+                const mpJson = await mpResponse.json();
+                paymentData = {
+                    qr_code: mpJson.point_of_interaction?.transaction_data?.qr_code,
+                    qr_code_base64: mpJson.point_of_interaction?.transaction_data?.qr_code_base64,
+                    ticket_url: mpJson.point_of_interaction?.transaction_data?.ticket_url,
+                    id: mpJson.id
+                };
+            } else {
+                console.error("Erro MP:", await mpResponse.text());
+            }
+        } catch (e) {
+            console.error("Falha ao gerar Pix:", e);
+        }
+    }
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         order_id: order.id, 
-        message: `Pedido #${order.id} criado com sucesso via n8n!`,
-        total: totalOrderPrice
+        total: totalOrderPrice,
+        payment_info: paymentData
       }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     )
   } catch (error) {
-    console.error('Erro no n8n-receive-order:', error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
-      }
-    )
+    console.error('Erro:', error);
+    return new Response(JSON.stringify({ error: error.message }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 400,
+    })
   }
 })
