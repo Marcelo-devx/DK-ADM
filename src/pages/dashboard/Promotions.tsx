@@ -46,8 +46,10 @@ type Promotion = {
   image_url: string | null;
   is_active: boolean;
   price: number;
+  pix_price: number;
   stock_quantity: number;
   description: string | null;
+  discount_percent?: number;
 };
 
 const fetchPromotions = async () => {
@@ -147,7 +149,6 @@ const PromotionsPage = () => {
               Adicionar Kit
             </Button>
           </DialogTrigger>
-          {/* MUDANÇA AQUI: sm:max-w-5xl para alargar o modal */}
           <DialogContent className="sm:max-w-5xl max-h-[95vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
