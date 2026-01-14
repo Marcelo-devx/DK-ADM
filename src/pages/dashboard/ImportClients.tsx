@@ -5,12 +5,20 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { FileUp, FileDown, Users, AlertCircle, CheckCircle2 } from "lucide-react";
+import { FileUp, FileDown, Users, AlertCircle, Table as TableIcon } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import * as XLSX from 'xlsx';
 import { mapRowKeys } from "@/utils/excel-utils";
 import { ClientImportModal } from "@/components/dashboard/ClientImportModal";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 const ImportClientsPage = () => {
   const queryClient = useQueryClient();
@@ -132,14 +140,79 @@ const ImportClientsPage = () => {
         </Card>
       </div>
 
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <TableIcon className="h-5 w-5 text-gray-500" />
+            Exemplo de Preenchimento
+          </CardTitle>
+          <CardDescription>
+            Certifique-se de que sua planilha siga a estrutura abaixo. A primeira linha deve conter os cabeçalhos exatos.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="border rounded-md overflow-x-auto">
+            <Table>
+              <TableHeader className="bg-gray-50">
+                <TableRow>
+                  <TableHead className="min-w-[150px]">Email*</TableHead>
+                  <TableHead>Senha</TableHead>
+                  <TableHead>Nome</TableHead>
+                  <TableHead>Sobrenome</TableHead>
+                  <TableHead>Telefone</TableHead>
+                  <TableHead>CEP</TableHead>
+                  <TableHead>Rua</TableHead>
+                  <TableHead>Numero</TableHead>
+                  <TableHead>Bairro</TableHead>
+                  <TableHead>Cidade</TableHead>
+                  <TableHead>Estado</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow>
+                  <TableCell className="font-medium text-blue-600">joao@exemplo.com</TableCell>
+                  <TableCell className="text-muted-foreground italic text-xs">(vazio)</TableCell>
+                  <TableCell>João</TableCell>
+                  <TableCell>Silva</TableCell>
+                  <TableCell>11999998888</TableCell>
+                  <TableCell>01001000</TableCell>
+                  <TableCell>Av. Paulista</TableCell>
+                  <TableCell>100</TableCell>
+                  <TableCell>Bela Vista</TableCell>
+                  <TableCell>São Paulo</TableCell>
+                  <TableCell>SP</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium text-blue-600">maria@teste.com</TableCell>
+                  <TableCell>Muda123</TableCell>
+                  <TableCell>Maria</TableCell>
+                  <TableCell>Oliveira</TableCell>
+                  <TableCell>21988887777</TableCell>
+                  <TableCell>20040002</TableCell>
+                  <TableCell>Rua Rio Branco</TableCell>
+                  <TableCell>50</TableCell>
+                  <TableCell>Centro</TableCell>
+                  <TableCell>Rio de Janeiro</TableCell>
+                  <TableCell>RJ</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+          <div className="mt-4 text-sm bg-gray-50 p-4 rounded-lg border text-gray-600 space-y-2">
+            <p><span className="font-bold text-red-600">* Email:</span> Campo obrigatório. Não pode haver e-mails duplicados.</p>
+            <p><span className="font-bold text-gray-900">Senha:</span> Opcional. Se deixar em branco, a senha padrão será <code className="bg-white px-2 py-0.5 rounded border border-gray-300 font-mono text-primary font-bold">123456</code>.</p>
+            <p><span className="font-bold text-gray-900">Telefone:</span> Apenas números, com DDD (ex: 11999999999).</p>
+          </div>
+        </CardContent>
+      </Card>
+
       <Alert className="bg-orange-50 border-orange-200">
         <AlertCircle className="h-4 w-4 text-orange-600" />
         <AlertTitle className="text-orange-800 font-bold">Importante</AlertTitle>
         <AlertDescription className="text-orange-700 text-sm mt-1">
             <ul className="list-disc pl-5 space-y-1">
-                <li>Se o cliente já existir (mesmo e-mail), ele será ignorado/pulado para evitar duplicações.</li>
-                <li>Se a coluna <strong>Senha</strong> estiver vazia, a senha padrão será <strong>123456</strong>.</li>
-                <li>Certifique-se de que os dados de endereço e telefone estejam formatados corretamente.</li>
+                <li>Se o cliente já existir no sistema (mesmo e-mail), ele será <strong>ignorado</strong> nesta importação.</li>
+                <li>Verifique se não há espaços em branco antes ou depois dos e-mails na sua planilha.</li>
             </ul>
         </AlertDescription>
       </Alert>
