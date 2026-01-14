@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Package, AlertCircle, Loader2 } from "lucide-react";
+import { Plus, Trash2, Package, AlertCircle, Loader2, Lock } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Badge } from "@/components/ui/badge";
 
@@ -80,22 +80,24 @@ export const PromotionComposition = ({ promotionId }: PromotionCompositionProps)
     enabled: !!promotionId,
   });
 
-  // Mutations
+  // Mutations usando RPC (Funções de Banco) para garantir a trava de estoque
   const addItemMutation = useMutation({
     mutationFn: async () => {
       if (!promotionId) throw new Error("Salve a promoção antes de adicionar itens.");
       
-      const { error } = await supabase.from("promotion_items").insert({
-        promotion_id: promotionId,
-        product_id: Number(selectedProductId),
-        variant_id: selectedVariantId === "none" ? null : selectedVariantId,
-        quantity: quantity
+      const { error } = await supabase.rpc("add_item_to_kit_and_lock_stock", {
+        p_promotion_id: promotionId,
+        p_product_id: Number(selectedProductId),
+        p_variant_id: selectedVariantId === "none" ? null : selectedVariantId,
+        p_quantity_per_kit: quantity
       });
+
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["promotionItems", promotionId] });
-      showSuccess("Item adicionado ao kit!");
+      queryClient.invalidateQueries({ queryKey: ["products"] }); // Atualiza lista geral de produtos para refletir novo estoque
+      showSuccess("Item adicionado e estoque reservado!");
       setQuantity(1);
     },
     onError: (err: any) => showError(err.message),
@@ -103,13 +105,17 @@ export const PromotionComposition = ({ promotionId }: PromotionCompositionProps)
 
   const removeItemMutation = useMutation({
     mutationFn: async (id: number) => {
-      const { error } = await supabase.from("promotion_items").delete().eq("id", id);
+      const { error } = await supabase.rpc("remove_item_from_kit_and_unlock_stock", {
+        p_item_id: id
+      });
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["promotionItems", promotionId] });
-      showSuccess("Item removido.");
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      showSuccess("Item removido e estoque devolvido.");
     },
+    onError: (err: any) => showError(err.message),
   });
 
   if (!promotionId) {
@@ -127,10 +133,15 @@ export const PromotionComposition = ({ promotionId }: PromotionCompositionProps)
   const hasVariants = selectedProduct && selectedProduct.variants && selectedProduct.variants.length > 0;
 
   return (
-    <div className="space-y-4 border rounded-lg p-4 bg-gray-50/50">
-      <h3 className="text-sm font-bold uppercase flex items-center gap-2 text-gray-600">
-        <Package className="w-4 h-4" /> Composição do Kit
-      </h3>
+    <div className="space-y-4 border rounded-lg p-4 bg-blue-50/30 border-blue-100">
+      <div className="flex justify-between items-center">
+        <h3 className="text-sm font-bold uppercase flex items-center gap-2 text-blue-800">
+            <Package className="w-4 h-4" /> Composição (Estoque Travado)
+        </h3>
+        <Badge variant="outline" className="text-[10px] border-blue-200 text-blue-700 bg-white">
+            <Lock className="w-3 h-3 mr-1" /> Reserva Automática
+        </Badge>
+      </div>
 
       {/* Formulário de Adição */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-white p-3 rounded-md border shadow-sm">
@@ -170,7 +181,7 @@ export const PromotionComposition = ({ promotionId }: PromotionCompositionProps)
         </div>
 
         <div className="md:col-span-2 space-y-1">
-          <Label className="text-xs">Qtd.</Label>
+          <Label className="text-xs">Qtd p/ Kit</Label>
           <Input 
             type="number" 
             min={1} 
@@ -183,7 +194,7 @@ export const PromotionComposition = ({ promotionId }: PromotionCompositionProps)
         <div className="md:col-span-1">
           <Button 
             size="sm" 
-            className="w-full h-8"
+            className="w-full h-8 bg-blue-600 hover:bg-blue-700"
             disabled={!selectedProductId || addItemMutation.isPending}
             onClick={() => addItemMutation.mutate()}
           >
@@ -207,7 +218,7 @@ export const PromotionComposition = ({ promotionId }: PromotionCompositionProps)
             {isLoading ? (
                <TableRow><TableCell colSpan={4} className="text-center text-xs py-4">Carregando...</TableCell></TableRow>
             ) : items?.length === 0 ? (
-               <TableRow><TableCell colSpan={4} className="text-center text-xs text-muted-foreground py-4">Nenhum item adicionado a este kit.</TableCell></TableRow>
+               <TableRow><TableCell colSpan={4} className="text-center text-xs text-muted-foreground py-4">Nenhum item adicionado. Adicione produtos para reservar estoque.</TableCell></TableRow>
             ) : (
               items?.map(item => (
                 <TableRow key={item.id} className="h-10">
@@ -226,6 +237,7 @@ export const PromotionComposition = ({ promotionId }: PromotionCompositionProps)
                         size="icon" 
                         className="h-6 w-6 text-red-500"
                         onClick={() => removeItemMutation.mutate(item.id)}
+                        disabled={removeItemMutation.isPending}
                     >
                         <Trash2 className="w-3 h-3" />
                     </Button>

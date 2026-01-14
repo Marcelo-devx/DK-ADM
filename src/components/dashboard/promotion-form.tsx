@@ -17,6 +17,7 @@ import { useEffect } from "react";
 import { Switch } from "../ui/switch";
 import { PromotionComposition } from "./PromotionComposition";
 import { Separator } from "../ui/separator";
+import { supabase } from "@/integrations/supabase/client"; // Importado para usar RPC
 
 const formSchema = z.object({
   id: z.number().optional(),
@@ -68,10 +69,47 @@ export const PromotionForm = ({
     }
   }, [stockQuantity, form]);
 
+  // Função intermediária para tratar o envio com lógica especial de estoque
+  const handleSmartSubmit = async (values: PromotionFormValues) => {
+    // Se for edição e o estoque mudou, precisamos usar a função especial
+    if (initialData?.id && values.stock_quantity !== initialData.stock_quantity) {
+        try {
+            // 1. Atualiza dados básicos (exceto estoque)
+            const { stock_quantity, ...basicData } = values;
+            const { error: basicError } = await supabase
+                .from('promotions')
+                .update(basicData)
+                .eq('id', initialData.id);
+            
+            if (basicError) throw basicError;
+
+            // 2. Chama a função inteligente para atualizar o estoque e ajustar os ingredientes
+            const { error: stockError } = await supabase.rpc('update_kit_stock_level', {
+                p_promotion_id: initialData.id,
+                p_new_stock: values.stock_quantity
+            });
+
+            if (stockError) throw stockError;
+
+            // Chama o callback original para finalizar (fechar modal, toast, etc)
+            // Passamos os valores originais pois o trabalho pesado já foi feito
+            onSubmit(values); 
+
+        } catch (error: any) {
+            // Repassa erro para o hook de formulário ou toast global
+            console.error("Erro ao atualizar kit:", error);
+            alert(`Erro ao atualizar estoque do kit: ${error.message}`);
+        }
+    } else {
+        // Se for criação ou não mudou estoque, segue fluxo normal
+        onSubmit(values);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <form onSubmit={form.handleSubmit(handleSmartSubmit)} className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Coluna da Esquerda: Dados Básicos */}
             <div className="space-y-4">
@@ -124,7 +162,12 @@ export const PromotionForm = ({
                         <FormItem>
                             <FormLabel>Kits Disponíveis</FormLabel>
                             <FormControl>
-                            <Input type="number" min="0" placeholder="Limite de vendas" {...field} />
+                            <Input 
+                                type="number" 
+                                min="0" 
+                                placeholder="Ao aumentar, consome estoque dos itens" 
+                                {...field} 
+                            />
                             </FormControl>
                             <FormMessage />
                         </FormItem>
@@ -174,7 +217,7 @@ export const PromotionForm = ({
           </div>
 
           <Button type="submit" disabled={isSubmitting} className="w-full h-12 font-bold text-lg">
-            {isSubmitting ? "Salvando..." : (initialData?.id ? "Salvar Dados Básicos" : "Criar Kit (Para Adicionar Itens)")}
+            {isSubmitting ? "Salvando e Ajustando Estoque..." : (initialData?.id ? "Salvar Dados Básicos" : "Criar Kit (Para Adicionar Itens)")}
           </Button>
         </form>
       </Form>
