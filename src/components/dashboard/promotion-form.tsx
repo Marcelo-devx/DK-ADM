@@ -28,7 +28,7 @@ const formSchema = z.object({
   description: z.string().optional(),
   image_url: z.string().url("URL da imagem inválida.").optional().or(z.literal('')),
   price: z.coerce.number().min(0, "O preço não pode ser negativo."), 
-  pix_price: z.coerce.number().min(0, "O preço pix não pode ser negativo."), // Novo campo
+  pix_price: z.coerce.number().min(0, "O preço pix não pode ser negativo."),
   stock_quantity: z.coerce.number().int().min(0, "O estoque não pode ser negativo."),
   is_active: z.boolean().default(false),
   discount_percent: z.coerce.number().min(0).max(100).optional(),
@@ -97,20 +97,19 @@ export const PromotionForm = ({
     setMaxPossibleStock(currentKitStock + surplus);
   };
 
-  // Auto-calcular preço quando muda o desconto
+  // Auto-calcular preço quando muda o desconto ou a base
   useEffect(() => {
-    if (itemsTotalBasePrice > 0 || itemsTotalBasePixPrice > 0) {
-        const discount = currentDiscount || 0;
-        const factor = (1 - (discount / 100));
+    // CORREÇÃO: Removemos a condição `if (itemsTotalBasePrice > 0 ...)` para permitir que o valor zere
+    // quando todos os itens forem removidos.
+    const discount = currentDiscount || 0;
+    const factor = (1 - (discount / 100));
 
-        const newPrice = itemsTotalBasePrice * factor;
-        const newPixPrice = itemsTotalBasePixPrice * factor;
+    const newPrice = itemsTotalBasePrice * factor;
+    const newPixPrice = itemsTotalBasePixPrice * factor;
 
-        // Só atualiza se o valor calculado for diferente para evitar loops (ou se quiser forçar, ok)
-        // Aqui estamos forçando a atualização baseada no desconto.
-        form.setValue("price", parseFloat(newPrice.toFixed(2)));
-        form.setValue("pix_price", parseFloat(newPixPrice.toFixed(2)));
-    }
+    form.setValue("price", parseFloat(newPrice.toFixed(2)));
+    form.setValue("pix_price", parseFloat(newPixPrice.toFixed(2)));
+    
   }, [currentDiscount, itemsTotalBasePrice, itemsTotalBasePixPrice, form]);
 
   const handleSmartSubmit = async (values: PromotionFormValues) => {
@@ -201,7 +200,7 @@ export const PromotionForm = ({
                         onUploadSuccess={(url) => field.onChange(url)}
                         initialUrl={field.value}
                         label="Capa da Promoção"
-                        className="h-[200px] max-w-full"
+                        className="h-[240px] max-w-full"
                     />
                     <FormMessage />
                     </FormItem>
