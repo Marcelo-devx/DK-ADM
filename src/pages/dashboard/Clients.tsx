@@ -130,8 +130,8 @@ const ClientsPage = () => {
       } else {
         functionName = 'admin-user-actions';
         body.action = action;
-        // Envia o URL atual para garantir que o link no email aponte para cá e não para localhost
-        body.redirectTo = window.location.origin + '/login'; 
+        // Define o URL de produção explicitamente para evitar links localhost
+        body.redirectTo = 'https://dk-l-andpage.vercel.app/login'; 
       }
 
       const { data, error } = await supabase.functions.invoke(functionName, {
