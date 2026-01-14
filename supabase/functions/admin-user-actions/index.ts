@@ -39,7 +39,7 @@ serve(async (req) => {
     }
 
     // 3. Get payload
-    const { action, targetUserId } = await req.json();
+    const { action, targetUserId, redirectTo } = await req.json();
     if (!action || !targetUserId) {
       throw new Error("Action and targetUserId are required.");
     }
@@ -55,17 +55,31 @@ serve(async (req) => {
     }
 
     let responseMessage = '';
+    
+    // Define as opções de redirecionamento se fornecidas
+    const options = redirectTo ? { redirectTo } : undefined;
 
     // 5. Perform action
     if (action === 'resend_confirmation') {
-      // CORREÇÃO: Removido o .admin
-      const { error } = await supabaseAdmin.auth.inviteUserByEmail(targetUserEmail);
-      if (error) throw error;
+      const { error } = await supabaseAdmin.auth.resend({
+        type: 'signup',
+        email: targetUserEmail,
+        options: {
+            emailRedirectTo: redirectTo
+        }
+      });
+      // Fallback para invite se resend não for o caso exato, mas geralmente inviteUserByEmail é para novos.
+      // Vamos manter a lógica original mas usando a API correta de resend ou invite
+      if (error) {
+          // Tenta reenviar convite se o resend falhar
+          const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(targetUserEmail, options);
+          if (inviteError) throw error; 
+      }
+      
       responseMessage = `E-mail de confirmação reenviado para ${targetUserEmail}.`;
 
     } else if (action === 'send_password_reset') {
-      // CORREÇÃO: Removido o .admin
-      const { error } = await supabaseAdmin.auth.resetPasswordForEmail(targetUserEmail);
+      const { error } = await supabaseAdmin.auth.resetPasswordForEmail(targetUserEmail, options);
       if (error) throw error;
       responseMessage = `Link de redefinição de senha enviado para ${targetUserEmail}.`;
 

@@ -130,6 +130,8 @@ const ClientsPage = () => {
       } else {
         functionName = 'admin-user-actions';
         body.action = action;
+        // Envia o URL atual para garantir que o link no email aponte para cá e não para localhost
+        body.redirectTo = window.location.origin + '/login'; 
       }
 
       const { data, error } = await supabase.functions.invoke(functionName, {
