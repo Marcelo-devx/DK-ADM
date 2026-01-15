@@ -51,7 +51,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { ProductForm } from "../../components/dashboard/product-form";
 import { showSuccess, showError } from "../../utils/toast";
-import { PlusCircle, MoreHorizontal, ImageOff, FileDown, Upload, FileUp, Star, Search, ArrowUpDown, ChevronUp, ChevronDown } from "lucide-react";
+import { PlusCircle, MoreHorizontal, ImageOff, FileDown, Upload, FileUp, Star, Search, ArrowUpDown, ChevronUp, ChevronDown, Lock } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import * as XLSX from 'xlsx';
@@ -76,16 +76,25 @@ type Product = {
   is_visible: boolean;
   variant_prices?: number[];
   variant_costs?: (number | null)[];
+  allocated_in_kits?: number; // Novo campo calculado
 };
 
-type ProductImportData = Omit<Product, 'id' | 'variant_prices' | 'variant_costs'>;
+type ProductImportData = Omit<Product, 'id' | 'variant_prices' | 'variant_costs' | 'allocated_in_kits'>;
 
 const fetchProducts = async () => {
+  // Busca produtos e também os itens de promoção vinculados para calcular alocação
   const { data, error } = await supabase
     .from("products")
     .select(`
         *, 
-        variants:product_variants(price, cost_price)
+        variants:product_variants(price, cost_price),
+        promotion_items (
+            quantity,
+            promotions (
+                is_active,
+                stock_quantity
+            )
+        )
     `)
     .order("created_at", { ascending: false });
   
@@ -94,10 +103,23 @@ const fetchProducts = async () => {
   return data.map(p => {
     const variantsList = Array.isArray(p.variants) ? p.variants : [];
     
+    // Calcula quanto deste produto está preso em kits ATIVOS
+    const promotionItems = p.promotion_items || [];
+    let allocated = 0;
+    
+    promotionItems.forEach((item: any) => {
+        const promo = item.promotions;
+        // Se a promoção existe, está ativa e tem estoque definido
+        if (promo && promo.is_active && promo.stock_quantity > 0) {
+            allocated += (item.quantity * promo.stock_quantity);
+        }
+    });
+
     return {
         ...p,
         variant_prices: variantsList.map((v: any) => v.price),
         variant_costs: variantsList.map((v: any) => v.cost_price),
+        allocated_in_kits: allocated
     };
   }) as Product[];
 };
@@ -368,7 +390,7 @@ const ProductsPage = () => {
               <TableHead>Custo</TableHead>
               <TableHead>Venda</TableHead>
               <TableHead className="text-green-600">Pix</TableHead>
-              <TableHead>Estoque</TableHead>
+              <TableHead>Estoque Disponível</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
@@ -385,7 +407,18 @@ const ProductsPage = () => {
                   <TableCell className="text-xs">{getPriceDisplay(product, true)}</TableCell>
                   <TableCell className="text-xs font-medium">{getPriceDisplay(product)}</TableCell>
                   <TableCell className="text-xs font-bold text-green-700">{product.pix_price ? formatCurrency(product.pix_price) : '-'}</TableCell>
-                  <TableCell><Badge variant={product.stock_quantity <= 5 ? "destructive" : "secondary"} className="h-5 text-[10px]">{product.stock_quantity} un</Badge></TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-1">
+                        <Badge variant={product.stock_quantity <= 5 ? "destructive" : "secondary"} className="h-5 text-[10px] w-fit">
+                            {product.stock_quantity} un
+                        </Badge>
+                        {product.allocated_in_kits ? (
+                            <Badge variant="outline" className="h-5 text-[9px] w-fit bg-amber-50 text-amber-700 border-amber-200 gap-1" title="Quantidade reservada em Kits Ativos">
+                                <Lock className="w-2.5 h-2.5" /> + {product.allocated_in_kits} em Kits
+                            </Badge>
+                        ) : null}
+                    </div>
+                  </TableCell>
                   <TableCell className="text-right">
                     <Button variant="ghost" size="icon" onClick={() => { setSelectedProduct(product); setIsEditModalOpen(true); }}><MoreHorizontal className="h-4 w-4 text-primary" /></Button>
                   </TableCell>
