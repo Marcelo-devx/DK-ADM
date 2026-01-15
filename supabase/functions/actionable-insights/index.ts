@@ -17,83 +17,67 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    // 1. Cruzamento de Dados (Venda Casada)
+    // 1. Associações de produtos (Venda Casada)
     const { data: associations } = await supabaseAdmin.rpc('get_product_pair_frequency');
 
-    // 2. Churn (Retenção)
+    // 2. Clientes em risco (Churn)
     const { data: churnRisk } = await supabaseAdmin.rpc('get_customers_at_risk');
 
-    // 3. Clientes VIP
+    // 3. Ranking VIP (Clientes que mais gastaram na história - LTV)
     const { data: vips } = await supabaseAdmin
         .from('profiles')
         .select('first_name, last_name, points')
         .order('points', { ascending: false })
         .limit(5);
 
-    // 4. Análise de Vendas e Giro de Estoque
-    const now = new Date();
-    const thirtyDaysAgo = new Date(now.setDate(now.getDate() - 30)).toISOString();
-    
+    // 4. Previsão de Estoque e Lucratividade
     const { data: salesHistory } = await supabaseAdmin
         .from('order_items')
-        .select('item_id, quantity, price_at_purchase, created_at')
-        .gte('created_at', thirtyDaysAgo);
+        .select('item_id, quantity, price_at_purchase')
+        .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
 
     const { data: allProducts } = await supabaseAdmin
         .from('products')
-        .select('id, name, stock_quantity, price, cost_price, brand, created_at');
-
-    // 5. Receita Perdida (Pedidos 'Pendente' com mais de 24h)
-    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const { data: lostRevenueOrders } = await supabaseAdmin
-        .from('orders')
-        .select('total_price')
-        .eq('status', 'Pendente')
-        .lt('created_at', yesterday);
-    
-    const totalLostRevenue = lostRevenueOrders?.reduce((acc, o) => acc + Number(o.total_price), 0) || 0;
+        .select('id, name, stock_quantity, price, cost_price, brand');
 
     const velocityMap = {};
+    const profitByBrand = {};
+    
     salesHistory?.forEach(item => {
         velocityMap[item.item_id] = (velocityMap[item.item_id] || 0) + item.quantity;
     });
 
-    const profitByBrand = {};
-    const deadStock = [];
-    const stockOutSoon = [];
-
-    allProducts?.forEach(p => {
+    const inventoryAnalysis = allProducts?.map(p => {
         const soldLast30Days = velocityMap[p.id] || 0;
-        const unitMargin = p.price - (p.cost_price || 0);
-        const profit = unitMargin * soldLast30Days;
-
-        if (p.brand) profitByBrand[p.brand] = (profitByBrand[p.brand] || 0) + profit;
-
-        // Se não vendeu nada em 30 dias e tem estoque > 5
-        if (soldLast30Days === 0 && p.stock_quantity > 5) {
-            deadStock.push({ name: p.name, value: p.stock_quantity * (p.cost_price || 0), quantity: p.stock_quantity });
-        }
-
-        // Previsão de esgotamento
         const dailyRate = soldLast30Days / 30;
         const daysRemaining = dailyRate > 0 ? Math.floor(p.stock_quantity / dailyRate) : 999;
         
-        if (daysRemaining < 45) {
-            stockOutSoon.push({ name: p.name, days_remaining: daysRemaining, profit_impact: profit });
+        // Lucro estimado (Preço Atual - Custo Atual) * Vendas
+        const unitMargin = p.price - (p.cost_price || 0);
+        const estMonthlyProfit = unitMargin * soldLast30Days;
+
+        if (p.brand) {
+            profitByBrand[p.brand] = (profitByBrand[p.brand] || 0) + estMonthlyProfit;
         }
+        
+        return {
+            name: p.name,
+            current_stock: p.stock_quantity,
+            days_remaining: daysRemaining,
+            daily_rate: dailyRate.toFixed(2),
+            profit_contribution: estMonthlyProfit
+        };
     });
 
     return new Response(JSON.stringify({
         associations: associations || [],
         churn: churnRisk || [],
-        inventory: stockOutSoon.sort((a,b) => a.days_remaining - b.days_remaining).slice(0, 8),
+        inventory: inventoryAnalysis?.filter(p => p.days_remaining < 45).sort((a,b) => a.days_remaining - b.days_remaining).slice(0, 8) || [],
         vips: vips || [],
-        profitability: Object.entries(profitByBrand).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value).slice(0, 5),
-        risks: {
-            lost_revenue: totalLostRevenue,
-            dead_stock_value: deadStock.reduce((acc, i) => acc + i.value, 0),
-            top_dead_items: deadStock.sort((a,b) => b.value - a.value).slice(0, 3)
-        }
+        profitability: Object.entries(profitByBrand)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a,b) => b.value - a.value)
+            .slice(0, 5)
     }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
