@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,7 @@ import { PromotionForm } from "@/components/dashboard/promotion-form";
 import { showSuccess, showError } from "@/utils/toast";
 import { PlusCircle, MoreHorizontal, ImageOff } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { useLocation } from "react-router-dom";
 
 type Promotion = {
   id: number;
@@ -63,9 +64,31 @@ const fetchPromotions = async () => {
 
 const PromotionsPage = () => {
   const queryClient = useQueryClient();
+  const location = useLocation();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
   const [selectedPromotion, setSelectedPromotion] = useState<Promotion | null>(null);
+  
+  // Estado para dados vindos da IA (sugestão)
+  const [suggestedData, setSuggestedData] = useState<Partial<Promotion> | null>(null);
+
+  useEffect(() => {
+    // Se vierem dados sugeridos via navegação (location state)
+    if (location.state && location.state.suggestedName) {
+        setSuggestedData({
+            name: location.state.suggestedName,
+            description: location.state.suggestedDescription,
+            // Defaults seguros
+            stock_quantity: 0,
+            price: 0,
+            pix_price: 0,
+            is_active: false
+        } as any);
+        setIsModalOpen(true);
+        // Limpa o estado da rota para não reabrir ao recarregar
+        window.history.replaceState({}, document.title);
+    }
+  }, [location]);
 
   const { data: promotions, isLoading: isLoadingPromotions } = useQuery<Promotion[]>({
     queryKey: ["promotions"],
@@ -85,8 +108,10 @@ const PromotionsPage = () => {
       queryClient.invalidateQueries({ queryKey: ["promotions"] });
       
       if (!selectedPromotion) {
-        // Se estava criando um novo, mantém aberto e define como selecionado para mostrar a composição
+        // Se estava criando um novo (ou sugestão), mantém aberto e define como selecionado para mostrar a composição
         setSelectedPromotion(data);
+        // Limpa a sugestão pois agora virou um item real
+        setSuggestedData(null);
         showSuccess("Kit criado! Agora adicione os produtos abaixo.");
       } else {
         // Se estava editando, fecha
@@ -140,7 +165,10 @@ const PromotionsPage = () => {
           open={isModalOpen}
           onOpenChange={(isOpen) => {
             setIsModalOpen(isOpen);
-            if (!isOpen) setSelectedPromotion(null);
+            if (!isOpen) {
+                setSelectedPromotion(null);
+                setSuggestedData(null);
+            }
           }}
         >
           <DialogTrigger asChild>
@@ -152,13 +180,13 @@ const PromotionsPage = () => {
           <DialogContent className="sm:max-w-5xl max-h-[95vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
-                {selectedPromotion ? "Editar Kit" : "Adicionar Novo Kit"}
+                {selectedPromotion ? "Editar Kit" : suggestedData ? "Criar Kit Sugerido (IA)" : "Adicionar Novo Kit"}
               </DialogTitle>
             </DialogHeader>
             <PromotionForm
               onSubmit={handleFormSubmit}
               isSubmitting={upsertMutation.isPending}
-              initialData={selectedPromotion || undefined}
+              initialData={selectedPromotion || suggestedData || undefined}
             />
           </DialogContent>
         </Dialog>

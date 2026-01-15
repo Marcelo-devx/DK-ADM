@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -41,6 +41,7 @@ import { CouponForm } from "@/components/dashboard/coupon-form";
 import { showSuccess, showError } from "@/utils/toast";
 import { PlusCircle, MoreHorizontal, Ticket } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { useLocation } from "react-router-dom";
 
 type Coupon = {
   id: number;
@@ -64,9 +65,31 @@ const fetchCoupons = async () => {
 
 const CouponsPage = () => {
   const queryClient = useQueryClient();
+  const location = useLocation();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
   const [selectedCoupon, setSelectedCoupon] = useState<Coupon | null>(null);
+  
+  // Estado para sugestão da IA
+  const [suggestedData, setSuggestedData] = useState<Partial<Coupon> | null>(null);
+
+  useEffect(() => {
+    // Se vierem dados sugeridos via navegação
+    if (location.state && location.state.suggestedName) {
+        setSuggestedData({
+            name: location.state.suggestedName,
+            description: location.state.suggestedDescription,
+            // Defaults
+            discount_value: 10,
+            points_cost: 0,
+            minimum_order_value: 0,
+            stock_quantity: 100,
+            is_active: true
+        } as any);
+        setIsModalOpen(true);
+        window.history.replaceState({}, document.title);
+    }
+  }, [location]);
 
   const { data: coupons, isLoading: isLoadingCoupons } = useQuery<Coupon[]>({
     queryKey: ["coupons"],
@@ -82,6 +105,7 @@ const CouponsPage = () => {
       queryClient.invalidateQueries({ queryKey: ["coupons"] });
       setIsModalOpen(false);
       setSelectedCoupon(null);
+      setSuggestedData(null);
       showSuccess("Cupom salvo com sucesso!");
     },
     onError: (error: Error) => {
@@ -125,7 +149,10 @@ const CouponsPage = () => {
           open={isModalOpen}
           onOpenChange={(isOpen) => {
             setIsModalOpen(isOpen);
-            if (!isOpen) setSelectedCoupon(null);
+            if (!isOpen) {
+                setSelectedCoupon(null);
+                setSuggestedData(null);
+            }
           }}
         >
           <DialogTrigger asChild>
@@ -137,13 +164,13 @@ const CouponsPage = () => {
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>
-                {selectedCoupon ? "Editar Cupom" : "Adicionar Novo Cupom"}
+                {selectedCoupon ? "Editar Cupom" : suggestedData ? "Criar Cupom Sugerido (IA)" : "Adicionar Novo Cupom"}
               </DialogTitle>
             </DialogHeader>
             <CouponForm
               onSubmit={handleFormSubmit}
               isSubmitting={upsertMutation.isPending}
-              initialData={selectedCoupon || undefined}
+              initialData={selectedCoupon || suggestedData || undefined}
             />
           </DialogContent>
         </Dialog>
