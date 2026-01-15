@@ -93,7 +93,7 @@ const PromotionsPage = () => {
   const [selectedPromotion, setSelectedPromotion] = useState<Promotion | null>(null);
   
   // Estado para dados vindos da IA (sugestão)
-  const [suggestedData, setSuggestedData] = useState<Partial<Promotion> & { suggestedProducts?: string[] } | null>(null);
+  const [suggestedData, setSuggestedData] = useState<Partial<Promotion> & { suggestedProductIds?: number[] } | null>(null);
 
   useEffect(() => {
     // Se vierem dados sugeridos via navegação (location state)
@@ -106,7 +106,7 @@ const PromotionsPage = () => {
             price: 0,
             pix_price: 0,
             is_active: false,
-            suggestedProducts: location.state.suggestedProducts // Captura produtos sugeridos
+            suggestedProductIds: location.state.suggestedProductIds // Captura IDs dos produtos
         } as any);
         setIsModalOpen(true);
         // Limpa o estado da rota para não reabrir ao recarregar
@@ -129,36 +129,33 @@ const PromotionsPage = () => {
       queryClient.invalidateQueries({ queryKey: ["promotions"] });
       
       if (!selectedPromotion) {
-        // Se estava criando um novo (ou sugestão)
-        
-        // Verifica se há produtos sugeridos para inserir automaticamente
-        if (suggestedData?.suggestedProducts && suggestedData.suggestedProducts.length > 0) {
+        // --- INSERÇÃO AUTOMÁTICA DE PRODUTOS SUGERIDOS ---
+        if (suggestedData?.suggestedProductIds && suggestedData.suggestedProductIds.length > 0) {
             try {
-                const productNames = suggestedData.suggestedProducts;
-                const { data: foundProducts } = await supabase
-                    .from('products')
-                    .select('id, name')
-                    .in('name', productNames);
+                const productIds = suggestedData.suggestedProductIds;
                 
-                if (foundProducts && foundProducts.length > 0) {
-                    for (const p of foundProducts) {
-                        // Adiciona ao kit com quantidade 1 (não suporta variantes ainda na auto-sugestão)
-                        await supabase.rpc("add_item_to_kit_and_lock_stock", {
-                            p_promotion_id: data.id,
-                            p_product_id: p.id,
-                            p_variant_id: null,
-                            p_quantity_per_kit: 1
-                        });
-                    }
-                    showSuccess(`Produtos adicionados automaticamente ao kit!`);
-                    
-                    // Invalida para atualizar a lista de itens dentro do modal (Composition)
-                    queryClient.invalidateQueries({ queryKey: ["promotionItems", data.id] });
+                for (const pid of productIds) {
+                    // Tenta adicionar item via RPC. Como não sabemos variação, mandamos null (produto base)
+                    // Se o produto tiver variações obrigatórias, o estoque será descontado do "pai" se não houver lógica impeditiva.
+                    await supabase.rpc("add_item_to_kit_and_lock_stock", {
+                        p_promotion_id: data.id,
+                        p_product_id: pid,
+                        p_variant_id: null,
+                        p_quantity_per_kit: 1
+                    });
                 }
+                showSuccess(`Produtos adicionados automaticamente ao kit!`);
+                
+                // Força atualização das queries para que os itens apareçam no modal de composição
+                await queryClient.invalidateQueries({ queryKey: ["promotionItems", data.id] });
+                await queryClient.invalidateQueries({ queryKey: ["products"] }); // Atualiza estoques
+                
             } catch (err) {
                 console.error("Erro ao adicionar produtos sugeridos:", err);
+                showError("Kit criado, mas houve erro ao adicionar os produtos automaticamente.");
             }
         }
+        // -------------------------------------------------
 
         setSelectedPromotion(data as any);
         setSuggestedData(null);
