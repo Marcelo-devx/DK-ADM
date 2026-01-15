@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -7,14 +8,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { 
   Lightbulb, Package, Target, UserMinus, Plus, ArrowRight, 
-  CheckCircle2, Sparkles, BarChart3, Crown, Wallet, MessageSquare, Zap, RefreshCw
+  Sparkles, Crown, Wallet, Zap, RefreshCw
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
+import { RetentionCampaignModal } from "@/components/dashboard/RetentionCampaignModal";
 
 const MetaflowInsightsPage = () => {
   const navigate = useNavigate();
+  const [isRetentionModalOpen, setIsRetentionModalOpen] = useState(false);
   
   const { data: insights, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["actionable-insights-final"],
@@ -39,12 +42,8 @@ const MetaflowInsightsPage = () => {
   };
 
   const handleRecoverClient = (clientName: string) => {
-     navigate("/dashboard/coupons", {
-        state: {
-            suggestedName: "VOLTA10",
-            suggestedDescription: `Cupom especial de reativação para o cliente ${clientName || "sumido"}.`
-        }
-     });
+     // Abre o modal diretamente, pois agora temos uma ferramenta dedicada
+     setIsRetentionModalOpen(true);
   };
 
   const handleCreateCrossSellKit = () => {
@@ -52,15 +51,6 @@ const MetaflowInsightsPage = () => {
       if (assoc) {
           handleCreateKit(assoc.product_a, assoc.product_a_id, assoc.product_b, assoc.product_b_id);
       }
-  };
-
-  const handleGlobalRecovery = () => {
-      navigate("/dashboard/coupons", {
-        state: {
-            suggestedName: "SAUDADES10",
-            suggestedDescription: "Cupom geral para campanha de recuperação de clientes inativos."
-        }
-     });
   };
 
   if (isLoading) return <div className="p-8 space-y-4"><Skeleton className="h-20 w-full" /><div className="grid grid-cols-1 md:grid-cols-3 gap-6"><Skeleton className="h-96" /><Skeleton className="h-96" /><Skeleton className="h-96" /></div></div>;
@@ -245,9 +235,9 @@ const MetaflowInsightsPage = () => {
                         <Button 
                             variant="outline" 
                             className="border-rose-600 text-rose-600 hover:bg-rose-50 font-black w-full h-12 gap-2"
-                            onClick={handleGlobalRecovery}
+                            onClick={() => setIsRetentionModalOpen(true)}
                         >
-                            <Zap className="w-5 h-5" /> DISPARAR CUPOM DE VOLTA (10% OFF)
+                            <Zap className="w-5 h-5" /> DISPARAR CUPOM DE VOLTA
                         </Button>
                     </div>
             </Card>
@@ -309,6 +299,8 @@ const MetaflowInsightsPage = () => {
                 </CardContent>
             </Card>
       </div>
+
+      <RetentionCampaignModal isOpen={isRetentionModalOpen} onClose={() => setIsRetentionModalOpen(false)} />
     </div>
   );
 };
