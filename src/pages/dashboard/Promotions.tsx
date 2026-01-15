@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -39,7 +39,6 @@ import { PromotionForm } from "@/components/dashboard/promotion-form";
 import { showSuccess, showError } from "@/utils/toast";
 import { PlusCircle, MoreHorizontal, ImageOff } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
-import { useLocation } from "react-router-dom";
 
 type Promotion = {
   id: number;
@@ -64,38 +63,9 @@ const fetchPromotions = async () => {
 
 const PromotionsPage = () => {
   const queryClient = useQueryClient();
-  const location = useLocation();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
   const [selectedPromotion, setSelectedPromotion] = useState<Promotion | null>(null);
-  
-  // Estado para dados vindos da IA (sugestão)
-  const [suggestedData, setSuggestedData] = useState<Partial<Promotion> | null>(null);
-  // NOVO: Estado para produtos sugeridos
-  const [suggestedProducts, setSuggestedProducts] = useState<string[]>([]);
-
-  useEffect(() => {
-    // Se vierem dados sugeridos via navegação (location state)
-    if (location.state && location.state.suggestedName) {
-        setSuggestedData({
-            name: location.state.suggestedName,
-            description: location.state.suggestedDescription,
-            // Defaults seguros
-            stock_quantity: 0,
-            price: 0,
-            pix_price: 0,
-            is_active: false
-        } as any);
-        
-        if (location.state.suggestedProducts) {
-            setSuggestedProducts(location.state.suggestedProducts);
-        }
-
-        setIsModalOpen(true);
-        // Limpa o estado da rota para não reabrir ao recarregar
-        window.history.replaceState({}, document.title);
-    }
-  }, [location]);
 
   const { data: promotions, isLoading: isLoadingPromotions } = useQuery<Promotion[]>({
     queryKey: ["promotions"],
@@ -115,16 +85,13 @@ const PromotionsPage = () => {
       queryClient.invalidateQueries({ queryKey: ["promotions"] });
       
       if (!selectedPromotion) {
-        // Se estava criando um novo (ou sugestão), mantém aberto e define como selecionado para mostrar a composição
+        // Se estava criando um novo, mantém aberto e define como selecionado para mostrar a composição
         setSelectedPromotion(data);
-        // Não limpamos suggestedProducts aqui, pois o form precisa dele para a composição
-        setSuggestedData(null);
-        showSuccess("Kit criado! Adicionando produtos sugeridos...");
+        showSuccess("Kit criado! Agora adicione os produtos abaixo.");
       } else {
         // Se estava editando, fecha
         setIsModalOpen(false);
         setSelectedPromotion(null);
-        setSuggestedProducts([]);
         showSuccess("Kit atualizado com sucesso!");
       }
     },
@@ -173,11 +140,7 @@ const PromotionsPage = () => {
           open={isModalOpen}
           onOpenChange={(isOpen) => {
             setIsModalOpen(isOpen);
-            if (!isOpen) {
-                setSelectedPromotion(null);
-                setSuggestedData(null);
-                setSuggestedProducts([]);
-            }
+            if (!isOpen) setSelectedPromotion(null);
           }}
         >
           <DialogTrigger asChild>
@@ -189,14 +152,13 @@ const PromotionsPage = () => {
           <DialogContent className="sm:max-w-5xl max-h-[95vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
-                {selectedPromotion ? "Editar Kit" : suggestedData ? "Criar Kit Sugerido (IA)" : "Adicionar Novo Kit"}
+                {selectedPromotion ? "Editar Kit" : "Adicionar Novo Kit"}
               </DialogTitle>
             </DialogHeader>
             <PromotionForm
               onSubmit={handleFormSubmit}
               isSubmitting={upsertMutation.isPending}
-              initialData={selectedPromotion || suggestedData || undefined}
-              suggestedProducts={suggestedProducts} // Correção: Passar sempre o estado, sem zerar condicionalmente
+              initialData={selectedPromotion || undefined}
             />
           </DialogContent>
         </Dialog>

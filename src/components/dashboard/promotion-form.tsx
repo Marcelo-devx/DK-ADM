@@ -40,14 +40,12 @@ interface PromotionFormProps {
   onSubmit: (values: PromotionFormValues) => void;
   isSubmitting: boolean;
   initialData?: Partial<PromotionFormValues>;
-  suggestedProducts?: string[];
 }
 
 export const PromotionForm = ({
   onSubmit,
   isSubmitting,
   initialData,
-  suggestedProducts = [],
 }: PromotionFormProps) => {
   const form = useForm<PromotionFormValues>({
     resolver: zodResolver(formSchema),
@@ -101,6 +99,8 @@ export const PromotionForm = ({
 
   // Auto-calcular preço quando muda o desconto ou a base
   useEffect(() => {
+    // CORREÇÃO: Removemos a condição `if (itemsTotalBasePrice > 0 ...)` para permitir que o valor zere
+    // quando todos os itens forem removidos.
     const discount = currentDiscount || 0;
     const factor = (1 - (discount / 100));
 
@@ -118,13 +118,9 @@ export const PromotionForm = ({
         return;
     }
 
-    if (initialData?.id) {
-        // Se o kit já existe (mesmo que acabado de criar no passo 1),
-        // FORÇAMOS a atualização de estoque via RPC para garantir a reserva dos produtos.
+    if (initialData?.id && values.stock_quantity !== initialData.stock_quantity) {
         try {
             const { stock_quantity, discount_percent, ...basicData } = values;
-            
-            // 1. Atualiza dados básicos primeiro
             const { error: basicError } = await supabase
                 .from('promotions')
                 .update(basicData)
@@ -132,17 +128,12 @@ export const PromotionForm = ({
             
             if (basicError) throw basicError;
 
-            // 2. Executa a lógica de estoque do Banco de Dados
-            // Isso vai calcular a diferença entre o estoque antigo (0) e o novo (ex: 10)
-            // e debitar os produtos correspondentes.
             const { error: stockError } = await supabase.rpc('update_kit_stock_level', {
                 p_promotion_id: initialData.id,
                 p_new_stock: values.stock_quantity
             });
 
             if (stockError) throw stockError;
-            
-            // Chama o callback de sucesso
             onSubmit(values); 
 
         } catch (error: any) {
@@ -150,7 +141,6 @@ export const PromotionForm = ({
             alert(`Erro ao atualizar estoque do kit: ${error.message}`);
         }
     } else {
-        // Criação inicial (Passo 1) - Ainda não tem itens para reservar
         onSubmit(values);
     }
   };
@@ -232,7 +222,6 @@ export const PromotionForm = ({
                 <PromotionComposition 
                     promotionId={promotionId} 
                     onStatsChange={handleStatsUpdate}
-                    suggestedProducts={suggestedProducts}
                 />
 
                 {/* PASSO 3: PREÇO E ESTOQUE */}
