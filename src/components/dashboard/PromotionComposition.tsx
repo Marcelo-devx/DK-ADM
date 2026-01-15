@@ -38,7 +38,7 @@ export interface BreakdownItem {
 interface PromotionCompositionProps {
   promotionId: number | undefined;
   onStatsChange?: (maxStock: number, totalBasePrice: number, totalBasePixPrice: number, breakdown: BreakdownItem[]) => void;
-  suggestedProducts?: string[]; // Novos produtos sugeridos
+  suggestedProducts?: string[];
 }
 
 interface ProductOption {
@@ -78,8 +78,8 @@ export const PromotionComposition = ({ promotionId, onStatsChange, suggestedProd
   const [selectedVariantId, setSelectedVariantId] = useState<string>("none");
   const [quantity, setQuantity] = useState<number>(1);
   const [openProductSearch, setOpenProductSearch] = useState(false);
+  const [isProcessingSuggestions, setIsProcessingSuggestions] = useState(false);
   
-  // Ref para evitar loop de inserção automática
   const hasProcessedSuggestions = useRef(false);
 
   // 1. Buscar Produtos Disponíveis
@@ -98,7 +98,7 @@ export const PromotionComposition = ({ promotionId, onStatsChange, suggestedProd
     },
   });
 
-  // 2. Buscar Itens já no Kit com Preços e Estoques
+  // 2. Buscar Itens já no Kit
   const { data: items, isLoading } = useQuery({
     queryKey: ["promotionItems", promotionId],
     queryFn: async () => {
@@ -180,7 +180,6 @@ export const PromotionComposition = ({ promotionId, onStatsChange, suggestedProd
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["promotionItems", promotionId] });
       queryClient.invalidateQueries({ queryKey: ["products"] });
-      showSuccess("Item adicionado e estoque reservado!");
       setQuantity(1);
     },
     onError: (err: any) => showError(err.message),
@@ -203,33 +202,50 @@ export const PromotionComposition = ({ promotionId, onStatsChange, suggestedProd
 
   // AUTOMAÇÃO: Adicionar Produtos Sugeridos
   useEffect(() => {
-    // Só roda se houver sugestões, produtos carregados, itens vazios (novo kit) e ainda não processado
-    if (suggestedProducts.length > 0 && products && products.length > 0 && items && items.length === 0 && !hasProcessedSuggestions.current) {
-        hasProcessedSuggestions.current = true; // Marca como processado para não repetir
-        
-        let addedCount = 0;
-        
-        suggestedProducts.forEach(suggName => {
-            // Tenta encontrar produto pelo nome (case insensitive)
-            // A busca tenta encontrar algo que contenha o nome sugerido, pois o nome da sugestão pode ser simplificado
-            const matchedProduct = products.find(p => p.name.toLowerCase().includes(suggName.toLowerCase()) || suggName.toLowerCase().includes(p.name.toLowerCase()));
-            
-            if (matchedProduct) {
-                // Adiciona o produto base (sem variação específica por enquanto, para simplificar)
-                addItemMutation.mutate({
-                    prodId: matchedProduct.id,
-                    varId: null,
-                    qty: 1
-                });
-                addedCount++;
-            }
-        });
-
-        if (addedCount > 0) {
-            showSuccess(`${addedCount} produtos sugeridos foram adicionados automaticamente!`);
+    const processSuggestions = async () => {
+        if (!promotionId || suggestedProducts.length === 0 || !products || items === undefined || items.length > 0 || hasProcessedSuggestions.current) {
+            return;
         }
-    }
-  }, [suggestedProducts, products, items, addItemMutation]);
+
+        hasProcessedSuggestions.current = true;
+        setIsProcessingSuggestions(true);
+        let addedCount = 0;
+
+        try {
+            for (const suggName of suggestedProducts) {
+                // Normaliza para comparação (remove acentos, minúsculas, trim)
+                const normalize = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+                const target = normalize(suggName);
+
+                const matchedProduct = products.find(p => {
+                    const pName = normalize(p.name);
+                    return pName.includes(target) || target.includes(pName);
+                });
+                
+                if (matchedProduct) {
+                    await addItemMutation.mutateAsync({
+                        prodId: matchedProduct.id,
+                        varId: null, // Produto base por padrão na automação
+                        qty: 1
+                    });
+                    addedCount++;
+                }
+            }
+
+            if (addedCount > 0) {
+                showSuccess(`${addedCount} produtos sugeridos foram adicionados!`);
+            } else {
+                console.warn("Nenhum produto correspondente encontrado para as sugestões:", suggestedProducts);
+            }
+        } catch (e) {
+            console.error("Erro ao adicionar sugestões:", e);
+        } finally {
+            setIsProcessingSuggestions(false);
+        }
+    };
+
+    processSuggestions();
+  }, [suggestedProducts, products, items, promotionId]);
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
@@ -337,11 +353,14 @@ export const PromotionComposition = ({ promotionId, onStatsChange, suggestedProd
             size="sm" 
             className="w-full h-8 bg-blue-600 hover:bg-blue-700"
             disabled={!selectedProductId || addItemMutation.isPending}
-            onClick={() => addItemMutation.mutate({ 
-                prodId: Number(selectedProductId), 
-                varId: selectedVariantId === "none" ? null : selectedVariantId, 
-                qty: quantity 
-            })}
+            onClick={() => {
+                addItemMutation.mutate({ 
+                    prodId: Number(selectedProductId), 
+                    varId: selectedVariantId === "none" ? null : selectedVariantId, 
+                    qty: quantity 
+                });
+                showSuccess("Item adicionado!");
+            }}
           >
             {addItemMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
           </Button>
@@ -360,7 +379,9 @@ export const PromotionComposition = ({ promotionId, onStatsChange, suggestedProd
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isLoading ? (
+            {isProcessingSuggestions ? (
+                <TableRow><TableCell colSpan={5} className="text-center text-xs py-4 flex items-center justify-center gap-2 text-blue-600 font-bold"><Loader2 className="w-4 h-4 animate-spin" /> Adicionando produtos sugeridos...</TableCell></TableRow>
+            ) : isLoading ? (
                <TableRow><TableCell colSpan={5} className="text-center text-xs py-4">Carregando...</TableCell></TableRow>
             ) : items?.length === 0 ? (
                <TableRow><TableCell colSpan={5} className="text-center text-xs text-muted-foreground py-4">Adicione produtos para compor este kit.</TableCell></TableRow>
@@ -369,8 +390,10 @@ export const PromotionComposition = ({ promotionId, onStatsChange, suggestedProd
                 const entity = item.product_variants || item.products;
                 const unitPrice = entity.price || 0;
                 
-                // Verifica se foi adicionado pela IA (opcional: destacar visualmente)
-                const isAutoAdded = suggestedProducts.some(s => item.products.name.includes(s));
+                const isAutoAdded = suggestedProducts.some(s => 
+                    item.products.name.toLowerCase().includes(s.toLowerCase()) || 
+                    s.toLowerCase().includes(item.products.name.toLowerCase())
+                );
 
                 return (
                   <TableRow key={item.id} className={cn("h-10", isAutoAdded && "bg-blue-50/30")}>
