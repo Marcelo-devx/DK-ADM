@@ -50,7 +50,18 @@ serve(async (req) => {
     const inventoryAnalysis = allProducts?.map(p => {
         const soldLast30Days = velocityMap[p.id] || 0;
         const dailyRate = soldLast30Days / 30;
-        const daysRemaining = dailyRate > 0 ? Math.floor(p.stock_quantity / dailyRate) : 999;
+        
+        let daysRemaining = 999;
+        let status = 'ok';
+
+        if (dailyRate > 0) {
+            daysRemaining = Math.floor(p.stock_quantity / dailyRate);
+            status = 'active';
+        } else if (p.stock_quantity <= 5) {
+            // Se não vendeu, mas tem pouco estoque, marca como crítico por quantidade
+            daysRemaining = 0; 
+            status = 'stagnant_low';
+        }
         
         // Lucro estimado (Preço Atual - Custo Atual) * Vendas
         const unitMargin = p.price - (p.cost_price || 0);
@@ -65,14 +76,21 @@ serve(async (req) => {
             current_stock: p.stock_quantity,
             days_remaining: daysRemaining,
             daily_rate: dailyRate.toFixed(2),
-            profit_contribution: estMonthlyProfit
+            profit_contribution: estMonthlyProfit,
+            status_type: status
         };
     });
+
+    // Filtra itens com menos de 45 dias de estoque OU estoque crítico estagnado
+    const alerts = inventoryAnalysis
+        ?.filter(p => p.days_remaining < 45 || p.status_type === 'stagnant_low')
+        .sort((a,b) => a.days_remaining - b.days_remaining) // Menor tempo primeiro
+        .slice(0, 8) || [];
 
     return new Response(JSON.stringify({
         associations: associations || [],
         churn: churnRisk || [],
-        inventory: inventoryAnalysis?.filter(p => p.days_remaining < 45).sort((a,b) => a.days_remaining - b.days_remaining).slice(0, 8) || [],
+        inventory: alerts,
         vips: vips || [],
         profitability: Object.entries(profitByBrand)
             .map(([name, value]) => ({ name, value }))

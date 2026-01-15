@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { 
   Lightbulb, Package, Target, UserMinus, Plus, ArrowRight, 
-  Sparkles, Crown, Wallet, Zap, RefreshCw
+  Sparkles, Crown, Wallet, Zap, RefreshCw, AlertTriangle
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -42,15 +42,7 @@ const MetaflowInsightsPage = () => {
   };
 
   const handleRecoverClient = (clientName: string) => {
-     // Abre o modal diretamente, pois agora temos uma ferramenta dedicada
      setIsRetentionModalOpen(true);
-  };
-
-  const handleCreateCrossSellKit = () => {
-      const assoc = insights?.associations[0];
-      if (assoc) {
-          handleCreateKit(assoc.product_a, assoc.product_a_id, assoc.product_b, assoc.product_b_id);
-      }
   };
 
   if (isLoading) return <div className="p-8 space-y-4"><Skeleton className="h-20 w-full" /><div className="grid grid-cols-1 md:grid-cols-3 gap-6"><Skeleton className="h-96" /><Skeleton className="h-96" /><Skeleton className="h-96" /></div></div>;
@@ -77,7 +69,7 @@ const MetaflowInsightsPage = () => {
                 Atualizar
             </Button>
             <Badge className="bg-blue-600 text-white font-bold px-3 py-1">IA ATIVA</Badge>
-            <Badge variant="outline" className="text-gray-500 font-bold px-3 py-1">v2.1.0</Badge>
+            <Badge variant="outline" className="text-gray-500 font-bold px-3 py-1">v2.2</Badge>
         </div>
       </div>
 
@@ -92,26 +84,41 @@ const MetaflowInsightsPage = () => {
                     <Badge variant="secondary" className="bg-orange-100 text-orange-700 font-bold rounded-full px-3">Reposição</Badge>
                 </div>
                 <CardTitle className="pt-6 text-xl font-bold text-gray-800">Alertas de Estoque</CardTitle>
-                <CardDescription className="text-gray-500">Previsão baseada na velocidade de venda (15 dias).</CardDescription>
+                <CardDescription className="text-gray-500">Previsão baseada em giro e níveis críticos.</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 space-y-4">
                 {insights?.inventory?.length > 0 ? (
-                    insights.inventory.map((item: any, i: number) => (
-                        <div key={i} className="flex items-center justify-between p-3 rounded-xl border border-gray-100 bg-gray-50/50 hover:bg-gray-50 transition-colors group">
-                            <div className="overflow-hidden">
-                                <p className="text-sm font-bold text-gray-800 truncate w-32 md:w-40">{item.name}</p>
-                                <p className="text-[11px] text-muted-foreground font-medium">{item.daily_rate} unidades / dia</p>
+                    insights.inventory.map((item: any, i: number) => {
+                        const isStagnant = item.status_type === 'stagnant_low';
+                        return (
+                            <div key={i} className="flex items-center justify-between p-3 rounded-xl border border-gray-100 bg-gray-50/50 hover:bg-gray-50 transition-colors group">
+                                <div className="overflow-hidden">
+                                    <p className="text-sm font-bold text-gray-800 truncate w-32 md:w-40" title={item.name}>{item.name}</p>
+                                    <p className="text-[11px] text-muted-foreground font-medium">
+                                        {isStagnant ? (
+                                            <span className="flex items-center text-orange-600 gap-1"><AlertTriangle className="w-3 h-3" /> Pouco estoque (Sem giro)</span>
+                                        ) : (
+                                            `${item.daily_rate} vendas / dia`
+                                        )}
+                                    </p>
+                                </div>
+                                <div className="text-right">
+                                    {isStagnant ? (
+                                        <Badge variant="outline" className="text-[10px] font-black text-red-600 border-red-200 bg-red-50">
+                                            {item.current_stock} UN RESTANTES
+                                        </Badge>
+                                    ) : (
+                                        <Badge variant={item.days_remaining <= 3 ? "destructive" : "outline"} className={cn("text-[10px] font-black", item.days_remaining > 3 && "text-orange-600 border-orange-200")}>
+                                            {item.days_remaining <= 0 ? "ESGOTADO" : `ACABA EM ${item.days_remaining}D`}
+                                        </Badge>
+                                    )}
+                                </div>
                             </div>
-                            <div className="text-right">
-                                <Badge variant={item.days_remaining <= 3 ? "destructive" : "outline"} className={cn("text-[10px] font-black", item.days_remaining > 3 && "text-orange-600 border-orange-200")}>
-                                    {item.days_remaining <= 0 ? "ESGOTADO" : `ACABA EM ${item.days_remaining}D`}
-                                </Badge>
-                            </div>
-                        </div>
-                    ))
+                        );
+                    })
                 ) : (
                     <div className="py-20 text-center">
-                        <p className="text-sm text-muted-foreground italic">Sem dados de venda suficientes para projetar.</p>
+                        <p className="text-sm text-muted-foreground italic">Estoque saudável! Nenhum risco detectado.</p>
                     </div>
                 )}
             </CardContent>
@@ -133,9 +140,9 @@ const MetaflowInsightsPage = () => {
                     insights.associations.map((pair: any, i: number) => (
                         <div key={i} className="p-4 rounded-xl bg-blue-50/20 border border-blue-100 hover:border-blue-300 transition-all group">
                             <div className="flex items-center gap-2 text-[12px] font-bold text-blue-900 leading-tight">
-                                <span className="truncate flex-1">{pair.product_a}</span>
+                                <span className="truncate flex-1" title={pair.product_a}>{pair.product_a}</span>
                                 <Plus className="w-3 h-3 shrink-0 text-blue-400" />
-                                <span className="truncate flex-1">{pair.product_b}</span>
+                                <span className="truncate flex-1" title={pair.product_b}>{pair.product_b}</span>
                             </div>
                             <div className="mt-3 flex items-center justify-between border-t border-blue-100 pt-3">
                                 <span className="text-[11px] text-blue-600 font-bold">{pair.frequency} pedidos em comum</span>
@@ -152,7 +159,7 @@ const MetaflowInsightsPage = () => {
                     ))
                 ) : (
                     <div className="py-20 text-center">
-                        <p className="text-sm text-muted-foreground italic">Ainda não há pedidos suficientes para cruzamento.</p>
+                        <p className="text-sm text-muted-foreground italic">Aguardando mais dados de vendas.</p>
                     </div>
                 )}
             </CardContent>
@@ -204,8 +211,6 @@ const MetaflowInsightsPage = () => {
             <Lightbulb className="w-4 h-4 text-amber-500" /> Ações Estratégicas Sugeridas
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* CARD DE CROSS-SELL REMOVIDO A PEDIDO */}
-
             <Card className="bg-white border-2 border-dashed border-rose-200 shadow-md p-8 relative group">
                     <div className="space-y-6">
                         <Badge variant="outline" className="text-rose-600 border-rose-200 font-black">CAMPANHA DE RETENÇÃO</Badge>
