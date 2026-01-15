@@ -11,8 +11,11 @@ import {
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { useNavigate } from "react-router-dom";
 
 const MetaflowInsightsPage = () => {
+  const navigate = useNavigate();
+  
   const { data: insights, isLoading } = useQuery({
     queryKey: ["actionable-insights-final"],
     queryFn: async () => {
@@ -24,6 +27,39 @@ const MetaflowInsightsPage = () => {
   });
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+
+  const handleCreateKit = (productA: string, productB: string) => {
+    navigate("/dashboard/promotions", { 
+      state: { 
+        suggestedName: `Kit ${productA} + ${productB}`,
+        suggestedDescription: `Combo especial contendo ${productA} e ${productB}. Economize levando os dois!`
+      } 
+    });
+  };
+
+  const handleRecoverClient = (clientName: string) => {
+     navigate("/dashboard/coupons", {
+        state: {
+            suggestedName: "VOLTA10",
+            suggestedDescription: `Cupom especial de reativação para o cliente ${clientName || "sumido"}.`
+        }
+     });
+  };
+
+  const handleCreateCrossSellKit = () => {
+      const pA = insights?.associations[0]?.product_a || "Produto A";
+      const pB = insights?.associations[0]?.product_b || "Produto B";
+      handleCreateKit(pA, pB);
+  };
+
+  const handleGlobalRecovery = () => {
+      navigate("/dashboard/coupons", {
+        state: {
+            suggestedName: "SAUDADES10",
+            suggestedDescription: "Cupom geral para campanha de recuperação de clientes inativos."
+        }
+     });
+  };
 
   if (isLoading) return <div className="p-8 space-y-4"><Skeleton className="h-20 w-full" /><div className="grid grid-cols-1 md:grid-cols-3 gap-6"><Skeleton className="h-96" /><Skeleton className="h-96" /><Skeleton className="h-96" /></div></div>;
 
@@ -101,7 +137,12 @@ const MetaflowInsightsPage = () => {
                             </div>
                             <div className="mt-3 flex items-center justify-between border-t border-blue-100 pt-3">
                                 <span className="text-[11px] text-blue-600 font-bold">{pair.frequency} pedidos em comum</span>
-                                <Button size="sm" variant="ghost" className="h-6 text-[11px] p-0 font-black text-blue-700 hover:bg-transparent">
+                                <Button 
+                                    size="sm" 
+                                    variant="ghost" 
+                                    className="h-6 text-[11px] p-0 font-black text-blue-700 hover:bg-transparent"
+                                    onClick={() => handleCreateKit(pair.product_a, pair.product_b)}
+                                >
                                     Criar Kit <ArrowRight className="w-3 h-3 ml-1 group-hover:translate-x-1 transition-transform" />
                                 </Button>
                             </div>
@@ -136,7 +177,13 @@ const MetaflowInsightsPage = () => {
                             </div>
                             <div className="text-right">
                                 <p className="text-[11px] font-black text-rose-600 uppercase tracking-tighter">{client.days_since_last_order} dias ausente</p>
-                                <Button variant="link" className="h-5 p-0 text-[10px] text-blue-600 font-black uppercase">Recuperar</Button>
+                                <Button 
+                                    variant="link" 
+                                    className="h-5 p-0 text-[10px] text-blue-600 font-black uppercase"
+                                    onClick={() => handleRecoverClient(client.customer_name)}
+                                >
+                                    Recuperar
+                                </Button>
                             </div>
                         </div>
                     ))
@@ -149,7 +196,7 @@ const MetaflowInsightsPage = () => {
         </Card>
       </div>
 
-      {/* SEÇÃO: ESTRATÉGIAS DE VENDA (RESTAURADO E MELHORADO) */}
+      {/* SEÇÃO: ESTRATÉGIAS DE VENDA */}
       <div className="pt-4 space-y-4">
         <h2 className="text-sm font-black uppercase text-gray-500 tracking-widest flex items-center gap-2">
             <Lightbulb className="w-4 h-4 text-amber-500" /> Ações Estratégicas Sugeridas
@@ -166,7 +213,10 @@ const MetaflowInsightsPage = () => {
                             A IA detectou que o produto <strong>{insights?.associations[0]?.product_a || 'Item A'}</strong> e <strong>{insights?.associations[0]?.product_b || 'Item B'}</strong> possuem alta correlação. 
                             Crie um Kit agora com 5% de desconto para aumentar o faturamento em aprox. 12%.
                         </p>
-                        <Button className="bg-blue-600 hover:bg-blue-700 font-black w-full h-12 gap-2">
+                        <Button 
+                            className="bg-blue-600 hover:bg-blue-700 font-black w-full h-12 gap-2"
+                            onClick={handleCreateCrossSellKit}
+                        >
                             <Plus className="w-5 h-5" /> CRIAR KIT RECOMENDADO
                         </Button>
                     </div>
@@ -180,7 +230,11 @@ const MetaflowInsightsPage = () => {
                             Existem <strong>{insights?.churn?.length || 0} clientes</strong> de alto valor que não compram há mais de 30 dias. 
                             Eles representam um faturamento potencial imediato através de cupons de reativação.
                         </p>
-                        <Button variant="outline" className="border-rose-600 text-rose-600 hover:bg-rose-50 font-black w-full h-12 gap-2">
+                        <Button 
+                            variant="outline" 
+                            className="border-rose-600 text-rose-600 hover:bg-rose-50 font-black w-full h-12 gap-2"
+                            onClick={handleGlobalRecovery}
+                        >
                             <Zap className="w-5 h-5" /> DISPARAR CUPOM DE VOLTA (10% OFF)
                         </Button>
                     </div>
