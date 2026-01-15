@@ -196,7 +196,7 @@ const PromotionsPage = () => {
               onSubmit={handleFormSubmit}
               isSubmitting={upsertMutation.isPending}
               initialData={selectedPromotion || suggestedData || undefined}
-              suggestedProducts={selectedPromotion ? [] : suggestedProducts} // Passa sugestões apenas se for novo
+              suggestedProducts={suggestedProducts} // Correção: Passar sempre o estado, sem zerar condicionalmente
             />
           </DialogContent>
         </Dialog>
