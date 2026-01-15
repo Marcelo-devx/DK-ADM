@@ -71,6 +71,8 @@ const PromotionsPage = () => {
   
   // Estado para dados vindos da IA (sugestão)
   const [suggestedData, setSuggestedData] = useState<Partial<Promotion> | null>(null);
+  // NOVO: Estado para produtos sugeridos
+  const [suggestedProducts, setSuggestedProducts] = useState<string[]>([]);
 
   useEffect(() => {
     // Se vierem dados sugeridos via navegação (location state)
@@ -84,6 +86,11 @@ const PromotionsPage = () => {
             pix_price: 0,
             is_active: false
         } as any);
+        
+        if (location.state.suggestedProducts) {
+            setSuggestedProducts(location.state.suggestedProducts);
+        }
+
         setIsModalOpen(true);
         // Limpa o estado da rota para não reabrir ao recarregar
         window.history.replaceState({}, document.title);
@@ -110,13 +117,14 @@ const PromotionsPage = () => {
       if (!selectedPromotion) {
         // Se estava criando um novo (ou sugestão), mantém aberto e define como selecionado para mostrar a composição
         setSelectedPromotion(data);
-        // Limpa a sugestão pois agora virou um item real
+        // Não limpamos suggestedProducts aqui, pois o form precisa dele para a composição
         setSuggestedData(null);
-        showSuccess("Kit criado! Agora adicione os produtos abaixo.");
+        showSuccess("Kit criado! Adicionando produtos sugeridos...");
       } else {
         // Se estava editando, fecha
         setIsModalOpen(false);
         setSelectedPromotion(null);
+        setSuggestedProducts([]);
         showSuccess("Kit atualizado com sucesso!");
       }
     },
@@ -168,6 +176,7 @@ const PromotionsPage = () => {
             if (!isOpen) {
                 setSelectedPromotion(null);
                 setSuggestedData(null);
+                setSuggestedProducts([]);
             }
           }}
         >
@@ -187,6 +196,7 @@ const PromotionsPage = () => {
               onSubmit={handleFormSubmit}
               isSubmitting={upsertMutation.isPending}
               initialData={selectedPromotion || suggestedData || undefined}
+              suggestedProducts={selectedPromotion ? [] : suggestedProducts} // Passa sugestões apenas se for novo
             />
           </DialogContent>
         </Dialog>

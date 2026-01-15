@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Package, Lock, Loader2, Check, ChevronsUpDown } from "lucide-react";
+import { Plus, Trash2, Package, Lock, Loader2, Check, ChevronsUpDown, Sparkles } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -38,6 +38,7 @@ export interface BreakdownItem {
 interface PromotionCompositionProps {
   promotionId: number | undefined;
   onStatsChange?: (maxStock: number, totalBasePrice: number, totalBasePixPrice: number, breakdown: BreakdownItem[]) => void;
+  suggestedProducts?: string[]; // Novos produtos sugeridos
 }
 
 interface ProductOption {
@@ -71,12 +72,15 @@ interface PromotionItem {
   } | null;
 }
 
-export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCompositionProps) => {
+export const PromotionComposition = ({ promotionId, onStatsChange, suggestedProducts = [] }: PromotionCompositionProps) => {
   const queryClient = useQueryClient();
   const [selectedProductId, setSelectedProductId] = useState<string>("");
   const [selectedVariantId, setSelectedVariantId] = useState<string>("none");
   const [quantity, setQuantity] = useState<number>(1);
   const [openProductSearch, setOpenProductSearch] = useState(false);
+  
+  // Ref para evitar loop de inserção automática
+  const hasProcessedSuggestions = useRef(false);
 
   // 1. Buscar Produtos Disponíveis
   const { data: products } = useQuery({
@@ -113,7 +117,7 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
     enabled: !!promotionId,
   });
 
-  // Calcular Estatísticas (Preço Base e Estoque Máximo Possível)
+  // Calcular Estatísticas
   useEffect(() => {
     if (!items || !onStatsChange) return;
 
@@ -126,11 +130,8 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
     items.forEach(item => {
         hasItems = true;
         
-        // Determina qual entidade usar (Variação ou Produto Pai)
         const entity = item.product_variants || item.products;
-        
         const price = entity.price || 0;
-        // Se não tiver preço pix específico, usa o preço normal como base
         const pixPrice = entity.pix_price || price; 
         const currentStock = entity.stock_quantity;
         
@@ -138,7 +139,6 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
             ? `${item.products.name} - ${item.product_variants.flavors?.name || "Padrão"}`
             : item.products.name;
 
-        // Custo total dos itens
         totalBase += (price * item.quantity);
         totalBasePix += (pixPrice * item.quantity);
 
@@ -151,7 +151,6 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
             totalPixPrice: pixPrice * item.quantity
         });
 
-        // Cálculo de estoque máximo possível
         const possibleKitsWithThisItem = Math.floor(currentStock / item.quantity);
         if (possibleKitsWithThisItem < minStockLimit) {
             minStockLimit = possibleKitsWithThisItem;
@@ -166,21 +165,21 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
 
   // Mutations
   const addItemMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async ({ prodId, varId, qty }: { prodId: number, varId: string | null, qty: number }) => {
       if (!promotionId) throw new Error("Salve a promoção antes de adicionar itens.");
       
       const { error } = await supabase.rpc("add_item_to_kit_and_lock_stock", {
         p_promotion_id: promotionId,
-        p_product_id: Number(selectedProductId),
-        p_variant_id: selectedVariantId === "none" ? null : selectedVariantId,
-        p_quantity_per_kit: quantity
+        p_product_id: prodId,
+        p_variant_id: varId,
+        p_quantity_per_kit: qty
       });
 
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["promotionItems", promotionId] });
-      queryClient.invalidateQueries({ queryKey: ["products"] }); // Atualiza estoques
+      queryClient.invalidateQueries({ queryKey: ["products"] });
       showSuccess("Item adicionado e estoque reservado!");
       setQuantity(1);
     },
@@ -201,6 +200,36 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
     },
     onError: (err: any) => showError(err.message),
   });
+
+  // AUTOMAÇÃO: Adicionar Produtos Sugeridos
+  useEffect(() => {
+    // Só roda se houver sugestões, produtos carregados, itens vazios (novo kit) e ainda não processado
+    if (suggestedProducts.length > 0 && products && products.length > 0 && items && items.length === 0 && !hasProcessedSuggestions.current) {
+        hasProcessedSuggestions.current = true; // Marca como processado para não repetir
+        
+        let addedCount = 0;
+        
+        suggestedProducts.forEach(suggName => {
+            // Tenta encontrar produto pelo nome (case insensitive)
+            // A busca tenta encontrar algo que contenha o nome sugerido, pois o nome da sugestão pode ser simplificado
+            const matchedProduct = products.find(p => p.name.toLowerCase().includes(suggName.toLowerCase()) || suggName.toLowerCase().includes(p.name.toLowerCase()));
+            
+            if (matchedProduct) {
+                // Adiciona o produto base (sem variação específica por enquanto, para simplificar)
+                addItemMutation.mutate({
+                    prodId: matchedProduct.id,
+                    varId: null,
+                    qty: 1
+                });
+                addedCount++;
+            }
+        });
+
+        if (addedCount > 0) {
+            showSuccess(`${addedCount} produtos sugeridos foram adicionados automaticamente!`);
+        }
+    }
+  }, [suggestedProducts, products, items, addItemMutation]);
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
@@ -308,7 +337,11 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
             size="sm" 
             className="w-full h-8 bg-blue-600 hover:bg-blue-700"
             disabled={!selectedProductId || addItemMutation.isPending}
-            onClick={() => addItemMutation.mutate()}
+            onClick={() => addItemMutation.mutate({ 
+                prodId: Number(selectedProductId), 
+                varId: selectedVariantId === "none" ? null : selectedVariantId, 
+                qty: quantity 
+            })}
           >
             {addItemMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
           </Button>
@@ -335,10 +368,20 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
               items?.map(item => {
                 const entity = item.product_variants || item.products;
                 const unitPrice = entity.price || 0;
+                
+                // Verifica se foi adicionado pela IA (opcional: destacar visualmente)
+                const isAutoAdded = suggestedProducts.some(s => item.products.name.includes(s));
 
                 return (
-                  <TableRow key={item.id} className="h-10">
-                    <TableCell className="text-xs font-medium py-1">{item.products.name}</TableCell>
+                  <TableRow key={item.id} className={cn("h-10", isAutoAdded && "bg-blue-50/30")}>
+                    <TableCell className="text-xs font-medium py-1 flex items-center gap-2">
+                        {item.products.name}
+                        {isAutoAdded && (
+                          <div title="Sugerido por IA">
+                            <Sparkles className="w-3 h-3 text-blue-500" />
+                          </div>
+                        )}
+                    </TableCell>
                     <TableCell className="text-xs text-muted-foreground py-1">
                       {item.product_variants ? (
                         <span>{item.product_variants.flavors?.name} {item.product_variants.volume_ml ? `(${item.product_variants.volume_ml}ml)` : ""}</span>
