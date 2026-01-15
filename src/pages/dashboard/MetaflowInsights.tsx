@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { 
   Lightbulb, Package, Target, UserMinus, Plus, ArrowRight, 
-  CheckCircle2, Sparkles, BarChart3, Crown, Wallet, MessageSquare 
+  CheckCircle2, Sparkles, BarChart3, Crown, Wallet, MessageSquare, Zap 
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -45,7 +45,7 @@ const MetaflowInsightsPage = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         
-        {/* COLUNA 1: REPOSIÇÃO (IDÊNTICO À IMAGEM) */}
+        {/* COLUNA 1: REPOSIÇÃO */}
         <Card className="border-none shadow-md bg-white flex flex-col h-full">
             <div className="h-1 bg-orange-500 rounded-t-lg" />
             <CardHeader className="pb-4">
@@ -79,7 +79,7 @@ const MetaflowInsightsPage = () => {
             </CardContent>
         </Card>
 
-        {/* COLUNA 2: CROSS-SELL (IDÊNTICO À IMAGEM) */}
+        {/* COLUNA 2: CROSS-SELL */}
         <Card className="border-none shadow-md bg-white flex flex-col h-full">
             <div className="h-1 bg-blue-500 rounded-t-lg" />
             <CardHeader className="pb-4">
@@ -115,7 +115,7 @@ const MetaflowInsightsPage = () => {
             </CardContent>
         </Card>
 
-        {/* COLUNA 3: RETENÇÃO (IDÊNTICO À IMAGEM) */}
+        {/* COLUNA 3: RETENÇÃO */}
         <Card className="border-none shadow-md bg-white flex flex-col h-full">
             <div className="h-1 bg-rose-500 rounded-t-lg" />
             <CardHeader className="pb-4">
@@ -149,7 +149,46 @@ const MetaflowInsightsPage = () => {
         </Card>
       </div>
 
-      {/* DASHBOARD DE LTV E MARGEM (OS "EXTRAS" DE VALOR) */}
+      {/* SEÇÃO: ESTRATÉGIAS DE VENDA (RESTAURADO E MELHORADO) */}
+      <div className="pt-4 space-y-4">
+        <h2 className="text-sm font-black uppercase text-gray-500 tracking-widest flex items-center gap-2">
+            <Lightbulb className="w-4 h-4 text-amber-500" /> Ações Estratégicas Sugeridas
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card className="bg-[#0B1221] border-none shadow-xl p-8 relative group overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <Target className="w-32 h-32 text-blue-500" />
+                    </div>
+                    <div className="relative z-10 space-y-6">
+                        <Badge className="bg-blue-500/20 text-blue-400 border border-blue-500/30 font-black">ESTRATÉGIA CROSS-SELL</Badge>
+                        <h3 className="text-2xl font-black text-white italic uppercase leading-none">Combo de Alta Performance</h3>
+                        <p className="text-gray-400 text-sm leading-relaxed">
+                            A IA detectou que o produto <strong>{insights?.associations[0]?.product_a || 'Item A'}</strong> e <strong>{insights?.associations[0]?.product_b || 'Item B'}</strong> possuem alta correlação. 
+                            Crie um Kit agora com 5% de desconto para aumentar o faturamento em aprox. 12%.
+                        </p>
+                        <Button className="bg-blue-600 hover:bg-blue-700 font-black w-full h-12 gap-2">
+                            <Plus className="w-5 h-5" /> CRIAR KIT RECOMENDADO
+                        </Button>
+                    </div>
+            </Card>
+
+            <Card className="bg-white border-2 border-dashed border-rose-200 shadow-md p-8 relative group">
+                    <div className="space-y-6">
+                        <Badge variant="outline" className="text-rose-600 border-rose-200 font-black">CAMPANHA DE RETENÇÃO</Badge>
+                        <h3 className="text-2xl font-black text-gray-900 italic uppercase leading-none">Recuperar Clientes Inativos</h3>
+                        <p className="text-gray-600 text-sm leading-relaxed">
+                            Existem <strong>{insights?.churn?.length || 0} clientes</strong> de alto valor que não compram há mais de 30 dias. 
+                            Eles representam um faturamento potencial imediato através de cupons de reativação.
+                        </p>
+                        <Button variant="outline" className="border-rose-600 text-rose-600 hover:bg-rose-50 font-black w-full h-12 gap-2">
+                            <Zap className="w-5 h-5" /> DISPARAR CUPOM DE VOLTA (10% OFF)
+                        </Button>
+                    </div>
+            </Card>
+        </div>
+      </div>
+
+      {/* DASHBOARD DE LTV E MARGEM */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4">
             {/* RANKING VIP */}
             <Card className="border-none shadow-md bg-white">
