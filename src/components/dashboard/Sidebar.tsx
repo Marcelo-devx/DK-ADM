@@ -5,7 +5,8 @@ import {
   Package, Home, LayoutGrid, Cloud, Image, Tags, Settings, Percent, 
   MessageSquare, Users, ListTree, GalleryHorizontal, Star, Ticket, Plug, 
   ShoppingCart, DollarSign, Truck, Coins, Printer, Map as MapIcon, 
-  Lock, FileOutput, FileUp, Workflow, BarChart3, Box, LogOut, Brain, Sparkles
+  Lock, FileOutput, FileUp, Workflow, BarChart3, Box, LogOut, Brain, Sparkles,
+  Lightbulb
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -48,11 +49,11 @@ const Sidebar = () => {
           Analytics
         </NavLink>
         
-        {/* INTELIGÊNCIA ARTIFICIAL */}
-        <p className={sectionTitleClass}>Inteligência de Dados</p>
+        {/* INTELIGÊNCIA DE DADOS */}
+        <p className={sectionTitleClass}>Inteligência</p>
         <NavLink to="/dashboard/metaflow" className={navLinkClass}>
-          <Sparkles className="w-4 h-4 mr-3 text-amber-500" />
-          Metaflow Insights
+          <Lightbulb className="w-4 h-4 mr-3 text-amber-500" />
+          Insights de Negócio
         </NavLink>
 
         {/* VENDAS & FINANCEIRO */}
