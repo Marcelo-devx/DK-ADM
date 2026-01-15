@@ -37,9 +37,20 @@ import {
 } from "@/components/ui/alert-dialog";
 import { PromotionForm } from "@/components/dashboard/promotion-form";
 import { showSuccess, showError } from "@/utils/toast";
-import { PlusCircle, MoreHorizontal, ImageOff } from "lucide-react";
+import { PlusCircle, MoreHorizontal, ImageOff, Package, Layers } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useLocation } from "react-router-dom";
+import { Badge } from "@/components/ui/badge";
+
+type PromotionItem = {
+  quantity: number;
+  products: { name: string } | null;
+  product_variants: {
+    flavors: { name: string } | null;
+    volume_ml: number | null;
+    color: string | null;
+  } | null;
+};
 
 type Promotion = {
   id: number;
@@ -51,15 +62,27 @@ type Promotion = {
   stock_quantity: number;
   description: string | null;
   discount_percent?: number;
+  promotion_items: PromotionItem[];
 };
 
 const fetchPromotions = async () => {
   const { data, error } = await supabase
     .from("promotions")
-    .select("*")
+    .select(`
+      *,
+      promotion_items (
+        quantity,
+        products (name),
+        product_variants (
+          volume_ml,
+          color,
+          flavors (name)
+        )
+      )
+    `)
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
-  return data;
+  return data as unknown as Promotion[];
 };
 
 const PromotionsPage = () => {
@@ -96,10 +119,7 @@ const PromotionsPage = () => {
   });
 
   const upsertMutation = useMutation({
-    mutationFn: async (values: Omit<Promotion, 'id'> & { id?: number }) => {
-      if (values.stock_quantity === 0) {
-        values.is_active = false;
-      }
+    mutationFn: async (values: Omit<Promotion, 'id' | 'promotion_items'> & { id?: number }) => {
       const { data, error } = await supabase.from('promotions').upsert(values).select().single();
       if (error) throw error;
       return data;
@@ -109,7 +129,7 @@ const PromotionsPage = () => {
       
       if (!selectedPromotion) {
         // Se estava criando um novo (ou sugestão), mantém aberto e define como selecionado para mostrar a composição
-        setSelectedPromotion(data);
+        setSelectedPromotion(data as any);
         // Limpa a sugestão pois agora virou um item real
         setSuggestedData(null);
         showSuccess("Kit criado! Agora adicione os produtos abaixo.");
@@ -150,10 +170,6 @@ const PromotionsPage = () => {
   };
 
   const handleStatusChange = (promotion: Promotion, newStatus: boolean) => {
-    if (newStatus && promotion.stock_quantity === 0) {
-      showError("Não é possível ativar um kit com estoque zero.");
-      return;
-    }
     upsertMutation.mutate({ ...promotion, is_active: newStatus });
   };
 
@@ -198,9 +214,9 @@ const PromotionsPage = () => {
             <TableRow>
               <TableHead className="w-[64px]">Imagem</TableHead>
               <TableHead>Nome do Kit</TableHead>
-              <TableHead>Descrição</TableHead>
+              <TableHead className="w-[300px]">Composição (Itens)</TableHead>
               <TableHead>Preço</TableHead>
-              <TableHead>Estoque</TableHead>
+              <TableHead className="text-center">Estoque</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
@@ -225,18 +241,45 @@ const PromotionsPage = () => {
                     )}
                   </TableCell>
                   <TableCell className="font-medium">{promo.name}</TableCell>
+                  
+                  {/* COLUNA COMPOSIÇÃO - NOVA */}
                   <TableCell>
-                    <p className="max-w-[200px] truncate" title={promo.description || ''}>
-                      {promo.description || "-"}
-                    </p>
+                    <div className="flex flex-col gap-1">
+                      {promo.promotion_items && promo.promotion_items.length > 0 ? (
+                        promo.promotion_items.map((item, idx) => {
+                          const hasVariant = !!item.product_variants;
+                          const flavorName = item.product_variants?.flavors?.name;
+                          const variantInfo = hasVariant 
+                            ? `${flavorName || "Sabor Padrão"}` 
+                            : "";
+                          
+                          return (
+                            <Badge key={idx} variant="secondary" className="w-fit text-[10px] font-normal px-2 py-0.5 bg-gray-100 hover:bg-gray-200 border-gray-200 text-gray-700">
+                              <span className="font-bold mr-1">{item.quantity}x</span> 
+                              {item.products?.name}
+                              {variantInfo && <span className="text-gray-500 ml-1">({variantInfo})</span>}
+                            </Badge>
+                          );
+                        })
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic flex items-center gap-1">
+                          <Layers className="w-3 h-3" /> Kit Vazio
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
+
                   <TableCell>
                     {new Intl.NumberFormat("pt-BR", {
                       style: "currency",
                       currency: "BRL",
                     }).format(promo.price)}
                   </TableCell>
-                  <TableCell>{promo.stock_quantity}</TableCell>
+                  <TableCell className="text-center">
+                    <Badge variant={promo.stock_quantity > 0 ? "outline" : "destructive"} className="font-mono">
+                      {promo.stock_quantity}
+                    </Badge>
+                  </TableCell>
                   <TableCell>
                     <Switch
                       checked={promo.is_active}
