@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -204,25 +204,7 @@ const MetaflowInsightsPage = () => {
             <Lightbulb className="w-4 h-4 text-amber-500" /> Ações Estratégicas Sugeridas
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card className="bg-[#0B1221] border-none shadow-xl p-8 relative group overflow-hidden">
-                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                        <Target className="w-32 h-32 text-blue-500" />
-                    </div>
-                    <div className="relative z-10 space-y-6">
-                        <Badge className="bg-blue-500/20 text-blue-400 border border-blue-500/30 font-black">ESTRATÉGIA CROSS-SELL</Badge>
-                        <h3 className="text-2xl font-black text-white italic uppercase leading-none">Combo de Alta Performance</h3>
-                        <p className="text-gray-400 text-sm leading-relaxed">
-                            A IA detectou que o produto <strong>{insights?.associations[0]?.product_a || 'Item A'}</strong> e <strong>{insights?.associations[0]?.product_b || 'Item B'}</strong> possuem alta correlação. 
-                            Crie um Kit agora com 5% de desconto para aumentar o faturamento em aprox. 12%.
-                        </p>
-                        <Button 
-                            className="bg-blue-600 hover:bg-blue-700 font-black w-full h-12 gap-2"
-                            onClick={handleCreateCrossSellKit}
-                        >
-                            <Plus className="w-5 h-5" /> CRIAR KIT RECOMENDADO
-                        </Button>
-                    </div>
-            </Card>
+            {/* CARD DE CROSS-SELL REMOVIDO A PEDIDO */}
 
             <Card className="bg-white border-2 border-dashed border-rose-200 shadow-md p-8 relative group">
                     <div className="space-y-6">
