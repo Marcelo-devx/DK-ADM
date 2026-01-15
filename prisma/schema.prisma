@@ -1,0 +1,94 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("SUPABASE_DB_URL")
+}
+
+model Profile {
+  id                         String    @id @db.Uuid
+  first_name                 String?
+  last_name                  String?
+  role                       String    @default("user")
+  cep                        String?
+  street                     String?
+  number                     String?
+  complement                 String?
+  neighborhood               String?
+  city                       String?
+  state                      String?
+  phone                      String?
+  points                     Int       @default(0)
+  referral_code              String?   @default(dbgenerated("substr(md5((random())::text), 1, 8)"))
+  date_of_birth              DateTime? @db.Date
+  updated_at                 DateTime? @default(now()) @db.Timestamptz(6)
+  force_pix_on_next_purchase Boolean?  @default(true)
+  is_credit_card_enabled     Boolean?  @default(false)
+  orders                     Order[]
+}
+
+model Product {
+  id             BigInt           @id @default(autoincrement())
+  created_at     DateTime         @default(now()) @db.Timestamptz(6)
+  name           String
+  description    String?
+  price          Decimal          @db.Decimal
+  pix_price      Decimal?         @db.Decimal
+  cost_price     Decimal?         @db.Decimal
+  image_url      String?
+  stock_quantity Int              @default(0)
+  category       String?
+  sub_category   String?
+  brand          String?
+  sku            String?          @unique
+  is_featured    Boolean?         @default(false)
+  is_visible     Boolean          @default(true)
+  variants       ProductVariant[]
+}
+
+model ProductVariant {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  product_id     BigInt
+  flavor_id      BigInt?
+  volume_ml      Int?
+  color          String?
+  sku            String?  @unique
+  price          Decimal  @db.Decimal
+  pix_price      Decimal? @db.Decimal
+  cost_price     Decimal? @db.Decimal
+  stock_quantity Int      @default(0)
+  is_active      Boolean? @default(true)
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+  product        Product  @relation(fields: [product_id], references: [id])
+}
+
+model Order {
+  id               BigInt      @id @default(autoincrement())
+  created_at       DateTime    @default(now()) @db.Timestamptz(6)
+  user_id          String      @db.Uuid
+  total_price      Decimal     @db.Decimal
+  shipping_cost    Decimal     @db.Decimal
+  status           String      @default("Pendente")
+  payment_method   String?     @default("Pix")
+  delivery_status  String?     @default("Pendente")
+  delivery_info    String?
+  shipping_address Json
+  coupon_discount  Decimal?    @default(0) @db.Decimal
+  profile          Profile     @relation(fields: [user_id], references: [id])
+  items            OrderItem[]
+}
+
+model OrderItem {
+  id                    BigInt   @id @default(autoincrement())
+  order_id              BigInt
+  item_id               BigInt
+  item_type             String
+  quantity              Int
+  price_at_purchase     Decimal  @db.Decimal
+  name_at_purchase      String
+  image_url_at_purchase String?
+  created_at            DateTime @default(now()) @db.Timestamptz(6)
+  order                 Order    @relation(fields: [order_id], references: [id])
+}
