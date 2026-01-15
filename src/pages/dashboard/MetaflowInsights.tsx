@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { 
   Lightbulb, Package, Target, UserMinus, Plus, ArrowRight, 
-  CheckCircle2, Sparkles, BarChart3, Crown, Wallet, MessageSquare, Zap 
+  CheckCircle2, Sparkles, BarChart3, Crown, Wallet, MessageSquare, Zap, RefreshCw
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -16,7 +16,7 @@ import { useNavigate } from "react-router-dom";
 const MetaflowInsightsPage = () => {
   const navigate = useNavigate();
   
-  const { data: insights, isLoading } = useQuery({
+  const { data: insights, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["actionable-insights-final"],
     queryFn: async () => {
         const { data, error } = await supabase.functions.invoke("actionable-insights");
@@ -75,7 +75,17 @@ const MetaflowInsightsPage = () => {
           </h1>
           <p className="text-muted-foreground mt-1 font-medium">Recomendações geradas a partir do comportamento de vendas.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+            <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => refetch()} 
+                disabled={isRefetching}
+                className="text-muted-foreground hover:text-primary"
+            >
+                <RefreshCw className={cn("w-4 h-4 mr-2", isRefetching && "animate-spin")} />
+                Atualizar
+            </Button>
             <Badge className="bg-blue-600 text-white font-bold px-3 py-1">IA ATIVA</Badge>
             <Badge variant="outline" className="text-gray-500 font-bold px-3 py-1">v2.1.0</Badge>
         </div>
