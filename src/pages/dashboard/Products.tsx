@@ -91,6 +91,8 @@ const fetchProducts = async () => {
         promotion_items (
             quantity,
             promotions (
+                id,
+                name,
                 is_active,
                 stock_quantity
             )
@@ -103,14 +105,18 @@ const fetchProducts = async () => {
   return data.map(p => {
     const variantsList = Array.isArray(p.variants) ? p.variants : [];
     
-    // Calcula quanto deste produto está preso em kits ATIVOS
+    // Calcula quanto deste produto está preso em Kits
     const promotionItems = p.promotion_items || [];
     let allocated = 0;
     
     promotionItems.forEach((item: any) => {
-        const promo = item.promotions;
-        // Se a promoção existe, está ativa e tem estoque definido
-        if (promo && promo.is_active && promo.stock_quantity > 0) {
+        // Supabase pode retornar array ou objeto dependendo da relação, garantimos o tratamento
+        const promo = Array.isArray(item.promotions) ? item.promotions[0] : item.promotions;
+        
+        // CORREÇÃO: Removemos a verificação de 'is_active'.
+        // Se o kit existe e tem estoque > 0, os produtos estão fisicamente reservados nele,
+        // independentemente se o kit está visível na loja ou não.
+        if (promo && promo.stock_quantity > 0) {
             allocated += (item.quantity * promo.stock_quantity);
         }
     });
@@ -413,7 +419,7 @@ const ProductsPage = () => {
                             {product.stock_quantity} un
                         </Badge>
                         {product.allocated_in_kits ? (
-                            <Badge variant="outline" className="h-5 text-[9px] w-fit bg-amber-50 text-amber-700 border-amber-200 gap-1" title="Quantidade reservada em Kits Ativos">
+                            <Badge variant="outline" className="h-5 text-[9px] w-fit bg-amber-50 text-amber-700 border-amber-200 gap-1" title="Quantidade reservada em Kits">
                                 <Lock className="w-2.5 h-2.5" /> + {product.allocated_in_kits} em Kits
                             </Badge>
                         ) : null}
