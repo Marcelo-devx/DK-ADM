@@ -93,7 +93,7 @@ const PromotionsPage = () => {
   const [selectedPromotion, setSelectedPromotion] = useState<Promotion | null>(null);
   
   // Estado para dados vindos da IA (sugestão)
-  const [suggestedData, setSuggestedData] = useState<Partial<Promotion> | null>(null);
+  const [suggestedData, setSuggestedData] = useState<Partial<Promotion> & { suggestedProducts?: string[] } | null>(null);
 
   useEffect(() => {
     // Se vierem dados sugeridos via navegação (location state)
@@ -105,7 +105,8 @@ const PromotionsPage = () => {
             stock_quantity: 0,
             price: 0,
             pix_price: 0,
-            is_active: false
+            is_active: false,
+            suggestedProducts: location.state.suggestedProducts // Captura produtos sugeridos
         } as any);
         setIsModalOpen(true);
         // Limpa o estado da rota para não reabrir ao recarregar
@@ -124,15 +125,44 @@ const PromotionsPage = () => {
       if (error) throw error;
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       queryClient.invalidateQueries({ queryKey: ["promotions"] });
       
       if (!selectedPromotion) {
-        // Se estava criando um novo (ou sugestão), mantém aberto e define como selecionado para mostrar a composição
+        // Se estava criando um novo (ou sugestão)
+        
+        // Verifica se há produtos sugeridos para inserir automaticamente
+        if (suggestedData?.suggestedProducts && suggestedData.suggestedProducts.length > 0) {
+            try {
+                const productNames = suggestedData.suggestedProducts;
+                const { data: foundProducts } = await supabase
+                    .from('products')
+                    .select('id, name')
+                    .in('name', productNames);
+                
+                if (foundProducts && foundProducts.length > 0) {
+                    for (const p of foundProducts) {
+                        // Adiciona ao kit com quantidade 1 (não suporta variantes ainda na auto-sugestão)
+                        await supabase.rpc("add_item_to_kit_and_lock_stock", {
+                            p_promotion_id: data.id,
+                            p_product_id: p.id,
+                            p_variant_id: null,
+                            p_quantity_per_kit: 1
+                        });
+                    }
+                    showSuccess(`Produtos adicionados automaticamente ao kit!`);
+                    
+                    // Invalida para atualizar a lista de itens dentro do modal (Composition)
+                    queryClient.invalidateQueries({ queryKey: ["promotionItems", data.id] });
+                }
+            } catch (err) {
+                console.error("Erro ao adicionar produtos sugeridos:", err);
+            }
+        }
+
         setSelectedPromotion(data as any);
-        // Limpa a sugestão pois agora virou um item real
         setSuggestedData(null);
-        showSuccess("Kit criado! Agora adicione os produtos abaixo.");
+        showSuccess("Kit criado! Composição iniciada.");
       } else {
         // Se estava editando, fecha
         setIsModalOpen(false);

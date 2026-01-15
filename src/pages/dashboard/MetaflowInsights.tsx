@@ -32,7 +32,8 @@ const MetaflowInsightsPage = () => {
     navigate("/dashboard/promotions", { 
       state: { 
         suggestedName: `Kit ${productA} + ${productB}`,
-        suggestedDescription: `Combo especial contendo ${productA} e ${productB}. Economize levando os dois!`
+        suggestedDescription: `Combo especial contendo ${productA} e ${productB}. Economize levando os dois!`,
+        suggestedProducts: [productA, productB]
       } 
     });
   };
