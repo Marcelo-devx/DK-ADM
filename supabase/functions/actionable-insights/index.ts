@@ -51,16 +51,13 @@ serve(async (req) => {
         const soldLast30Days = velocityMap[p.id] || 0;
         const dailyRate = soldLast30Days / 30;
         
-        let daysRemaining = 999;
+        let daysRemaining = 999; // Valor alto padrão (seguro)
         let status = 'ok';
 
+        // SÓ calcula previsão se tiver giro (vendas nos últimos 30 dias)
         if (dailyRate > 0) {
             daysRemaining = Math.floor(p.stock_quantity / dailyRate);
             status = 'active';
-        } else if (p.stock_quantity <= 5) {
-            // Se não vendeu, mas tem pouco estoque, marca como crítico por quantidade
-            daysRemaining = 0; 
-            status = 'stagnant_low';
         }
         
         // Lucro estimado (Preço Atual - Custo Atual) * Vendas
@@ -81,10 +78,10 @@ serve(async (req) => {
         };
     });
 
-    // Filtra itens com menos de 45 dias de estoque OU estoque crítico estagnado
+    // Filtra APENAS itens com giro ativo E que vão acabar em menos de 45 dias
     const alerts = inventoryAnalysis
-        ?.filter(p => p.days_remaining < 45 || p.status_type === 'stagnant_low')
-        .sort((a,b) => a.days_remaining - b.days_remaining) // Menor tempo primeiro
+        ?.filter(p => p.days_remaining < 45 && p.daily_rate > 0)
+        .sort((a,b) => a.days_remaining - b.days_remaining)
         .slice(0, 8) || [];
 
     return new Response(JSON.stringify({
