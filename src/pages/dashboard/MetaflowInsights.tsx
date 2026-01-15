@@ -28,12 +28,12 @@ const MetaflowInsightsPage = () => {
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
-  const handleCreateKit = (productA: string, productB: string) => {
+  const handleCreateKit = (productA: string, idA: number, productB: string, idB: number) => {
     navigate("/dashboard/promotions", { 
       state: { 
         suggestedName: `Kit ${productA} + ${productB}`,
         suggestedDescription: `Combo especial contendo ${productA} e ${productB}. Economize levando os dois!`,
-        suggestedProducts: [productA, productB]
+        suggestedProductIds: [idA, idB]
       } 
     });
   };
@@ -48,9 +48,10 @@ const MetaflowInsightsPage = () => {
   };
 
   const handleCreateCrossSellKit = () => {
-      const pA = insights?.associations[0]?.product_a || "Produto A";
-      const pB = insights?.associations[0]?.product_b || "Produto B";
-      handleCreateKit(pA, pB);
+      const assoc = insights?.associations[0];
+      if (assoc) {
+          handleCreateKit(assoc.product_a, assoc.product_a_id, assoc.product_b, assoc.product_b_id);
+      }
   };
 
   const handleGlobalRecovery = () => {
@@ -76,7 +77,7 @@ const MetaflowInsightsPage = () => {
         </div>
         <div className="flex gap-2">
             <Badge className="bg-blue-600 text-white font-bold px-3 py-1">IA ATIVA</Badge>
-            <Badge variant="outline" className="text-gray-500 font-bold px-3 py-1">v2.0.4</Badge>
+            <Badge variant="outline" className="text-gray-500 font-bold px-3 py-1">v2.1.0</Badge>
         </div>
       </div>
 
@@ -142,7 +143,7 @@ const MetaflowInsightsPage = () => {
                                     size="sm" 
                                     variant="ghost" 
                                     className="h-6 text-[11px] p-0 font-black text-blue-700 hover:bg-transparent"
-                                    onClick={() => handleCreateKit(pair.product_a, pair.product_b)}
+                                    onClick={() => handleCreateKit(pair.product_a, pair.product_a_id, pair.product_b, pair.product_b_id)}
                                 >
                                     Criar Kit <ArrowRight className="w-3 h-3 ml-1 group-hover:translate-x-1 transition-transform" />
                                 </Button>
