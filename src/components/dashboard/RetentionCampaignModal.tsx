@@ -104,7 +104,7 @@ export const RetentionCampaignModal = ({ isOpen, onClose }: RetentionCampaignMod
     onSuccess: (data) => {
       const msg = data.webhooks_fired > 0 
         ? `Cupom enviado e automação disparada para ${selectedUserIds.length} clientes!`
-        : `Cupom creditado para ${selectedUserIds.length} clientes (Sem automação configurada).`;
+        : `Cupom creditado para ${selectedUserIds.length} clientes (Sem disparo de mensagem).`;
       
       showSuccess(msg);
       setSelectedUserIds([]);
@@ -143,7 +143,7 @@ export const RetentionCampaignModal = ({ isOpen, onClose }: RetentionCampaignMod
             <Users className="h-6 w-6 text-rose-600" /> Campanha de Recuperação
           </DialogTitle>
           <DialogDescription>
-            Selecione clientes inativos e envie um cupom. {hasWebhook ? "O sistema enviará WhatsApp/Email automaticamente." : ""}
+            Selecione clientes inativos e envie um cupom.
           </DialogDescription>
         </DialogHeader>
 
@@ -174,11 +174,11 @@ export const RetentionCampaignModal = ({ isOpen, onClose }: RetentionCampaignMod
                 <span>Validade automática: <strong>7 dias</strong></span>
                 {hasWebhook ? (
                     <Badge className="bg-green-600 hover:bg-green-700 gap-1">
-                        <MessageSquare className="w-3 h-3" /> Automação Ativa
+                        <MessageSquare className="w-3 h-3" /> Disparo de Zap Ativo
                     </Badge>
                 ) : (
                     <Badge variant="outline" className="text-gray-500 gap-1 border-dashed border-gray-400">
-                        <MessageSquare className="w-3 h-3" /> Sem Automação (Apenas Saldo)
+                        <MessageSquare className="w-3 h-3" /> Sem Disparo (Apenas Credita)
                     </Badge>
                 )}
             </div>
@@ -186,7 +186,7 @@ export const RetentionCampaignModal = ({ isOpen, onClose }: RetentionCampaignMod
             {!hasWebhook && (
                 <Alert className="bg-yellow-50 border-yellow-200 text-yellow-800 py-2">
                     <AlertDescription className="text-xs flex items-center gap-2">
-                        Para enviar Email/WhatsApp automaticamente, configure um Webhook com o evento <strong>retention_campaign</strong> em "Automação & API".
+                        O cupom será vinculado à conta do cliente automaticamente. Para <strong>disparar a mensagem no WhatsApp</strong> avisando sobre o presente, ative o Webhook.
                     </AlertDescription>
                 </Alert>
             )}
