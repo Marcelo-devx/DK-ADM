@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { MoreHorizontal, Mail, KeyRound, RotateCcw, CheckCircle, Lock, Unlock, UserPlus, User, Calendar } from "lucide-react";
+import { MoreHorizontal, Mail, KeyRound, RotateCcw, CheckCircle, Lock, Unlock, UserPlus } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -41,7 +41,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { showSuccess, showError } from "@/utils/toast";
 import { CreateClientForm } from "@/components/dashboard/CreateClientForm";
-import { cn } from "@/lib/utils";
 
 interface Client {
   id: string;
@@ -50,8 +49,6 @@ interface Client {
   updated_at: string | null;
   first_name: string | null;
   last_name: string | null;
-  gender: string | null;
-  date_of_birth: string | null;
   role: 'user' | 'adm';
   force_pix_on_next_purchase: boolean;
   order_count: number;
@@ -60,27 +57,10 @@ interface Client {
 
 const fetchClients = async (): Promise<Client[]> => {
   const { data, error } = await supabase.functions.invoke("get-users");
-  if (error) throw new Error(error.message);
-  
-  // Como a função get-users não retorna todos os campos nativamente, vamos complementar com os profiles
-  const { data: profiles } = await supabase.from('profiles').select('id, gender, date_of_birth');
-  const profilesMap = new Map(profiles?.map(p => [p.id, p]));
-
-  return data.map((u: any) => ({
-      ...u,
-      gender: profilesMap.get(u.id)?.gender || null,
-      date_of_birth: profilesMap.get(u.id)?.date_of_birth || null,
-  }));
-};
-
-const calculateAge = (dob: string | null) => {
-    if (!dob) return null;
-    const birthDate = new Date(dob);
-    const today = new Date();
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const m = today.getMonth() - birthDate.getMonth();
-    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
-    return age;
+  if (error) {    
+    throw new Error(`Falha ao buscar clientes: ${error.message}`);
+  }
+  return data;
 };
 
 const ClientsPage = () => {
@@ -150,11 +130,21 @@ const ClientsPage = () => {
       } else {
         functionName = 'admin-user-actions';
         body.action = action;
+        // Define o URL de produção explicitamente para evitar links localhost
         body.redirectTo = 'https://dk-l-andpage.vercel.app/login'; 
       }
 
-      const { data, error } = await supabase.functions.invoke(functionName, { body });
-      if (error) throw new Error(error.message);
+      const { data, error } = await supabase.functions.invoke(functionName, {
+        body,
+      });
+      
+      if (error) {
+        if (error.context && typeof error.context.json === 'function') {
+            const errorJson = await error.context.json();
+            if (errorJson.details) throw new Error(errorJson.details);
+        }
+        throw new Error(error.message);
+      }
       return data;
     },
     onSuccess: (data) => {
@@ -162,8 +152,19 @@ const ClientsPage = () => {
       showSuccess(data.message);
       setActionToConfirm(null);
     },
-    onError: (error: Error) => showError(`Erro: ${error.message}`),
+    onError: (error: Error) => {
+      showError(`Erro: ${error.message}`);
+    },
   });
+
+  const handleConfirmAction = () => {
+    if (actionToConfirm) {
+      userActionMutation.mutate({
+        action: actionToConfirm.action,
+        targetUserId: actionToConfirm.client.id,
+      });
+    }
+  };
 
   const filteredClients = clients?.filter(client => {
     if (client.role === 'adm') return false;
@@ -208,47 +209,41 @@ const ClientsPage = () => {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Cliente</TableHead>
-              <TableHead>Perfil (BI)</TableHead>
+              <TableHead>Email</TableHead>
+              <TableHead>Nome</TableHead>
               <TableHead>Status Compra</TableHead>
               <TableHead>Segurança (Exigir PIX)</TableHead>
+              <TableHead>Data da Alteração</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               Array.from({ length: 5 }).map((_, index) => (
-                <TableRow key={index}><TableCell colSpan={5}><Skeleton className="h-10 w-full" /></TableCell></TableRow>
+                <TableRow key={index}>
+                  <TableCell colSpan={6}><Skeleton className="h-5 w-full" /></TableCell>
+                </TableRow>
               ))
-            ) : filteredClients?.map((client) => {
-                const age = calculateAge(client.date_of_birth);
-                return (
+            ) : error ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center text-red-500">
+                  Erro ao carregar clientes.
+                </TableCell>
+              </TableRow>
+            ) : filteredClients && filteredClients.length > 0 ? (
+              filteredClients.map((client) => (
                 <TableRow key={client.id}>
+                  <TableCell className="font-medium">{client.email}</TableCell>
+                  <TableCell>{client.first_name || '-'} {client.last_name || ''}</TableCell>
                   <TableCell>
-                      <div className="flex flex-col">
-                          <span className="font-bold text-sm">{client.first_name || 'S/N'} {client.last_name || ''}</span>
-                          <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Mail className="w-2.5 h-2.5" /> {client.email}</span>
-                      </div>
-                  </TableCell>
-                  <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-[9px] gap-1 font-bold">
-                            <User className="w-2.5 h-2.5" /> {client.gender || 'N/I'}
-                        </Badge>
-                        {age && (
-                            <Badge variant="outline" className="text-[9px] gap-1 bg-gray-50">
-                                <Calendar className="w-2.5 h-2.5" /> {age} anos
-                            </Badge>
-                        )}
-                      </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col gap-1">
-                      <Badge variant="secondary" className="text-[9px] w-fit">Total: {client.order_count}</Badge>
+                    <div className="space-y-1">
+                      <Badge variant="outline">Total: {client.order_count} Pedido(s)</Badge>
                       {client.completed_order_count > 0 ? (
-                        <Badge className="bg-green-500 text-[9px] w-fit">Recorrente</Badge>
+                        <Badge variant="default" className="bg-green-500 hover:bg-green-600">
+                          Recorrente ({client.completed_order_count} Concluído(s))
+                        </Badge>
                       ) : (
-                        <Badge variant="outline" className="text-[9px] w-fit">Primeira Compra</Badge>
+                        <Badge variant="secondary">Primeira Compra</Badge>
                       )}
                     </div>
                   </TableCell>
@@ -259,42 +254,109 @@ const ClientsPage = () => {
                         onCheckedChange={(checked) => toggleSecurityMutation.mutate({ userId: client.id, forcePix: checked })}
                         disabled={toggleSecurityMutation.isPending}
                       />
-                      <span className={cn("text-[10px] font-black uppercase", client.force_pix_on_next_purchase ? 'text-red-600' : 'text-green-600')}>
-                        {client.force_pix_on_next_purchase ? "PIX" : "LIBERADO"}
-                      </span>
+                      <div className="flex flex-col">
+                        <span className={`text-xs font-bold ${client.force_pix_on_next_purchase ? 'text-red-600' : 'text-green-600'}`}>
+                          {client.force_pix_on_next_purchase ? "PIX OBRIGATÓRIO" : "CARTÃO LIBERADO"}
+                        </span>
+                      </div>
                     </div>
+                  </TableCell>
+                  <TableCell>
+                    {client.updated_at 
+                      ? new Date(client.updated_at).toLocaleString("pt-BR") 
+                      : '-'}
                   </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
-                      <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="h-8 w-8 p-0">
+                          <span className="sr-only">Abrir menu de ações</span>
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onSelect={() => setActionToConfirm({ action: 'send_password_reset', client })}><KeyRound className="mr-2 h-4 w-4" />Redefinir Senha</DropdownMenuItem>
-                        {client.order_count > 0 && (
-                          <DropdownMenuItem onSelect={() => setActionToConfirm({ action: 'delete_orders', client })} className="text-red-600"><RotateCcw className="mr-2 h-4 w-4" />Redefinir Compras</DropdownMenuItem>
+                        <DropdownMenuLabel>Ações do Usuário</DropdownMenuLabel>
+                        
+                        <DropdownMenuItem
+                            onSelect={() => toggleSecurityMutation.mutate({ userId: client.id, forcePix: !client.force_pix_on_next_purchase })}
+                            disabled={toggleSecurityMutation.isPending}
+                            className={client.force_pix_on_next_purchase ? "text-green-600" : "text-red-600"}
+                        >
+                            {client.force_pix_on_next_purchase ? (
+                                <><Unlock className="h-4 w-4 mr-2" /><span>Liberar Cartão</span></>
+                            ) : (
+                                <><Lock className="h-4 w-4 mr-2" /><span>Exigir PIX (Bloquear Cartão)</span></>
+                            )}
+                        </DropdownMenuItem>
+
+                        {client.completed_order_count === 0 && (
+                          <DropdownMenuItem
+                            onSelect={() => setActionToConfirm({ action: 'mark_as_recurrent', client })}
+                          >
+                            <CheckCircle className="mr-2 h-4 w-4" />
+                            <span>Marcar como Recorrente</span>
+                          </DropdownMenuItem>
                         )}
+                        {client.order_count > 0 && (
+                          <DropdownMenuItem
+                            onSelect={() => setActionToConfirm({ action: 'delete_orders', client })}
+                            className="text-red-600"
+                          >
+                            <RotateCcw className="mr-2 h-4 w-4" />
+                            <span>Redefinir Status Compra</span>
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem
+                          onSelect={() => setActionToConfirm({ action: 'resend_confirmation', client })}
+                        >
+                          <Mail className="mr-2 h-4 w-4" />
+                          <span>Reenviar Confirmação</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onSelect={() => setActionToConfirm({ action: 'send_password_reset', client })}
+                        >
+                          <KeyRound className="mr-2 h-4 w-4" />
+                          <span>Enviar Redefinição de Senha</span>
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
                 </TableRow>
-                )
-            })}
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center">
+                  Nenhum cliente encontrado.
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </div>
 
+      {/* Confirmação de Ações e Novo Cadastro */}
       <AlertDialog open={!!actionToConfirm} onOpenChange={() => setActionToConfirm(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmar Ação</AlertDialogTitle>
             <AlertDialogDescription>
-              {actionToConfirm?.action === 'send_password_reset'
-                ? `Enviar link de redefinição de senha para ${actionToConfirm?.client.email}?`
-                : `ATENÇÃO: Você vai DELETAR TODOS OS PEDIDOS de ${actionToConfirm?.client.email}. Ele voltará a ser 'Primeira Compra'.`}
+              {actionToConfirm?.action === 'resend_confirmation'
+                ? `Você tem certeza que deseja reenviar o e-mail de confirmação para ${actionToConfirm?.client.email}?`
+                : actionToConfirm?.action === 'send_password_reset'
+                ? `Você tem certeza que deseja enviar um link de redefinição de senha para ${actionToConfirm?.client.email}?`
+                : actionToConfirm?.action === 'mark_as_recurrent'
+                ? `Você tem certeza que deseja marcar o cliente ${actionToConfirm?.client.email} como recorrente? Isso removerá a restrição de PIX e permitirá outros métodos de pagamento.`
+                : `ATENÇÃO: Você está prestes a DELETAR PERMANENTEMENTE TODOS OS PEDIDOS do cliente ${actionToConfirm?.client.email}. Isso redefinirá o status de compra dele para 'Primeira Compra'. Esta ação é irreversível.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => actionToConfirm && userActionMutation.mutate({ action: actionToConfirm.action, targetUserId: actionToConfirm.client.id })}>Sim, Continuar</AlertDialogAction>
+            <AlertDialogAction
+              onClick={handleConfirmAction}
+              disabled={userActionMutation.isPending}
+            >
+              {userActionMutation.isPending ? "Executando..." : "Sim, Continuar"}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

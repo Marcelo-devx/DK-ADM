@@ -14,14 +14,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Loader2, Users, Calendar, User } from "lucide-react";
+import { Loader2, Users } from "lucide-react";
 
 interface ClientImportData {
   email: string;
   first_name: string;
   last_name: string;
-  gender: string;
-  date_of_birth: string;
   phone: string;
   city: string;
   password?: string;
@@ -44,51 +42,47 @@ export const ClientImportModal = ({
 }: ClientImportModalProps) => {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Users className="h-6 w-6" /> Confirmar Importação ({clientsToImport.length} Clientes)
           </DialogTitle>
           <DialogDescription>
-            Revise os dados antes de processar. Os campos de gênero e nascimento alimentarão seu Analytics.
+            Revise os dados abaixo. Se a senha não for fornecida, será definida como <strong>123456</strong>.
+            <br />
+            <span className="text-red-500 font-bold text-xs">Atenção: Usuários com e-mails já cadastrados serão ignorados.</span>
           </DialogDescription>
         </DialogHeader>
         
         <div className="border rounded-lg overflow-hidden">
           <Table>
-            <TableHeader className="bg-gray-50">
+            <TableHeader>
               <TableRow>
                 <TableHead>Email</TableHead>
-                <TableHead>Nome Completo</TableHead>
-                <TableHead>Gênero</TableHead>
-                <TableHead>Nascimento</TableHead>
+                <TableHead>Nome</TableHead>
+                <TableHead>Sobrenome</TableHead>
+                <TableHead>Telefone</TableHead>
                 <TableHead>Cidade</TableHead>
+                <TableHead>Senha</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {clientsToImport.slice(0, 50).map((client, index) => (
+              {clientsToImport.slice(0, 100).map((client, index) => (
                 <TableRow key={index}>
-                  <TableCell className="font-medium text-xs">{client.email}</TableCell>
-                  <TableCell className="text-xs">{client.first_name} {client.last_name}</TableCell>
-                  <TableCell className="text-xs">
-                    <span className="flex items-center gap-1">
-                        <User className="w-3 h-3 text-muted-foreground" />
-                        {client.gender || 'N/I'}
-                    </span>
+                  <TableCell className="font-medium">{client.email}</TableCell>
+                  <TableCell>{client.first_name}</TableCell>
+                  <TableCell>{client.last_name}</TableCell>
+                  <TableCell>{client.phone || '-'}</TableCell>
+                  <TableCell>{client.city || '-'}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">
+                    {client.password ? 'Definida' : 'Padrão (123456)'}
                   </TableCell>
-                  <TableCell className="text-xs">
-                    <span className="flex items-center gap-1">
-                        <Calendar className="w-3 h-3 text-muted-foreground" />
-                        {client.date_of_birth || '-'}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-xs">{client.city || '-'}</TableCell>
                 </TableRow>
               ))}
-              {clientsToImport.length > 50 && (
+              {clientsToImport.length > 100 && (
                 <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground italic bg-gray-50/50 py-4">
-                        ... e mais {clientsToImport.length - 50} clientes na lista.
+                    <TableCell colSpan={6} className="text-center text-muted-foreground italic">
+                        ... e mais {clientsToImport.length - 100} clientes.
                     </TableCell>
                 </TableRow>
               )}
@@ -100,11 +94,11 @@ export const ClientImportModal = ({
           <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
             Cancelar
           </Button>
-          <Button onClick={onConfirm} disabled={isSubmitting} className="bg-green-600 hover:bg-green-700 font-bold px-8">
+          <Button onClick={onConfirm} disabled={isSubmitting}>
             {isSubmitting ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Processando...
+                Importando...
               </>
             ) : (
               "Confirmar Importação"

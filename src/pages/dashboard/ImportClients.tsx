@@ -58,8 +58,6 @@ const ImportClientsPage = () => {
             email: row.email,
             first_name: row.nome || '',
             last_name: row.sobrenome || '',
-            gender: row.genero || 'Não Informado',
-            date_of_birth: row.datadenascimento || null,
             phone: row.telefone ? String(row.telefone) : '',
             cep: row.cep ? String(row.cep) : '',
             street: row.rua || '',
@@ -85,7 +83,7 @@ const ImportClientsPage = () => {
 
   const handleDownloadTemplate = () => {
     const headers = [
-        "Email", "Senha", "Nome", "Sobrenome", "Genero", "DataDeNascimento", "Telefone", "CEP", "Rua", "Numero", "Complemento", "Bairro", "Cidade", "Estado"
+        "Email", "Senha", "Nome", "Sobrenome", "Telefone", "CEP", "Rua", "Numero", "Complemento", "Bairro", "Cidade", "Estado"
     ];
     const worksheet = XLSX.utils.aoa_to_sheet([headers]);
     const workbook = XLSX.utils.book_new();
@@ -113,7 +111,7 @@ const ImportClientsPage = () => {
                     1. Baixar Modelo
                 </CardTitle>
                 <CardDescription>
-                    Comece baixando a planilha padrão com as colunas de **Gênero** e **Data de Nascimento**.
+                    Comece baixando a planilha padrão para preencher os dados dos seus clientes corretamente.
                 </CardDescription>
             </CardHeader>
             <CardContent>
@@ -158,32 +156,68 @@ const ImportClientsPage = () => {
               <TableHeader className="bg-gray-50">
                 <TableRow>
                   <TableHead className="min-w-[150px]">Email*</TableHead>
+                  <TableHead>Senha</TableHead>
                   <TableHead>Nome</TableHead>
-                  <TableHead>Gênero</TableHead>
-                  <TableHead>Nascimento</TableHead>
+                  <TableHead>Sobrenome</TableHead>
                   <TableHead>Telefone</TableHead>
+                  <TableHead>CEP</TableHead>
+                  <TableHead>Rua</TableHead>
+                  <TableHead>Numero</TableHead>
+                  <TableHead>Bairro</TableHead>
                   <TableHead>Cidade</TableHead>
+                  <TableHead>Estado</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 <TableRow>
                   <TableCell className="font-medium text-blue-600">joao@exemplo.com</TableCell>
-                  <TableCell>João Silva</TableCell>
-                  <TableCell>Masculino</TableCell>
-                  <TableCell>1990-05-15</TableCell>
+                  <TableCell className="text-muted-foreground italic text-xs">(vazio)</TableCell>
+                  <TableCell>João</TableCell>
+                  <TableCell>Silva</TableCell>
                   <TableCell>11999998888</TableCell>
+                  <TableCell>01001000</TableCell>
+                  <TableCell>Av. Paulista</TableCell>
+                  <TableCell>100</TableCell>
+                  <TableCell>Bela Vista</TableCell>
                   <TableCell>São Paulo</TableCell>
+                  <TableCell>SP</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium text-blue-600">maria@teste.com</TableCell>
+                  <TableCell>Muda123</TableCell>
+                  <TableCell>Maria</TableCell>
+                  <TableCell>Oliveira</TableCell>
+                  <TableCell>21988887777</TableCell>
+                  <TableCell>20040002</TableCell>
+                  <TableCell>Rua Rio Branco</TableCell>
+                  <TableCell>50</TableCell>
+                  <TableCell>Centro</TableCell>
+                  <TableCell>Rio de Janeiro</TableCell>
+                  <TableCell>RJ</TableCell>
                 </TableRow>
               </TableBody>
             </Table>
           </div>
           <div className="mt-4 text-sm bg-gray-50 p-4 rounded-lg border text-gray-600 space-y-2">
-            <p><span className="font-bold text-gray-900">Gênero:</span> Use 'Masculino', 'Feminino' ou 'Outro'.</p>
-            <p><span className="font-bold text-gray-900">Nascimento:</span> Use o formato <code className="bg-white px-1 border rounded">AAAA-MM-DD</code> (ex: 1995-12-31).</p>
+            <p><span className="font-bold text-red-600">* Email:</span> Campo obrigatório. Não pode haver e-mails duplicados.</p>
+            <p><span className="font-bold text-gray-900">Senha:</span> Opcional. Se deixar em branco, a senha padrão será <code className="bg-white px-2 py-0.5 rounded border border-gray-300 font-mono text-primary font-bold">123456</code>.</p>
+            <p><span className="font-bold text-gray-900">Telefone:</span> Apenas números, com DDD (ex: 11999999999).</p>
           </div>
         </CardContent>
       </Card>
 
+      <Alert className="bg-orange-50 border-orange-200">
+        <AlertCircle className="h-4 w-4 text-orange-600" />
+        <AlertTitle className="text-orange-800 font-bold">Importante</AlertTitle>
+        <AlertDescription className="text-orange-700 text-sm mt-1">
+            <ul className="list-disc pl-5 space-y-1">
+                <li>Se o cliente já existir no sistema (mesmo e-mail), ele será <strong>ignorado</strong> nesta importação.</li>
+                <li>Verifique se não há espaços em branco antes ou depois dos e-mails na sua planilha.</li>
+            </ul>
+        </AlertDescription>
+      </Alert>
+
+      {/* Modal de Importação */}
       <ClientImportModal 
         isOpen={isImportModalOpen} 
         onClose={() => setIsImportModalOpen(false)} 
