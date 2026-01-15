@@ -17,48 +17,67 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    // 1. Pegar associações de produtos (Venda Casada Real)
+    // 1. Associações de produtos (Venda Casada)
     const { data: associations } = await supabaseAdmin.rpc('get_product_pair_frequency');
 
-    // 2. Pegar clientes em risco (Recuperação Real)
+    // 2. Clientes em risco (Churn)
     const { data: churnRisk } = await supabaseAdmin.rpc('get_customers_at_risk');
 
-    // 3. Cálculo de Previsão de Estoque (Velocidade de Venda)
-    // Buscamos o que vendeu nos últimos 15 dias para projetar o futuro
+    // 3. Ranking VIP (Clientes que mais gastaram na história - LTV)
+    const { data: vips } = await supabaseAdmin
+        .from('profiles')
+        .select('first_name, last_name, points')
+        .order('points', { ascending: false })
+        .limit(5);
+
+    // 4. Previsão de Estoque e Lucratividade
     const { data: salesHistory } = await supabaseAdmin
         .from('order_items')
-        .select('item_id, quantity, name_at_purchase')
-        .gte('created_at', new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString());
+        .select('item_id, quantity, price_at_purchase')
+        .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
 
-    const { data: currentStock } = await supabaseAdmin
+    const { data: allProducts } = await supabaseAdmin
         .from('products')
-        .select('id, name, stock_quantity')
-        .gt('stock_quantity', 0);
+        .select('id, name, stock_quantity, price, cost_price, brand');
 
     const velocityMap = {};
+    const profitByBrand = {};
+    
     salesHistory?.forEach(item => {
         velocityMap[item.item_id] = (velocityMap[item.item_id] || 0) + item.quantity;
     });
 
-    const stockPredictions = currentStock?.map(p => {
-        const soldLast15Days = velocityMap[p.id] || 0;
-        const dailyRate = soldLast15Days / 15;
+    const inventoryAnalysis = allProducts?.map(p => {
+        const soldLast30Days = velocityMap[p.id] || 0;
+        const dailyRate = soldLast30Days / 30;
         const daysRemaining = dailyRate > 0 ? Math.floor(p.stock_quantity / dailyRate) : 999;
+        
+        // Lucro estimado (Preço Atual - Custo Atual) * Vendas
+        const unitMargin = p.price - (p.cost_price || 0);
+        const estMonthlyProfit = unitMargin * soldLast30Days;
+
+        if (p.brand) {
+            profitByBrand[p.brand] = (profitByBrand[p.brand] || 0) + estMonthlyProfit;
+        }
         
         return {
             name: p.name,
             current_stock: p.stock_quantity,
             days_remaining: daysRemaining,
-            daily_rate: dailyRate.toFixed(2)
+            daily_rate: dailyRate.toFixed(2),
+            profit_contribution: estMonthlyProfit
         };
-    }).filter(p => p.days_remaining < 60) // Só mostrar o que acaba em breve
-      .sort((a, b) => a.days_remaining - b.days_remaining)
-      .slice(0, 10);
+    });
 
     return new Response(JSON.stringify({
         associations: associations || [],
         churn: churnRisk || [],
-        inventory: stockPredictions || []
+        inventory: inventoryAnalysis?.filter(p => p.days_remaining < 45).sort((a,b) => a.days_remaining - b.days_remaining).slice(0, 8) || [],
+        vips: vips || [],
+        profitability: Object.entries(profitByBrand)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a,b) => b.value - a.value)
+            .slice(0, 5)
     }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
