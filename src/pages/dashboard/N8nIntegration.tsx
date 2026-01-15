@@ -139,6 +139,37 @@ const N8nIntegrationPage = () => {
   "status": "pending"
 }`
       },
+      { 
+        method: "WEBHOOK", 
+        name: "Campanha de Retenção (Disparo)", 
+        url: "Seu Endpoint N8N (Configurar na aba Webhooks)", 
+        desc: "Este é o JSON que o sistema enviará para o seu N8N quando você clicar em 'Disparar Campanha'. Use isso para configurar o nó 'Webhook' no N8N.",
+        request: `{
+  "event": "retention_campaign",
+  "campaign_size": 2,
+  "recipients": [
+    {
+      "client_id": "uuid-cliente-1",
+      "name": "João Silva",
+      "phone": "11999998888",
+      "email": "joao@email.com",
+      "coupon_code": "VOLTA10",
+      "discount_value": 10,
+      "valid_days": 7
+    },
+    {
+      "client_id": "uuid-cliente-2",
+      "name": "Maria Oliveira",
+      "phone": "21988887777",
+      "email": "maria@email.com",
+      "coupon_code": "VOLTA10",
+      "discount_value": 10,
+      "valid_days": 7
+    }
+  ]
+}`,
+        response: `200 OK`
+      },
   ];
 
   // --- Queries ---
@@ -289,18 +320,20 @@ const N8nIntegrationPage = () => {
                                 >
                                     <div className="flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 cursor-pointer transition-colors" onClick={() => toggleEndpoint(i)}>
                                         <div className="flex items-center gap-3 overflow-hidden">
-                                            <Badge className={`uppercase w-16 justify-center ${ep.method === 'GET' ? 'bg-blue-600' : 'bg-emerald-600'}`}>{ep.method}</Badge>
+                                            <Badge className={`uppercase w-20 justify-center ${ep.method === 'GET' ? 'bg-blue-600' : ep.method === 'WEBHOOK' ? 'bg-purple-600' : 'bg-emerald-600'}`}>{ep.method}</Badge>
                                             <span className="font-semibold text-sm truncate">{ep.url.replace(baseUrl, '')}</span>
                                             <span className="text-xs text-muted-foreground hidden sm:inline-block">- {ep.name}</span>
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            <span className="text-xs text-muted-foreground hidden sm:block">{ep.desc}</span>
+                                            <span className="text-xs text-muted-foreground hidden sm:block">{ep.desc.substring(0, 40)}...</span>
                                             {openEndpoints.includes(i) ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
                                         </div>
                                     </div>
 
                                     <CollapsibleContent>
                                         <div className="p-4 bg-slate-50 border-t space-y-4">
+                                            <p className="text-sm text-gray-600 mb-2">{ep.desc}</p>
+                                            
                                             <div className="flex items-center justify-between">
                                                 <span className="text-xs font-mono bg-white border px-2 py-1 rounded text-gray-600 w-full truncate select-all">{ep.url}</span>
                                                 <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); copyToClipboard(ep.url); }}><Copy className="w-3 h-3" /></Button>
@@ -309,7 +342,9 @@ const N8nIntegrationPage = () => {
                                             {ep.request && (
                                                 <div className="space-y-1">
                                                     <div className="flex justify-between items-center">
-                                                        <Label className="text-xs font-bold text-gray-700">Request Body (JSON)</Label>
+                                                        <Label className="text-xs font-bold text-gray-700">
+                                                            {ep.method === 'WEBHOOK' ? "Payload Enviado (Webhook Body)" : "Request Body (JSON)"}
+                                                        </Label>
                                                         <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => copyToClipboard(ep.request!)}>Copiar</Button>
                                                     </div>
                                                     <div className="bg-slate-900 text-slate-50 p-3 rounded-md font-mono text-xs overflow-x-auto">
@@ -351,6 +386,7 @@ const N8nIntegrationPage = () => {
                                         <SelectContent>
                                             <SelectItem value="order_created">Pedido Criado</SelectItem>
                                             <SelectItem value="payment_confirmed">Pagamento Confirmado</SelectItem>
+                                            <SelectItem value="retention_campaign">Campanha de Retenção</SelectItem>
                                             <SelectItem value="abandoned_cart">Carrinho Abandonado (Monitor)</SelectItem>
                                         </SelectContent>
                                     </Select>
