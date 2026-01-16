@@ -4,12 +4,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Webhook, Copy, ExternalLink, ShieldCheck, Truck, CreditCard, BellRing, ArrowLeftRight, Globe, Save, Loader2 } from "lucide-react";
+import { Webhook, Copy, ExternalLink, ShieldCheck, Truck, CreditCard, BellRing, ArrowLeftRight, Globe, Save, Loader2, Undo2 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { API_URL } from "@/data/constants";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const IncomingWebhooksPage = () => {
   const queryClient = useQueryClient();
@@ -155,97 +156,112 @@ const IncomingWebhooksPage = () => {
         </CardContent>
       </Card>
 
-      {/* SEÇÃO 1: WEBHOOKS (Servidor para Servidor) */}
-      <div>
-        <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-gray-700">
-            <Webhook className="w-5 h-5" /> Webhooks (Notificações)
-        </h2>
-        <div className="grid gap-6">
-            {webhooks.map((hook) => (
-            <Card key={hook.id} className="overflow-hidden">
-                <CardHeader className="bg-gray-50/50 border-b pb-4">
-                <div className="flex items-start gap-4">
-                    <div className="p-2 bg-white rounded-lg border shadow-sm">
-                        {hook.icon}
+      <Tabs defaultValue="webhooks" className="w-full">
+        <TabsList className="grid w-full grid-cols-2 lg:w-[400px]">
+          <TabsTrigger value="webhooks">
+            <Webhook className="w-4 h-4 mr-2" /> Webhooks
+          </TabsTrigger>
+          <TabsTrigger value="redirects">
+            <Undo2 className="w-4 h-4 mr-2" /> URLs de Retorno
+          </TabsTrigger>
+        </TabsList>
+
+        {/* ABA 1: WEBHOOKS */}
+        <TabsContent value="webhooks" className="mt-6 space-y-6">
+            <div className="flex flex-col gap-1 mb-4">
+                <h2 className="text-lg font-bold text-gray-700">Webhooks (Notificações)</h2>
+                <p className="text-sm text-muted-foreground">Configurações para receber atualizações automáticas dos serviços.</p>
+            </div>
+            
+            <div className="grid gap-6">
+                {webhooks.map((hook) => (
+                <Card key={hook.id} className="overflow-hidden">
+                    <CardHeader className="bg-gray-50/50 border-b pb-4">
+                    <div className="flex items-start gap-4">
+                        <div className="p-2 bg-white rounded-lg border shadow-sm">
+                            {hook.icon}
+                        </div>
+                        <div className="space-y-1">
+                            <CardTitle className="text-lg flex items-center gap-2">
+                                {hook.title}
+                            </CardTitle>
+                            <CardDescription>{hook.description}</CardDescription>
+                        </div>
                     </div>
-                    <div className="space-y-1">
-                        <CardTitle className="text-lg flex items-center gap-2">
-                            {hook.title}
-                        </CardTitle>
-                        <CardDescription>{hook.description}</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4 pt-6">
+                    <div className="flex gap-2">
+                        <div className="relative flex-1">
+                        <Input 
+                            readOnly 
+                            value={hook.url} 
+                            className="font-mono text-sm bg-slate-50 text-slate-700 border-slate-200" 
+                            onClick={(e) => e.currentTarget.select()}
+                        />
+                        </div>
+                        <Button variant="outline" onClick={() => copyToClipboard(hook.url)} className="shrink-0">
+                        <Copy className="w-4 h-4 mr-2" /> Copiar
+                        </Button>
                     </div>
-                </div>
+                    
+                    <div className="bg-blue-50 text-blue-800 text-xs p-3 rounded-md border border-blue-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                        <p className="flex-1"><strong>Onde colar:</strong> {hook.instructions}</p>
+                        {hook.docs !== "#" && (
+                            <a 
+                                href={hook.docs} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                className="text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 whitespace-nowrap shrink-0"
+                            >
+                                Abrir Site <ExternalLink className="w-3 h-3" />
+                            </a>
+                        )}
+                    </div>
+                    </CardContent>
+                </Card>
+                ))}
+            </div>
+        </TabsContent>
+
+        {/* ABA 2: REDIRECTS */}
+        <TabsContent value="redirects" className="mt-6 space-y-6">
+            <div className="flex flex-col gap-1 mb-4">
+                <h2 className="text-lg font-bold text-gray-700">URLs de Retorno (Fallback)</h2>
+                <p className="text-sm text-muted-foreground">Para onde o cliente é redirecionado após o pagamento.</p>
+            </div>
+
+            <Card>
+                <CardHeader className="bg-gray-50/50 border-b">
+                    <CardTitle className="text-base">Redirecionamento Pós-Pagamento</CardTitle>
+                    <CardDescription>
+                        Links baseados em: <strong className="text-primary">{cleanBase}</strong>. 
+                        Certifique-se de que este domínio está correto antes de configurar no gateway.
+                    </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4 pt-6">
-                <div className="flex gap-2">
-                    <div className="relative flex-1">
-                    <Input 
-                        readOnly 
-                        value={hook.url} 
-                        className="font-mono text-sm bg-slate-50 text-slate-700 border-slate-200" 
-                        onClick={(e) => e.currentTarget.select()}
-                    />
-                    </div>
-                    <Button variant="outline" onClick={() => copyToClipboard(hook.url)} className="shrink-0">
-                    <Copy className="w-4 h-4 mr-2" /> Copiar
-                    </Button>
-                </div>
-                
-                <div className="bg-blue-50 text-blue-800 text-xs p-3 rounded-md border border-blue-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                    <p className="flex-1"><strong>Onde colar:</strong> {hook.instructions}</p>
-                    {hook.docs !== "#" && (
-                        <a 
-                            href={hook.docs} 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
-                            className="text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 whitespace-nowrap shrink-0"
-                        >
-                            Abrir Site <ExternalLink className="w-3 h-3" />
-                        </a>
-                    )}
-                </div>
+                <CardContent className="space-y-6 pt-6">
+                    {redirects.map((r, i) => (
+                        <div key={i} className="space-y-2">
+                            <div className="flex justify-between">
+                                <span className="text-sm font-bold text-gray-700">{r.label}</span>
+                                <span className="text-xs text-muted-foreground">{r.desc}</span>
+                            </div>
+                            <div className="flex gap-2">
+                                <Input 
+                                    readOnly 
+                                    value={r.value} 
+                                    className="font-mono text-sm bg-slate-50 border-slate-200" 
+                                    onClick={(e) => e.currentTarget.select()}
+                                />
+                                <Button variant="ghost" size="icon" onClick={() => copyToClipboard(r.value)}>
+                                    <Copy className="w-4 h-4" />
+                                </Button>
+                            </div>
+                        </div>
+                    ))}
                 </CardContent>
             </Card>
-            ))}
-        </div>
-      </div>
-
-      {/* SEÇÃO 2: REDIRECTS (URLs de Retorno) */}
-      <div>
-        <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-gray-700">
-            <ArrowLeftRight className="w-5 h-5" /> URLs de Retorno (Back URLs / Fallback)
-        </h2>
-        <Card>
-            <CardHeader className="bg-gray-50/50 border-b">
-                <CardTitle className="text-base">Redirecionamento Pós-Pagamento</CardTitle>
-                <CardDescription>
-                    Links baseados em: <strong className="text-primary">{cleanBase}</strong>. 
-                    Certifique-se de que este domínio está correto antes de configurar no gateway.
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6 pt-6">
-                {redirects.map((r, i) => (
-                    <div key={i} className="space-y-2">
-                        <div className="flex justify-between">
-                            <span className="text-sm font-bold text-gray-700">{r.label}</span>
-                            <span className="text-xs text-muted-foreground">{r.desc}</span>
-                        </div>
-                        <div className="flex gap-2">
-                            <Input 
-                                readOnly 
-                                value={r.value} 
-                                className="font-mono text-sm bg-slate-50 border-slate-200" 
-                                onClick={(e) => e.currentTarget.select()}
-                            />
-                            <Button variant="ghost" size="icon" onClick={() => copyToClipboard(r.value)}>
-                                <Copy className="w-4 h-4" />
-                            </Button>
-                        </div>
-                    </div>
-                ))}
-            </CardContent>
-        </Card>
-      </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
