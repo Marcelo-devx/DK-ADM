@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { RetentionCampaignModal } from "@/components/dashboard/RetentionCampaignModal";
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import { LogisticsInsights } from "@/components/dashboard/LogisticsInsights";
 
 const MetaflowInsightsPage = () => {
   const navigate = useNavigate();
@@ -206,6 +207,9 @@ const MetaflowInsightsPage = () => {
             </CardContent>
         </Card>
       </div>
+
+      {/* SEÇÃO: INTEGRAÇÃO LOGÍSTICA (NOVO) */}
+      <LogisticsInsights />
 
       {/* NOVA SEÇÃO: MOMENTUM E HORÁRIOS */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4">
