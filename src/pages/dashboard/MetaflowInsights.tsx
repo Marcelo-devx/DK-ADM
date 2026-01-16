@@ -9,13 +9,15 @@ import { Button } from "@/components/ui/button";
 import { 
   Lightbulb, Package, Target, UserMinus, Plus, ArrowRight, 
   Sparkles, Crown, Wallet, Zap, RefreshCw, AlertTriangle,
-  TrendingUp, TrendingDown, Clock, BarChart4
+  TrendingUp, TrendingDown, Clock, BarChart4, AlertOctagon,
+  Hourglass
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { RetentionCampaignModal } from "@/components/dashboard/RetentionCampaignModal";
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const MetaflowInsightsPage = () => {
   const navigate = useNavigate();
@@ -49,6 +51,50 @@ const MetaflowInsightsPage = () => {
 
   if (isLoading) return <div className="p-8 space-y-4"><Skeleton className="h-20 w-full" /><div className="grid grid-cols-1 md:grid-cols-3 gap-6"><Skeleton className="h-96" /><Skeleton className="h-96" /><Skeleton className="h-96" /></div></div>;
 
+  // Separação dos itens de inventário
+  const inventoryItems = insights?.inventory || [];
+  const outOfStockItems = inventoryItems.filter((item: any) => item.current_stock === 0);
+  const lowStockItems = inventoryItems.filter((item: any) => item.current_stock > 0);
+
+  // Componente auxiliar para renderizar item de estoque
+  const InventoryItemRow = ({ item }: { item: any }) => {
+    const isStagnant = item.status_type === 'stagnant_low';
+    const isOut = item.current_stock === 0;
+
+    return (
+        <div className={cn(
+            "flex items-center justify-between p-3 rounded-xl border transition-colors group",
+            isOut ? "border-red-100 bg-red-50/30 hover:bg-red-50" : "border-gray-100 bg-gray-50/50 hover:bg-gray-50"
+        )}>
+            <div className="overflow-hidden">
+                <p className="text-sm font-bold text-gray-800 truncate w-32 md:w-40" title={item.name}>{item.name}</p>
+                <p className="text-[11px] text-muted-foreground font-medium">
+                    {isStagnant ? (
+                        <span className="flex items-center text-orange-600 gap-1"><AlertTriangle className="w-3 h-3" /> Parado (Baixo)</span>
+                    ) : (
+                        `${item.daily_rate} vendas / dia`
+                    )}
+                </p>
+            </div>
+            <div className="text-right">
+                {isOut ? (
+                    <Badge variant="destructive" className="text-[10px] font-black h-5 px-2">
+                        ESGOTADO
+                    </Badge>
+                ) : isStagnant ? (
+                    <Badge variant="outline" className="text-[10px] font-black text-orange-600 border-orange-200 bg-orange-50">
+                        {item.current_stock} UN RESTANTES
+                    </Badge>
+                ) : (
+                    <Badge variant="outline" className={cn("text-[10px] font-black border-orange-200 text-orange-600 bg-white")}>
+                        ACABA EM {item.days_remaining}D
+                    </Badge>
+                )}
+            </div>
+        </div>
+    );
+  };
+
   return (
     <div className="space-y-8 pb-20">
       {/* HEADER INTEGRADO */}
@@ -71,58 +117,62 @@ const MetaflowInsightsPage = () => {
                 Atualizar
             </Button>
             <Badge className="bg-blue-600 text-white font-bold px-3 py-1">IA ATIVA</Badge>
-            <Badge variant="outline" className="text-gray-500 font-bold px-3 py-1">v3.0</Badge>
+            <Badge variant="outline" className="text-gray-500 font-bold px-3 py-1">v3.1</Badge>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         
-        {/* COLUNA 1: REPOSIÇÃO */}
-        <Card className="border-none shadow-md bg-white flex flex-col h-full">
-            <div className="h-1 bg-orange-500 rounded-t-lg" />
-            <CardHeader className="pb-4">
+        {/* COLUNA 1: REPOSIÇÃO (COM ABAS) */}
+        <Card className="border-none shadow-md bg-white flex flex-col h-full overflow-hidden">
+            <div className="h-1 bg-orange-500" />
+            <CardHeader className="pb-2">
                 <div className="flex justify-between items-start">
                     <div className="p-2.5 bg-orange-50 rounded-xl text-orange-600 border border-orange-100"><Package className="w-6 h-6" /></div>
                     <Badge variant="secondary" className="bg-orange-100 text-orange-700 font-bold rounded-full px-3">Reposição</Badge>
                 </div>
-                <CardTitle className="pt-6 text-xl font-bold text-gray-800">Alertas de Estoque</CardTitle>
-                <CardDescription className="text-gray-500">Previsão baseada em giro e níveis críticos.</CardDescription>
+                <CardTitle className="pt-4 text-xl font-bold text-gray-800">Alertas de Estoque</CardTitle>
+                <CardDescription className="text-gray-500">Gestão de ruptura e previsão de demanda.</CardDescription>
             </CardHeader>
-            <CardContent className="flex-1 space-y-4">
-                {insights?.inventory?.length > 0 ? (
-                    insights.inventory.map((item: any, i: number) => {
-                        const isStagnant = item.status_type === 'stagnant_low';
-                        return (
-                            <div key={i} className="flex items-center justify-between p-3 rounded-xl border border-gray-100 bg-gray-50/50 hover:bg-gray-50 transition-colors group">
-                                <div className="overflow-hidden">
-                                    <p className="text-sm font-bold text-gray-800 truncate w-32 md:w-40" title={item.name}>{item.name}</p>
-                                    <p className="text-[11px] text-muted-foreground font-medium">
-                                        {isStagnant ? (
-                                            <span className="flex items-center text-orange-600 gap-1"><AlertTriangle className="w-3 h-3" /> Pouco estoque (Sem giro)</span>
-                                        ) : (
-                                            `${item.daily_rate} vendas / dia`
-                                        )}
-                                    </p>
-                                </div>
-                                <div className="text-right">
-                                    {isStagnant ? (
-                                        <Badge variant="outline" className="text-[10px] font-black text-red-600 border-red-200 bg-red-50">
-                                            {item.current_stock} UN RESTANTES
-                                        </Badge>
-                                    ) : (
-                                        <Badge variant={item.days_remaining <= 3 ? "destructive" : "outline"} className={cn("text-[10px] font-black", item.days_remaining > 3 && "text-orange-600 border-orange-200")}>
-                                            {item.days_remaining <= 0 ? "ESGOTADO" : `ACABA EM ${item.days_remaining}D`}
-                                        </Badge>
-                                    )}
-                                </div>
-                            </div>
-                        );
-                    })
-                ) : (
-                    <div className="py-20 text-center">
-                        <p className="text-sm text-muted-foreground italic">Estoque saudável! Nenhum risco detectado.</p>
+            <CardContent className="flex-1 p-0">
+                <Tabs defaultValue="esgotados" className="w-full flex flex-col h-full">
+                    <div className="px-6 mb-2">
+                        <TabsList className="w-full grid grid-cols-2 bg-gray-100/80 p-1">
+                            <TabsTrigger value="esgotados" className="text-xs font-bold data-[state=active]:bg-white data-[state=active]:text-red-600 data-[state=active]:shadow-sm">
+                                <AlertOctagon className="w-3 h-3 mr-1.5" /> Esgotados ({outOfStockItems.length})
+                            </TabsTrigger>
+                            <TabsTrigger value="previsao" className="text-xs font-bold data-[state=active]:bg-white data-[state=active]:text-orange-600 data-[state=active]:shadow-sm">
+                                <Hourglass className="w-3 h-3 mr-1.5" /> Baixo ({lowStockItems.length})
+                            </TabsTrigger>
+                        </TabsList>
                     </div>
-                )}
+
+                    <div className="flex-1 px-6 pb-6 overflow-y-auto max-h-[400px] min-h-[300px]">
+                        <TabsContent value="esgotados" className="space-y-3 mt-2 data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:slide-in-from-left-2">
+                            {outOfStockItems.length > 0 ? (
+                                outOfStockItems.map((item: any, i: number) => <InventoryItemRow key={i} item={item} />)
+                            ) : (
+                                <div className="h-full flex flex-col items-center justify-center text-center py-10 opacity-60">
+                                    <Package className="w-12 h-12 text-green-500 mb-2" />
+                                    <p className="text-sm font-bold text-gray-600">Nenhum produto esgotado!</p>
+                                    <p className="text-xs text-gray-400">Seu estoque está saudável.</p>
+                                </div>
+                            )}
+                        </TabsContent>
+
+                        <TabsContent value="previsao" className="space-y-3 mt-2 data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:slide-in-from-right-2">
+                            {lowStockItems.length > 0 ? (
+                                lowStockItems.map((item: any, i: number) => <InventoryItemRow key={i} item={item} />)
+                            ) : (
+                                <div className="h-full flex flex-col items-center justify-center text-center py-10 opacity-60">
+                                    <Clock className="w-12 h-12 text-gray-300 mb-2" />
+                                    <p className="text-sm font-bold text-gray-600">Sem previsões de ruptura.</p>
+                                    <p className="text-xs text-gray-400">Os produtos ativos têm estoque suficiente para +45 dias.</p>
+                                </div>
+                            )}
+                        </TabsContent>
+                    </div>
+                </Tabs>
             </CardContent>
         </Card>
 
