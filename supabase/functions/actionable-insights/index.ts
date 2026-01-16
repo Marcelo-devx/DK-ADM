@@ -42,9 +42,13 @@ serve(async (req) => {
         .select('item_id, quantity, price_at_purchase, created_at')
         .gte('created_at', thirtyDaysAgo.toISOString());
 
+    // Busca produtos E variações
     const { data: allProducts } = await supabaseAdmin
         .from('products')
-        .select('id, name, stock_quantity, price, cost_price, brand');
+        .select(`
+            id, name, stock_quantity, price, cost_price, brand,
+            product_variants (id, stock_quantity, flavors(name), volume_ml, color, cost_price, price)
+        `);
 
     // --- CÁLCULOS ---
     const velocityMap = {};      // Vendas totais 30d (para estoque)
@@ -57,11 +61,10 @@ serve(async (req) => {
         const itemDate = new Date(item.created_at);
         const qty = item.quantity;
 
-        // Velocity 30d
+        // Velocity 30d (Agrupado por Produto Pai para simplicidade de tendência)
         velocityMap[item.item_id] = (velocityMap[item.item_id] || 0) + qty;
 
-        // Horário de Pico (acumulado dos últimos 30 dias)
-        // Ajuste fuso horário (simplificado -3h Brasil)
+        // Horário de Pico
         let hour = itemDate.getHours() - 3;
         if (hour < 0) hour += 24;
         hoursMap[hour] += qty;
@@ -74,73 +77,112 @@ serve(async (req) => {
         }
     });
 
-    // Processamento de Produtos
-    const inventoryAnalysis = allProducts?.map(p => {
-        // --- Análise de Estoque ---
+    const alertsCandidates = [];
+    const trendCandidates = [];
+
+    allProducts?.forEach(p => {
+        // Métricas do Produto Pai
         const soldLast30Days = velocityMap[p.id] || 0;
         const dailyRate = soldLast30Days / 30;
+        const thisWeek = salesThisWeek[p.id] || 0;
+        const lastWeek = salesLastWeek[p.id] || 0;
         
-        let daysRemaining = 999;
-        let status = 'ok';
-
-        if (dailyRate > 0) {
-            daysRemaining = Math.floor(p.stock_quantity / dailyRate);
-            status = 'active';
+        let growthPercent = 0;
+        if (lastWeek > 0) {
+            growthPercent = ((thisWeek - lastWeek) / lastWeek) * 100;
+        } else if (thisWeek > 0) {
+            growthPercent = 100; 
         }
-        
-        // --- Análise de Lucro ---
+
+        // 1. PROFITABILITY (Brand) - Usa dados do pai
         const unitMargin = p.price - (p.cost_price || 0);
         const estMonthlyProfit = unitMargin * soldLast30Days;
-
         if (p.brand) {
             profitByBrand[p.brand] = (profitByBrand[p.brand] || 0) + estMonthlyProfit;
         }
 
-        // --- Análise de Tendência (Growth) ---
-        const thisWeek = salesThisWeek[p.id] || 0;
-        const lastWeek = salesLastWeek[p.id] || 0;
-        let growthPercent = 0;
-
-        if (lastWeek > 0) {
-            growthPercent = ((thisWeek - lastWeek) / lastWeek) * 100;
-        } else if (thisWeek > 0) {
-            growthPercent = 100; // Novo ou explodiu do zero
-        }
-
-        return {
+        // 2. TRENDS (Product Level)
+        trendCandidates.push({
             id: p.id,
             name: p.name,
-            current_stock: p.stock_quantity,
-            days_remaining: daysRemaining,
-            daily_rate: dailyRate.toFixed(2),
-            profit_contribution: estMonthlyProfit,
-            status_type: status,
             growth: growthPercent,
             sales_this_week: thisWeek
-        };
+        });
+
+        // 3. INVENTORY ALERTS (Variant Level Granularity)
+        const variants = p.product_variants || [];
+        
+        if (variants.length > 0) {
+            // Se tem variações, analisa cada uma individualmente
+            variants.forEach(v => {
+                // Se o produto pai tem giro (dailyRate > 0), assumimos que as variações precisam de estoque.
+                // Estimativa: Dividimos o giro do pai pelo nº de variações para uma média simples de "dias restantes".
+                if (dailyRate > 0) {
+                    const estimatedVariantRate = dailyRate / variants.length; 
+                    let daysRemaining = 999;
+                    
+                    if (estimatedVariantRate > 0) {
+                        daysRemaining = Math.floor(v.stock_quantity / estimatedVariantRate);
+                    } else if (v.stock_quantity === 0) {
+                        daysRemaining = 0; // Acabou e produto tem giro
+                    }
+
+                    // Formata Nome: Produto - Sabor - Cor
+                    let vName = p.name;
+                    const details = [];
+                    if (v.flavors?.name) details.push(v.flavors.name);
+                    if (v.color) details.push(v.color);
+                    if (v.volume_ml) details.push(v.volume_ml + 'ml');
+                    if (details.length > 0) vName += ` (${details.join(' - ')})`;
+
+                    alertsCandidates.push({
+                        id: p.id,
+                        variant_id: v.id,
+                        name: vName,
+                        current_stock: v.stock_quantity,
+                        days_remaining: daysRemaining,
+                        daily_rate: dailyRate.toFixed(2), // Mostra taxa do pai como contexto de demanda
+                        status_type: daysRemaining < 45 ? 'active' : 'ok'
+                    });
+                }
+            });
+        } else {
+            // Produto Simples (Sem variação)
+            if (dailyRate > 0) {
+                const daysRemaining = Math.floor(p.stock_quantity / dailyRate);
+                alertsCandidates.push({
+                    id: p.id,
+                    name: p.name,
+                    current_stock: p.stock_quantity,
+                    days_remaining: daysRemaining,
+                    daily_rate: dailyRate.toFixed(2),
+                    status_type: daysRemaining < 45 ? 'active' : 'ok'
+                });
+            }
+        }
     });
 
-    // Filtros Finais
+    // --- FILTRAGEM FINAL ---
     
-    // 1. Alertas de Estoque (Acaba em < 45 dias)
-    const alerts = inventoryAnalysis
-        ?.filter(p => p.days_remaining < 45 && p.daily_rate > 0)
+    // Alertas: Ordena por urgência (menos dias restantes)
+    const alerts = alertsCandidates
+        .filter(a => a.days_remaining < 45)
         .sort((a,b) => a.days_remaining - b.days_remaining)
-        .slice(0, 8) || [];
+        .slice(0, 8);
 
-    // 2. Em Alta (Trending Up) - Crescimento > 20% e venda relevante
-    const trendingUp = inventoryAnalysis
-        ?.filter(p => p.growth >= 20 && p.sales_this_week >= 3)
+    // Em Alta
+    const trendingUp = trendCandidates
+        .filter(p => p.growth >= 20 && p.sales_this_week >= 3)
         .sort((a,b) => b.growth - a.growth)
-        .slice(0, 5) || [];
+        .slice(0, 5);
 
-    // 3. Esfriando (Trending Down) - Queda > 20% e tinha venda antes
-    const coolingDown = inventoryAnalysis
-        ?.filter(p => p.growth <= -20 && p.sales_this_week < 5) // Caindo e vendendo pouco agora
-        .sort((a,b) => a.growth - b.growth) // Menores crescimentos (mais negativos) primeiro
-        .slice(0, 5) || [];
+    // Esfriando
+    const coolingDown = trendCandidates
+        .filter(p => p.growth <= -20 && p.sales_this_week < 5)
+        .sort((a,b) => a.growth - b.growth)
+        .slice(0, 5);
 
-    // 4. Horários de Pico Formatados
+    // Horários de Pico
     const peakHours = hoursMap.map((count, hour) => ({
         hour: `${hour}h`,
         orders: count
