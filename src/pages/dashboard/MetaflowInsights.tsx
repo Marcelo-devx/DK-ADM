@@ -10,7 +10,7 @@ import {
   Lightbulb, Package, Target, UserMinus, Plus, ArrowRight, 
   Sparkles, Crown, Wallet, Zap, RefreshCw, AlertTriangle,
   TrendingUp, TrendingDown, Clock, BarChart4, AlertOctagon,
-  Hourglass
+  Hourglass, Brain, Calculator, History, LineChart
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -335,7 +335,7 @@ const MetaflowInsightsPage = () => {
         </Card>
       </div>
 
-      {/* DASHBOARD DE LTV E MARGEM (Mantido como estava) */}
+      {/* DASHBOARD DE LTV E MARGEM */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4">
             {/* RANKING VIP */}
             <Card className="border-none shadow-md bg-white">
@@ -390,6 +390,54 @@ const MetaflowInsightsPage = () => {
                 </CardContent>
             </Card>
       </div>
+
+      {/* SEÇÃO DIDÁTICA: COMO FUNCIONA */}
+      <Card className="bg-slate-50 border-dashed border-2 border-slate-200 mt-12 mb-8">
+        <CardHeader className="border-b border-dashed border-slate-200 pb-4">
+            <CardTitle className="text-base text-slate-700 font-bold flex items-center gap-2">
+                <Brain className="w-5 h-5" /> Entenda os Bastidores da Inteligência
+            </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-blue-600 font-bold text-sm">
+                        <Target className="w-4 h-4" /> Análise de Cestas (Cross-sell)
+                    </div>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                        O algoritmo analisa o histórico de todos os pedidos para encontrar produtos que frequentemente são comprados juntos, sugerindo a criação de Kits promocionais.
+                    </p>
+                </div>
+
+                <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-orange-600 font-bold text-sm">
+                        <Calculator className="w-4 h-4" /> Previsão de Ruptura
+                    </div>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                        Calculamos a velocidade média de vendas diárias (velocity) de cada item nos últimos 30 dias para estimar exatamente em quantos dias o estoque atual vai acabar.
+                    </p>
+                </div>
+
+                <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-rose-600 font-bold text-sm">
+                        <History className="w-4 h-4" /> Radar de Churn
+                    </div>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                        Identificamos clientes que tinham um padrão de compra frequente mas que não realizam novos pedidos há mais de 30 dias, sinalizando risco de perda.
+                    </p>
+                </div>
+
+                <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-teal-600 font-bold text-sm">
+                        <LineChart className="w-4 h-4" /> Momentum de Vendas
+                    </div>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                        Comparamos o volume de vendas dos últimos 7 dias com a semana anterior para detectar tendências de alta (trending) ou queda (cooling) antes que sejam óbvias.
+                    </p>
+                </div>
+            </div>
+        </CardContent>
+      </Card>
 
       <RetentionCampaignModal isOpen={isRetentionModalOpen} onClose={() => setIsRetentionModalOpen(false)} />
     </div>
