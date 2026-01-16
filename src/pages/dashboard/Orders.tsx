@@ -255,8 +255,9 @@ const OrdersPage = () => {
               <TableHead>Data</TableHead>
               <TableHead>Cliente</TableHead>
               <TableHead>Valor Total</TableHead>
-              <TableHead>Status Pagto</TableHead>
+              <TableHead>Status</TableHead>
               <TableHead>Entrega</TableHead>
+              <TableHead>Origem Pagto</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
@@ -301,9 +302,6 @@ const OrdersPage = () => {
                     <TableCell className="font-bold">{formatCurrency(order.total_price)}</TableCell>
                     <TableCell>
                         <div className="flex flex-col gap-1">
-                            <Badge variant="outline" className={cn(isPix ? "bg-cyan-50 text-cyan-700 border-cyan-200" : "bg-purple-50 text-purple-700 border-purple-200")}>
-                                {order.payment_method || 'Pix'}
-                            </Badge>
                             {needsValidation ? (
                                 <Badge variant="default" className="bg-orange-500 hover:bg-orange-600 text-[10px] gap-1">
                                     <AlertCircle className="w-3 h-3" /> Conferir Whats
@@ -321,6 +319,11 @@ const OrdersPage = () => {
                             order.delivery_status === 'Despachado' && "bg-blue-100 text-blue-800 animate-pulse"
                         )}>
                             {order.delivery_status}
+                        </Badge>
+                    </TableCell>
+                    <TableCell>
+                        <Badge variant="outline" className={cn(isPix ? "bg-cyan-50 text-cyan-700 border-cyan-200" : "bg-purple-50 text-purple-700 border-purple-200")}>
+                            {order.payment_method || 'Pix'}
                         </Badge>
                     </TableCell>
                     <TableCell className="text-right">
