@@ -3,24 +3,54 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Webhook, Copy, ExternalLink, ShieldCheck, Truck, CreditCard, BellRing, ArrowLeftRight } from "lucide-react";
-import { showSuccess } from "@/utils/toast";
+import { Label } from "@/components/ui/label";
+import { Webhook, Copy, ExternalLink, ShieldCheck, Truck, CreditCard, BellRing, ArrowLeftRight, Globe, Save, Loader2 } from "lucide-react";
+import { showSuccess, showError } from "@/utils/toast";
 import { API_URL } from "@/data/constants";
 import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 const IncomingWebhooksPage = () => {
-  const [origin, setOrigin] = useState("");
+  const queryClient = useQueryClient();
+  const [baseUrl, setBaseUrl] = useState("");
+
+  // Busca a URL salva no banco ou usa a atual
+  const { data: savedUrl, isLoading } = useQuery({
+    queryKey: ["siteBaseUrl"],
+    queryFn: async () => {
+      const { data } = await supabase.from("app_settings").select("value").eq("key", "site_url").single();
+      return data?.value;
+    }
+  });
 
   useEffect(() => {
-    // Captura o domínio atual (ex: https://sua-loja.vercel.app)
-    if (typeof window !== "undefined") {
-      setOrigin(window.location.origin);
+    if (savedUrl) {
+        setBaseUrl(savedUrl);
+    } else if (typeof window !== "undefined") {
+        setBaseUrl(window.location.origin);
     }
-  }, []);
+  }, [savedUrl]);
+
+  const saveUrlMutation = useMutation({
+    mutationFn: async (url: string) => {
+        // Remove barra final se houver
+        const cleanUrl = url.replace(/\/$/, "");
+        const { error } = await supabase.from("app_settings").upsert({ key: "site_url", value: cleanUrl }, { onConflict: "key" });
+        if (error) throw error;
+        return cleanUrl;
+    },
+    onSuccess: (cleanUrl) => {
+        queryClient.invalidateQueries({ queryKey: ["siteBaseUrl"] });
+        setBaseUrl(cleanUrl);
+        showSuccess("URL base salva!");
+    },
+    onError: (err: any) => showError(err.message)
+  });
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    showSuccess("URL copiada para a área de transferência!");
+    showSuccess("Copiado!");
   };
 
   const webhooks = [
@@ -62,20 +92,23 @@ const IncomingWebhooksPage = () => {
     }
   ];
 
+  // Garante que a URL base não tenha barra no final para concatenar corretamente
+  const cleanBase = baseUrl.replace(/\/$/, "");
+
   const redirects = [
     {
       label: "URL de Sucesso (Back URL Success)",
-      value: `${origin}/meus-pedidos`,
+      value: `${cleanBase}/meus-pedidos`,
       desc: "Para onde o cliente vai após pagar com sucesso."
     },
     {
       label: "URL de Pendência (Back URL Pending)",
-      value: `${origin}/meus-pedidos`,
+      value: `${cleanBase}/meus-pedidos`,
       desc: "Para onde o cliente vai se o pagamento estiver em análise."
     },
     {
       label: "URL de Falha (Back URL Failure)",
-      value: `${origin}/`,
+      value: `${cleanBase}/`,
       desc: "Para onde o cliente vai se o pagamento falhar ou for cancelado."
     }
   ];
@@ -90,6 +123,37 @@ const IncomingWebhooksPage = () => {
           URLs necessárias para conectar seus gateways de pagamento e logística.
         </p>
       </div>
+
+      {/* SEÇÃO 0: CONFIGURAÇÃO DE URL BASE */}
+      <Card className="border-blue-200 bg-blue-50/20">
+        <CardContent className="p-4 flex flex-col md:flex-row items-end md:items-center gap-4">
+            <div className="flex-1 space-y-1 w-full">
+                <Label className="text-xs font-bold uppercase text-blue-700 flex items-center gap-1">
+                    <Globe className="w-3 h-3" /> Domínio da Loja (Produção)
+                </Label>
+                <p className="text-xs text-muted-foreground mb-2">
+                    Defina o endereço real do seu site (ex: https://sualoja.com) para gerar os links de retorno corretos.
+                </p>
+                <div className="flex gap-2">
+                    <Input 
+                        value={baseUrl} 
+                        onChange={(e) => setBaseUrl(e.target.value)} 
+                        placeholder="https://seu-dominio.com"
+                        className="bg-white"
+                    />
+                    <Button 
+                        onClick={() => saveUrlMutation.mutate(baseUrl)} 
+                        disabled={saveUrlMutation.isPending}
+                        variant="default"
+                        className="bg-blue-600 hover:bg-blue-700 text-white shrink-0"
+                    >
+                        {saveUrlMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                        Salvar URL
+                    </Button>
+                </div>
+            </div>
+        </CardContent>
+      </Card>
 
       {/* SEÇÃO 1: WEBHOOKS (Servidor para Servidor) */}
       <div>
@@ -154,7 +218,10 @@ const IncomingWebhooksPage = () => {
         <Card>
             <CardHeader className="bg-gray-50/50 border-b">
                 <CardTitle className="text-base">Redirecionamento Pós-Pagamento</CardTitle>
-                <CardDescription>Configure estas URLs no seu Gateway para trazer o cliente de volta à loja após o checkout.</CardDescription>
+                <CardDescription>
+                    Links baseados em: <strong className="text-primary">{cleanBase}</strong>. 
+                    Certifique-se de que este domínio está correto antes de configurar no gateway.
+                </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6 pt-6">
                 {redirects.map((r, i) => (
@@ -167,7 +234,7 @@ const IncomingWebhooksPage = () => {
                             <Input 
                                 readOnly 
                                 value={r.value} 
-                                className="font-mono text-sm bg-slate-50" 
+                                className="font-mono text-sm bg-slate-50 border-slate-200" 
                                 onClick={(e) => e.currentTarget.select()}
                             />
                             <Button variant="ghost" size="icon" onClick={() => copyToClipboard(r.value)}>
