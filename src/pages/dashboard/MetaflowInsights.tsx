@@ -9,13 +9,13 @@ import { Button } from "@/components/ui/button";
 import { 
   Lightbulb, Package, Target, UserMinus, Plus, ArrowRight, 
   Sparkles, Crown, Wallet, Zap, RefreshCw, AlertTriangle,
-  TrendingUp, TrendingDown, Clock, BarChart4, Users
+  TrendingUp, TrendingDown, Clock, BarChart4
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { RetentionCampaignModal } from "@/components/dashboard/RetentionCampaignModal";
-import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from "recharts";
+import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 
 const MetaflowInsightsPage = () => {
   const navigate = useNavigate();
@@ -47,15 +47,6 @@ const MetaflowInsightsPage = () => {
      setIsRetentionModalOpen(true);
   };
 
-  // Preparar dados para o gráfico RFM
-  const rfmData = insights?.rfm ? [
-    { name: 'Campeões', value: insights.rfm.champions.count, color: '#10b981' }, // Verde
-    { name: 'Fiéis', value: insights.rfm.loyal.count, color: '#3b82f6' }, // Azul
-    { name: 'Potenciais', value: insights.rfm.potential.count, color: '#f59e0b' }, // Amarelo
-    { name: 'Em Risco', value: insights.rfm.at_risk.count, color: '#f97316' }, // Laranja
-    { name: 'Hibernando', value: insights.rfm.hibernating.count, color: '#ef4444' }, // Vermelho
-  ] : [];
-
   if (isLoading) return <div className="p-8 space-y-4"><Skeleton className="h-20 w-full" /><div className="grid grid-cols-1 md:grid-cols-3 gap-6"><Skeleton className="h-96" /><Skeleton className="h-96" /><Skeleton className="h-96" /></div></div>;
 
   return (
@@ -80,7 +71,7 @@ const MetaflowInsightsPage = () => {
                 Atualizar
             </Button>
             <Badge className="bg-blue-600 text-white font-bold px-3 py-1">IA ATIVA</Badge>
-            <Badge variant="outline" className="text-gray-500 font-bold px-3 py-1">v3.1</Badge>
+            <Badge variant="outline" className="text-gray-500 font-bold px-3 py-1">v3.0</Badge>
         </div>
       </div>
 
@@ -176,7 +167,7 @@ const MetaflowInsightsPage = () => {
             </CardContent>
         </Card>
 
-        {/* COLUNA 3: RETENÇÃO (CHURN) */}
+        {/* COLUNA 3: RETENÇÃO */}
         <Card className="border-none shadow-md bg-white flex flex-col h-full">
             <div className="h-1 bg-rose-500 rounded-t-lg" />
             <CardHeader className="pb-4">
@@ -216,47 +207,14 @@ const MetaflowInsightsPage = () => {
         </Card>
       </div>
 
-      {/* SEÇÃO SEGMENTAÇÃO RFM (NOVA) */}
+      {/* NOVA SEÇÃO: MOMENTUM E HORÁRIOS */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4">
-        <Card className="border-none shadow-md bg-white">
-            <CardHeader className="border-b bg-gray-50/50">
-                <CardTitle className="text-lg font-black uppercase text-gray-700 flex items-center gap-2">
-                    <Users className="w-5 h-5 text-indigo-600" /> Segmentação RFM
-                </CardTitle>
-                <CardDescription>Distribuição da base de clientes por comportamento.</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-6 h-[300px]">
-                {rfmData.length > 0 && rfmData.some(d => d.value > 0) ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                            <Pie 
-                                data={rfmData} 
-                                innerRadius={60} 
-                                outerRadius={90} 
-                                paddingAngle={5} 
-                                dataKey="value"
-                            >
-                                {rfmData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={entry.color} />
-                                ))}
-                            </Pie>
-                            <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
-                            <Legend verticalAlign="middle" align="right" layout="vertical" iconType="circle" />
-                        </PieChart>
-                    </ResponsiveContainer>
-                ) : (
-                    <div className="h-full flex items-center justify-center text-muted-foreground">
-                        Sem dados suficientes para segmentação.
-                    </div>
-                )}
-            </CardContent>
-        </Card>
-
+        
         {/* Gráfico de Horários de Pico */}
         <Card className="border-none shadow-md bg-white">
             <CardHeader className="border-b bg-gray-50/50">
                 <CardTitle className="text-lg font-black uppercase text-gray-700 flex items-center gap-2">
-                    <Clock className="w-5 h-5 text-purple-600" /> Horários de Pico (30 Dias)
+                    <Clock className="w-5 h-5 text-purple-600" /> Horários de Pico (Últimos 30 Dias)
                 </CardTitle>
                 <CardDescription>Volume de pedidos por hora do dia.</CardDescription>
             </CardHeader>
@@ -278,54 +236,82 @@ const MetaflowInsightsPage = () => {
                 )}
             </CardContent>
         </Card>
+
+        {/* Listas de Trending */}
+        <Card className="border-none shadow-md bg-white">
+            <CardHeader className="border-b bg-gray-50/50">
+                <CardTitle className="text-lg font-black uppercase text-gray-700 flex items-center gap-2">
+                    <BarChart4 className="w-5 h-5 text-teal-600" /> Momentum de Vendas
+                </CardTitle>
+                <CardDescription>Variação de vendas nos últimos 7 dias vs semana anterior.</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
+                
+                {/* Em Alta */}
+                <div className="space-y-3">
+                    <h4 className="text-xs font-black uppercase text-green-700 flex items-center gap-1 mb-2">
+                        <TrendingUp className="w-4 h-4" /> Em Alta (Trending)
+                    </h4>
+                    {insights?.trends?.up?.length > 0 ? (
+                        insights.trends.up.map((item: any, i: number) => (
+                            <div key={i} className="flex justify-between items-center text-sm border-b border-green-100 pb-2 last:border-0">
+                                <span className="font-medium truncate max-w-[120px]" title={item.name}>{item.name}</span>
+                                <Badge className="bg-green-100 text-green-800 border-none font-bold">+{item.growth.toFixed(0)}%</Badge>
+                            </div>
+                        ))
+                    ) : (
+                        <p className="text-xs text-muted-foreground italic">Nenhum produto disparou recentemente.</p>
+                    )}
+                </div>
+
+                {/* Esfriando */}
+                <div className="space-y-3">
+                    <h4 className="text-xs font-black uppercase text-red-700 flex items-center gap-1 mb-2">
+                        <TrendingDown className="w-4 h-4" /> Esfriando (Cooling)
+                    </h4>
+                    {insights?.trends?.down?.length > 0 ? (
+                        insights.trends.down.map((item: any, i: number) => (
+                            <div key={i} className="flex justify-between items-center text-sm border-b border-red-100 pb-2 last:border-0">
+                                <span className="font-medium truncate max-w-[120px]" title={item.name}>{item.name}</span>
+                                <Badge variant="outline" className="text-red-600 border-red-200 bg-red-50 font-bold">{item.growth.toFixed(0)}%</Badge>
+                            </div>
+                        ))
+                    ) : (
+                        <p className="text-xs text-muted-foreground italic">Nenhuma queda brusca detectada.</p>
+                    )}
+                </div>
+
+            </CardContent>
+        </Card>
       </div>
 
-      {/* DASHBOARD DE LTV, MARGEM E MOMENTUM */}
+      {/* DASHBOARD DE LTV E MARGEM (Mantido como estava) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4">
-            {/* Listas de Trending */}
+            {/* RANKING VIP */}
             <Card className="border-none shadow-md bg-white">
                 <CardHeader className="border-b bg-gray-50/50">
-                    <CardTitle className="text-lg font-black uppercase text-gray-700 flex items-center gap-2">
-                        <BarChart4 className="w-5 h-5 text-teal-600" /> Momentum de Vendas
+                    <CardTitle className="text-sm font-black uppercase text-gray-500 flex items-center gap-2">
+                        <Crown className="w-4 h-4 text-yellow-600" /> Top Clientes por Faturamento (LTV)
                     </CardTitle>
-                    <CardDescription>Variação de vendas nos últimos 7 dias vs semana anterior.</CardDescription>
                 </CardHeader>
-                <CardContent className="pt-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
-                    
-                    {/* Em Alta */}
-                    <div className="space-y-3">
-                        <h4 className="text-xs font-black uppercase text-green-700 flex items-center gap-1 mb-2">
-                            <TrendingUp className="w-4 h-4" /> Em Alta (Trending)
-                        </h4>
-                        {insights?.trends?.up?.length > 0 ? (
-                            insights.trends.up.map((item: any, i: number) => (
-                                <div key={i} className="flex justify-between items-center text-sm border-b border-green-100 pb-2 last:border-0">
-                                    <span className="font-medium truncate max-w-[120px]" title={item.name}>{item.name}</span>
-                                    <Badge className="bg-green-100 text-green-800 border-none font-bold">+{item.growth.toFixed(0)}%</Badge>
+                <CardContent className="p-0">
+                    <div className="divide-y">
+                        {insights?.vips?.map((vip: any, i: number) => (
+                            <div key={i} className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
+                                <div className="flex items-center gap-4">
+                                    <div className="h-10 w-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-black text-sm">#{i+1}</div>
+                                    <div>
+                                        <p className="text-sm font-black text-gray-900">{vip.first_name} {vip.last_name}</p>
+                                        <p className="text-[11px] text-muted-foreground font-bold uppercase">Cliente Fidelidade</p>
+                                    </div>
                                 </div>
-                            ))
-                        ) : (
-                            <p className="text-xs text-muted-foreground italic">Nenhum produto disparou recentemente.</p>
-                        )}
-                    </div>
-
-                    {/* Esfriando */}
-                    <div className="space-y-3">
-                        <h4 className="text-xs font-black uppercase text-red-700 flex items-center gap-1 mb-2">
-                            <TrendingDown className="w-4 h-4" /> Esfriando (Cooling)
-                        </h4>
-                        {insights?.trends?.down?.length > 0 ? (
-                            insights.trends.down.map((item: any, i: number) => (
-                                <div key={i} className="flex justify-between items-center text-sm border-b border-red-100 pb-2 last:border-0">
-                                    <span className="font-medium truncate max-w-[120px]" title={item.name}>{item.name}</span>
-                                    <Badge variant="outline" className="text-red-600 border-red-200 bg-red-50 font-bold">{item.growth.toFixed(0)}%</Badge>
+                                <div className="text-right">
+                                    <p className="text-sm font-black text-blue-700">{vip.points} pts</p>
+                                    <p className="text-[10px] text-gray-400 font-bold uppercase">Saldo Acumulado</p>
                                 </div>
-                            ))
-                        ) : (
-                            <p className="text-xs text-muted-foreground italic">Nenhuma queda brusca detectada.</p>
-                        )}
+                            </div>
+                        ))}
                     </div>
-
                 </CardContent>
             </Card>
 
