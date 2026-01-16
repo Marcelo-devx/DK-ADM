@@ -43,6 +43,7 @@ import ImportClientsPage from "./pages/dashboard/ImportClients";
 import N8nIntegrationPage from "./pages/dashboard/N8nIntegration";
 import AnalyticsPage from "./pages/dashboard/Analytics";
 import MetaflowInsightsPage from "./pages/dashboard/MetaflowInsights";
+import IncomingWebhooksPage from "./pages/dashboard/IncomingWebhooks";
 
 const queryClient = new QueryClient();
 
@@ -67,6 +68,7 @@ const AppContent = () => {
           <Route path="metaflow" element={<MetaflowInsightsPage />} />
           <Route path="orders" element={<OrdersPage />} />
           <Route path="n8n" element={<N8nIntegrationPage />} />
+          <Route path="incoming-webhooks" element={<IncomingWebhooksPage />} />
           <Route path="delivery-routes" element={<DeliveryRoutesPage />} />
           <Route path="spoke-export" element={<SpokeExportPage />} />
           <Route path="print-labels" element={<PrintLabelsPage />} />

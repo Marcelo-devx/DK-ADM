@@ -6,7 +6,7 @@ import {
   MessageSquare, Users, ListTree, GalleryHorizontal, Star, Ticket, Plug, 
   ShoppingCart, DollarSign, Truck, Coins, Printer, Map as MapIcon, 
   Lock, FileOutput, FileUp, Workflow, BarChart3, Box, LogOut, Brain, Sparkles,
-  Lightbulb
+  Lightbulb, Webhook
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -152,6 +152,10 @@ const Sidebar = () => {
 
         {/* SISTEMA */}
         <p className={sectionTitleClass}>Sistema</p>
+        <NavLink to="/dashboard/incoming-webhooks" className={navLinkClass}>
+          <Webhook className="w-4 h-4 mr-3 text-pink-600" />
+          Webhooks (Entrada)
+        </NavLink>
         <NavLink to="/dashboard/integrations" className={navLinkClass}>
           <Plug className="w-4 h-4 mr-3 text-slate-600" />
           Integrações
