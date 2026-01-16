@@ -31,40 +31,20 @@ serve(async (req) => {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 403, headers: corsHeaders });
     }
 
-    const { userIds, couponId } = await req.json();
+    const { userIds, messageTemplate } = await req.json();
 
-    if (!userIds || !couponId || userIds.length === 0) {
-        throw new Error("Dados incompletos para a campanha.");
+    if (!userIds || userIds.length === 0) {
+        throw new Error("Nenhum cliente selecionado.");
     }
 
-    // 2. Buscar detalhes do Cupom
-    const { data: coupon } = await supabaseAdmin
-        .from('coupons')
-        .select('name, discount_value, description')
-        .eq('id', couponId)
-        .single();
-
-    if (!coupon) throw new Error("Cupom não encontrado.");
-
-    // 3. Inserir Cupons no Banco
-    const records = userIds.map((uid: string) => ({
-        user_id: uid,
-        coupon_id: couponId,
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 dias
-        is_used: false,
-    }));
-
-    const { error: insertError } = await supabaseAdmin.from("user_coupons").insert(records);
-    if (insertError) throw insertError;
-
-    // 4. Buscar Webhooks Ativos para 'retention_campaign'
+    // 2. Buscar Webhooks Ativos
     const { data: webhooks } = await supabaseAdmin
         .from('webhook_configs')
         .select('target_url')
         .eq('is_active', true)
         .eq('trigger_event', 'retention_campaign');
 
-    // 5. Se houver webhooks, buscar dados dos clientes e disparar
+    // 3. Processar Clientes e Mensagens
     let dispatchedCount = 0;
     if (webhooks && webhooks.length > 0) {
         const { data: profiles } = await supabaseAdmin
@@ -72,26 +52,30 @@ serve(async (req) => {
             .select('id, first_name, last_name, phone')
             .in('id', userIds);
         
-        // Obter emails do Auth (pois profiles pode não ter atualizado ou ter email)
-        // Nota: em produção massiva, isso deve ser feito em chunks ou background job
+        // Busca Emails
         const { data: { users } } = await supabaseAdmin.auth.admin.listUsers();
         const emailMap = new Map(users.map(u => [u.id, u.email]));
 
-        const notifications = profiles?.map(p => ({
-            client_id: p.id,
-            name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Cliente',
-            phone: p.phone,
-            email: emailMap.get(p.id),
-            coupon_code: coupon.name,
-            discount_value: coupon.discount_value,
-            valid_days: 7
-        }));
+        const notifications = profiles?.map(p => {
+            const firstName = p.first_name || 'Cliente';
+            // Substitui a variável {{name}} pelo primeiro nome
+            const finalMessage = messageTemplate 
+                ? messageTemplate.replace(/{{name}}/g, firstName)
+                : `Olá ${firstName}, sentimos sua falta!`;
+
+            return {
+                client_id: p.id,
+                name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Cliente',
+                phone: p.phone,
+                email: emailMap.get(p.id),
+                message_content: finalMessage
+            };
+        });
 
         if (notifications) {
             // Dispara para cada URL configurada
             for (const hook of webhooks) {
                 try {
-                    // Envia a lista inteira para o N8N processar
                     await fetch(hook.target_url, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -112,7 +96,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
           success: true, 
-          message: `Campanha enviada para ${userIds.length} clientes.`,
+          message: `Processado para ${userIds.length} clientes.`,
           webhooks_fired: dispatchedCount
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }

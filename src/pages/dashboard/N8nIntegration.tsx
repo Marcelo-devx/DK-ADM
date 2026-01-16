@@ -143,7 +143,7 @@ const N8nIntegrationPage = () => {
         method: "WEBHOOK", 
         name: "Campanha de Retenção (Disparo)", 
         url: "Seu Endpoint N8N (Configurar na aba Webhooks)", 
-        desc: "Este é o JSON que o sistema enviará para o seu N8N quando você clicar em 'Disparar Campanha'. Use isso para configurar o nó 'Webhook' no N8N.",
+        desc: "JSON enviado para o N8N quando você dispara uma campanha de recuperação. Contém a mensagem já personalizada com o nome do cliente.",
         request: `{
   "event": "retention_campaign",
   "campaign_size": 2,
@@ -153,18 +153,14 @@ const N8nIntegrationPage = () => {
       "name": "João Silva",
       "phone": "11999998888",
       "email": "joao@email.com",
-      "coupon_code": "VOLTA10",
-      "discount_value": 10,
-      "valid_days": 7
+      "message_content": "Oi João! Sentimos sua falta na Tabacaria. Chegaram muitas novidades..."
     },
     {
       "client_id": "uuid-cliente-2",
       "name": "Maria Oliveira",
       "phone": "21988887777",
       "email": "maria@email.com",
-      "coupon_code": "VOLTA10",
-      "discount_value": 10,
-      "valid_days": 7
+      "message_content": "Oi Maria! Sentimos sua falta na Tabacaria. Chegaram muitas novidades..."
     }
   ]
 }`,

@@ -19,18 +19,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Loader2, Ticket, Users, Send, MessageSquare, ExternalLink } from "lucide-react";
+import { Loader2, Users, Send, MessageSquare, Text, Sparkles } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Textarea } from "@/components/ui/textarea";
 
 interface RetentionCampaignModalProps {
   isOpen: boolean;
@@ -40,7 +34,7 @@ interface RetentionCampaignModalProps {
 export const RetentionCampaignModal = ({ isOpen, onClose }: RetentionCampaignModalProps) => {
   const queryClient = useQueryClient();
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
-  const [selectedCouponId, setSelectedCouponId] = useState<string>("");
+  const [message, setMessage] = useState<string>("Oi {{name}}! Sentimos sua falta na Tabacaria. Chegaram muitas novidades que combinam com você. Vem conferir! 🚀");
 
   // 1. Buscar Clientes em Risco
   const { data: atRiskClients, isLoading: isLoadingClients } = useQuery({
@@ -53,22 +47,7 @@ export const RetentionCampaignModal = ({ isOpen, onClose }: RetentionCampaignMod
     enabled: isOpen,
   });
 
-  // 2. Buscar Cupons Ativos
-  const { data: coupons, isLoading: isLoadingCoupons } = useQuery({
-    queryKey: ["activeCoupons"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("coupons")
-        .select("id, name, discount_value, description")
-        .eq("is_active", true)
-        .gt("stock_quantity", 0);
-      if (error) throw error;
-      return data;
-    },
-    enabled: isOpen,
-  });
-
-  // 3. Verificar se há Webhook configurado para avisar o usuário
+  // 2. Verificar se há Webhook configurado
   const { data: hasWebhook } = useQuery({
     queryKey: ["hasRetentionWebhook"],
     queryFn: async () => {
@@ -83,16 +62,16 @@ export const RetentionCampaignModal = ({ isOpen, onClose }: RetentionCampaignMod
     enabled: isOpen
   });
 
-  // 4. Mutação para Enviar Campanha (Via Edge Function)
+  // 3. Mutação para Enviar Campanha
   const sendCampaignMutation = useMutation({
     mutationFn: async () => {
-      if (!selectedCouponId) throw new Error("Selecione um cupom.");
+      if (!message || message.length < 5) throw new Error("Escreva uma mensagem válida.");
       if (selectedUserIds.length === 0) throw new Error("Selecione pelo menos um cliente.");
 
       const { data, error } = await supabase.functions.invoke("admin-send-campaign", {
         body: {
             userIds: selectedUserIds,
-            couponId: parseInt(selectedCouponId)
+            messageTemplate: message // Envia a mensagem em vez do cupom
         }
       });
 
@@ -103,8 +82,8 @@ export const RetentionCampaignModal = ({ isOpen, onClose }: RetentionCampaignMod
     },
     onSuccess: (data) => {
       const msg = data.webhooks_fired > 0 
-        ? `Cupom enviado e automação disparada para ${selectedUserIds.length} clientes!`
-        : `Cupom creditado para ${selectedUserIds.length} clientes (Sem disparo de mensagem).`;
+        ? `Mensagens enviadas para processamento de ${selectedUserIds.length} clientes!`
+        : `Simulação concluída (${selectedUserIds.length} clientes). Ative o webhook para enviar de verdade.`;
       
       showSuccess(msg);
       setSelectedUserIds([]);
@@ -132,61 +111,40 @@ export const RetentionCampaignModal = ({ isOpen, onClose }: RetentionCampaignMod
     );
   };
 
-  const formatCurrency = (val: number) =>
-    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">
-            <Users className="h-6 w-6 text-rose-600" /> Campanha de Recuperação
+            <Users className="h-6 w-6 text-blue-600" /> Recuperar Clientes
           </DialogTitle>
           <DialogDescription>
-            Selecione clientes inativos e envie um cupom.
+            Envie uma mensagem de reaproximação para clientes inativos.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4 flex-1 overflow-y-auto px-1">
-          {/* Seleção de Cupom */}
-          <div className="bg-rose-50 p-4 rounded-lg border border-rose-100 flex flex-col gap-3">
-            <div className="flex flex-col sm:flex-row items-end sm:items-center gap-4">
-                <div className="flex-1 w-full space-y-1">
-                <Label className="text-rose-800 font-bold flex items-center gap-2">
-                    <Ticket className="w-4 h-4" /> Escolha o Cupom de Resgate
+          {/* Área da Mensagem */}
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 flex flex-col gap-3">
+            <div className="space-y-2">
+                <Label className="text-blue-800 font-bold flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4" /> Mensagem para WhatsApp
                 </Label>
-                <Select value={selectedCouponId} onValueChange={setSelectedCouponId}>
-                    <SelectTrigger className="bg-white border-rose-200">
-                    <SelectValue placeholder={isLoadingCoupons ? "Carregando cupons..." : "Selecione um cupom..."} />
-                    </SelectTrigger>
-                    <SelectContent>
-                    {coupons?.map((coupon) => (
-                        <SelectItem key={coupon.id} value={String(coupon.id)}>
-                        <span className="font-bold">{coupon.name}</span> - Desconto de {formatCurrency(coupon.discount_value)}
-                        </SelectItem>
-                    ))}
-                    </SelectContent>
-                </Select>
-                </div>
-            </div>
-            
-            <div className="flex items-center justify-between text-xs text-rose-700 bg-white/50 p-2 rounded">
-                <span>Validade automática: <strong>7 dias</strong></span>
-                {hasWebhook ? (
-                    <Badge className="bg-green-600 hover:bg-green-700 gap-1">
-                        <MessageSquare className="w-3 h-3" /> Disparo de Zap Ativo
-                    </Badge>
-                ) : (
-                    <Badge variant="outline" className="text-gray-500 gap-1 border-dashed border-gray-400">
-                        <MessageSquare className="w-3 h-3" /> Sem Disparo (Apenas Credita)
-                    </Badge>
-                )}
+                <Textarea 
+                    value={message} 
+                    onChange={(e) => setMessage(e.target.value)} 
+                    className="bg-white min-h-[80px]"
+                    placeholder="Escreva sua mensagem aqui..."
+                />
+                <p className="text-xs text-blue-600 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" /> Dica: Use <strong>{`{{name}}`}</strong> para inserir o primeiro nome do cliente automaticamente.
+                </p>
             </div>
             
             {!hasWebhook && (
                 <Alert className="bg-yellow-50 border-yellow-200 text-yellow-800 py-2">
                     <AlertDescription className="text-xs flex items-center gap-2">
-                        O cupom será vinculado à conta do cliente automaticamente. Para <strong>disparar a mensagem no WhatsApp</strong> avisando sobre o presente, ative o Webhook.
+                        <strong>Atenção:</strong> Nenhum webhook de 'Campanha de Retenção' está ativo. As mensagens não serão disparadas externamente. Vá em Integrações &gt; N8N para configurar.
                     </AlertDescription>
                 </Alert>
             )}
@@ -208,7 +166,6 @@ export const RetentionCampaignModal = ({ isOpen, onClose }: RetentionCampaignMod
                     />
                   </TableHead>
                   <TableHead>Cliente</TableHead>
-                  <TableHead>Email</TableHead>
                   <TableHead className="text-center">Dias Ausente</TableHead>
                   <TableHead className="text-center">Histórico</TableHead>
                 </TableRow>
@@ -216,21 +173,25 @@ export const RetentionCampaignModal = ({ isOpen, onClose }: RetentionCampaignMod
               <TableBody>
                 {isLoadingClients ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center">
+                    <TableCell colSpan={4} className="h-24 text-center">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
                     </TableCell>
                   </TableRow>
                 ) : atRiskClients && atRiskClients.length > 0 ? (
                   atRiskClients.map((client: any) => (
-                    <TableRow key={client.user_id} className={selectedUserIds.includes(client.user_id) ? "bg-rose-50/30" : ""}>
+                    <TableRow key={client.user_id} className={selectedUserIds.includes(client.user_id) ? "bg-blue-50/30" : ""}>
                       <TableCell className="text-center">
                         <Checkbox
                           checked={selectedUserIds.includes(client.user_id)}
                           onCheckedChange={() => handleToggleUser(client.user_id)}
                         />
                       </TableCell>
-                      <TableCell className="font-medium">{client.customer_name || "Sem Nome"}</TableCell>
-                      <TableCell className="text-muted-foreground text-xs">{client.email}</TableCell>
+                      <TableCell>
+                          <div className="flex flex-col">
+                            <span className="font-medium">{client.customer_name || "Sem Nome"}</span>
+                            <span className="text-muted-foreground text-[10px]">{client.email}</span>
+                          </div>
+                      </TableCell>
                       <TableCell className="text-center">
                         <Badge variant="outline" className="text-rose-600 border-rose-200 bg-rose-50">
                           {client.days_since_last_order} dias
@@ -243,7 +204,7 @@ export const RetentionCampaignModal = ({ isOpen, onClose }: RetentionCampaignMod
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                    <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
                       Parabéns! Nenhum cliente em risco de churn no momento.
                     </TableCell>
                   </TableRow>
@@ -258,16 +219,16 @@ export const RetentionCampaignModal = ({ isOpen, onClose }: RetentionCampaignMod
             Cancelar
           </Button>
           <Button
-            className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
+            className="bg-green-600 hover:bg-green-700 text-white font-bold"
             onClick={() => sendCampaignMutation.mutate()}
-            disabled={sendCampaignMutation.isPending || selectedUserIds.length === 0 || !selectedCouponId}
+            disabled={sendCampaignMutation.isPending || selectedUserIds.length === 0 || !message}
           >
             {sendCampaignMutation.isPending ? (
               <Loader2 className="w-4 h-4 animate-spin mr-2" />
             ) : (
               <Send className="w-4 h-4 mr-2" />
             )}
-            Disparar Campanha ({selectedUserIds.length})
+            Disparar Mensagens ({selectedUserIds.length})
           </Button>
         </DialogFooter>
       </DialogContent>
