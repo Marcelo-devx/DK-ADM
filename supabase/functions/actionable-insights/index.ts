@@ -30,59 +30,121 @@ serve(async (req) => {
         .order('points', { ascending: false })
         .limit(5);
 
-    // 4. Previsão de Estoque e Lucratividade
+    // 4. DADOS PARA ANÁLISE DE ESTOQUE E TENDÊNCIA
+    const today = new Date();
+    const sevenDaysAgo = new Date(today); sevenDaysAgo.setDate(today.getDate() - 7);
+    const fourteenDaysAgo = new Date(today); fourteenDaysAgo.setDate(today.getDate() - 14);
+    const thirtyDaysAgo = new Date(today); thirtyDaysAgo.setDate(today.getDate() - 30);
+
+    // Busca itens vendidos nos últimos 30 dias
     const { data: salesHistory } = await supabaseAdmin
         .from('order_items')
-        .select('item_id, quantity, price_at_purchase')
-        .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+        .select('item_id, quantity, price_at_purchase, created_at')
+        .gte('created_at', thirtyDaysAgo.toISOString());
 
     const { data: allProducts } = await supabaseAdmin
         .from('products')
         .select('id, name, stock_quantity, price, cost_price, brand');
 
-    const velocityMap = {};
-    const profitByBrand = {};
-    
+    // --- CÁLCULOS ---
+    const velocityMap = {};      // Vendas totais 30d (para estoque)
+    const profitByBrand = {};    // Lucratividade
+    const salesThisWeek = {};    // Vendas 0-7 dias
+    const salesLastWeek = {};    // Vendas 7-14 dias
+    const hoursMap = new Array(24).fill(0); // Mapa de calor de horas
+
     salesHistory?.forEach(item => {
-        velocityMap[item.item_id] = (velocityMap[item.item_id] || 0) + item.quantity;
+        const itemDate = new Date(item.created_at);
+        const qty = item.quantity;
+
+        // Velocity 30d
+        velocityMap[item.item_id] = (velocityMap[item.item_id] || 0) + qty;
+
+        // Horário de Pico (acumulado dos últimos 30 dias)
+        // Ajuste fuso horário (simplificado -3h Brasil)
+        let hour = itemDate.getHours() - 3;
+        if (hour < 0) hour += 24;
+        hoursMap[hour] += qty;
+
+        // Trending (Semanal)
+        if (itemDate >= sevenDaysAgo) {
+            salesThisWeek[item.item_id] = (salesThisWeek[item.item_id] || 0) + qty;
+        } else if (itemDate >= fourteenDaysAgo) {
+            salesLastWeek[item.item_id] = (salesLastWeek[item.item_id] || 0) + qty;
+        }
     });
 
+    // Processamento de Produtos
     const inventoryAnalysis = allProducts?.map(p => {
+        // --- Análise de Estoque ---
         const soldLast30Days = velocityMap[p.id] || 0;
         const dailyRate = soldLast30Days / 30;
         
-        let daysRemaining = 999; // Valor alto padrão (seguro)
+        let daysRemaining = 999;
         let status = 'ok';
 
-        // SÓ calcula previsão se tiver giro (vendas nos últimos 30 dias)
         if (dailyRate > 0) {
             daysRemaining = Math.floor(p.stock_quantity / dailyRate);
             status = 'active';
         }
         
-        // Lucro estimado (Preço Atual - Custo Atual) * Vendas
+        // --- Análise de Lucro ---
         const unitMargin = p.price - (p.cost_price || 0);
         const estMonthlyProfit = unitMargin * soldLast30Days;
 
         if (p.brand) {
             profitByBrand[p.brand] = (profitByBrand[p.brand] || 0) + estMonthlyProfit;
         }
-        
+
+        // --- Análise de Tendência (Growth) ---
+        const thisWeek = salesThisWeek[p.id] || 0;
+        const lastWeek = salesLastWeek[p.id] || 0;
+        let growthPercent = 0;
+
+        if (lastWeek > 0) {
+            growthPercent = ((thisWeek - lastWeek) / lastWeek) * 100;
+        } else if (thisWeek > 0) {
+            growthPercent = 100; // Novo ou explodiu do zero
+        }
+
         return {
+            id: p.id,
             name: p.name,
             current_stock: p.stock_quantity,
             days_remaining: daysRemaining,
             daily_rate: dailyRate.toFixed(2),
             profit_contribution: estMonthlyProfit,
-            status_type: status
+            status_type: status,
+            growth: growthPercent,
+            sales_this_week: thisWeek
         };
     });
 
-    // Filtra APENAS itens com giro ativo E que vão acabar em menos de 45 dias
+    // Filtros Finais
+    
+    // 1. Alertas de Estoque (Acaba em < 45 dias)
     const alerts = inventoryAnalysis
         ?.filter(p => p.days_remaining < 45 && p.daily_rate > 0)
         .sort((a,b) => a.days_remaining - b.days_remaining)
         .slice(0, 8) || [];
+
+    // 2. Em Alta (Trending Up) - Crescimento > 20% e venda relevante
+    const trendingUp = inventoryAnalysis
+        ?.filter(p => p.growth >= 20 && p.sales_this_week >= 3)
+        .sort((a,b) => b.growth - a.growth)
+        .slice(0, 5) || [];
+
+    // 3. Esfriando (Trending Down) - Queda > 20% e tinha venda antes
+    const coolingDown = inventoryAnalysis
+        ?.filter(p => p.growth <= -20 && p.sales_this_week < 5) // Caindo e vendendo pouco agora
+        .sort((a,b) => a.growth - b.growth) // Menores crescimentos (mais negativos) primeiro
+        .slice(0, 5) || [];
+
+    // 4. Horários de Pico Formatados
+    const peakHours = hoursMap.map((count, hour) => ({
+        hour: `${hour}h`,
+        orders: count
+    }));
 
     return new Response(JSON.stringify({
         associations: associations || [],
@@ -92,7 +154,12 @@ serve(async (req) => {
         profitability: Object.entries(profitByBrand)
             .map(([name, value]) => ({ name, value }))
             .sort((a,b) => b.value - a.value)
-            .slice(0, 5)
+            .slice(0, 5),
+        trends: {
+            up: trendingUp,
+            down: coolingDown
+        },
+        peak_hours: peakHours
     }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,

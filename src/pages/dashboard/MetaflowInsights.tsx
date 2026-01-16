@@ -8,12 +8,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { 
   Lightbulb, Package, Target, UserMinus, Plus, ArrowRight, 
-  Sparkles, Crown, Wallet, Zap, RefreshCw, AlertTriangle
+  Sparkles, Crown, Wallet, Zap, RefreshCw, AlertTriangle,
+  TrendingUp, TrendingDown, Clock, BarChart4
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { RetentionCampaignModal } from "@/components/dashboard/RetentionCampaignModal";
+import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 
 const MetaflowInsightsPage = () => {
   const navigate = useNavigate();
@@ -69,7 +71,7 @@ const MetaflowInsightsPage = () => {
                 Atualizar
             </Button>
             <Badge className="bg-blue-600 text-white font-bold px-3 py-1">IA ATIVA</Badge>
-            <Badge variant="outline" className="text-gray-500 font-bold px-3 py-1">v2.2</Badge>
+            <Badge variant="outline" className="text-gray-500 font-bold px-3 py-1">v3.0</Badge>
         </div>
       </div>
 
@@ -205,33 +207,85 @@ const MetaflowInsightsPage = () => {
         </Card>
       </div>
 
-      {/* SEÇÃO: ESTRATÉGIAS DE VENDA */}
-      <div className="pt-4 space-y-4">
-        <h2 className="text-sm font-black uppercase text-gray-500 tracking-widest flex items-center gap-2">
-            <Lightbulb className="w-4 h-4 text-amber-500" /> Ações Estratégicas Sugeridas
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card className="bg-white border-2 border-dashed border-rose-200 shadow-md p-8 relative group">
-                    <div className="space-y-6">
-                        <Badge variant="outline" className="text-rose-600 border-rose-200 font-black">CAMPANHA DE RETENÇÃO</Badge>
-                        <h3 className="text-2xl font-black text-gray-900 italic uppercase leading-none">Recuperar Clientes Inativos</h3>
-                        <p className="text-gray-600 text-sm leading-relaxed">
-                            Existem <strong>{insights?.churn?.length || 0} clientes</strong> de alto valor que não compram há mais de 30 dias. 
-                            Eles representam um faturamento potencial imediato através de cupons de reativação.
-                        </p>
-                        <Button 
-                            variant="outline" 
-                            className="border-rose-600 text-rose-600 hover:bg-rose-50 font-black w-full h-12 gap-2"
-                            onClick={() => setIsRetentionModalOpen(true)}
-                        >
-                            <Zap className="w-5 h-5" /> DISPARAR CUPOM DE VOLTA
-                        </Button>
-                    </div>
-            </Card>
-        </div>
+      {/* NOVA SEÇÃO: MOMENTUM E HORÁRIOS */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4">
+        
+        {/* Gráfico de Horários de Pico */}
+        <Card className="border-none shadow-md bg-white">
+            <CardHeader className="border-b bg-gray-50/50">
+                <CardTitle className="text-lg font-black uppercase text-gray-700 flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-purple-600" /> Horários de Pico (Últimos 30 Dias)
+                </CardTitle>
+                <CardDescription>Volume de pedidos por hora do dia.</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-6 h-[300px]">
+                {insights?.peak_hours ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={insights.peak_hours}>
+                            <XAxis dataKey="hour" tick={{fontSize: 10}} axisLine={false} tickLine={false} />
+                            <Tooltip cursor={{fill: '#f3f4f6'}} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
+                            <Bar dataKey="orders" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={20}>
+                                {insights.peak_hours.map((entry: any, index: number) => (
+                                    <Cell key={`cell-${index}`} fill={entry.orders > 5 ? "#7c3aed" : "#c4b5fd"} />
+                                ))}
+                            </Bar>
+                        </BarChart>
+                    </ResponsiveContainer>
+                ) : (
+                    <div className="h-full flex items-center justify-center text-muted-foreground">Sem dados suficientes.</div>
+                )}
+            </CardContent>
+        </Card>
+
+        {/* Listas de Trending */}
+        <Card className="border-none shadow-md bg-white">
+            <CardHeader className="border-b bg-gray-50/50">
+                <CardTitle className="text-lg font-black uppercase text-gray-700 flex items-center gap-2">
+                    <BarChart4 className="w-5 h-5 text-teal-600" /> Momentum de Vendas
+                </CardTitle>
+                <CardDescription>Variação de vendas nos últimos 7 dias vs semana anterior.</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
+                
+                {/* Em Alta */}
+                <div className="space-y-3">
+                    <h4 className="text-xs font-black uppercase text-green-700 flex items-center gap-1 mb-2">
+                        <TrendingUp className="w-4 h-4" /> Em Alta (Trending)
+                    </h4>
+                    {insights?.trends?.up?.length > 0 ? (
+                        insights.trends.up.map((item: any, i: number) => (
+                            <div key={i} className="flex justify-between items-center text-sm border-b border-green-100 pb-2 last:border-0">
+                                <span className="font-medium truncate max-w-[120px]" title={item.name}>{item.name}</span>
+                                <Badge className="bg-green-100 text-green-800 border-none font-bold">+{item.growth.toFixed(0)}%</Badge>
+                            </div>
+                        ))
+                    ) : (
+                        <p className="text-xs text-muted-foreground italic">Nenhum produto disparou recentemente.</p>
+                    )}
+                </div>
+
+                {/* Esfriando */}
+                <div className="space-y-3">
+                    <h4 className="text-xs font-black uppercase text-red-700 flex items-center gap-1 mb-2">
+                        <TrendingDown className="w-4 h-4" /> Esfriando (Cooling)
+                    </h4>
+                    {insights?.trends?.down?.length > 0 ? (
+                        insights.trends.down.map((item: any, i: number) => (
+                            <div key={i} className="flex justify-between items-center text-sm border-b border-red-100 pb-2 last:border-0">
+                                <span className="font-medium truncate max-w-[120px]" title={item.name}>{item.name}</span>
+                                <Badge variant="outline" className="text-red-600 border-red-200 bg-red-50 font-bold">{item.growth.toFixed(0)}%</Badge>
+                            </div>
+                        ))
+                    ) : (
+                        <p className="text-xs text-muted-foreground italic">Nenhuma queda brusca detectada.</p>
+                    )}
+                </div>
+
+            </CardContent>
+        </Card>
       </div>
 
-      {/* DASHBOARD DE LTV E MARGEM */}
+      {/* DASHBOARD DE LTV E MARGEM (Mantido como estava) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4">
             {/* RANKING VIP */}
             <Card className="border-none shadow-md bg-white">
