@@ -20,17 +20,14 @@ serve(async (req) => {
     // 1. Associações de produtos (Venda Casada)
     const { data: associations } = await supabaseAdmin.rpc('get_product_pair_frequency');
 
-    // 2. Clientes em risco (Churn)
-    const { data: churnRisk } = await supabaseAdmin.rpc('get_customers_at_risk');
-
-    // 3. Ranking VIP (Clientes que mais gastaram na história - LTV)
+    // 2. Ranking VIP (Clientes que mais gastaram na história - LTV)
     const { data: vips } = await supabaseAdmin
         .from('profiles')
         .select('first_name, last_name, points')
         .order('points', { ascending: false })
         .limit(5);
 
-    // 4. DADOS PARA ANÁLISE DE ESTOQUE E TENDÊNCIA
+    // 3. DADOS PARA ANÁLISE DE ESTOQUE E TENDÊNCIA
     const today = new Date();
     const sevenDaysAgo = new Date(today); sevenDaysAgo.setDate(today.getDate() - 7);
     const fourteenDaysAgo = new Date(today); fourteenDaysAgo.setDate(today.getDate() - 14);
@@ -46,27 +43,82 @@ serve(async (req) => {
         .from('products')
         .select('id, name, stock_quantity, price, cost_price, brand');
 
-    // --- CÁLCULOS ---
-    const velocityMap = {};      // Vendas totais 30d (para estoque)
-    const profitByBrand = {};    // Lucratividade
-    const salesThisWeek = {};    // Vendas 0-7 dias
-    const salesLastWeek = {};    // Vendas 7-14 dias
-    const hoursMap = new Array(24).fill(0); // Mapa de calor de horas
+    // 4. DADOS PARA RFM (Todos os pedidos finalizados)
+    const { data: allOrders } = await supabaseAdmin
+        .from('orders')
+        .select('user_id, total_price, created_at')
+        .in('status', ['Finalizada', 'Pago'])
+        .order('created_at', { ascending: false }); // Do mais recente para o mais antigo
+
+    // --- CÁLCULOS RFM ---
+    const rfmMap = new Map();
+    
+    allOrders?.forEach(order => {
+        if (!rfmMap.has(order.user_id)) {
+            rfmMap.set(order.user_id, {
+                lastOrderDate: new Date(order.created_at),
+                frequency: 0,
+                monetary: 0
+            });
+        }
+        const entry = rfmMap.get(order.user_id);
+        entry.frequency += 1;
+        entry.monetary += Number(order.total_price);
+    });
+
+    const segments = {
+        champions: { count: 0, revenue: 0 }, // R < 30, F > 4
+        loyal: { count: 0, revenue: 0 },     // F > 2
+        potential: { count: 0, revenue: 0 }, // R < 30, F <= 2
+        at_risk: { count: 0, revenue: 0 },   // R 30-90, F > 2
+        hibernating: { count: 0, revenue: 0 } // R > 90
+    };
+
+    const churnList = [];
+
+    rfmMap.forEach((metrics, userId) => {
+        const daysSinceLast = Math.floor((today.getTime() - metrics.lastOrderDate.getTime()) / (1000 * 3600 * 24));
+        
+        let segmentKey = 'hibernating';
+
+        if (daysSinceLast <= 30) {
+            if (metrics.frequency >= 4) segmentKey = 'champions';
+            else segmentKey = 'potential';
+        } else if (daysSinceLast <= 90) {
+            if (metrics.frequency >= 3) segmentKey = 'at_risk';
+            else segmentKey = 'loyal'; // Compra esporádica mas fiel
+        } else {
+            segmentKey = 'hibernating';
+        }
+
+        segments[segmentKey].count += 1;
+        segments[segmentKey].revenue += metrics.monetary;
+
+        // Monta lista de Churn (Em Risco ou Hibernando com alto valor)
+        if (segmentKey === 'at_risk' || (segmentKey === 'hibernating' && metrics.monetary > 500)) {
+            // Precisamos buscar o nome depois, mas para performance vamos retornar só stats
+            // ou usar a lista antiga se preferir. Vamos manter a estrutura de Churn antiga mas alimentada por essa lógica
+            // Para não quebrar o front existente, manteremos a lista simplificada de Churn Risk no response
+        }
+    });
+
+    // --- CÁLCULOS ESTOQUE & TENDÊNCIA ---
+    const velocityMap = {};      
+    const profitByBrand = {};    
+    const salesThisWeek = {};    
+    const salesLastWeek = {};    
+    const hoursMap = new Array(24).fill(0); 
 
     salesHistory?.forEach(item => {
         const itemDate = new Date(item.created_at);
         const qty = item.quantity;
 
-        // Velocity 30d
         velocityMap[item.item_id] = (velocityMap[item.item_id] || 0) + qty;
 
-        // Horário de Pico (acumulado dos últimos 30 dias)
-        // Ajuste fuso horário (simplificado -3h Brasil)
         let hour = itemDate.getHours() - 3;
         if (hour < 0) hour += 24;
         hoursMap[hour] += qty;
 
-        // Trending (Semanal)
         if (itemDate >= sevenDaysAgo) {
             salesThisWeek[item.item_id] = (salesThisWeek[item.item_id] || 0) + qty;
         } else if (itemDate >= fourteenDaysAgo) {
@@ -74,12 +126,9 @@ serve(async (req) => {
         }
     });
 
-    // Processamento de Produtos
     const inventoryAnalysis = allProducts?.map(p => {
-        // --- Análise de Estoque ---
         const soldLast30Days = velocityMap[p.id] || 0;
         const dailyRate = soldLast30Days / 30;
-        
         let daysRemaining = 999;
         let status = 'ok';
 
@@ -88,7 +137,6 @@ serve(async (req) => {
             status = 'active';
         }
         
-        // --- Análise de Lucro ---
         const unitMargin = p.price - (p.cost_price || 0);
         const estMonthlyProfit = unitMargin * soldLast30Days;
 
@@ -96,7 +144,6 @@ serve(async (req) => {
             profitByBrand[p.brand] = (profitByBrand[p.brand] || 0) + estMonthlyProfit;
         }
 
-        // --- Análise de Tendência (Growth) ---
         const thisWeek = salesThisWeek[p.id] || 0;
         const lastWeek = salesLastWeek[p.id] || 0;
         let growthPercent = 0;
@@ -104,7 +151,7 @@ serve(async (req) => {
         if (lastWeek > 0) {
             growthPercent = ((thisWeek - lastWeek) / lastWeek) * 100;
         } else if (thisWeek > 0) {
-            growthPercent = 100; // Novo ou explodiu do zero
+            growthPercent = 100; 
         }
 
         return {
@@ -120,35 +167,34 @@ serve(async (req) => {
         };
     });
 
-    // Filtros Finais
-    
-    // 1. Alertas de Estoque (Acaba em < 45 dias)
     const alerts = inventoryAnalysis
         ?.filter(p => p.days_remaining < 45 && p.daily_rate > 0)
         .sort((a,b) => a.days_remaining - b.days_remaining)
         .slice(0, 8) || [];
 
-    // 2. Em Alta (Trending Up) - Crescimento > 20% e venda relevante
     const trendingUp = inventoryAnalysis
         ?.filter(p => p.growth >= 20 && p.sales_this_week >= 3)
         .sort((a,b) => b.growth - a.growth)
         .slice(0, 5) || [];
 
-    // 3. Esfriando (Trending Down) - Queda > 20% e tinha venda antes
     const coolingDown = inventoryAnalysis
-        ?.filter(p => p.growth <= -20 && p.sales_this_week < 5) // Caindo e vendendo pouco agora
-        .sort((a,b) => a.growth - b.growth) // Menores crescimentos (mais negativos) primeiro
+        ?.filter(p => p.growth <= -20 && p.sales_this_week < 5) 
+        .sort((a,b) => a.growth - b.growth) 
         .slice(0, 5) || [];
 
-    // 4. Horários de Pico Formatados
     const peakHours = hoursMap.map((count, hour) => ({
         hour: `${hour}h`,
         orders: count
     }));
 
+    // Mantemos a chamada RPC original para Churn para garantir dados completos de nome/email
+    // Mas agora temos os dados ricos de RFM também
+    const { data: churnRisk } = await supabaseAdmin.rpc('get_customers_at_risk');
+
     return new Response(JSON.stringify({
         associations: associations || [],
-        churn: churnRisk || [],
+        churn: churnRisk || [], // Mantém compatibilidade
+        rfm: segments, // Novo payload
         inventory: alerts,
         vips: vips || [],
         profitability: Object.entries(profitByBrand)
