@@ -21,7 +21,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock } from "lucide-react";
+import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { showSuccess, showError } from "@/utils/toast";
 import { OrderDetailModal } from "@/components/dashboard/OrderDetailModal";
@@ -213,6 +213,19 @@ const OrdersPage = () => {
 
   const formatCurrency = (val: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
 
+  const getPaymentMethodDetails = (method: string | null | undefined) => {
+    if (!method) return { label: 'Pix', icon: QrCode, style: "bg-cyan-50 text-cyan-700 border-cyan-200" };
+    
+    const lower = method.toLowerCase();
+    if (lower.includes('pix')) {
+      return { label: 'Pix', icon: QrCode, style: "bg-cyan-50 text-cyan-700 border-cyan-200" };
+    }
+    if (lower.includes('credit') || lower.includes('card') || lower.includes('cart')) {
+      return { label: 'Cartão (MP)', icon: CreditCard, style: "bg-purple-50 text-purple-700 border-purple-200" };
+    }
+    return { label: method, icon: DollarSign, style: "bg-gray-50 text-gray-700 border-gray-200" };
+  };
+
   return (
     <div className="relative pb-24">
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
@@ -271,6 +284,8 @@ const OrdersPage = () => {
                 const isInRoute = order.delivery_status === "Despachado";
                 const isSelected = selectedIds.has(order.id);
                 const isNextRoute = checkIsNextRoute(order.created_at);
+                const paymentDetails = getPaymentMethodDetails(order.payment_method);
+                const PaymentIcon = paymentDetails.icon;
 
                 return (
                   <TableRow key={order.id} className={cn(
@@ -322,8 +337,9 @@ const OrdersPage = () => {
                         </Badge>
                     </TableCell>
                     <TableCell>
-                        <Badge variant="outline" className={cn(isPix ? "bg-cyan-50 text-cyan-700 border-cyan-200" : "bg-purple-50 text-purple-700 border-purple-200")}>
-                            {order.payment_method || 'Pix'}
+                        <Badge variant="outline" className={cn("gap-1 pr-3", paymentDetails.style)}>
+                            <PaymentIcon className="w-3 h-3" />
+                            {paymentDetails.label}
                         </Badge>
                     </TableCell>
                     <TableCell className="text-right">
