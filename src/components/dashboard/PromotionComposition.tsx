@@ -43,11 +43,13 @@ interface PromotionCompositionProps {
 interface ProductOption {
   id: number;
   name: string;
+  stock_quantity: number;
   variants?: {
     id: string;
     flavor_id: number | null;
     flavors?: { name: string } | null;
     volume_ml: number | null;
+    stock_quantity: number;
   }[];
 }
 
@@ -78,16 +80,17 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
   const [quantity, setQuantity] = useState<number>(1);
   const [openProductSearch, setOpenProductSearch] = useState(false);
 
-  // 1. Buscar Produtos Disponíveis
+  // 1. Buscar Produtos Disponíveis (Apenas com estoque > 0)
   const { data: products } = useQuery({
     queryKey: ["productsForComposition"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("products")
         .select(`
-          id, name,
-          variants:product_variants(id, flavor_id, volume_ml, flavors(name))
+          id, name, stock_quantity,
+          variants:product_variants(id, flavor_id, volume_ml, flavors(name), stock_quantity)
         `)
+        .gt("stock_quantity", 0) // Filtra produtos sem estoque
         .order("name");
       if (error) throw error;
       return data as unknown as ProductOption[];
@@ -180,7 +183,7 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["promotionItems", promotionId] });
-      queryClient.invalidateQueries({ queryKey: ["products"] }); // Atualiza estoques
+      queryClient.invalidateQueries({ queryKey: ["productsForComposition"] }); // Atualiza lista para remover sem estoque se acabar
       showSuccess("Item adicionado e estoque reservado!");
       setQuantity(1);
     },
@@ -196,7 +199,7 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["promotionItems", promotionId] });
-      queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["productsForComposition"] });
       showSuccess("Item removido e estoque devolvido.");
     },
     onError: (err: any) => showError(err.message),
@@ -207,7 +210,9 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
   if (!promotionId) return null;
 
   const selectedProduct = products?.find(p => String(p.id) === selectedProductId);
-  const hasVariants = selectedProduct && selectedProduct.variants && selectedProduct.variants.length > 0;
+  // Filtra apenas variações com estoque > 0
+  const availableVariants = selectedProduct?.variants?.filter(v => v.stock_quantity > 0) || [];
+  const hasVariants = availableVariants.length > 0;
 
   return (
     <div className="space-y-4 border rounded-lg p-4 bg-blue-50/30 border-blue-100 my-6">
@@ -242,7 +247,7 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
               <Command>
                 <CommandInput placeholder="Digite para buscar..." />
                 <CommandList>
-                  <CommandEmpty>Nenhum produto encontrado.</CommandEmpty>
+                  <CommandEmpty>Nenhum produto com estoque encontrado.</CommandEmpty>
                   <CommandGroup>
                     {products?.map((p) => (
                       <CommandItem
@@ -275,14 +280,18 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
           <Select 
             value={selectedVariantId} 
             onValueChange={setSelectedVariantId}
-            disabled={!hasVariants}
+            disabled={!hasVariants && !selectedProduct?.variants?.length} // Desabilita se não tiver variações ou se todas estiverem sem estoque
           >
             <SelectTrigger className="h-8 text-xs">
-              <SelectValue placeholder={!selectedProductId ? "Selecione prod..." : hasVariants ? "Escolha a opção..." : "Sem variações"} />
+              <SelectValue placeholder={!selectedProductId ? "Selecione prod..." : hasVariants ? "Escolha a opção..." : selectedProduct?.variants?.length ? "Sem estoque nas variações" : "Sem variações"} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="none">Padrão / Qualquer</SelectItem>
-              {hasVariants && selectedProduct.variants?.map(v => (
+              {/* Só mostra opção "Padrão" se não tiver variações configuradas no produto */}
+              {!selectedProduct?.variants?.length && (
+                <SelectItem value="none">Padrão</SelectItem>
+              )}
+              
+              {hasVariants && availableVariants.map(v => (
                 <SelectItem key={v.id} value={v.id}>
                   {v.flavors?.name || "Padrão"} {v.volume_ml ? `(${v.volume_ml}ml)` : ""}
                 </SelectItem>
