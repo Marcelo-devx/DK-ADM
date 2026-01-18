@@ -22,7 +22,7 @@ InputOTP.displayName = "InputOTP"
 
 const InputOTPGroup = React.forwardRef<
   React.ElementRef<"div">,
-  React.ComponentPropsWithoutRef<"div text-center">
+  React.ComponentPropsWithoutRef<"div">
 >(({ className, ...props }, ref) => (
   <div ref={ref} className={cn("flex items-center", className)} {...props} />
 ))
@@ -33,7 +33,6 @@ const InputOTPSlot = React.forwardRef<
   React.ComponentPropsWithoutRef<"div"> & { index: number }
 >(({ index, className, ...props }, ref) => {
   const inputOTPContext = React.useContext(OTPInputContext)
-  // Fazendo cast para any para resolver o erro TS2339 onde o slots não é reconhecido no unknown
   const slot = (inputOTPContext as any).slots[index]
   const { char, hasFakeCaret, isActive } = slot
 
