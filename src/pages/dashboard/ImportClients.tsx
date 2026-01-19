@@ -25,8 +25,8 @@ const ImportClientsPage = () => {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [clientsToImport, setClientsToImport] = useState<any[]>([]);
 
-  // Função para converter DD-MM-AAAA ou DD/MM/AAAA para YYYY-MM-DD
-  const formatBirthDateToISO = (val: any) => {
+  // Função para converter formatos de data brasileiros para ISO
+  const formatDateToISO = (val: any) => {
     if (!val) return null;
     const str = String(val).trim();
     const match = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
@@ -34,7 +34,7 @@ const ImportClientsPage = () => {
         const [_, d, m, y] = match;
         return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
     }
-    return val; // Retorna original se já estiver em formato ISO ou Excel Date
+    return val;
   };
 
   const bulkImportMutation = useMutation({
@@ -42,7 +42,6 @@ const ImportClientsPage = () => {
       const { data, error } = await supabase.functions.invoke("bulk-import-clients", { 
         body: { clients } 
       });
-      
       if (error) throw new Error(error.message);
       return data;
     },
@@ -68,8 +67,12 @@ const ImportClientsPage = () => {
         
         const mappedClients = json.map(mapRowKeys).map((row: any) => ({
             email: row.email,
+            password: row.senha ? String(row.senha) : undefined,
             full_name: row.nomecompleto || '',
-            date_of_birth: formatBirthDateToISO(row.datadenascimento),
+            cpf_cnpj: row.cpfcnpj ? String(row.cpfcnpj) : '',
+            gender: row.sexo || '',
+            date_of_birth: formatDateToISO(row.datadenascimento),
+            client_since: formatDateToISO(row.clientedesde),
             phone: row.telefone ? String(row.telefone) : '',
             cep: row.cep ? String(row.cep) : '',
             street: row.rua || '',
@@ -78,11 +81,10 @@ const ImportClientsPage = () => {
             neighborhood: row.bairro || '',
             city: row.cidade || '',
             state: row.estado || '',
-            password: row.senha ? String(row.senha) : undefined,
         })).filter((c: any) => c.email && c.email.includes('@'));
 
         if (mappedClients.length === 0) {
-            showError("Nenhum cliente válido encontrado na planilha. Verifique a coluna 'Email'.");
+            showError("Nenhum cliente válido encontrado. Verifique a coluna 'Email'.");
             return;
         }
 
@@ -94,13 +96,11 @@ const ImportClientsPage = () => {
   };
 
   const handleDownloadTemplate = () => {
-    // Cabeçalhos
     const headers = [
-        "Email", "Senha", "Nome Completo", "Data de Nascimento", "Telefone", "CEP", "Rua", "Numero", "Complemento", "Bairro", "Cidade", "Estado"
+        "Email", "Senha", "Nome Completo", "CPF/CNPJ", "Sexo", "Data de Nascimento", "Cliente Desde", "Telefone", "CEP", "Rua", "Numero", "Complemento", "Bairro", "Cidade", "Estado"
     ];
-    // Linha de Exemplo para orientar o usuário
     const exampleRow = [
-        "cliente@exemplo.com", "123456", "João da Silva", "15-05-1990", "11999998888", "01001000", "Rua das Flores", "123", "Apto 12", "Centro", "São Paulo", "SP"
+        "cliente@exemplo.com", "123456", "João da Silva", "123.456.789-00", "Masculino", "15-05-1990", "01-01-2023", "11999998888", "01001000", "Rua das Flores", "123", "Apto 12", "Centro", "São Paulo", "SP"
     ];
 
     const worksheet = XLSX.utils.aoa_to_sheet([headers, exampleRow]);
@@ -117,7 +117,7 @@ const ImportClientsPage = () => {
             <Users className="h-8 w-8 text-primary" />
             Importação de Clientes
           </h1>
-          <p className="text-muted-foreground text-sm">Ferramentas para migração e cadastro em massa.</p>
+          <p className="text-muted-foreground text-sm">Migre sua base de dados incluindo CPF, Gênero e Histórico.</p>
         </div>
       </div>
 
@@ -128,13 +128,11 @@ const ImportClientsPage = () => {
                     <FileDown className="h-5 w-5 text-blue-600" />
                     1. Baixar Modelo
                 </CardTitle>
-                <CardDescription>
-                    Comece baixando a planilha padrão para preencher os dados dos seus clientes corretamente.
-                </CardDescription>
+                <CardDescription>Baixe a planilha com os novos campos (CPF, Sexo, Data de Cadastro).</CardDescription>
             </CardHeader>
             <CardContent>
                 <Button variant="outline" className="w-full h-12 border-blue-200 text-blue-700 hover:bg-blue-50" onClick={handleDownloadTemplate}>
-                    Baixar Planilha Modelo (.xlsx)
+                    Baixar Planilha Atualizada (.xlsx)
                 </Button>
             </CardContent>
         </Card>
@@ -145,15 +143,13 @@ const ImportClientsPage = () => {
                     <FileUp className="h-5 w-5 text-green-600" />
                     2. Enviar Planilha
                 </CardTitle>
-                <CardDescription>
-                    Faça o upload da planilha preenchida. O sistema criará os usuários e perfis automaticamente.
-                </CardDescription>
+                <CardDescription>Envie o arquivo preenchido para processar os cadastros.</CardDescription>
             </CardHeader>
             <CardContent>
-                <Button className="w-full h-12 bg-green-600 hover:bg-green-700 font-bold" onClick={() => document.getElementById('client-import-input-page')?.click()}>
+                <Button className="w-full h-12 bg-green-600 hover:bg-green-700 font-bold" onClick={() => document.getElementById('client-import-input-new')?.click()}>
                     Selecionar Arquivo Excel
                 </Button>
-                <input type="file" id="client-import-input-page" className="hidden" onChange={handleImportXLSX} accept=".xlsx, .xls" />
+                <input type="file" id="client-import-input-new" className="hidden" onChange={handleImportXLSX} accept=".xlsx, .xls" />
             </CardContent>
         </Card>
       </div>
@@ -161,70 +157,45 @@ const ImportClientsPage = () => {
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
-            <TableIcon className="h-5 w-5 text-gray-500" />
-            Exemplo de Preenchimento
+            <TableIcon className="h-5 w-5 text-gray-500" /> Estrutura da Planilha
           </CardTitle>
-          <CardDescription>
-            Certifique-se de que sua planilha siga a estrutura abaixo. A primeira linha deve conter os cabeçalhos exatos.
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="border rounded-md overflow-x-auto">
             <Table>
-              <TableHeader className="bg-gray-50">
+              <TableHeader className="bg-gray-50 text-[10px] uppercase">
                 <TableRow>
-                  <TableHead className="min-w-[180px]">Email*</TableHead>
-                  <TableHead>Senha</TableHead>
-                  <TableHead className="min-w-[180px]">Nome Completo</TableHead>
-                  <TableHead className="min-w-[150px]">Data de Nascimento</TableHead>
-                  <TableHead className="min-w-[130px]">Telefone</TableHead>
-                  <TableHead>CEP</TableHead>
-                  <TableHead className="min-w-[150px]">Rua</TableHead>
-                  <TableHead>Numero</TableHead>
-                  <TableHead>Complemento</TableHead>
-                  <TableHead>Bairro</TableHead>
+                  <TableHead>Email*</TableHead>
+                  <TableHead>Nome Completo</TableHead>
+                  <TableHead>CPF/CNPJ</TableHead>
+                  <TableHead>Sexo</TableHead>
+                  <TableHead>Nascimento</TableHead>
+                  <TableHead>Cliente Desde</TableHead>
+                  <TableHead>Telefone</TableHead>
                   <TableHead>Cidade</TableHead>
-                  <TableHead>Estado</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 <TableRow className="text-[11px]">
-                  <TableCell className="font-medium text-blue-600">joao@exemplo.com</TableCell>
-                  <TableCell>123456</TableCell>
+                  <TableCell className="font-medium text-blue-600">exemplo@email.com</TableCell>
                   <TableCell>João da Silva</TableCell>
+                  <TableCell>123.456.789-00</TableCell>
+                  <TableCell>Masculino</TableCell>
                   <TableCell>15-05-1990</TableCell>
+                  <TableCell>01-01-2023</TableCell>
                   <TableCell>11999998888</TableCell>
-                  <TableCell>01001000</TableCell>
-                  <TableCell>Rua das Flores</TableCell>
-                  <TableCell>123</TableCell>
-                  <TableCell>Apto 12</TableCell>
-                  <TableCell>Centro</TableCell>
                   <TableCell>São Paulo</TableCell>
-                  <TableCell>SP</TableCell>
                 </TableRow>
               </TableBody>
             </Table>
           </div>
           <div className="mt-4 text-sm bg-gray-50 p-4 rounded-lg border text-gray-600 space-y-2">
-            <p><span className="font-bold text-red-600">* Email:</span> Campo obrigatório. Não pode haver e-mails duplicados.</p>
-            <p><span className="font-bold text-gray-900">Data de Nascimento:</span> Use o formato <code className="bg-white px-2 py-0.5 rounded border border-gray-300 font-bold">DD-MM-AAAA</code> (ex: 15-05-1990).</p>
-            <p><span className="font-bold text-gray-900">Senha:</span> Opcional. Se deixar em branco, a senha padrão será <code className="bg-white px-2 py-0.5 rounded border border-gray-300 font-mono text-primary font-bold">123456</code>.</p>
+            <p><span className="font-bold text-gray-900">Datas:</span> Use o formato <code className="bg-white px-2 py-0.5 rounded border border-gray-300 font-bold">DD-MM-AAAA</code>.</p>
+            <p><span className="font-bold text-gray-900">Cliente Desde:</span> Se deixar em branco, o sistema usará a data atual do cadastro.</p>
           </div>
         </CardContent>
       </Card>
 
-      <Alert className="bg-orange-50 border-orange-200">
-        <AlertCircle className="h-4 w-4 text-orange-600" />
-        <AlertTitle className="text-orange-800 font-bold">Importante</AlertTitle>
-        <AlertDescription className="text-orange-700 text-sm mt-1">
-            <ul className="list-disc pl-5 space-y-1">
-                <li>Se o cliente já existir no sistema (mesmo e-mail), ele será <strong>ignorado</strong> nesta importação.</li>
-                <li>Verifique se não há espaços em branco antes ou depois dos e-mails na sua planilha.</li>
-            </ul>
-        </AlertDescription>
-      </Alert>
-
-      {/* Modal de Importação */}
       <ClientImportModal 
         isOpen={isImportModalOpen} 
         onClose={() => setIsImportModalOpen(false)} 

@@ -40,14 +40,13 @@ serve(async (req) => {
             throw new Error("Email é obrigatório");
         }
 
-        // Separa Nome de Sobrenome para metadados (Pega primeira palavra como nome, restante como sobrenome)
         const nameParts = (client.full_name || '').trim().split(' ');
         const firstName = nameParts[0] || 'Cliente';
         const lastName = nameParts.slice(1).join(' ') || '';
 
-        // 1. Criar usuário no Auth
         const password = client.password ? String(client.password) : "123456";
 
+        // 1. Criar usuário no Auth
         const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
           email: client.email,
           password: password,
@@ -62,17 +61,19 @@ serve(async (req) => {
 
         if (authError) {
             results.failed++;
-            results.errors.push(`${client.email}: Usuário já cadastrado ou erro no Auth.`);
+            results.errors.push(`${client.email}: ${authError.message}`);
             continue; 
         }
 
-        // 2. Atualizar tabela de profiles com dados extras
+        // 2. Atualizar perfil com novos campos
         if (userId) {
             const updateData: any = {
                 first_name: firstName,
                 last_name: lastName,
                 date_of_birth: client.date_of_birth || null,
                 phone: client.phone ? String(client.phone) : null,
+                cpf_cnpj: client.cpf_cnpj ? String(client.cpf_cnpj) : null,
+                gender: client.gender || null,
                 cep: client.cep ? String(client.cep) : null,
                 street: client.street,
                 number: client.number ? String(client.number) : null,
@@ -83,8 +84,10 @@ serve(async (req) => {
                 updated_at: new Date().toISOString()
             };
 
-            // Remove campos undefined que não queremos limpar
-            Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
+            // Se "Cliente Desde" foi enviado, atualizamos o created_at do perfil
+            if (client.client_since) {
+                updateData.created_at = client.client_since;
+            }
 
             const { error: profileError } = await supabaseAdmin
                 .from('profiles')
@@ -99,7 +102,6 @@ serve(async (req) => {
         results.success++;
 
       } catch (err: any) {
-        console.error(`Erro ao importar ${client.email}:`, err);
         results.failed++;
         results.errors.push(`${client.email || 'Desconhecido'}: ${err.message}`);
       }
@@ -116,7 +118,6 @@ serve(async (req) => {
       }
     )
   } catch (error) {
-    console.error('Erro geral na importação:', error);
     return new Response(
       JSON.stringify({ error: 'Falha interna na função.', details: error.message }),
       {
