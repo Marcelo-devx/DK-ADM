@@ -40,44 +40,38 @@ serve(async (req) => {
             throw new Error("Email é obrigatório");
         }
 
-        // 1. Criar usuário no Auth (ou retornar se já existe)
-        // Se a senha não vier na planilha, define uma padrão '123456'
+        // Separa Nome de Sobrenome para metadados (Pega primeira palavra como nome, restante como sobrenome)
+        const nameParts = (client.full_name || '').trim().split(' ');
+        const firstName = nameParts[0] || 'Cliente';
+        const lastName = nameParts.slice(1).join(' ') || '';
+
+        // 1. Criar usuário no Auth
         const password = client.password ? String(client.password) : "123456";
 
-        // Tenta criar o usuário
         const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
           email: client.email,
           password: password,
           email_confirm: true,
           user_metadata: {
-            first_name: client.first_name,
-            last_name: client.last_name
+            first_name: firstName,
+            last_name: lastName
           }
         });
 
         let userId = authData.user?.id;
 
-        // Se der erro porque já existe, tentamos buscar o ID dele para atualizar o perfil mesmo assim
         if (authError) {
-            // Se o erro for "User already registered", buscamos o usuário
-            // Nota: createUser não retorna o ID se falhar, então precisamos listar ou assumir falha se não quisermos atualizar existentes
-            console.log(`Usuário ${client.email}: ${authError.message}`);
-            
-            // Opcional: Se quiser atualizar dados de usuários já existentes, descomente abaixo.
-            // Por segurança na importação em massa, vamos contar como falha/existente para não sobrescrever dados sensíveis sem querer.
             results.failed++;
-            results.errors.push(`${client.email}: Usuário já cadastrado.`);
+            results.errors.push(`${client.email}: Usuário já cadastrado ou erro no Auth.`);
             continue; 
         }
 
-        // 2. Atualizar tabela de profiles com dados extras (telefone, endereço)
+        // 2. Atualizar tabela de profiles com dados extras
         if (userId) {
-            // Aguarda um pouco para garantir que o trigger handle_new_user rodou
-            // (Embora o update abaixo deva funcionar mesmo se rodar milissegundos depois)
-            
             const updateData: any = {
-                first_name: client.first_name,
-                last_name: client.last_name,
+                first_name: firstName,
+                last_name: lastName,
+                date_of_birth: client.date_of_birth || null,
                 phone: client.phone ? String(client.phone) : null,
                 cep: client.cep ? String(client.cep) : null,
                 street: client.street,
@@ -89,7 +83,7 @@ serve(async (req) => {
                 updated_at: new Date().toISOString()
             };
 
-            // Remove campos undefined/null que não queremos limpar
+            // Remove campos undefined que não queremos limpar
             Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
 
             const { error: profileError } = await supabaseAdmin
@@ -99,7 +93,6 @@ serve(async (req) => {
 
             if (profileError) {
                 console.error(`Erro ao atualizar perfil de ${client.email}:`, profileError);
-                // Não conta como falha total pois o login foi criado
             }
         }
 

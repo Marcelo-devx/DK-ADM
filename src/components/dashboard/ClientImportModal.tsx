@@ -18,8 +18,8 @@ import { Loader2, Users } from "lucide-react";
 
 interface ClientImportData {
   email: string;
-  first_name: string;
-  last_name: string;
+  full_name: string;
+  date_of_birth: string | null;
   phone: string;
   city: string;
   password?: string;
@@ -42,7 +42,7 @@ export const ClientImportModal = ({
 }: ClientImportModalProps) => {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Users className="h-6 w-6" /> Confirmar Importação ({clientsToImport.length} Clientes)
@@ -59,8 +59,8 @@ export const ClientImportModal = ({
             <TableHeader>
               <TableRow>
                 <TableHead>Email</TableHead>
-                <TableHead>Nome</TableHead>
-                <TableHead>Sobrenome</TableHead>
+                <TableHead>Nome Completo</TableHead>
+                <TableHead>Nascimento</TableHead>
                 <TableHead>Telefone</TableHead>
                 <TableHead>Cidade</TableHead>
                 <TableHead>Senha</TableHead>
@@ -70,8 +70,8 @@ export const ClientImportModal = ({
               {clientsToImport.slice(0, 100).map((client, index) => (
                 <TableRow key={index}>
                   <TableCell className="font-medium">{client.email}</TableCell>
-                  <TableCell>{client.first_name}</TableCell>
-                  <TableCell>{client.last_name}</TableCell>
+                  <TableCell>{client.full_name}</TableCell>
+                  <TableCell>{client.date_of_birth || '-'}</TableCell>
                   <TableCell>{client.phone || '-'}</TableCell>
                   <TableCell>{client.city || '-'}</TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">

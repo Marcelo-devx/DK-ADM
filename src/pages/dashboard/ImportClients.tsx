@@ -56,8 +56,8 @@ const ImportClientsPage = () => {
         
         const mappedClients = json.map(mapRowKeys).map((row: any) => ({
             email: row.email,
-            first_name: row.nome || '',
-            last_name: row.sobrenome || '',
+            full_name: row.nomecompleto || '',
+            date_of_birth: row.datadenascimento || null,
             phone: row.telefone ? String(row.telefone) : '',
             cep: row.cep ? String(row.cep) : '',
             street: row.rua || '',
@@ -83,7 +83,7 @@ const ImportClientsPage = () => {
 
   const handleDownloadTemplate = () => {
     const headers = [
-        "Email", "Senha", "Nome", "Sobrenome", "Telefone", "CEP", "Rua", "Numero", "Complemento", "Bairro", "Cidade", "Estado"
+        "Email", "Senha", "Nome Completo", "Data de Nascimento", "Telefone", "CEP", "Rua", "Numero", "Complemento", "Bairro", "Cidade", "Estado"
     ];
     const worksheet = XLSX.utils.aoa_to_sheet([headers]);
     const workbook = XLSX.utils.book_new();
@@ -156,14 +156,10 @@ const ImportClientsPage = () => {
               <TableHeader className="bg-gray-50">
                 <TableRow>
                   <TableHead className="min-w-[150px]">Email*</TableHead>
-                  <TableHead>Senha</TableHead>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>Sobrenome</TableHead>
+                  <TableHead>Nome Completo</TableHead>
+                  <TableHead>Data de Nascimento</TableHead>
                   <TableHead>Telefone</TableHead>
                   <TableHead>CEP</TableHead>
-                  <TableHead>Rua</TableHead>
-                  <TableHead>Numero</TableHead>
-                  <TableHead>Bairro</TableHead>
                   <TableHead>Cidade</TableHead>
                   <TableHead>Estado</TableHead>
                 </TableRow>
@@ -171,27 +167,19 @@ const ImportClientsPage = () => {
               <TableBody>
                 <TableRow>
                   <TableCell className="font-medium text-blue-600">joao@exemplo.com</TableCell>
-                  <TableCell className="text-muted-foreground italic text-xs">(vazio)</TableCell>
-                  <TableCell>João</TableCell>
-                  <TableCell>Silva</TableCell>
+                  <TableCell>João da Silva</TableCell>
+                  <TableCell>1990-05-15</TableCell>
                   <TableCell>11999998888</TableCell>
                   <TableCell>01001000</TableCell>
-                  <TableCell>Av. Paulista</TableCell>
-                  <TableCell>100</TableCell>
-                  <TableCell>Bela Vista</TableCell>
                   <TableCell>São Paulo</TableCell>
                   <TableCell>SP</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell className="font-medium text-blue-600">maria@teste.com</TableCell>
-                  <TableCell>Muda123</TableCell>
-                  <TableCell>Maria</TableCell>
-                  <TableCell>Oliveira</TableCell>
+                  <TableCell>Maria Oliveira</TableCell>
+                  <TableCell>1985-12-30</TableCell>
                   <TableCell>21988887777</TableCell>
                   <TableCell>20040002</TableCell>
-                  <TableCell>Rua Rio Branco</TableCell>
-                  <TableCell>50</TableCell>
-                  <TableCell>Centro</TableCell>
                   <TableCell>Rio de Janeiro</TableCell>
                   <TableCell>RJ</TableCell>
                 </TableRow>
@@ -200,8 +188,8 @@ const ImportClientsPage = () => {
           </div>
           <div className="mt-4 text-sm bg-gray-50 p-4 rounded-lg border text-gray-600 space-y-2">
             <p><span className="font-bold text-red-600">* Email:</span> Campo obrigatório. Não pode haver e-mails duplicados.</p>
+            <p><span className="font-bold text-gray-900">Data de Nascimento:</span> Use o formato <code className="bg-white px-2 py-0.5 rounded border border-gray-300">AAAA-MM-DD</code> (ex: 1990-05-15).</p>
             <p><span className="font-bold text-gray-900">Senha:</span> Opcional. Se deixar em branco, a senha padrão será <code className="bg-white px-2 py-0.5 rounded border border-gray-300 font-mono text-primary font-bold">123456</code>.</p>
-            <p><span className="font-bold text-gray-900">Telefone:</span> Apenas números, com DDD (ex: 11999999999).</p>
           </div>
         </CardContent>
       </Card>
