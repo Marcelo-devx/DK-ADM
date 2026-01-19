@@ -10,6 +10,7 @@ import { showSuccess, showError } from "@/utils/toast";
 import * as XLSX from 'xlsx';
 import { mapRowKeys } from "@/utils/excel-utils";
 import { ClientImportModal } from "@/components/dashboard/ClientImportModal";
+import { ImportResultModal } from "@/components/dashboard/ImportResultModal";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Table,
@@ -24,6 +25,10 @@ const ImportClientsPage = () => {
   const queryClient = useQueryClient();
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [clientsToImport, setClientsToImport] = useState<any[]>([]);
+  
+  // Estado para o Modal de Resultados
+  const [isResultModalOpen, setIsResultModalOpen] = useState(false);
+  const [importResult, setImportResult] = useState<{ success: number; failed: number; errors: string[] } | null>(null);
 
   // Função para converter formatos de data brasileiros para ISO
   const formatDateToISO = (val: any) => {
@@ -47,12 +52,17 @@ const ImportClientsPage = () => {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
-      showSuccess(data.message);
+      
+      // Fecha modal de confirmação e limpa seleção
       setIsImportModalOpen(false);
       setClientsToImport([]);
+
+      // Define os resultados e abre o modal de relatório
+      setImportResult(data.details);
+      setIsResultModalOpen(true);
     },
     onError: (error: Error) => {
-      showError(`Erro na importação: ${error.message}`);
+      showError(`Erro crítico na importação: ${error.message}`);
     },
   });
 
@@ -208,6 +218,12 @@ const ImportClientsPage = () => {
         clientsToImport={clientsToImport} 
         onConfirm={() => bulkImportMutation.mutate(clientsToImport)}
         isSubmitting={bulkImportMutation.isPending}
+      />
+
+      <ImportResultModal 
+        isOpen={isResultModalOpen} 
+        onClose={() => setIsResultModalOpen(false)} 
+        result={importResult} 
       />
     </div>
   );
