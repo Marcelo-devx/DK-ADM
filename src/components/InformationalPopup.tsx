@@ -11,6 +11,7 @@ import {
 import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { Info } from "lucide-react";
+import { useUser } from "@/hooks/useUser";
 
 const fetchActivePopups = async () => {
   const { data, error } = await supabase
@@ -27,6 +28,7 @@ const fetchActivePopups = async () => {
 };
 
 export const InformationalPopup = () => {
+  const { isAdmin, loading: userLoading } = useUser();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
@@ -43,15 +45,21 @@ export const InformationalPopup = () => {
   }, [popups]);
 
   useEffect(() => {
+    // Bloqueia exibição se for admin ou se estiver em rotas administrativas
     const isExcludedRoute = 
       location.pathname === '/login' || 
       location.pathname === '/' || 
       location.pathname.startsWith('/dashboard');
 
-    if (pendingPopups.length > 0 && !isExcludedRoute && !isOpen) {
+    if (isAdmin || isExcludedRoute) {
+        setIsOpen(false);
+        return;
+    }
+
+    if (pendingPopups.length > 0 && !isOpen && !userLoading) {
         setIsOpen(true);
     }
-  }, [pendingPopups, location.pathname, isOpen]);
+  }, [pendingPopups, location.pathname, isOpen, isAdmin, userLoading]);
 
   const currentPopup = pendingPopups[currentIndex];
 
@@ -68,7 +76,7 @@ export const InformationalPopup = () => {
     }
   };
 
-  if (isLoading || !currentPopup || !isOpen) {
+  if (isLoading || userLoading || !currentPopup || !isOpen || isAdmin) {
     return null;
   }
 
@@ -76,7 +84,6 @@ export const InformationalPopup = () => {
     <AlertDialog 
       open={isOpen} 
       onOpenChange={(open) => {
-        // Se tentar fechar (open === false), impedimos a mudança de estado
         if (!open) return;
         setIsOpen(open);
       }}
