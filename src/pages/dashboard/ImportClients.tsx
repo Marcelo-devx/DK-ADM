@@ -155,33 +155,34 @@ const ImportClientsPage = () => {
             <Table>
               <TableHeader className="bg-gray-50">
                 <TableRow>
-                  <TableHead className="min-w-[150px]">Email*</TableHead>
-                  <TableHead>Nome Completo</TableHead>
-                  <TableHead>Data de Nascimento</TableHead>
-                  <TableHead>Telefone</TableHead>
+                  <TableHead className="min-w-[180px]">Email*</TableHead>
+                  <TableHead>Senha</TableHead>
+                  <TableHead className="min-w-[180px]">Nome Completo</TableHead>
+                  <TableHead className="min-w-[150px]">Data de Nascimento</TableHead>
+                  <TableHead className="min-w-[130px]">Telefone</TableHead>
                   <TableHead>CEP</TableHead>
+                  <TableHead className="min-w-[150px]">Rua</TableHead>
+                  <TableHead>Numero</TableHead>
+                  <TableHead>Complemento</TableHead>
+                  <TableHead>Bairro</TableHead>
                   <TableHead>Cidade</TableHead>
                   <TableHead>Estado</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                <TableRow>
+                <TableRow className="text-[11px]">
                   <TableCell className="font-medium text-blue-600">joao@exemplo.com</TableCell>
+                  <TableCell>123456</TableCell>
                   <TableCell>João da Silva</TableCell>
                   <TableCell>1990-05-15</TableCell>
                   <TableCell>11999998888</TableCell>
                   <TableCell>01001000</TableCell>
+                  <TableCell>Rua das Flores</TableCell>
+                  <TableCell>123</TableCell>
+                  <TableCell>Apto 12</TableCell>
+                  <TableCell>Centro</TableCell>
                   <TableCell>São Paulo</TableCell>
                   <TableCell>SP</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell className="font-medium text-blue-600">maria@teste.com</TableCell>
-                  <TableCell>Maria Oliveira</TableCell>
-                  <TableCell>1985-12-30</TableCell>
-                  <TableCell>21988887777</TableCell>
-                  <TableCell>20040002</TableCell>
-                  <TableCell>Rio de Janeiro</TableCell>
-                  <TableCell>RJ</TableCell>
                 </TableRow>
               </TableBody>
             </Table>
