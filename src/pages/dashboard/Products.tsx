@@ -51,7 +51,22 @@ import {
 import { Input } from "@/components/ui/input";
 import { ProductForm } from "../../components/dashboard/product-form";
 import { showSuccess, showError } from "../../utils/toast";
-import { PlusCircle, MoreHorizontal, ImageOff, FileDown, Upload, FileUp, Star, Search, ArrowUpDown, ChevronUp, ChevronDown, Lock } from "lucide-react";
+import { 
+  PlusCircle, 
+  MoreHorizontal, 
+  ImageOff, 
+  FileDown, 
+  Upload, 
+  FileUp, 
+  Star, 
+  Search, 
+  ArrowUpDown, 
+  ChevronUp, 
+  ChevronDown, 
+  Lock, 
+  DownloadCloud,
+  RefreshCw 
+} from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import * as XLSX from 'xlsx';
@@ -77,13 +92,12 @@ type Product = {
   is_visible: boolean;
   variant_prices?: number[];
   variant_costs?: (number | null)[];
-  allocated_in_kits?: number; // Novo campo calculado
+  allocated_in_kits?: number;
 };
 
 type ProductImportData = Omit<Product, 'id' | 'variant_prices' | 'variant_costs' | 'allocated_in_kits'>;
 
 const fetchProducts = async () => {
-  // Busca produtos e também os itens de promoção vinculados para calcular alocação
   const { data, error } = await supabase
     .from("products")
     .select(`
@@ -105,15 +119,11 @@ const fetchProducts = async () => {
   
   return data.map(p => {
     const variantsList = Array.isArray(p.variants) ? p.variants : [];
-    
-    // Calcula quanto deste produto está preso em Kits
     const promotionItems = p.promotion_items || [];
     let allocated = 0;
     
     promotionItems.forEach((item: any) => {
-        // Supabase pode retornar array ou objeto dependendo da relação, garantimos o tratamento
         const promo = Array.isArray(item.promotions) ? item.promotions[0] : item.promotions;
-        
         if (promo && promo.stock_quantity > 0) {
             allocated += (item.quantity * promo.stock_quantity);
         }
@@ -159,7 +169,6 @@ const ProductsPage = () => {
   const [isImportConfirmationModalOpen, setIsImportConfirmationModalOpen] = useState(false);
   const [productsToConfirm, setProductsToConfirm] = useState<ProductImportData[]>([]);
   
-  // Estado para o Modal de Resultados
   const [isResultModalOpen, setIsResultModalOpen] = useState(false);
   const [importResult, setImportResult] = useState<{ success: number; failed: number; errors: string[] } | null>(null);
 
@@ -257,8 +266,6 @@ const ProductsPage = () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
       setIsImportConfirmationModalOpen(false);
       setProductsToConfirm([]);
-      
-      // Define os resultados e abre o modal de relatório
       setImportResult(data.details);
       setIsResultModalOpen(true);
     },
@@ -289,7 +296,7 @@ const ProductsPage = () => {
             brand: row.marca || null,
             image_url: row.imagem || null,
             is_visible: row.publicadosimnao?.toLowerCase() === 'sim',
-            flavor_names: row.sabores || '' // Campo opcional para importação de sabores
+            flavor_names: row.sabores || '' 
         }));
         setProductsToConfirm(productsToInsert);
         setIsImportConfirmationModalOpen(true);
@@ -304,7 +311,7 @@ const ProductsPage = () => {
     const data = products.map(p => [
         p.sku || '', 
         p.name,
-        '', // Sabores (placeholder, complexo exportar aqui)
+        '', 
         p.description || '', 
         p.cost_price || 0, 
         p.price, 
@@ -320,6 +327,14 @@ const ProductsPage = () => {
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Produtos");
     XLSX.writeFile(workbook, "produtos_tabacaria.xlsx");
+  };
+
+  const handleDownloadTemplate = () => {
+    const headers = ["SKU", "Nome", "Sabores", "Descrição", "Preço de Custo", "Preço de Venda", "Preço Pix", "Estoque", "Categoria", "Sub-categoria", "Marca", "Imagem", "Publicado (Sim/Não)"];
+    const worksheet = XLSX.utils.aoa_to_sheet([headers]);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Template");
+    XLSX.writeFile(workbook, "template_importacao_produtos.xlsx");
   };
 
   const formatCurrency = (val: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
@@ -349,29 +364,60 @@ const ProductsPage = () => {
   };
 
   return (
-    <div>
-      <div className="flex flex-col gap-6 mb-6">
+    <div className="pb-20">
+      <div className="flex flex-col gap-6 mb-8">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold">Produtos</h1>
-            {!isLoadingProducts && <Badge variant="secondary" className="h-7 px-3 text-sm font-bold bg-gray-100 text-gray-700">{filteredProducts.length} itens</Badge>}
+            <h1 className="text-3xl font-black text-gray-900 tracking-tight">Catálogo</h1>
+            {!isLoadingProducts && <Badge variant="secondary" className="h-7 px-3 text-sm font-bold bg-blue-50 text-blue-700 border-blue-100">{filteredProducts.length} itens</Badge>}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <TooltipProvider>
-              <Tooltip><TooltipTrigger asChild><Button variant="outline" size="icon" onClick={() => {
-                const headers = ["SKU", "Nome", "Sabores", "Descrição", "Preço de Custo", "Preço de Venda", "Preço Pix", "Estoque", "Categoria", "Sub-categoria", "Marca", "Imagem", "Publicado (Sim/Não)"];
-                const worksheet = XLSX.utils.aoa_to_sheet([headers]);
-                const workbook = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(workbook, worksheet, "Template");
-                XLSX.writeFile(workbook, "template_importacao_produtos.xlsx");
-              }}><Upload className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent><p>Baixar Modelo</p></TooltipContent></Tooltip>
-              <Tooltip><TooltipTrigger asChild><Button variant="outline" size="icon" onClick={() => document.getElementById('import-input')?.click()}><FileUp className="h-4 w-4" /><input type="file" id="import-input" className="hidden" onChange={handleImportXLSX} /></Button></TooltipTrigger><TooltipContent><p>Importar Planilha</p></TooltipContent></Tooltip>
-              <Tooltip><TooltipTrigger asChild><Button variant="outline" size="icon" onClick={handleExportXLSX}><FileDown className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent><p>Exportar Catálogo</p></TooltipContent></Tooltip>
-            </TooltipProvider>
+          
+          <div className="flex flex-wrap items-center gap-3">
+            {/* GRUPO DE EXCEL */}
+            <div className="flex items-center bg-white border p-1 rounded-xl shadow-sm">
+                <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-9 w-9 text-blue-600 hover:bg-blue-50 rounded-lg" onClick={handleDownloadTemplate}>
+                                <DownloadCloud className="h-5 w-5" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent><p>Baixar Modelo Excel</p></TooltipContent>
+                    </Tooltip>
+                    
+                    <div className="w-[1px] h-4 bg-gray-200 mx-1" />
+
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-9 w-9 text-green-600 hover:bg-green-50 rounded-lg" onClick={() => document.getElementById('import-input')?.click()}>
+                                <FileUp className="h-5 w-5" />
+                                <input type="file" id="import-input" className="hidden" onChange={handleImportXLSX} accept=".xlsx, .xls" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent><p>Importar Planilha</p></TooltipContent>
+                    </Tooltip>
+
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-9 w-9 text-orange-600 hover:bg-orange-50 rounded-lg" onClick={handleExportXLSX}>
+                                <FileDown className="h-5 w-5" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent><p>Exportar Catálogo</p></TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+            </div>
             
+            {/* BOTÃO PRINCIPAL */}
             <Dialog open={isProductModalOpen} onOpenChange={setIsProductModalOpen}>
-              <DialogTrigger asChild><Button><PlusCircle className="w-4 h-4 mr-2" />Adicionar Produto</Button></DialogTrigger>
-              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>Adicionar Novo Produto</DialogTitle></DialogHeader>
+              <DialogTrigger asChild>
+                <Button className="bg-primary hover:bg-primary/90 font-bold h-11 px-6 shadow-lg rounded-xl transition-all hover:scale-[1.02] active:scale-95">
+                    <PlusCircle className="w-5 h-5 mr-2" />
+                    Adicionar Produto
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader><DialogTitle>Adicionar Novo Produto</DialogTitle></DialogHeader>
                 <ProductForm 
                     onSubmit={(v) => addProductMutation.mutate(v)} 
                     isSubmitting={addProductMutation.isPending} 
@@ -388,17 +434,26 @@ const ProductsPage = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 bg-white p-4 rounded-lg border shadow-sm">
-          <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Pesquisar produto ou SKU..." className="pl-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
-          <Select value={brandFilter} onValueChange={setBrandFilter}><SelectTrigger><SelectValue placeholder="Todas as Marcas" /></SelectTrigger><SelectContent><SelectItem value="all">Todas as Marcas</SelectItem>{brands?.map(b => <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>)}</SelectContent></Select>
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}><SelectTrigger><SelectValue placeholder="Todas as Categorias" /></SelectTrigger><SelectContent><SelectItem value="all">Todas as Categorias</SelectItem>{categories?.map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}</SelectContent></Select>
-          <div className="flex items-center justify-end"><span className="text-xs text-muted-foreground font-medium">{filteredProducts?.length || 0} encontrados</span></div>
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 bg-white p-4 rounded-xl border shadow-sm">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Pesquisar produto ou SKU..." className="pl-9 bg-gray-50/50" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+          </div>
+          <Select value={brandFilter} onValueChange={setBrandFilter}>
+            <SelectTrigger className="bg-gray-50/50"><SelectValue placeholder="Todas as Marcas" /></SelectTrigger>
+            <SelectContent><SelectItem value="all">Todas as Marcas</SelectItem>{brands?.map(b => <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>)}</SelectContent>
+          </Select>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="bg-gray-50/50"><SelectValue placeholder="Todas as Categorias" /></SelectTrigger>
+            <SelectContent><SelectItem value="all">Todas as Categorias</SelectItem>{categories?.map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
+          </Select>
+          <div className="flex items-center justify-end"><span className="text-xs text-muted-foreground font-bold uppercase tracking-wider">{filteredProducts?.length || 0} encontrados</span></div>
         </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-x-auto">
+      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
         <Table>
-          <TableHeader>
+          <TableHeader className="bg-gray-50/50">
             <TableRow>
               <TableHead className="w-[64px]">Imagem</TableHead>
               <TableHead>SKU</TableHead>
@@ -413,35 +468,35 @@ const ProductsPage = () => {
           </TableHeader>
           <TableBody>
             {isLoadingProducts ? (
-              <TableRow><TableCell colSpan={10} className="text-center">Carregando...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={10} className="text-center py-10"><RefreshCw className="h-6 w-6 animate-spin mx-auto text-muted-foreground" /></TableCell></TableRow>
             ) : filteredProducts && filteredProducts.length > 0 ? (
               filteredProducts.map((product) => (
-                <TableRow key={product.id}>
-                  <TableCell>{product.image_url ? <img src={product.image_url} alt={product.name} className="h-12 w-12 rounded-md object-cover" /> : <div className="h-12 w-12 rounded-md bg-gray-100 flex items-center justify-center"><ImageOff className="h-5 w-5 text-gray-400" /></div>}</TableCell>
-                  <TableCell className="font-mono text-[10px] font-bold">#{product.sku || product.id}</TableCell>
-                  <TableCell className="font-medium text-xs truncate max-w-[200px]">{product.name}</TableCell>
-                  <TableCell className="text-xs">{product.category || "N/A"}</TableCell>
-                  <TableCell className="text-xs">{getPriceDisplay(product, true)}</TableCell>
-                  <TableCell className="text-xs font-medium">{getPriceDisplay(product)}</TableCell>
-                  <TableCell className="text-xs font-bold text-green-700">{product.pix_price ? formatCurrency(product.pix_price) : '-'}</TableCell>
+                <TableRow key={product.id} className="hover:bg-gray-50/50 transition-colors">
+                  <TableCell>{product.image_url ? <img src={product.image_url} alt={product.name} className="h-12 w-12 rounded-lg object-cover shadow-sm border" /> : <div className="h-12 w-12 rounded-lg bg-gray-100 flex items-center justify-center border border-dashed"><ImageOff className="h-5 w-5 text-gray-400" /></div>}</TableCell>
+                  <TableCell className="font-mono text-[10px] font-black text-gray-500">#{product.sku || product.id}</TableCell>
+                  <TableCell className="font-bold text-xs truncate max-w-[200px] text-gray-800">{product.name}</TableCell>
+                  <TableCell className="text-xs font-medium text-muted-foreground">{product.category || "N/A"}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{getPriceDisplay(product, true)}</TableCell>
+                  <TableCell className="text-xs font-bold text-gray-700">{getPriceDisplay(product)}</TableCell>
+                  <TableCell className="text-xs font-black text-green-700">{product.pix_price ? formatCurrency(product.pix_price) : '-'}</TableCell>
                   <TableCell>
                     <div className="flex flex-col gap-1">
-                        <Badge variant={product.stock_quantity <= 5 ? "destructive" : "secondary"} className="h-5 text-[10px] w-fit">
+                        <Badge variant={product.stock_quantity <= 5 ? "destructive" : "secondary"} className="h-5 text-[10px] w-fit font-black">
                             {product.stock_quantity} un
                         </Badge>
                         {product.allocated_in_kits ? (
-                            <Badge variant="outline" className="h-5 text-[9px] w-fit bg-amber-50 text-amber-700 border-amber-200 gap-1" title="Quantidade reservada em Kits">
+                            <Badge variant="outline" className="h-5 text-[9px] w-fit bg-amber-50 text-amber-700 border-amber-200 gap-1 font-bold" title="Quantidade reservada em Kits">
                                 <Lock className="w-2.5 h-2.5" /> + {product.allocated_in_kits} em Kits
                             </Badge>
                         ) : null}
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => { setSelectedProduct(product); setIsEditModalOpen(true); }}><MoreHorizontal className="h-4 w-4 text-primary" /></Button>
+                    <Button variant="ghost" size="icon" className="hover:bg-primary/5" onClick={() => { setSelectedProduct(product); setIsEditModalOpen(true); }}><MoreHorizontal className="h-4 w-4 text-primary" /></Button>
                   </TableCell>
                 </TableRow>
               ))
-            ) : <TableRow><TableCell colSpan={10} className="text-center py-10">Nenhum produto.</TableCell></TableRow>}
+            ) : <TableRow><TableCell colSpan={10} className="text-center py-20 text-muted-foreground italic">Nenhum produto encontrado.</TableCell></TableRow>}
           </TableBody>
         </Table>
       </div>
