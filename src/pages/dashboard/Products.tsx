@@ -56,6 +56,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import * as XLSX from 'xlsx';
 import { ImportConfirmationModal } from "@/components/dashboard/ImportConfirmationModal";
+import { ImportResultModal } from "@/components/dashboard/ImportResultModal";
 import { mapRowKeys } from "@/utils/excel-utils";
 import { ProductVariantViewer } from "@/components/dashboard/ProductVariantViewer";
 import { cn } from "@/lib/utils";
@@ -113,9 +114,6 @@ const fetchProducts = async () => {
         // Supabase pode retornar array ou objeto dependendo da relação, garantimos o tratamento
         const promo = Array.isArray(item.promotions) ? item.promotions[0] : item.promotions;
         
-        // CORREÇÃO: Removemos a verificação de 'is_active'.
-        // Se o kit existe e tem estoque > 0, os produtos estão fisicamente reservados nele,
-        // independentemente se o kit está visível na loja ou não.
         if (promo && promo.stock_quantity > 0) {
             allocated += (item.quantity * promo.stock_quantity);
         }
@@ -160,6 +158,10 @@ const ProductsPage = () => {
 
   const [isImportConfirmationModalOpen, setIsImportConfirmationModalOpen] = useState(false);
   const [productsToConfirm, setProductsToConfirm] = useState<ProductImportData[]>([]);
+  
+  // Estado para o Modal de Resultados
+  const [isResultModalOpen, setIsResultModalOpen] = useState(false);
+  const [importResult, setImportResult] = useState<{ success: number; failed: number; errors: string[] } | null>(null);
 
   const { data: products, isLoading: isLoadingProducts } = useQuery<Product[]>({
     queryKey: ["products"],
@@ -253,8 +255,15 @@ const ProductsPage = () => {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
-      showSuccess(data.message);
       setIsImportConfirmationModalOpen(false);
+      setProductsToConfirm([]);
+      
+      // Define os resultados e abre o modal de relatório
+      setImportResult(data.details);
+      setIsResultModalOpen(true);
+    },
+    onError: (error) => {
+      showError(`Erro ao processar: ${error.message}`);
     },
   });
 
@@ -280,6 +289,7 @@ const ProductsPage = () => {
             brand: row.marca || null,
             image_url: row.imagem || null,
             is_visible: row.publicadosimnao?.toLowerCase() === 'sim',
+            flavor_names: row.sabores || '' // Campo opcional para importação de sabores
         }));
         setProductsToConfirm(productsToInsert);
         setIsImportConfirmationModalOpen(true);
@@ -290,10 +300,11 @@ const ProductsPage = () => {
 
   const handleExportXLSX = () => {
     if (!products?.length) return;
-    const headers = ["SKU", "Nome", "Descrição", "Preço de Custo", "Preço de Venda", "Preço Pix", "Estoque", "Categoria", "Sub-categoria", "Marca", "Imagem", "Publicado (Sim/Não)"];
+    const headers = ["SKU", "Nome", "Sabores", "Descrição", "Preço de Custo", "Preço de Venda", "Preço Pix", "Estoque", "Categoria", "Sub-categoria", "Marca", "Imagem", "Publicado (Sim/Não)"];
     const data = products.map(p => [
         p.sku || '', 
-        p.name, 
+        p.name,
+        '', // Sabores (placeholder, complexo exportar aqui)
         p.description || '', 
         p.cost_price || 0, 
         p.price, 
@@ -348,11 +359,11 @@ const ProductsPage = () => {
           <div className="flex flex-wrap items-center gap-2">
             <TooltipProvider>
               <Tooltip><TooltipTrigger asChild><Button variant="outline" size="icon" onClick={() => {
-                const headers = ["SKU", "Nome", "Descrição", "Preço de Custo", "Preço de Venda", "Preço Pix", "Estoque", "Categoria", "Sub-categoria", "Marca", "Imagem", "Publicado (Sim/Não)"];
+                const headers = ["SKU", "Nome", "Sabores", "Descrição", "Preço de Custo", "Preço de Venda", "Preço Pix", "Estoque", "Categoria", "Sub-categoria", "Marca", "Imagem", "Publicado (Sim/Não)"];
                 const worksheet = XLSX.utils.aoa_to_sheet([headers]);
                 const workbook = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(workbook, worksheet, "Template");
-                XLSX.writeFile(workbook, "template_importacao.xlsx");
+                XLSX.writeFile(workbook, "template_importacao_produtos.xlsx");
               }}><Upload className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent><p>Baixar Modelo</p></TooltipContent></Tooltip>
               <Tooltip><TooltipTrigger asChild><Button variant="outline" size="icon" onClick={() => document.getElementById('import-input')?.click()}><FileUp className="h-4 w-4" /><input type="file" id="import-input" className="hidden" onChange={handleImportXLSX} /></Button></TooltipTrigger><TooltipContent><p>Importar Planilha</p></TooltipContent></Tooltip>
               <Tooltip><TooltipTrigger asChild><Button variant="outline" size="icon" onClick={handleExportXLSX}><FileDown className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent><p>Exportar Catálogo</p></TooltipContent></Tooltip>
@@ -451,8 +462,22 @@ const ProductsPage = () => {
           />
         </DialogContent>
       </Dialog>
+      
       {productToViewVariants && <ProductVariantViewer productId={productToViewVariants.id} productName={productToViewVariants.name} isOpen={isVariantViewerOpen} onClose={() => setIsVariantViewerOpen(false)} />}
-      <ImportConfirmationModal isOpen={isImportConfirmationModalOpen} onClose={() => setIsImportConfirmationModalOpen(false)} productsToImport={productsToConfirm} onConfirm={() => bulkInsertMutation.mutate(productsToConfirm)} isSubmitting={bulkInsertMutation.isPending} />
+      
+      <ImportConfirmationModal 
+        isOpen={isImportConfirmationModalOpen} 
+        onClose={() => setIsImportConfirmationModalOpen(false)} 
+        productsToImport={productsToConfirm} 
+        onConfirm={() => bulkInsertMutation.mutate(productsToConfirm)} 
+        isSubmitting={bulkInsertMutation.isPending} 
+      />
+
+      <ImportResultModal 
+        isOpen={isResultModalOpen} 
+        onClose={() => setIsResultModalOpen(false)} 
+        result={importResult} 
+      />
     </div>
   );
 };

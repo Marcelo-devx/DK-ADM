@@ -16,7 +16,7 @@ serve(async (req) => {
     const { products } = await req.json();
 
     if (!products || !Array.isArray(products) || products.length === 0) {
-      return new Response(JSON.stringify({ error: 'Nenhum produto fornecido para upsert.' }), {
+      return new Response(JSON.stringify({ error: 'Nenhum produto fornecido.' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -28,90 +28,105 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    const allFlavorNames = new Set();
-    for (const product of products) {
-      if (product.flavor_names) {
-        product.flavor_names.split(',').map(name => name.trim()).forEach(name => {
-          if (name) allFlavorNames.add(name);
-        });
-      }
-    }
-    const flavorNamesArray = Array.from(allFlavorNames);
+    const results = {
+      success: 0,
+      failed: 0,
+      errors: [] as string[]
+    };
 
-    let flavorMap = new Map();
-    if (flavorNamesArray.length > 0) {
-      const { data: existingFlavors, error: flavorError } = await supabaseAdmin
-        .from('flavors')
-        .select('id, name')
-        .in('name', flavorNamesArray);
+    // Cache de sabores para evitar muitas queries
+    const { data: allFlavors } = await supabaseAdmin.from('flavors').select('id, name');
+    const flavorMap = new Map(allFlavors?.map(f => [f.name.toLowerCase().trim(), f.id]));
 
-      if (flavorError) throw flavorError;
-      
-      flavorMap = new Map(existingFlavors.map(f => [f.name, f.id]));
-    }
+    for (const p of products) {
+      try {
+        const { flavor_names, ...productData } = p;
+        
+        // Validações básicas
+        if (!productData.name) throw new Error("Nome do produto é obrigatório");
 
-    const productsToUpsert = products.map(p => {
-      const { flavor_names, ...productData } = p;
-      // Garante que o SKU seja nulo se estiver vazio, para não violar a restrição UNIQUE
-      if (productData.sku === '') {
-        productData.sku = null;
-      }
-      return productData;
-    });
-
-    const { data: upsertedProducts, error: upsertError } = await supabaseAdmin
-      .from('products')
-      .upsert(productsToUpsert, { onConflict: 'sku' }) // Alterado de 'name' para 'sku'
-      .select('id, sku, name');
-
-    if (upsertError) throw upsertError;
-
-    const productFlavorInserts = [];
-    const productIdsMap = new Map(upsertedProducts.map(p => [p.sku || p.name, p.id]));
-
-    for (const product of products) {
-      const identifier = product.sku || product.name;
-      const productId = productIdsMap.get(identifier);
-      if (!productId) continue;
-
-      const flavorNames = product.flavor_names ? product.flavor_names.split(',').map(name => name.trim()).filter(name => name) : [];
-      
-      const { error: deleteError } = await supabaseAdmin
-        .from('product_flavors')
-        .delete()
-        .eq('product_id', productId);
-      if (deleteError) console.error(`Erro ao limpar product_flavors para produto ${productId}:`, deleteError);
-
-      for (const flavorName of flavorNames) {
-        const flavorId = flavorMap.get(flavorName);
-        if (flavorId) {
-          productFlavorInserts.push({
-            product_id: productId,
-            flavor_id: flavorId,
-            is_visible: true,
-          });
+        // Tratamento de SKU vazio
+        if (productData.sku === '' || productData.sku === undefined) {
+            productData.sku = null;
         }
-      }
-    }
 
-    if (productFlavorInserts.length > 0) {
-      const { error: insertError } = await supabaseAdmin
-        .from('product_flavors')
-        .insert(productFlavorInserts);
-      if (insertError) console.error('Erro ao inserir product_flavors:', insertError);
+        // 1. Upsert do Produto
+        // Se tiver SKU, usa como chave de conflito. Se não, é um INSERT novo.
+        const options = productData.sku ? { onConflict: 'sku' } : undefined;
+        
+        const { data: upsertedProduct, error: upsertError } = await supabaseAdmin
+          .from('products')
+          .upsert(productData, options)
+          .select('id')
+          .single();
+
+        if (upsertError) {
+            // Tratamento específico para erro de SKU duplicado se não capturado pelo upsert
+            if (upsertError.code === '23505') throw new Error("SKU já existe em outro produto.");
+            throw upsertError;
+        }
+        
+        const productId = upsertedProduct.id;
+
+        // 2. Processar Sabores (Se houver coluna flavor_names na planilha)
+        if (flavor_names) {
+           const names = String(flavor_names).split(',').map((n: string) => n.trim());
+           
+           // Remove associações antigas para recriar (estratégia simples de sync)
+           await supabaseAdmin.from('product_flavors').delete().eq('product_id', productId);
+           
+           const flavorsToInsert = [];
+           for (const name of names) {
+             if (!name) continue;
+             const normalized = name.toLowerCase();
+             let fId = flavorMap.get(normalized);
+             
+             // Cria sabor se não existir (Opcional, mas útil na importação)
+             if (!fId) {
+                const { data: newFlavor, error: newFlavorError } = await supabaseAdmin
+                    .from('flavors')
+                    .insert({ name: name, is_visible: true })
+                    .select('id')
+                    .single();
+                
+                if (!newFlavorError && newFlavor) {
+                    fId = newFlavor.id;
+                    flavorMap.set(normalized, fId);
+                }
+             }
+
+             if (fId) {
+                flavorsToInsert.push({ product_id: productId, flavor_id: fId, is_visible: true });
+             }
+           }
+
+           if (flavorsToInsert.length > 0) {
+             await supabaseAdmin.from('product_flavors').insert(flavorsToInsert);
+           }
+        }
+
+        results.success++;
+
+      } catch (err: any) {
+        results.failed++;
+        const iden = p.sku || p.name || 'Produto desconhecido';
+        results.errors.push(`${iden}: ${err.message}`);
+      }
     }
 
     return new Response(
-      JSON.stringify({ message: `${upsertedProducts.length} produtos processados com sucesso.` }),
+      JSON.stringify({ 
+        message: `Processamento concluído.`,
+        details: results
+      }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
       }
     )
   } catch (error) {
-    console.error('Erro no bulk-product-upsert:', error);
     return new Response(
-      JSON.stringify({ error: 'Falha na operação em massa.', details: error.message }),
+      JSON.stringify({ error: 'Falha interna na função.', details: error.message }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 500,
