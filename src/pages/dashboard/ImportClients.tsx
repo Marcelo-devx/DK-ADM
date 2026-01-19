@@ -126,13 +126,13 @@ const ImportClientsPage = () => {
             <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
                     <FileDown className="h-5 w-5 text-blue-600" />
-                    1. Baixar Modelo
+                    Baixar Modelo
                 </CardTitle>
-                <CardDescription>Baixe a planilha com os novos campos (CPF, Sexo, Data de Cadastro).</CardDescription>
+                <CardDescription>Baixe a planilha com todos os campos suportados pelo sistema.</CardDescription>
             </CardHeader>
             <CardContent>
                 <Button variant="outline" className="w-full h-12 border-blue-200 text-blue-700 hover:bg-blue-50" onClick={handleDownloadTemplate}>
-                    Baixar Planilha Atualizada (.xlsx)
+                    Baixar Planilha Modelo (.xlsx)
                 </Button>
             </CardContent>
         </Card>
@@ -141,7 +141,7 @@ const ImportClientsPage = () => {
             <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
                     <FileUp className="h-5 w-5 text-green-600" />
-                    2. Enviar Planilha
+                    Enviar Planilha
                 </CardTitle>
                 <CardDescription>Envie o arquivo preenchido para processar os cadastros.</CardDescription>
             </CardHeader>
@@ -159,6 +159,7 @@ const ImportClientsPage = () => {
           <CardTitle className="text-lg flex items-center gap-2">
             <TableIcon className="h-5 w-5 text-gray-500" /> Estrutura da Planilha
           </CardTitle>
+          <CardDescription>Exemplo de como as colunas devem ser preenchidas:</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="border rounded-md overflow-x-auto">
@@ -166,6 +167,7 @@ const ImportClientsPage = () => {
               <TableHeader className="bg-gray-50 text-[10px] uppercase">
                 <TableRow>
                   <TableHead>Email*</TableHead>
+                  <TableHead>Senha</TableHead>
                   <TableHead>Nome Completo</TableHead>
                   <TableHead>CPF/CNPJ</TableHead>
                   <TableHead>Sexo</TableHead>
@@ -173,11 +175,13 @@ const ImportClientsPage = () => {
                   <TableHead>Cliente Desde</TableHead>
                   <TableHead>Telefone</TableHead>
                   <TableHead>Cidade</TableHead>
+                  <TableHead>Estado</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 <TableRow className="text-[11px]">
                   <TableCell className="font-medium text-blue-600">exemplo@email.com</TableCell>
+                  <TableCell>123456</TableCell>
                   <TableCell>João da Silva</TableCell>
                   <TableCell>123.456.789-00</TableCell>
                   <TableCell>Masculino</TableCell>
@@ -185,14 +189,15 @@ const ImportClientsPage = () => {
                   <TableCell>01-01-2023</TableCell>
                   <TableCell>11999998888</TableCell>
                   <TableCell>São Paulo</TableCell>
+                  <TableCell>SP</TableCell>
                 </TableRow>
               </TableBody>
             </Table>
           </div>
           <div className="mt-4 text-sm bg-gray-50 p-4 rounded-lg border text-gray-600 space-y-2">
             <p><span className="font-bold text-gray-900">Datas:</span> Use o formato <code className="bg-white px-2 py-0.5 rounded border border-gray-300 font-bold">DD-MM-AAAA</code>.</p>
-            <p><span className="font-bold text-gray-900">Senha:</span> Se não for fornecida na planilha, será definida como <code className="bg-white px-2 py-0.5 rounded border border-gray-300 font-bold">123456</code>.</p>
-            <p><span className="font-bold text-gray-900">Cliente Desde:</span> Se deixar em branco, o sistema usará a data atual do cadastro.</p>
+            <p><span className="font-bold text-gray-900">Senha:</span> Se não for fornecida na planilha, será definida como <code className="bg-white px-2 py-0.5 rounded border border-gray-300 font-bold">123456</code> por padrão.</p>
+            <p><span className="font-bold text-gray-900">Cliente Desde:</span> Se deixar em branco, o sistema registrará a data atual da importação.</p>
           </div>
         </CardContent>
       </Card>
