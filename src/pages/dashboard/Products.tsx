@@ -378,8 +378,9 @@ const ProductsPage = () => {
                 <TooltipProvider>
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-9 w-9 text-blue-600 hover:bg-blue-50 rounded-lg" onClick={handleDownloadTemplate}>
-                                <DownloadCloud className="h-5 w-5" />
+                            <Button variant="ghost" className="h-9 px-3 text-blue-600 hover:bg-blue-50 rounded-lg flex items-center gap-2 font-bold text-xs" onClick={handleDownloadTemplate}>
+                                <DownloadCloud className="h-4 w-4" />
+                                <span>Modelo</span>
                             </Button>
                         </TooltipTrigger>
                         <TooltipContent><p>Baixar Modelo Excel</p></TooltipContent>
@@ -389,8 +390,9 @@ const ProductsPage = () => {
 
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-9 w-9 text-green-600 hover:bg-green-50 rounded-lg" onClick={() => document.getElementById('import-input')?.click()}>
-                                <FileUp className="h-5 w-5" />
+                            <Button variant="ghost" className="h-9 px-3 text-green-600 hover:bg-green-50 rounded-lg flex items-center gap-2 font-bold text-xs relative" onClick={() => document.getElementById('import-input')?.click()}>
+                                <FileUp className="h-4 w-4" />
+                                <span>Importar</span>
                                 <input type="file" id="import-input" className="hidden" onChange={handleImportXLSX} accept=".xlsx, .xls" />
                             </Button>
                         </TooltipTrigger>
@@ -399,8 +401,9 @@ const ProductsPage = () => {
 
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-9 w-9 text-orange-600 hover:bg-orange-50 rounded-lg" onClick={handleExportXLSX}>
-                                <FileDown className="h-5 w-5" />
+                            <Button variant="ghost" className="h-9 px-3 text-orange-600 hover:bg-orange-50 rounded-lg flex items-center gap-2 font-bold text-xs" onClick={handleExportXLSX}>
+                                <FileDown className="h-4 w-4" />
+                                <span>Exportar</span>
                             </Button>
                         </TooltipTrigger>
                         <TooltipContent><p>Exportar Catálogo</p></TooltipContent>
