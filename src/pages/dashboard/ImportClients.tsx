@@ -191,6 +191,7 @@ const ImportClientsPage = () => {
           </div>
           <div className="mt-4 text-sm bg-gray-50 p-4 rounded-lg border text-gray-600 space-y-2">
             <p><span className="font-bold text-gray-900">Datas:</span> Use o formato <code className="bg-white px-2 py-0.5 rounded border border-gray-300 font-bold">DD-MM-AAAA</code>.</p>
+            <p><span className="font-bold text-gray-900">Senha:</span> Se não for fornecida na planilha, será definida como <code className="bg-white px-2 py-0.5 rounded border border-gray-300 font-bold">123456</code>.</p>
             <p><span className="font-bold text-gray-900">Cliente Desde:</span> Se deixar em branco, o sistema usará a data atual do cadastro.</p>
           </div>
         </CardContent>
