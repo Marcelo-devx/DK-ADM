@@ -69,7 +69,6 @@ const ImportClientsPage = () => {
         const mappedClients = json.map(mapRowKeys).map((row: any) => ({
             email: row.email,
             full_name: row.nomecompleto || '',
-            // Aplica a conversão de data aqui antes de enviar para a API
             date_of_birth: formatBirthDateToISO(row.datadenascimento),
             phone: row.telefone ? String(row.telefone) : '',
             cep: row.cep ? String(row.cep) : '',
@@ -95,10 +94,16 @@ const ImportClientsPage = () => {
   };
 
   const handleDownloadTemplate = () => {
+    // Cabeçalhos
     const headers = [
         "Email", "Senha", "Nome Completo", "Data de Nascimento", "Telefone", "CEP", "Rua", "Numero", "Complemento", "Bairro", "Cidade", "Estado"
     ];
-    const worksheet = XLSX.utils.aoa_to_sheet([headers]);
+    // Linha de Exemplo para orientar o usuário
+    const exampleRow = [
+        "cliente@exemplo.com", "123456", "João da Silva", "15-05-1990", "11999998888", "01001000", "Rua das Flores", "123", "Apto 12", "Centro", "São Paulo", "SP"
+    ];
+
+    const worksheet = XLSX.utils.aoa_to_sheet([headers, exampleRow]);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Clientes");
     XLSX.writeFile(workbook, "modelo_importacao_clientes.xlsx");
