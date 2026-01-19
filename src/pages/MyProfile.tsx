@@ -21,10 +21,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const profileSchema = z.object({
   first_name: z.string().optional(),
   last_name: z.string().optional(),
+  cpf_cnpj: z.string().optional(),
+  gender: z.string().optional(),
+  phone: z.string().optional(),
   cep: z.string().optional(),
   street: z.string().optional(),
   number: z.string().optional(),
@@ -32,7 +36,6 @@ const profileSchema = z.object({
   neighborhood: z.string().optional(),
   city: z.string().optional(),
   state: z.string().optional(),
-  phone: z.string().optional(),
 });
 
 type ProfileFormValues = z.infer<typeof profileSchema>;
@@ -65,7 +68,11 @@ const MyProfilePage = () => {
 
   useEffect(() => {
     if (profile) {
-      form.reset(profile);
+      form.reset({
+        ...profile,
+        cpf_cnpj: profile.cpf_cnpj || "",
+        gender: profile.gender || "",
+      });
     }
   }, [profile, form]);
 
@@ -95,7 +102,8 @@ const MyProfilePage = () => {
     for (const key of formKeys) {
       const originalValue = profile?.[key] ?? "";
       const newValue = values[key] ?? "";
-      if (originalValue !== newValue) {
+      // Comparação simples, ignorando nulos/vazios iguais
+      if ((originalValue || "") !== (newValue || "")) {
         dataChanged = true;
         break;
       }
@@ -103,6 +111,8 @@ const MyProfilePage = () => {
 
     if (dataChanged) {
       setFormData(values);
+      // Se alterou CPF ou Endereço, pede confirmação de segurança (força PIX)
+      // Se for apenas Nome/Gênero, pode salvar direto (opcional, mantendo padrão seguro para tudo por enquanto)
       setConfirmAlertOpen(true);
     } else {
       showSuccess("Nenhuma alteração detectada.");
@@ -135,13 +145,43 @@ const MyProfilePage = () => {
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField control={form.control} name="first_name" render={({ field }) => (<FormItem><FormLabel>Nome</FormLabel><FormControl><Input {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
                 <FormField control={form.control} name="last_name" render={({ field }) => (<FormItem><FormLabel>Sobrenome</FormLabel><FormControl><Input {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
               </div>
-              <FormField control={form.control} name="phone" render={({ field }) => (<FormItem><FormLabel>Telefone</FormLabel><FormControl><Input {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <FormField control={form.control} name="cpf_cnpj" render={({ field }) => (<FormItem><FormLabel>CPF / CNPJ</FormLabel><FormControl><Input placeholder="000.000.000-00" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
+                <FormField control={form.control} name="phone" render={({ field }) => (<FormItem><FormLabel>Telefone</FormLabel><FormControl><Input placeholder="(00) 00000-0000" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
+                <FormField 
+                    control={form.control} 
+                    name="gender" 
+                    render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Gênero</FormLabel>
+                            <Select onValueChange={field.onChange} defaultValue={field.value || undefined}>
+                                <FormControl>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Selecione" />
+                                </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                <SelectItem value="Masculino">Masculino</SelectItem>
+                                <SelectItem value="Feminino">Feminino</SelectItem>
+                                <SelectItem value="Outro">Outro</SelectItem>
+                                <SelectItem value="Prefiro não dizer">Prefiro não dizer</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <FormMessage />
+                        </FormItem>
+                    )} 
+                />
+              </div>
+
               <hr />
               <h3 className="text-lg font-semibold">Endereço</h3>
+              
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <FormField control={form.control} name="cep" render={({ field }) => (<FormItem><FormLabel>CEP</FormLabel><FormControl><Input {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
                 <FormField control={form.control} name="street" render={({ field }) => (<FormItem className="col-span-2"><FormLabel>Rua</FormLabel><FormControl><Input {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
@@ -155,7 +195,8 @@ const MyProfilePage = () => {
                 <FormField control={form.control} name="city" render={({ field }) => (<FormItem><FormLabel>Cidade</FormLabel><FormControl><Input {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
                 <FormField control={form.control} name="state" render={({ field }) => (<FormItem><FormLabel>Estado</FormLabel><FormControl><Input {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
               </div>
-              <Button type="submit" disabled={updateProfileMutation.isPending}>
+              
+              <Button type="submit" disabled={updateProfileMutation.isPending} className="w-full md:w-auto">
                 {updateProfileMutation.isPending ? "Salvando..." : "Salvar Alterações"}
               </Button>
             </form>

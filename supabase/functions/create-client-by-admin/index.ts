@@ -8,20 +8,18 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  // Lida com a requisição CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    // 1. Cria o cliente admin para interagir com o Auth
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
       { auth: { persistSession: false } }
     );
 
-    // 2. Verifica se quem está chamando a função é um admin
+    // Verificação de Admin
     const authHeader = req.headers.get('Authorization')!;
     const supabaseClient = createClient(
         Deno.env.get('SUPABASE_URL') ?? '',
@@ -32,45 +30,62 @@ serve(async (req) => {
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
     if (userError || !user) throw new Error('Falha na autenticação.');
 
-    const { data: profile, error: profileError } = await supabaseAdmin
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-        
-    if (profileError || profile.role !== 'adm') {
-        return new Response(JSON.stringify({ error: 'Acesso negado. Apenas administradores podem criar clientes.' }), { 
-            status: 403, 
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        });
+    const { data: profile } = await supabaseAdmin.from('profiles').select('role').eq('id', user.id).single();
+    if (profile?.role !== 'adm') {
+        return new Response(JSON.stringify({ error: 'Acesso negado.' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // 3. Obtém os dados do novo cliente
-    const { email, password } = await req.json();
+    // Recebe os novos campos
+    const { email, password, full_name, cpf_cnpj, gender, phone } = await req.json();
+    
     if (!email || !password) {
       throw new Error("E-mail e senha são obrigatórios.");
     }
 
-    // 4. Cria o usuário no Supabase Auth
+    // Processa nome
+    const nameParts = (full_name || '').trim().split(' ');
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ') || '';
+
+    // 1. Cria usuário no Auth
     const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
-      email_confirm: true // Já marca como confirmado para facilitar o acesso
+      email_confirm: true,
+      user_metadata: {
+        first_name: firstName,
+        last_name: lastName
+      }
     });
 
     if (createError) throw createError;
 
+    // 2. Atualiza perfil com dados extras
+    if (newUser.user) {
+        const { error: updateError } = await supabaseAdmin
+            .from('profiles')
+            .update({
+                first_name: firstName,
+                last_name: lastName,
+                cpf_cnpj: cpf_cnpj || null,
+                gender: gender || null,
+                phone: phone || null
+            })
+            .eq('id', newUser.user.id);
+
+        if (updateError) console.error("Erro ao atualizar perfil:", updateError);
+    }
+
     return new Response(
-      JSON.stringify({ message: `Cliente ${email} criado com sucesso!` }),
+      JSON.stringify({ message: `Cliente ${email} cadastrado com sucesso!` }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
       }
     )
   } catch (error) {
-    console.error('Erro ao criar cliente:', error);
     return new Response(
-      JSON.stringify({ error: 'Falha ao processar a criação do cliente.', details: error.message }),
+      JSON.stringify({ error: 'Falha ao processar criação.', details: error.message }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 500,
