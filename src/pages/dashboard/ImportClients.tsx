@@ -25,6 +25,18 @@ const ImportClientsPage = () => {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [clientsToImport, setClientsToImport] = useState<any[]>([]);
 
+  // Função para converter DD-MM-AAAA ou DD/MM/AAAA para YYYY-MM-DD
+  const formatBirthDateToISO = (val: any) => {
+    if (!val) return null;
+    const str = String(val).trim();
+    const match = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+    if (match) {
+        const [_, d, m, y] = match;
+        return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    }
+    return val; // Retorna original se já estiver em formato ISO ou Excel Date
+  };
+
   const bulkImportMutation = useMutation({
     mutationFn: async (clients: any[]) => {
       const { data, error } = await supabase.functions.invoke("bulk-import-clients", { 
@@ -57,7 +69,8 @@ const ImportClientsPage = () => {
         const mappedClients = json.map(mapRowKeys).map((row: any) => ({
             email: row.email,
             full_name: row.nomecompleto || '',
-            date_of_birth: row.datadenascimento || null,
+            // Aplica a conversão de data aqui antes de enviar para a API
+            date_of_birth: formatBirthDateToISO(row.datadenascimento),
             phone: row.telefone ? String(row.telefone) : '',
             cep: row.cep ? String(row.cep) : '',
             street: row.rua || '',
@@ -174,7 +187,7 @@ const ImportClientsPage = () => {
                   <TableCell className="font-medium text-blue-600">joao@exemplo.com</TableCell>
                   <TableCell>123456</TableCell>
                   <TableCell>João da Silva</TableCell>
-                  <TableCell>1990-05-15</TableCell>
+                  <TableCell>15-05-1990</TableCell>
                   <TableCell>11999998888</TableCell>
                   <TableCell>01001000</TableCell>
                   <TableCell>Rua das Flores</TableCell>
@@ -189,7 +202,7 @@ const ImportClientsPage = () => {
           </div>
           <div className="mt-4 text-sm bg-gray-50 p-4 rounded-lg border text-gray-600 space-y-2">
             <p><span className="font-bold text-red-600">* Email:</span> Campo obrigatório. Não pode haver e-mails duplicados.</p>
-            <p><span className="font-bold text-gray-900">Data de Nascimento:</span> Use o formato <code className="bg-white px-2 py-0.5 rounded border border-gray-300">AAAA-MM-DD</code> (ex: 1990-05-15).</p>
+            <p><span className="font-bold text-gray-900">Data de Nascimento:</span> Use o formato <code className="bg-white px-2 py-0.5 rounded border border-gray-300 font-bold">DD-MM-AAAA</code> (ex: 15-05-1990).</p>
             <p><span className="font-bold text-gray-900">Senha:</span> Opcional. Se deixar em branco, a senha padrão será <code className="bg-white px-2 py-0.5 rounded border border-gray-300 font-mono text-primary font-bold">123456</code>.</p>
           </div>
         </CardContent>
