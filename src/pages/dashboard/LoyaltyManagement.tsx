@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { showSuccess, showError } from "@/utils/toast";
-import { Crown, Coins, History, Settings, Search, PlusCircle, Save, Loader2, User, Gift, Zap, Trash2, Info } from "lucide-react";
+import { Crown, Coins, History, Settings, Search, PlusCircle, Save, Loader2, User, Gift, Zap, Trash2, Info, TicketCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -33,8 +33,23 @@ interface LoyaltyHistoryItem {
   profiles: {
     first_name: string | null;
     last_name: string | null;
-    email: string | null;
   } | null;
+}
+
+interface UserCoupon {
+    id: number;
+    created_at: string;
+    is_used: boolean;
+    expires_at: string;
+    order_id: number | null;
+    profiles: {
+        first_name: string | null;
+        last_name: string | null;
+    } | null;
+    coupons: {
+        name: string;
+        discount_value: number;
+    } | null;
 }
 
 // --- FETCHERS ---
@@ -55,10 +70,19 @@ const fetchHistory = async () => {
     .from("loyalty_history")
     .select("*, profiles(first_name, last_name)")
     .order("created_at", { ascending: false })
-    .limit(20);
+    .limit(50);
   if (error) throw error;
-  return data;
+  return data as unknown as LoyaltyHistoryItem[];
 };
+
+const fetchUserCoupons = async () => {
+    const { data, error } = await supabase
+        .from("user_coupons")
+        .select("*, profiles(first_name, last_name), coupons(name, discount_value)")
+        .order("created_at", { ascending: false });
+    if (error) throw error;
+    return data as unknown as UserCoupon[];
+}
 
 const fetchSettings = async () => {
   const keys = [
@@ -90,10 +114,22 @@ export default function LoyaltyManagementPage() {
   const { data: redemptionRules, isLoading: loadingRules } = useQuery({ queryKey: ["adminRedemptionRules"], queryFn: fetchRedemptionRules });
   const { data: history } = useQuery({ queryKey: ["adminLoyaltyHistory"], queryFn: fetchHistory });
   const { data: settings } = useQuery({ queryKey: ["adminLoyaltySettings"], queryFn: fetchSettings });
+  const { data: userCoupons, isLoading: loadingUserCoupons } = useQuery({ queryKey: ["adminUserCoupons"], queryFn: fetchUserCoupons });
 
   // --- MUTATIONS ---
 
-  // 1. Update Tiers
+  const deleteUserCouponMutation = useMutation({
+    mutationFn: async (id: number) => {
+        const { error } = await supabase.from("user_coupons").delete().eq("id", id);
+        if (error) throw error;
+    },
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["adminUserCoupons"] });
+        showSuccess("Cupom do usuário removido!");
+    },
+    onError: (err: any) => showError(err.message),
+  });
+
   const updateTierMutation = useMutation({
     mutationFn: async (tier: any) => {
       const { error } = await supabase.from("loyalty_tiers").update(tier).eq("id", tier.id);
@@ -103,7 +139,6 @@ export default function LoyaltyManagementPage() {
     onError: (err: any) => showError(err.message),
   });
 
-  // 2. Update Settings (Bonuses)
   const updateSettingsMutation = useMutation({
     mutationFn: async (updates: { key: string, value: string }[]) => {
       const { error } = await supabase.from("app_settings").upsert(updates, { onConflict: 'key' });
@@ -116,7 +151,6 @@ export default function LoyaltyManagementPage() {
     onError: (err: any) => showError(err.message),
   });
 
-  // 3. Redemption Rules
   const addRuleMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.from("loyalty_redemption_rules").insert({
@@ -145,7 +179,6 @@ export default function LoyaltyManagementPage() {
     }
   });
 
-  // 4. Manual Adjustment
   const searchUser = async () => {
     if (!searchTerm.includes("@")) { showError("Digite o e-mail completo."); return; }
     const { data: uid } = await supabase.rpc('get_user_id_by_email', { user_email: searchTerm });
@@ -190,18 +223,18 @@ export default function LoyaltyManagementPage() {
       </div>
 
       <Tabs defaultValue="bonus" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 lg:grid-cols-5 lg:w-full bg-slate-100 p-1">
+        <TabsList className="grid w-full grid-cols-3 lg:grid-cols-6 bg-slate-100 p-1">
             <TabsTrigger value="bonus">Regras de Pontuação</TabsTrigger>
-            <TabsTrigger value="tiers">Níveis (Tiers)</TabsTrigger>
+            <TabsTrigger value="tiers">Níveis</TabsTrigger>
             <TabsTrigger value="redemption">Regras de Resgate</TabsTrigger>
+            <TabsTrigger value="user-coupons">Cupons dos Clientes</TabsTrigger>
             <TabsTrigger value="manual">Ajuste Manual</TabsTrigger>
-            <TabsTrigger value="history">Histórico</TabsTrigger>
+            <TabsTrigger value="history">Extrato Geral</TabsTrigger>
         </TabsList>
 
         {/* 1. REGRAS DE PONTUAÇÃO (BÔNUS) */}
         <TabsContent value="bonus" className="mt-6 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Gatilhos Básicos */}
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-base flex items-center gap-2"><Gift className="w-4 h-4 text-pink-500" /> Gatilhos de Engajamento</CardTitle>
@@ -239,7 +272,6 @@ export default function LoyaltyManagementPage() {
                     </CardContent>
                 </Card>
 
-                {/* Ticket Alto */}
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-base flex items-center gap-2"><Zap className="w-4 h-4 text-yellow-500" /> Bônus Ticket Alto</CardTitle>
@@ -266,7 +298,6 @@ export default function LoyaltyManagementPage() {
                     </CardContent>
                 </Card>
 
-                {/* Recorrência */}
                 <Card className="md:col-span-2">
                     <CardHeader>
                         <CardTitle className="text-base flex items-center gap-2"><History className="w-4 h-4 text-blue-500" /> Bônus de Recorrência Mensal</CardTitle>
@@ -391,6 +422,54 @@ export default function LoyaltyManagementPage() {
                     </CardContent>
                 </Card>
             </div>
+        </TabsContent>
+
+        {/* NOVA ABA: CUPONS DOS CLIENTES */}
+        <TabsContent value="user-coupons" className="mt-6">
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2"><TicketCheck className="w-5 h-5 text-emerald-600" /> Inventário de Cupons Resgatados</CardTitle>
+                    <CardDescription>Lista de todos os cupons que os clientes compraram com pontos e ainda possuem.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Cliente</TableHead>
+                                <TableHead>Cupom</TableHead>
+                                <TableHead>Valor</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead>Resgatado em</TableHead>
+                                <TableHead className="text-right">Ação</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {loadingUserCoupons ? <TableRow><TableCell colSpan={6} className="text-center">Carregando...</TableCell></TableRow> :
+                             userCoupons?.length === 0 ? <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-10">Nenhum cupom resgatado ainda.</TableCell></TableRow> :
+                             userCoupons?.map((uc) => (
+                                <TableRow key={uc.id} className={uc.is_used ? "opacity-50" : ""}>
+                                    <TableCell className="font-medium">{uc.profiles?.first_name} {uc.profiles?.last_name}</TableCell>
+                                    <TableCell className="font-bold">{uc.coupons?.name}</TableCell>
+                                    <TableCell className="text-emerald-600 font-bold">R$ {uc.coupons?.discount_value}</TableCell>
+                                    <TableCell>
+                                        {uc.is_used ? (
+                                            <Badge variant="secondary">Usado no Pedido #{uc.order_id}</Badge>
+                                        ) : (
+                                            <Badge className="bg-emerald-500">Disponível</Badge>
+                                        )}
+                                    </TableCell>
+                                    <TableCell className="text-xs">{new Date(uc.created_at).toLocaleDateString('pt-BR')}</TableCell>
+                                    <TableCell className="text-right">
+                                        <Button variant="ghost" size="icon" onClick={() => { if(confirm("Deseja apagar este cupom do inventário do cliente?")) deleteUserCouponMutation.mutate(uc.id); }} className="text-red-500">
+                                            <Trash2 className="w-4 h-4" />
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </CardContent>
+            </Card>
         </TabsContent>
 
         {/* 4. AJUSTE MANUAL */}
