@@ -10,15 +10,38 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { showSuccess, showError } from "@/utils/toast";
-import { Crown, Coins, History, Settings, Search, PlusCircle, Save, Loader2, User, Gift, Zap, Trash2 } from "lucide-react";
+import { Crown, Coins, History, Settings, Search, PlusCircle, Save, Loader2, User, Gift, Zap, Trash2, Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+// --- TYPES ---
+interface LoyaltyTier {
+  id: number;
+  name: string;
+  min_spend: number;
+  max_spend: number | null;
+  points_multiplier: number;
+}
+
+interface LoyaltyHistoryItem {
+  id: number;
+  user_id: string;
+  points: number;
+  description: string;
+  created_at: string;
+  operation_type: string;
+  profiles: {
+    first_name: string | null;
+    last_name: string | null;
+    email: string | null;
+  } | null;
+}
 
 // --- FETCHERS ---
 const fetchTiers = async () => {
   const { data, error } = await supabase.from("loyalty_tiers").select("*").order("min_spend");
   if (error) throw error;
-  return data;
+  return data as LoyaltyTier[];
 };
 
 const fetchRedemptionRules = async () => {
@@ -193,7 +216,12 @@ export default function LoyaltyManagementPage() {
                             </div>
                         </div>
                         <div className="flex justify-between items-center">
-                            <Label>Bônus por Indicação (MGM)</Label>
+                            <div className="space-y-1">
+                                <Label>Bônus por Indicação (MGM)</Label>
+                                <p className="text-[10px] text-muted-foreground max-w-[220px] flex items-center gap-1">
+                                    <Info className="w-3 h-3" /> Pago somente após a <strong>1ª compra paga</strong> do indicado.
+                                </p>
+                            </div>
                             <div className="flex items-center gap-2">
                                 <Input className="w-20 text-right" defaultValue={settings?.loyalty_referral_bonus} id="input-ref" />
                                 <span className="text-xs text-muted-foreground">pts</span>
