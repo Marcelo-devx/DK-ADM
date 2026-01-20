@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { showSuccess, showError } from "@/utils/toast";
-import { Crown, Coins, History, Settings, Search, PlusCircle, Save, Loader2, User, Gift, Zap, Trash2, Info, TicketCheck } from "lucide-react";
+import { Crown, Coins, History, Settings, Search, PlusCircle, Save, Loader2, User, Gift, Zap, Trash2, Info, TicketCheck, RefreshCw, AlertCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -114,7 +114,7 @@ export default function LoyaltyManagementPage() {
   const { data: redemptionRules, isLoading: loadingRules } = useQuery({ queryKey: ["adminRedemptionRules"], queryFn: fetchRedemptionRules });
   const { data: history } = useQuery({ queryKey: ["adminLoyaltyHistory"], queryFn: fetchHistory });
   const { data: settings } = useQuery({ queryKey: ["adminLoyaltySettings"], queryFn: fetchSettings });
-  const { data: userCoupons, isLoading: loadingUserCoupons } = useQuery({ queryKey: ["adminUserCoupons"], queryFn: fetchUserCoupons });
+  const { data: userCoupons, isLoading: loadingUserCoupons, isError: errorUserCoupons, refetch: refetchUserCoupons } = useQuery({ queryKey: ["adminUserCoupons"], queryFn: fetchUserCoupons });
 
   // --- MUTATIONS ---
 
@@ -428,46 +428,69 @@ export default function LoyaltyManagementPage() {
         <TabsContent value="user-coupons" className="mt-6">
             <Card>
                 <CardHeader>
-                    <CardTitle className="text-base flex items-center gap-2"><TicketCheck className="w-5 h-5 text-emerald-600" /> Inventário de Cupons Resgatados</CardTitle>
-                    <CardDescription>Lista de todos os cupons que os clientes compraram com pontos e ainda possuem.</CardDescription>
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <CardTitle className="text-base flex items-center gap-2"><TicketCheck className="w-5 h-5 text-emerald-600" /> Inventário de Cupons Resgatados</CardTitle>
+                            <CardDescription>Lista de todos os cupons que os clientes compraram com pontos e ainda possuem.</CardDescription>
+                        </div>
+                        <Button variant="outline" size="sm" onClick={() => refetchUserCoupons()}>
+                            <RefreshCw className="w-4 h-4 mr-2" /> Atualizar Lista
+                        </Button>
+                    </div>
                 </CardHeader>
                 <CardContent>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Cliente</TableHead>
-                                <TableHead>Cupom</TableHead>
-                                <TableHead>Valor</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead>Resgatado em</TableHead>
-                                <TableHead className="text-right">Ação</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {loadingUserCoupons ? <TableRow><TableCell colSpan={6} className="text-center">Carregando...</TableCell></TableRow> :
-                             userCoupons?.length === 0 ? <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-10">Nenhum cupom resgatado ainda.</TableCell></TableRow> :
-                             userCoupons?.map((uc) => (
-                                <TableRow key={uc.id} className={uc.is_used ? "opacity-50" : ""}>
-                                    <TableCell className="font-medium">{uc.profiles?.first_name} {uc.profiles?.last_name}</TableCell>
-                                    <TableCell className="font-bold">{uc.coupons?.name}</TableCell>
-                                    <TableCell className="text-emerald-600 font-bold">R$ {uc.coupons?.discount_value}</TableCell>
-                                    <TableCell>
-                                        {uc.is_used ? (
-                                            <Badge variant="secondary">Usado no Pedido #{uc.order_id}</Badge>
-                                        ) : (
-                                            <Badge className="bg-emerald-500">Disponível</Badge>
-                                        )}
-                                    </TableCell>
-                                    <TableCell className="text-xs">{new Date(uc.created_at).toLocaleDateString('pt-BR')}</TableCell>
-                                    <TableCell className="text-right">
-                                        <Button variant="ghost" size="icon" onClick={() => { if(confirm("Deseja apagar este cupom do inventário do cliente?")) deleteUserCouponMutation.mutate(uc.id); }} className="text-red-500">
-                                            <Trash2 className="w-4 h-4" />
-                                        </Button>
-                                    </TableCell>
+                    <div className="rounded-md border">
+                        <Table>
+                            <TableHeader className="bg-gray-50">
+                                <TableRow>
+                                    <TableHead>Cliente</TableHead>
+                                    <TableHead>Cupom</TableHead>
+                                    <TableHead>Valor</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead>Resgatado em</TableHead>
+                                    <TableHead className="text-right">Ação</TableHead>
                                 </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
+                            </TableHeader>
+                            <TableBody>
+                                {loadingUserCoupons ? (
+                                    <TableRow><TableCell colSpan={6} className="text-center py-10"><Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" /></TableCell></TableRow>
+                                ) : errorUserCoupons ? (
+                                    <TableRow>
+                                        <TableCell colSpan={6} className="text-center py-10 text-red-500 bg-red-50">
+                                            <div className="flex flex-col items-center gap-2">
+                                                <AlertCircle className="w-6 h-6" />
+                                                <span className="font-bold">Erro ao carregar dados.</span>
+                                                <span className="text-xs">Verifique suas permissões de administrador.</span>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                ) : userCoupons?.length === 0 ? (
+                                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-10">Nenhum cupom resgatado ainda.</TableCell></TableRow>
+                                ) : (
+                                    userCoupons?.map((uc) => (
+                                        <TableRow key={uc.id} className={uc.is_used ? "opacity-50 bg-gray-50" : ""}>
+                                            <TableCell className="font-medium">{uc.profiles?.first_name} {uc.profiles?.last_name}</TableCell>
+                                            <TableCell className="font-bold text-gray-700">{uc.coupons?.name}</TableCell>
+                                            <TableCell className="text-emerald-600 font-bold">R$ {uc.coupons?.discount_value}</TableCell>
+                                            <TableCell>
+                                                {uc.is_used ? (
+                                                    <Badge variant="secondary" className="text-[10px]">Usado #{uc.order_id}</Badge>
+                                                ) : (
+                                                    <Badge className="bg-emerald-500 text-[10px] hover:bg-emerald-600">Disponível</Badge>
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="text-xs text-muted-foreground">{new Date(uc.created_at).toLocaleDateString('pt-BR')}</TableCell>
+                                            <TableCell className="text-right">
+                                                <Button variant="ghost" size="icon" onClick={() => { if(confirm("Deseja apagar este cupom do inventário do cliente?")) deleteUserCouponMutation.mutate(uc.id); }} className="text-red-500 hover:bg-red-50">
+                                                    <Trash2 className="w-4 h-4" />
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
                 </CardContent>
             </Card>
         </TabsContent>
