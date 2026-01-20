@@ -8,54 +8,23 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { showSuccess, showError } from "@/utils/toast";
-import { Crown, Coins, History, Settings, Search, PlusCircle, MinusCircle, Save, Loader2, User } from "lucide-react";
+import { Crown, Coins, History, Settings, Search, PlusCircle, Save, Loader2, User, Gift, Zap, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
-// --- TYPES ---
-interface LoyaltyTier {
-  id: number;
-  name: string;
-  min_spend: number;
-  max_spend: number | null;
-  points_multiplier: number;
-}
-
-interface LoyaltyHistoryItem {
-  id: number;
-  user_id: string;
-  points: number;
-  description: string;
-  created_at: string;
-  operation_type: string;
-  profiles: {
-    first_name: string | null;
-    last_name: string | null;
-    email: string | null; // Note: email is in auth.users, handled via join or separate fetch if needed. Let's assume profile join for name.
-  } | null;
-}
+import { Switch } from "@/components/ui/switch";
 
 // --- FETCHERS ---
 const fetchTiers = async () => {
   const { data, error } = await supabase.from("loyalty_tiers").select("*").order("min_spend");
   if (error) throw error;
-  return data as LoyaltyTier[];
+  return data;
+};
+
+const fetchRedemptionRules = async () => {
+  const { data, error } = await supabase.from("loyalty_redemption_rules").select("*").order("points_cost");
+  if (error) throw error;
+  return data;
 };
 
 const fetchHistory = async () => {
@@ -63,90 +32,125 @@ const fetchHistory = async () => {
     .from("loyalty_history")
     .select("*, profiles(first_name, last_name)")
     .order("created_at", { ascending: false })
-    .limit(50);
+    .limit(20);
   if (error) throw error;
-  return data as any[];
+  return data;
 };
 
-const fetchStats = async () => {
-  // Simulação de stats (ideal seria RPC para performance em grandes bases)
-  const { data: profiles } = await supabase.from("profiles").select("points");
-  const totalPoints = profiles?.reduce((acc, p) => acc + (p.points || 0), 0) || 0;
-  
-  // Pontos distribuidos hoje
-  const today = new Date().toISOString().split('T')[0];
-  const { data: history } = await supabase
-    .from("loyalty_history")
-    .select("points")
-    .eq("operation_type", "earn")
-    .gte("created_at", today);
-  const pointsToday = history?.reduce((acc, h) => acc + h.points, 0) || 0;
-
-  return { totalPoints, pointsToday };
+const fetchSettings = async () => {
+  const keys = [
+    'loyalty_birthday_bonus', 'loyalty_referral_bonus', 
+    'loyalty_ticket_threshold', 'loyalty_ticket_bonus',
+    'loyalty_recurrence_2nd', 'loyalty_recurrence_3rd', 'loyalty_recurrence_4th'
+  ];
+  const { data } = await supabase.from("app_settings").select("*").in("key", keys);
+  const settingsMap: any = {};
+  data?.forEach((item: any) => settingsMap[item.key] = item.value);
+  return settingsMap;
 };
 
 export default function LoyaltyManagementPage() {
   const queryClient = useQueryClient();
+  
+  // States
   const [searchTerm, setSearchTerm] = useState("");
-  const [adjustUserId, setAdjustUserId] = useState("");
+  const [foundUser, setFoundUser] = useState<any>(null);
   const [adjustPoints, setAdjustPoints] = useState<number>(0);
   const [adjustReason, setAdjustReason] = useState("");
-  const [foundUser, setFoundUser] = useState<any>(null);
+  
+  // New Rule States
+  const [newRulePoints, setNewRulePoints] = useState("");
+  const [newRuleValue, setNewRuleValue] = useState("");
 
+  // Queries
   const { data: tiers, isLoading: loadingTiers } = useQuery({ queryKey: ["adminTiers"], queryFn: fetchTiers });
-  const { data: history, isLoading: loadingHistory } = useQuery({ queryKey: ["adminLoyaltyHistory"], queryFn: fetchHistory });
-  const { data: stats } = useQuery({ queryKey: ["adminLoyaltyStats"], queryFn: fetchStats });
+  const { data: redemptionRules, isLoading: loadingRules } = useQuery({ queryKey: ["adminRedemptionRules"], queryFn: fetchRedemptionRules });
+  const { data: history } = useQuery({ queryKey: ["adminLoyaltyHistory"], queryFn: fetchHistory });
+  const { data: settings } = useQuery({ queryKey: ["adminLoyaltySettings"], queryFn: fetchSettings });
 
-  // Busca usuário para ajuste manual
-  const searchUser = async () => {
-    if (!searchTerm.includes("@")) {
-        showError("Digite o e-mail completo para buscar.");
-        return;
+  // --- MUTATIONS ---
+
+  // 1. Update Tiers
+  const updateTierMutation = useMutation({
+    mutationFn: async (tier: any) => {
+      const { error } = await supabase.from("loyalty_tiers").update(tier).eq("id", tier.id);
+      if (error) throw error;
+    },
+    onSuccess: () => showSuccess("Nível atualizado!"),
+    onError: (err: any) => showError(err.message),
+  });
+
+  // 2. Update Settings (Bonuses)
+  const updateSettingsMutation = useMutation({
+    mutationFn: async (updates: { key: string, value: string }[]) => {
+      const { error } = await supabase.from("app_settings").upsert(updates, { onConflict: 'key' });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["adminLoyaltySettings"] });
+        showSuccess("Configurações salvas!");
+    },
+    onError: (err: any) => showError(err.message),
+  });
+
+  // 3. Redemption Rules
+  const addRuleMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("loyalty_redemption_rules").insert({
+        points_cost: parseInt(newRulePoints),
+        discount_value: parseFloat(newRuleValue.replace(',', '.'))
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["adminRedemptionRules"] });
+      setNewRulePoints("");
+      setNewRuleValue("");
+      showSuccess("Opção de resgate adicionada!");
+    },
+    onError: (err: any) => showError(err.message),
+  });
+
+  const deleteRuleMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const { error } = await supabase.from("loyalty_redemption_rules").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["adminRedemptionRules"] });
+      showSuccess("Opção removida.");
     }
+  });
+
+  // 4. Manual Adjustment
+  const searchUser = async () => {
+    if (!searchTerm.includes("@")) { showError("Digite o e-mail completo."); return; }
     const { data: uid } = await supabase.rpc('get_user_id_by_email', { user_email: searchTerm });
-    
     if (uid) {
         const { data: profile } = await supabase.from("profiles").select("*").eq("id", uid).single();
         setFoundUser(profile);
-        setAdjustUserId(uid);
     } else {
         setFoundUser(null);
-        setAdjustUserId("");
         showError("Usuário não encontrado.");
     }
   };
 
-  // Mutação: Ajuste Manual
   const adjustMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.rpc("admin_adjust_points", {
-        target_user_id: adjustUserId,
+        target_user_id: foundUser.id,
         points_delta: adjustPoints,
         reason: adjustReason || "Ajuste manual administrativo"
       });
       if (error) throw error;
     },
     onSuccess: () => {
-      showSuccess("Pontos ajustados com sucesso!");
+      showSuccess("Pontos ajustados!");
       setAdjustPoints(0);
       setAdjustReason("");
       setFoundUser(null);
       setSearchTerm("");
       queryClient.invalidateQueries({ queryKey: ["adminLoyaltyHistory"] });
-      queryClient.invalidateQueries({ queryKey: ["adminLoyaltyStats"] });
-    },
-    onError: (err: any) => showError(err.message),
-  });
-
-  // Mutação: Editar Tier (Simples)
-  const updateTierMutation = useMutation({
-    mutationFn: async (tier: LoyaltyTier) => {
-      const { error } = await supabase.from("loyalty_tiers").update(tier).eq("id", tier.id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      showSuccess("Nível atualizado!");
-      queryClient.invalidateQueries({ queryKey: ["adminTiers"] });
     },
     onError: (err: any) => showError(err.message),
   });
@@ -158,85 +162,148 @@ export default function LoyaltyManagementPage() {
             <h1 className="text-3xl font-bold flex items-center gap-2">
                 <Crown className="h-8 w-8 text-yellow-500" /> Gestão Club DK
             </h1>
-            <p className="text-muted-foreground">Gerencie níveis, pontuação e ajustes manuais.</p>
+            <p className="text-muted-foreground">Configure as regras do seu programa de fidelidade.</p>
         </div>
       </div>
 
-      {/* KPI CARDS */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="bg-yellow-50 border-yellow-200">
-            <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-yellow-800 font-bold uppercase flex items-center gap-2">
-                    <Coins className="w-4 h-4" /> Pontos em Circulação
-                </CardTitle>
-            </CardHeader>
-            <CardContent>
-                <div className="text-3xl font-black text-yellow-900">{stats?.totalPoints?.toLocaleString() || 0}</div>
-                <p className="text-xs text-yellow-700 mt-1">Saldo total dos clientes</p>
-            </CardContent>
-        </Card>
-        <Card>
-            <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-gray-500 font-bold uppercase flex items-center gap-2">
-                    <PlusCircle className="w-4 h-4" /> Gerados Hoje
-                </CardTitle>
-            </CardHeader>
-            <CardContent>
-                <div className="text-3xl font-black text-green-600">+{stats?.pointsToday?.toLocaleString() || 0}</div>
-            </CardContent>
-        </Card>
-        <Card>
-            <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-gray-500 font-bold uppercase flex items-center gap-2">
-                    <Settings className="w-4 h-4" /> Configuração
-                </CardTitle>
-            </CardHeader>
-            <CardContent>
-                <div className="text-2xl font-bold">{tiers?.length || 0} Níveis</div>
-                <p className="text-xs text-muted-foreground">Regras ativas</p>
-            </CardContent>
-        </Card>
-      </div>
-
-      <Tabs defaultValue="history" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
-            <TabsTrigger value="history">Histórico</TabsTrigger>
+      <Tabs defaultValue="bonus" className="w-full">
+        <TabsList className="grid w-full grid-cols-2 lg:grid-cols-5 lg:w-full bg-slate-100 p-1">
+            <TabsTrigger value="bonus">Regras de Pontuação</TabsTrigger>
+            <TabsTrigger value="tiers">Níveis (Tiers)</TabsTrigger>
+            <TabsTrigger value="redemption">Regras de Resgate</TabsTrigger>
             <TabsTrigger value="manual">Ajuste Manual</TabsTrigger>
-            <TabsTrigger value="tiers">Regras de Nível</TabsTrigger>
+            <TabsTrigger value="history">Histórico</TabsTrigger>
         </TabsList>
 
-        {/* ABA HISTÓRICO */}
-        <TabsContent value="history" className="mt-4">
+        {/* 1. REGRAS DE PONTUAÇÃO (BÔNUS) */}
+        <TabsContent value="bonus" className="mt-6 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Gatilhos Básicos */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="text-base flex items-center gap-2"><Gift className="w-4 h-4 text-pink-500" /> Gatilhos de Engajamento</CardTitle>
+                        <CardDescription>Pontos dados por ações específicas.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="flex justify-between items-center border-b pb-4">
+                            <Label>Bônus de Aniversário</Label>
+                            <div className="flex items-center gap-2">
+                                <Input className="w-20 text-right" defaultValue={settings?.loyalty_birthday_bonus} id="input-bday" />
+                                <span className="text-xs text-muted-foreground">pts</span>
+                            </div>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <Label>Bônus por Indicação (MGM)</Label>
+                            <div className="flex items-center gap-2">
+                                <Input className="w-20 text-right" defaultValue={settings?.loyalty_referral_bonus} id="input-ref" />
+                                <span className="text-xs text-muted-foreground">pts</span>
+                            </div>
+                        </div>
+                        <Button 
+                            className="w-full bg-slate-800" 
+                            onClick={() => updateSettingsMutation.mutate([
+                                { key: 'loyalty_birthday_bonus', value: (document.getElementById('input-bday') as HTMLInputElement).value },
+                                { key: 'loyalty_referral_bonus', value: (document.getElementById('input-ref') as HTMLInputElement).value }
+                            ])}
+                        >
+                            Salvar Gatilhos
+                        </Button>
+                    </CardContent>
+                </Card>
+
+                {/* Ticket Alto */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="text-base flex items-center gap-2"><Zap className="w-4 h-4 text-yellow-500" /> Bônus Ticket Alto</CardTitle>
+                        <CardDescription>Incentive compras maiores.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                            <Label>Valor Mínimo do Pedido (R$)</Label>
+                            <Input defaultValue={settings?.loyalty_ticket_threshold} id="input-thresh" />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Pontos Extras Concedidos</Label>
+                            <Input defaultValue={settings?.loyalty_ticket_bonus} id="input-ticket-pts" />
+                        </div>
+                        <Button 
+                            className="w-full bg-slate-800" 
+                            onClick={() => updateSettingsMutation.mutate([
+                                { key: 'loyalty_ticket_threshold', value: (document.getElementById('input-thresh') as HTMLInputElement).value },
+                                { key: 'loyalty_ticket_bonus', value: (document.getElementById('input-ticket-pts') as HTMLInputElement).value }
+                            ])}
+                        >
+                            Salvar Ticket Alto
+                        </Button>
+                    </CardContent>
+                </Card>
+
+                {/* Recorrência */}
+                <Card className="md:col-span-2">
+                    <CardHeader>
+                        <CardTitle className="text-base flex items-center gap-2"><History className="w-4 h-4 text-blue-500" /> Bônus de Recorrência Mensal</CardTitle>
+                        <CardDescription>Pontos extras baseados na quantidade de compras no mesmo mês.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="grid grid-cols-3 gap-4">
+                            <div className="space-y-2">
+                                <Label>2ª Compra</Label>
+                                <Input defaultValue={settings?.loyalty_recurrence_2nd} id="rec-2" />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>3ª Compra</Label>
+                                <Input defaultValue={settings?.loyalty_recurrence_3rd} id="rec-3" />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>4ª Compra em diante</Label>
+                                <Input defaultValue={settings?.loyalty_recurrence_4th} id="rec-4" />
+                            </div>
+                        </div>
+                        <Button 
+                            className="w-full mt-4 bg-slate-800" 
+                            onClick={() => updateSettingsMutation.mutate([
+                                { key: 'loyalty_recurrence_2nd', value: (document.getElementById('rec-2') as HTMLInputElement).value },
+                                { key: 'loyalty_recurrence_3rd', value: (document.getElementById('rec-3') as HTMLInputElement).value },
+                                { key: 'loyalty_recurrence_4th', value: (document.getElementById('rec-4') as HTMLInputElement).value }
+                            ])}
+                        >
+                            Salvar Recorrência
+                        </Button>
+                    </CardContent>
+                </Card>
+            </div>
+        </TabsContent>
+
+        {/* 2. NÍVEIS (TIERS) */}
+        <TabsContent value="tiers" className="mt-6">
             <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2"><History className="w-5 h-5" /> Extrato Global</CardTitle>
-                    <CardDescription>Últimas 50 movimentações de pontos em toda a loja.</CardDescription>
-                </CardHeader>
+                <CardHeader><CardTitle>Configuração de Níveis</CardTitle></CardHeader>
                 <CardContent>
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>Cliente</TableHead>
-                                <TableHead>Pontos</TableHead>
-                                <TableHead>Descrição</TableHead>
-                                <TableHead>Data</TableHead>
+                                <TableHead>Nível</TableHead>
+                                <TableHead>Gasto Mín (R$)</TableHead>
+                                <TableHead>Multiplicador</TableHead>
+                                <TableHead className="text-right">Ação</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {loadingHistory ? (
-                                <TableRow><TableCell colSpan={4} className="text-center py-8">Carregando...</TableCell></TableRow>
-                            ) : history?.map((item: any) => (
-                                <TableRow key={item.id}>
-                                    <TableCell className="font-medium">
-                                        {item.profiles?.first_name} {item.profiles?.last_name}
+                            {loadingTiers ? <TableRow><TableCell colSpan={4}>Carregando...</TableCell></TableRow> : 
+                             tiers?.map((tier: any) => (
+                                <TableRow key={tier.id}>
+                                    <TableCell className="font-bold">{tier.name}</TableCell>
+                                    <TableCell>
+                                        <Input type="number" defaultValue={tier.min_spend} className="w-24 h-8" 
+                                            onBlur={(e) => updateTierMutation.mutate({...tier, min_spend: parseFloat(e.target.value)})}
+                                        />
                                     </TableCell>
                                     <TableCell>
-                                        <Badge variant="outline" className={item.points > 0 ? "text-green-600 bg-green-50 border-green-200" : "text-red-600 bg-red-50 border-red-200"}>
-                                            {item.points > 0 ? "+" : ""}{item.points}
-                                        </Badge>
+                                        <Input type="number" step="0.1" defaultValue={tier.points_multiplier} className="w-20 h-8" 
+                                            onBlur={(e) => updateTierMutation.mutate({...tier, points_multiplier: parseFloat(e.target.value)})}
+                                        />
                                     </TableCell>
-                                    <TableCell className="text-xs text-muted-foreground">{item.description}</TableCell>
-                                    <TableCell className="text-xs text-muted-foreground">{new Date(item.created_at).toLocaleString('pt-BR')}</TableCell>
+                                    <TableCell className="text-right"><Badge variant="outline">Auto-salvar</Badge></TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>
@@ -245,68 +312,99 @@ export default function LoyaltyManagementPage() {
             </Card>
         </TabsContent>
 
-        {/* ABA AJUSTE MANUAL */}
-        <TabsContent value="manual" className="mt-4">
+        {/* 3. REGRAS DE RESGATE */}
+        <TabsContent value="redemption" className="mt-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <Card className="md:col-span-1 border-dashed bg-slate-50">
+                    <CardHeader>
+                        <CardTitle className="text-base">Adicionar Opção</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                            <Label>Custo em Pontos</Label>
+                            <Input placeholder="Ex: 2000" type="number" value={newRulePoints} onChange={(e) => setNewRulePoints(e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Desconto (R$)</Label>
+                            <Input placeholder="Ex: 250,00" value={newRuleValue} onChange={(e) => setNewRuleValue(e.target.value)} />
+                        </div>
+                        <Button className="w-full" disabled={!newRulePoints || !newRuleValue} onClick={() => addRuleMutation.mutate()}>
+                            <PlusCircle className="w-4 h-4 mr-2" /> Adicionar
+                        </Button>
+                    </CardContent>
+                </Card>
+
+                <Card className="md:col-span-2">
+                    <CardHeader><CardTitle>Opções de Troca Disponíveis</CardTitle></CardHeader>
+                    <CardContent>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Pontos Necessários</TableHead>
+                                    <TableHead>Valor do Cupom</TableHead>
+                                    <TableHead className="w-12"></TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {loadingRules ? <TableRow><TableCell colSpan={3}>Carregando...</TableCell></TableRow> :
+                                 redemptionRules?.map((rule: any) => (
+                                    <TableRow key={rule.id}>
+                                        <TableCell className="font-bold">{rule.points_cost} pts</TableCell>
+                                        <TableCell className="text-green-600 font-bold">R$ {rule.discount_value}</TableCell>
+                                        <TableCell>
+                                            <Button variant="ghost" size="icon" onClick={() => deleteRuleMutation.mutate(rule.id)} className="text-red-500">
+                                                <Trash2 className="w-4 h-4" />
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+            </div>
+        </TabsContent>
+
+        {/* 4. AJUSTE MANUAL */}
+        <TabsContent value="manual" className="mt-6">
             <Card>
                 <CardHeader>
                     <CardTitle>Lançamento Manual</CardTitle>
-                    <CardDescription>Adicione ou remova pontos de um cliente específico.</CardDescription>
+                    <CardDescription>Correção ou bonificação direta para um cliente.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                     <div className="flex gap-4 items-end">
                         <div className="flex-1 space-y-2">
                             <Label>Buscar Cliente por E-mail</Label>
                             <div className="flex gap-2">
-                                <Input 
-                                    placeholder="cliente@email.com" 
-                                    value={searchTerm} 
-                                    onChange={(e) => setSearchTerm(e.target.value)} 
-                                />
+                                <Input placeholder="cliente@email.com" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                                 <Button onClick={searchUser} variant="secondary"><Search className="w-4 h-4" /></Button>
                             </div>
                         </div>
                     </div>
 
                     {foundUser && (
-                        <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 animate-in fade-in">
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="h-10 w-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold">
-                                    <User className="w-5 h-5" />
-                                </div>
+                        <div className="bg-slate-50 p-6 rounded-lg border border-slate-200 animate-in fade-in">
+                            <div className="flex items-center gap-4 mb-6">
+                                <div className="h-12 w-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold"><User className="w-6 h-6" /></div>
                                 <div>
-                                    <p className="font-bold text-lg">{foundUser.first_name} {foundUser.last_name}</p>
-                                    <p className="text-sm text-muted-foreground">Saldo Atual: <span className="font-bold text-black">{foundUser.points} pts</span></p>
+                                    <p className="font-bold text-xl">{foundUser.first_name} {foundUser.last_name}</p>
+                                    <p className="text-sm text-muted-foreground">Saldo: <span className="font-bold text-black">{foundUser.points} pts</span></p>
                                 </div>
                             </div>
-
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="space-y-2">
-                                    <Label>Quantidade de Pontos</Label>
-                                    <Input 
-                                        type="number" 
-                                        placeholder="Ex: 100 ou -50" 
-                                        value={adjustPoints} 
-                                        onChange={(e) => setAdjustPoints(Number(e.target.value))}
-                                    />
-                                    <p className="text-xs text-muted-foreground">Use valor negativo para remover.</p>
+                                    <Label>Quantidade</Label>
+                                    <Input type="number" placeholder="100 ou -50" value={adjustPoints} onChange={(e) => setAdjustPoints(Number(e.target.value))} />
+                                    <p className="text-xs text-muted-foreground">Negativo para remover.</p>
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Motivo</Label>
-                                    <Input 
-                                        placeholder="Ex: Bonificação por atraso" 
-                                        value={adjustReason} 
-                                        onChange={(e) => setAdjustReason(e.target.value)}
-                                    />
+                                    <Input placeholder="Ex: Erro no sistema" value={adjustReason} onChange={(e) => setAdjustReason(e.target.value)} />
                                 </div>
                             </div>
-
-                            <Button 
-                                className="w-full mt-4 font-bold" 
-                                onClick={() => adjustMutation.mutate()} 
-                                disabled={adjustMutation.isPending || adjustPoints === 0}
-                            >
-                                {adjustMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
-                                Confirmar Lançamento
+                            <Button className="w-full mt-6 font-bold bg-black hover:bg-gray-800" onClick={() => adjustMutation.mutate()} disabled={adjustMutation.isPending || adjustPoints === 0}>
+                                {adjustMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />} Confirmar
                             </Button>
                         </div>
                     )}
@@ -314,55 +412,20 @@ export default function LoyaltyManagementPage() {
             </Card>
         </TabsContent>
 
-        {/* ABA TIERS */}
-        <TabsContent value="tiers" className="mt-4">
+        {/* 5. HISTÓRICO */}
+        <TabsContent value="history" className="mt-6">
             <Card>
-                <CardHeader>
-                    <CardTitle>Configuração de Níveis</CardTitle>
-                    <CardDescription>Defina os valores de gasto necessários para cada faixa.</CardDescription>
-                </CardHeader>
+                <CardHeader><CardTitle>Extrato Recente (Global)</CardTitle></CardHeader>
                 <CardContent>
                     <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Nível</TableHead>
-                                <TableHead>Gasto Mín (R$)</TableHead>
-                                <TableHead>Multiplicador (pts/R$)</TableHead>
-                                <TableHead className="text-right">Ação</TableHead>
-                            </TableRow>
-                        </TableHeader>
+                        <TableHeader><TableRow><TableHead>Cliente</TableHead><TableHead>Pontos</TableHead><TableHead>Motivo</TableHead><TableHead>Data</TableHead></TableRow></TableHeader>
                         <TableBody>
-                            {loadingTiers ? (
-                                <TableRow><TableCell colSpan={4}>Carregando...</TableCell></TableRow>
-                            ) : tiers?.map((tier) => (
-                                <TableRow key={tier.id}>
-                                    <TableCell className="font-bold">{tier.name}</TableCell>
-                                    <TableCell>
-                                        <Input 
-                                            type="number" 
-                                            defaultValue={tier.min_spend} 
-                                            className="w-24 h-8" 
-                                            onBlur={(e) => {
-                                                const val = parseFloat(e.target.value);
-                                                if(val !== tier.min_spend) updateTierMutation.mutate({...tier, min_spend: val});
-                                            }}
-                                        />
-                                    </TableCell>
-                                    <TableCell>
-                                        <Input 
-                                            type="number" 
-                                            step="0.1" 
-                                            defaultValue={tier.points_multiplier} 
-                                            className="w-20 h-8" 
-                                            onBlur={(e) => {
-                                                const val = parseFloat(e.target.value);
-                                                if(val !== tier.points_multiplier) updateTierMutation.mutate({...tier, points_multiplier: val});
-                                            }}
-                                        />
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <Badge variant="outline">Auto-salvar</Badge>
-                                    </TableCell>
+                            {history?.map((item: any) => (
+                                <TableRow key={item.id}>
+                                    <TableCell className="font-medium">{item.profiles?.first_name} {item.profiles?.last_name}</TableCell>
+                                    <TableCell><Badge variant="outline" className={item.points > 0 ? "text-green-600 bg-green-50" : "text-red-600 bg-red-50"}>{item.points > 0 ? "+" : ""}{item.points}</Badge></TableCell>
+                                    <TableCell className="text-xs text-muted-foreground">{item.description}</TableCell>
+                                    <TableCell className="text-xs text-muted-foreground">{new Date(item.created_at).toLocaleString('pt-BR')}</TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>
