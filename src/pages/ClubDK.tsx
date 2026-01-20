@@ -15,6 +15,15 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 
+// Interface para os cupons de prêmio
+interface RewardCoupon {
+    id: number;
+    name: string;
+    points_cost: number;
+    discount_value: number;
+    description: string;
+}
+
 export default function ClubDKPage() {
   const { user } = useUser();
   const queryClient = useQueryClient();
@@ -42,15 +51,21 @@ export default function ClubDKPage() {
     },
   });
 
-  const { data: redemptionRules } = useQuery({
-    queryKey: ["publicRedemptionRules"],
+  // Busca CUPONS que custam pontos (Loja de Resgate)
+  const { data: rewardCoupons, isLoading: isLoadingRewards } = useQuery({
+    queryKey: ["publicRewardCoupons"],
     queryFn: async () => {
-        const { data } = await supabase.from("loyalty_redemption_rules").select("*").eq("is_active", true).order("points_cost");
-        return data || [];
+        const { data } = await supabase
+            .from("coupons")
+            .select("*")
+            .gt("points_cost", 0)
+            .eq("is_active", true)
+            .order("points_cost");
+        return data as RewardCoupon[];
     }
   });
 
-  // Processa bônus de aniversário automaticamente ao carregar a página
+  // Processa bônus de aniversário automaticamente
   useEffect(() => {
     if (user && profile?.date_of_birth) {
         supabase.rpc('process_annual_birthday_bonus', { p_user_id: user.id })
@@ -73,6 +88,20 @@ export default function ClubDKPage() {
       queryClient.invalidateQueries({ queryKey: ["loyaltyProfile"] });
     },
     onError: (err: any) => showError(err.message),
+  });
+
+  const redeemMutation = useMutation({
+    mutationFn: async (couponId: number) => {
+        const { data, error } = await supabase.rpc("redeem_coupon", { coupon_id_to_redeem: couponId });
+        if (error) throw error;
+        return data;
+    },
+    onSuccess: () => {
+        showSuccess("Resgate realizado! O cupom está na sua conta.");
+        queryClient.invalidateQueries({ queryKey: ["loyaltyProfile"] });
+        // Opcional: Redirecionar para 'Meus Pedidos' ou mostrar o código
+    },
+    onError: (err: any) => showError(`Erro no resgate: ${err.message}`),
   });
 
   if (isLoading || !profile || !tiers) return <div className="p-8"><Skeleton className="h-96 w-full" /></div>;
@@ -163,21 +192,46 @@ export default function ClubDKPage() {
                     <Card>
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2"><Gift className="w-5 h-5 text-purple-600" /> Loja de Pontos</CardTitle>
-                            <CardDescription>Troque seus pontos por descontos. Os cupons ficam salvos no seu perfil.</CardDescription>
+                            <CardDescription>Troque seus pontos por cupons de desconto.</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                {redemptionRules?.map((rule) => {
-                                    const canAfford = profile.points >= rule.points_cost;
-                                    return (
-                                        <button key={rule.id} disabled={!canAfford} className={cn("flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all", canAfford ? "border-purple-100 bg-purple-50 hover:border-purple-500 cursor-pointer shadow-sm" : "border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed grayscale")}>
-                                            <span className="text-2xl font-black text-purple-700">R$ {rule.discount_value}</span>
-                                            <span className="text-xs font-bold text-gray-500 mt-1 uppercase">Cupom</span>
-                                            <div className="mt-3 bg-white px-3 py-1 rounded-full text-xs font-bold shadow-sm border">{rule.points_cost} pts</div>
-                                        </button>
-                                    )
-                                })}
-                            </div>
+                            {isLoadingRewards ? (
+                                <div className="text-center py-10"><Loader2 className="h-8 w-8 animate-spin mx-auto text-purple-600" /></div>
+                            ) : rewardCoupons && rewardCoupons.length > 0 ? (
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                    {rewardCoupons.map((coupon) => {
+                                        const canAfford = profile.points >= coupon.points_cost;
+                                        return (
+                                            <button 
+                                                key={coupon.id} 
+                                                disabled={!canAfford || redeemMutation.isPending}
+                                                onClick={() => {
+                                                    if(confirm(`Confirmar troca de ${coupon.points_cost} pontos pelo cupom de R$ ${coupon.discount_value}?`)) {
+                                                        redeemMutation.mutate(coupon.id);
+                                                    }
+                                                }}
+                                                className={cn(
+                                                    "flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all relative group",
+                                                    canAfford ? "border-purple-100 bg-purple-50 hover:border-purple-500 cursor-pointer shadow-sm hover:shadow-md" : "border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed grayscale"
+                                                )}
+                                            >
+                                                <span className="text-2xl font-black text-purple-700">R$ {coupon.discount_value}</span>
+                                                <span className="text-xs font-bold text-gray-500 mt-1 uppercase">Cupom</span>
+                                                <div className="mt-3 bg-white px-3 py-1 rounded-full text-xs font-bold shadow-sm border text-purple-900">
+                                                    {coupon.points_cost} pts
+                                                </div>
+                                                {canAfford && (
+                                                    <div className="absolute inset-0 bg-purple-600/90 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <span className="text-white font-bold flex items-center gap-2"><Gift className="w-4 h-4" /> RESGATAR</span>
+                                                    </div>
+                                                )}
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+                            ) : (
+                                <div className="text-center py-10 text-muted-foreground">Nenhuma opção de resgate disponível no momento.</div>
+                            )}
                         </CardContent>
                     </Card>
                 </TabsContent>

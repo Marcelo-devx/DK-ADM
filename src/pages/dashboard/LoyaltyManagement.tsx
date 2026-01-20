@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { showSuccess, showError } from "@/utils/toast";
-import { Crown, Coins, History, Settings, Search, PlusCircle, Save, Loader2, User, Gift, Zap, Trash2, Info, TicketCheck, RefreshCw, AlertCircle } from "lucide-react";
+import { Crown, Coins, History, Settings, Search, PlusCircle, Save, Loader2, User, Gift, Zap, Trash2, Info, TicketCheck, RefreshCw, AlertCircle, Ticket } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -52,6 +52,14 @@ interface UserCoupon {
     } | null;
 }
 
+interface RewardCoupon {
+    id: number;
+    name: string;
+    points_cost: number;
+    discount_value: number;
+    stock_quantity: number;
+}
+
 // --- FETCHERS ---
 const fetchTiers = async () => {
   const { data, error } = await supabase.from("loyalty_tiers").select("*").order("min_spend");
@@ -59,10 +67,16 @@ const fetchTiers = async () => {
   return data as LoyaltyTier[];
 };
 
-const fetchRedemptionRules = async () => {
-  const { data, error } = await supabase.from("loyalty_redemption_rules").select("*").order("points_cost");
+// Agora busca CUPONS reais que tenham custo em pontos > 0
+const fetchRewardCoupons = async () => {
+  const { data, error } = await supabase
+    .from("coupons")
+    .select("*")
+    .gt("points_cost", 0)
+    .eq("is_active", true)
+    .order("points_cost");
   if (error) throw error;
-  return data;
+  return data as RewardCoupon[];
 };
 
 const fetchHistory = async () => {
@@ -105,13 +119,14 @@ export default function LoyaltyManagementPage() {
   const [adjustPoints, setAdjustPoints] = useState<number>(0);
   const [adjustReason, setAdjustReason] = useState("");
   
-  // New Rule States
+  // New Reward Coupon States
   const [newRulePoints, setNewRulePoints] = useState("");
   const [newRuleValue, setNewRuleValue] = useState("");
+  const [newRuleName, setNewRuleName] = useState("");
 
   // Queries
   const { data: tiers, isLoading: loadingTiers } = useQuery({ queryKey: ["adminTiers"], queryFn: fetchTiers });
-  const { data: redemptionRules, isLoading: loadingRules } = useQuery({ queryKey: ["adminRedemptionRules"], queryFn: fetchRedemptionRules });
+  const { data: rewardCoupons, isLoading: loadingRewards } = useQuery({ queryKey: ["adminRewardCoupons"], queryFn: fetchRewardCoupons });
   const { data: history } = useQuery({ queryKey: ["adminLoyaltyHistory"], queryFn: fetchHistory });
   const { data: settings } = useQuery({ queryKey: ["adminLoyaltySettings"], queryFn: fetchSettings });
   const { data: userCoupons, isLoading: loadingUserCoupons, isError: errorUserCoupons, refetch: refetchUserCoupons } = useQuery({ queryKey: ["adminUserCoupons"], queryFn: fetchUserCoupons });
@@ -151,32 +166,44 @@ export default function LoyaltyManagementPage() {
     onError: (err: any) => showError(err.message),
   });
 
-  const addRuleMutation = useMutation({
+  // Cria um CUPOM real com custo em pontos
+  const addRewardCouponMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("loyalty_redemption_rules").insert({
-        points_cost: parseInt(newRulePoints),
-        discount_value: parseFloat(newRuleValue.replace(',', '.'))
+      const points = parseInt(newRulePoints);
+      const value = parseFloat(newRuleValue.replace(',', '.'));
+      
+      const { error } = await supabase.from("coupons").insert({
+        name: newRuleName || `RESGATE${points}`,
+        description: `Cupom de R$ ${value} por ${points} pontos`,
+        discount_value: value,
+        points_cost: points,
+        minimum_order_value: 0,
+        stock_quantity: 9999, // Estoque virtualmente infinito para resgates
+        is_active: true
       });
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["adminRedemptionRules"] });
+      queryClient.invalidateQueries({ queryKey: ["adminRewardCoupons"] });
       setNewRulePoints("");
       setNewRuleValue("");
-      showSuccess("Opção de resgate adicionada!");
+      setNewRuleName("");
+      showSuccess("Opção de resgate criada (Cupom Gerado)!");
     },
     onError: (err: any) => showError(err.message),
   });
 
-  const deleteRuleMutation = useMutation({
+  const deleteRewardCouponMutation = useMutation({
     mutationFn: async (id: number) => {
-      const { error } = await supabase.from("loyalty_redemption_rules").delete().eq("id", id);
+      // Apenas desativa ou deleta se não tiver uso? Vamos deletar para simplificar a gestão visual
+      const { error } = await supabase.from("coupons").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["adminRedemptionRules"] });
+      queryClient.invalidateQueries({ queryKey: ["adminRewardCoupons"] });
       showSuccess("Opção removida.");
-    }
+    },
+    onError: (err: any) => showError(`Erro ao remover (pode estar em uso): ${err.message}`),
   });
 
   const searchUser = async () => {
@@ -226,8 +253,8 @@ export default function LoyaltyManagementPage() {
         <TabsList className="grid w-full grid-cols-3 lg:grid-cols-6 bg-slate-100 p-1">
             <TabsTrigger value="bonus">Regras de Pontuação</TabsTrigger>
             <TabsTrigger value="tiers">Níveis</TabsTrigger>
-            <TabsTrigger value="redemption">Regras de Resgate</TabsTrigger>
-            <TabsTrigger value="user-coupons">Cupons dos Clientes</TabsTrigger>
+            <TabsTrigger value="redemption">Prêmios (Cupons)</TabsTrigger>
+            <TabsTrigger value="user-coupons">Resgates Feitos</TabsTrigger>
             <TabsTrigger value="manual">Ajuste Manual</TabsTrigger>
             <TabsTrigger value="history">Extrato Geral</TabsTrigger>
         </TabsList>
@@ -371,47 +398,54 @@ export default function LoyaltyManagementPage() {
             </Card>
         </TabsContent>
 
-        {/* 3. REGRAS DE RESGATE */}
+        {/* 3. CATÁLOGO DE PRÊMIOS (CUPONS) */}
         <TabsContent value="redemption" className="mt-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <Card className="md:col-span-1 border-dashed bg-slate-50">
                     <CardHeader>
-                        <CardTitle className="text-base">Adicionar Opção</CardTitle>
+                        <CardTitle className="text-base flex items-center gap-2"><Ticket className="w-4 h-4" /> Criar Prêmio</CardTitle>
+                        <CardDescription>Cria um cupom real comprável com pontos.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className="space-y-2">
-                            <Label>Custo em Pontos</Label>
-                            <Input placeholder="Ex: 2000" type="number" value={newRulePoints} onChange={(e) => setNewRulePoints(e.target.value)} />
+                            <Label>Nome do Cupom (Código)</Label>
+                            <Input placeholder="Ex: VALE10" value={newRuleName} onChange={(e) => setNewRuleName(e.target.value.toUpperCase())} />
                         </div>
                         <div className="space-y-2">
-                            <Label>Desconto (R$)</Label>
-                            <Input placeholder="Ex: 250,00" value={newRuleValue} onChange={(e) => setNewRuleValue(e.target.value)} />
+                            <Label>Custo em Pontos</Label>
+                            <Input placeholder="Ex: 1000" type="number" value={newRulePoints} onChange={(e) => setNewRulePoints(e.target.value)} />
                         </div>
-                        <Button className="w-full" disabled={!newRulePoints || !newRuleValue} onClick={() => addRuleMutation.mutate()}>
-                            <PlusCircle className="w-4 h-4 mr-2" /> Adicionar
+                        <div className="space-y-2">
+                            <Label>Valor do Desconto (R$)</Label>
+                            <Input placeholder="Ex: 10,00" value={newRuleValue} onChange={(e) => setNewRuleValue(e.target.value)} />
+                        </div>
+                        <Button className="w-full" disabled={!newRulePoints || !newRuleValue} onClick={() => addRewardCouponMutation.mutate()}>
+                            <PlusCircle className="w-4 h-4 mr-2" /> Salvar Prêmio
                         </Button>
                     </CardContent>
                 </Card>
 
                 <Card className="md:col-span-2">
-                    <CardHeader><CardTitle>Opções de Troca Disponíveis</CardTitle></CardHeader>
+                    <CardHeader><CardTitle>Catálogo Atual</CardTitle></CardHeader>
                     <CardContent>
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>Pontos Necessários</TableHead>
-                                    <TableHead>Valor do Cupom</TableHead>
+                                    <TableHead>Cupom</TableHead>
+                                    <TableHead>Pontos (Preço)</TableHead>
+                                    <TableHead>Desconto</TableHead>
                                     <TableHead className="w-12"></TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {loadingRules ? <TableRow><TableCell colSpan={3}>Carregando...</TableCell></TableRow> :
-                                 redemptionRules?.map((rule: any) => (
-                                    <TableRow key={rule.id}>
-                                        <TableCell className="font-bold">{rule.points_cost} pts</TableCell>
-                                        <TableCell className="text-green-600 font-bold">R$ {rule.discount_value}</TableCell>
+                                {loadingRewards ? <TableRow><TableCell colSpan={4}>Carregando...</TableCell></TableRow> :
+                                 rewardCoupons?.map((coupon: any) => (
+                                    <TableRow key={coupon.id}>
+                                        <TableCell className="font-medium">{coupon.name}</TableCell>
+                                        <TableCell className="font-bold text-yellow-600">{coupon.points_cost} pts</TableCell>
+                                        <TableCell className="text-green-600 font-bold">R$ {coupon.discount_value}</TableCell>
                                         <TableCell>
-                                            <Button variant="ghost" size="icon" onClick={() => deleteRuleMutation.mutate(rule.id)} className="text-red-500">
+                                            <Button variant="ghost" size="icon" onClick={() => deleteRewardCouponMutation.mutate(coupon.id)} className="text-red-500">
                                                 <Trash2 className="w-4 h-4" />
                                             </Button>
                                         </TableCell>
@@ -424,7 +458,7 @@ export default function LoyaltyManagementPage() {
             </div>
         </TabsContent>
 
-        {/* NOVA ABA: CUPONS DOS CLIENTES */}
+        {/* 4. CUPONS DOS CLIENTES (RESGATES) */}
         <TabsContent value="user-coupons" className="mt-6">
             <Card>
                 <CardHeader>
@@ -495,7 +529,7 @@ export default function LoyaltyManagementPage() {
             </Card>
         </TabsContent>
 
-        {/* 4. AJUSTE MANUAL */}
+        {/* 5. AJUSTE MANUAL */}
         <TabsContent value="manual" className="mt-6">
             <Card>
                 <CardHeader>
@@ -542,7 +576,7 @@ export default function LoyaltyManagementPage() {
             </Card>
         </TabsContent>
 
-        {/* 5. HISTÓRICO */}
+        {/* 6. HISTÓRICO */}
         <TabsContent value="history" className="mt-6">
             <Card>
                 <CardHeader><CardTitle>Extrato Recente (Global)</CardTitle></CardHeader>
