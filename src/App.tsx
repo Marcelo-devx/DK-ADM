@@ -44,6 +44,7 @@ import N8nIntegrationPage from "./pages/dashboard/N8nIntegration";
 import AnalyticsPage from "./pages/dashboard/Analytics";
 import MetaflowInsightsPage from "./pages/dashboard/MetaflowInsights";
 import IncomingWebhooksPage from "./pages/dashboard/IncomingWebhooks";
+import ClubDKPage from "./pages/ClubDK";
 
 const queryClient = new QueryClient();
 
@@ -61,12 +62,15 @@ const AppContent = () => {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/meus-pedidos" element={<MyOrdersPage />} />
         <Route path="/produto/:id" element={<ProductDetailPage />} />
+        {/* Rota direta para clientes acessarem o clube fora do dashboard admin */}
+        <Route path="/club-dk" element={<ClubDKPage />} />
         
         <Route path="/dashboard" element={<DashboardLayout />}>
           <Route index element={<DashboardPage />} />
           <Route path="analytics" element={<AnalyticsPage />} />
           <Route path="metaflow" element={<MetaflowInsightsPage />} />
           <Route path="orders" element={<OrdersPage />} />
+          <Route path="club-dk" element={<ClubDKPage />} />
           <Route path="n8n" element={<N8nIntegrationPage />} />
           <Route path="incoming-webhooks" element={<IncomingWebhooksPage />} />
           <Route path="delivery-routes" element={<DeliveryRoutesPage />} />
