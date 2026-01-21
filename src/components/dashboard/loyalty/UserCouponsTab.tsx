@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { TicketCheck, RefreshCw, Loader2, AlertCircle, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { showSuccess, showError } from "@/utils/toast";
+import { cn } from "@/lib/utils";
 
 // Interface específica para o retorno da RPC (Flat structure)
 interface UserCouponRPC {
@@ -25,14 +26,14 @@ interface UserCouponRPC {
 }
 
 const fetchUserCoupons = async () => {
-    // Usa a função RPC segura em vez de select direto para evitar erros de RLS
+    // Agora buscamos também a data de criação do pedido relacionado (orders -> created_at)
     const { data, error } = await supabase.rpc("get_all_user_coupons_with_usage");
         
     if (error) throw error;
     return data as UserCouponRPC[];
 }
 
-export const UserCouponsTab = () => {
+export const UserCouponsTab = ({ className }: { className?: string }) => {
   const queryClient = useQueryClient();
   const { data: userCoupons, isLoading, isError, refetch } = useQuery({ 
     queryKey: ["adminUserCouponsV2"], 
@@ -52,11 +53,11 @@ export const UserCouponsTab = () => {
   });
 
   return (
-    <Card className="mt-6">
+    <Card className={cn("mt-6", className)}>
         <CardHeader>
             <div className="flex justify-between items-center">
                 <div>
-                    <CardTitle className="text-base flex items-center gap-2"><TicketCheck className="w-5 h-5 text-emerald-600" /> Histórico Completo de Cupons</CardTitle>
+                    <CardTitle className="text-base flex items-center gap-2"><TicketCheck className="w-5 h-5 text-emerald-600" /> Lista Geral de Resgates</CardTitle>
                     <CardDescription>Visualize quando seus clientes resgataram e quando utilizaram os cupons.</CardDescription>
                 </div>
                 <Button variant="outline" size="sm" onClick={() => refetch()}>
@@ -73,8 +74,8 @@ export const UserCouponsTab = () => {
                             <TableHead>Cupom</TableHead>
                             <TableHead>Valor</TableHead>
                             <TableHead>Status</TableHead>
-                            <TableHead>Data Resgate (Compra Pontos)</TableHead>
-                            <TableHead>Data Uso (No Pedido)</TableHead>
+                            <TableHead>Data Resgate</TableHead>
+                            <TableHead>Data Uso</TableHead>
                             <TableHead className="text-right">Ação</TableHead>
                         </TableRow>
                     </TableHeader>

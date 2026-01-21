@@ -6,7 +6,7 @@ import {
   MessageSquare, Users, ListTree, GalleryHorizontal, Star, Ticket, Plug, 
   ShoppingCart, DollarSign, Truck, Coins, Printer, Map as MapIcon, 
   Lock, FileOutput, FileUp, Workflow, BarChart3, Box, LogOut, Brain, Sparkles,
-  Lightbulb, Webhook, Crown
+  Lightbulb, Webhook, Crown, TicketCheck
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -121,6 +121,10 @@ const Sidebar = () => {
         <NavLink to="/dashboard/club-dk" className={navLinkClass}>
           <Crown className="w-4 h-4 mr-3 text-yellow-500" />
           Club DK (Fidelidade)
+        </NavLink>
+        <NavLink to="/dashboard/user-coupons" className={navLinkClass}>
+          <TicketCheck className="w-4 h-4 mr-3 text-emerald-600" />
+          Histórico de Cupons
         </NavLink>
         <NavLink to="/dashboard/promotions" className={navLinkClass}>
           <Percent className="w-4 h-4 mr-3 text-pink-500" />

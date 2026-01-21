@@ -46,6 +46,7 @@ import MetaflowInsightsPage from "./pages/dashboard/MetaflowInsights";
 import IncomingWebhooksPage from "./pages/dashboard/IncomingWebhooks";
 import ClubDKPage from "./pages/ClubDK";
 import LoyaltyManagementPage from "./pages/dashboard/LoyaltyManagement";
+import UserCouponsHistoryPage from "./pages/dashboard/UserCouponsHistory";
 
 const queryClient = new QueryClient();
 
@@ -75,6 +76,7 @@ const AppContent = () => {
           
           {/* Rota de Gestão (Admin) */}
           <Route path="club-dk" element={<LoyaltyManagementPage />} />
+          <Route path="user-coupons" element={<UserCouponsHistoryPage />} />
           
           <Route path="n8n" element={<N8nIntegrationPage />} />
           <Route path="incoming-webhooks" element={<IncomingWebhooksPage />} />
