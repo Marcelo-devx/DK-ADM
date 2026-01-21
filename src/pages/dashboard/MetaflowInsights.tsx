@@ -391,7 +391,7 @@ const MetaflowInsightsPage = () => {
             </Card>
       </div>
 
-      {/* SEÇÃO DIDÁTICA: COMO FUNCIONA */}
+      {/* SEÇÃO DIDÁTICA: COMO FUNCIONA (Com quadradinhos para o cliente) */}
       <Card className="bg-slate-50 border-dashed border-2 border-slate-200 mt-12 mb-8">
         <CardHeader className="border-b border-dashed border-slate-200 pb-4">
             <CardTitle className="text-base text-slate-700 font-bold flex items-center gap-2">
@@ -400,41 +400,47 @@ const MetaflowInsightsPage = () => {
         </CardHeader>
         <CardContent className="pt-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                
+                {/* BLOCO 1: Cross-sell */}
                 <div className="space-y-2">
                     <div className="flex items-center gap-2 text-blue-600 font-bold text-sm">
-                        <Target className="w-4 h-4" /> Análise de Cestas (Cross-sell)
+                        <Target className="w-4 h-4" /> Análise de Cestas
                     </div>
                     <p className="text-xs text-slate-600 leading-relaxed">
-                        O algoritmo analisa o histórico de todos os pedidos para encontrar produtos que frequentemente são comprados juntos, sugerindo a criação de Kits promocionais.
+                        O sistema lê todos os pedidos passados e encontra produtos que "andam juntos" frequentemente, sugerindo a criação de Kits promocionais automáticos.
                     </p>
                 </div>
 
+                {/* BLOCO 2: Estoque */}
                 <div className="space-y-2">
                     <div className="flex items-center gap-2 text-orange-600 font-bold text-sm">
                         <Calculator className="w-4 h-4" /> Previsão de Ruptura
                     </div>
                     <p className="text-xs text-slate-600 leading-relaxed">
-                        Calculamos a velocidade média de vendas diárias (velocity) de cada item nos últimos 30 dias para estimar exatamente em quantos dias o estoque atual vai acabar.
+                        Calculamos a velocidade de vendas dos últimos 30 dias para prever a data exata que seu estoque vai zerar, permitindo reposição antecipada.
                     </p>
                 </div>
 
+                {/* BLOCO 3: Churn */}
                 <div className="space-y-2">
                     <div className="flex items-center gap-2 text-rose-600 font-bold text-sm">
                         <History className="w-4 h-4" /> Radar de Churn
                     </div>
                     <p className="text-xs text-slate-600 leading-relaxed">
-                        Identificamos clientes que tinham um padrão de compra frequente mas que não realizam novos pedidos há mais de 30 dias, sinalizando risco de perda.
+                        Identificamos clientes frequentes que pararam de comprar repentinamente (há mais de 30 dias) para que você possa recuperá-los com campanhas.
                     </p>
                 </div>
 
+                {/* BLOCO 4: Momentum */}
                 <div className="space-y-2">
                     <div className="flex items-center gap-2 text-teal-600 font-bold text-sm">
                         <LineChart className="w-4 h-4" /> Momentum de Vendas
                     </div>
                     <p className="text-xs text-slate-600 leading-relaxed">
-                        Comparamos o volume de vendas dos últimos 7 dias com a semana anterior para detectar tendências de alta (trending) ou queda (cooling) antes que sejam óbvias.
+                        Comparamos a semana atual com a anterior para detectar tendências de alta (trending) ou baixa (cooling) antes que sejam óbvias no caixa.
                     </p>
                 </div>
+
             </div>
         </CardContent>
       </Card>
