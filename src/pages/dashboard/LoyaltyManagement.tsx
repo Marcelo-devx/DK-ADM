@@ -10,9 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { showSuccess, showError } from "@/utils/toast";
-import { Crown, Coins, History, Settings, Search, PlusCircle, Save, Loader2, User, Gift, Zap, Trash2, Info, TicketCheck, RefreshCw, AlertCircle, Ticket, Database } from "lucide-react";
+import { Crown, History, Settings, Search, PlusCircle, Save, Loader2, User, Gift, Zap, Trash2, Info, TicketCheck, RefreshCw, AlertCircle, Ticket, Database } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // --- TYPES ---
 interface LoyaltyTier {
@@ -83,28 +82,19 @@ const fetchHistory = async () => {
   return data as unknown as LoyaltyHistoryItem[];
 };
 
-// ATUALIZADO: Usando RPC seguro para Admin
+// ATUALIZADO: Consulta direta padrão (agora permitida pelo RLS)
 const fetchUserCoupons = async () => {
-    const { data, error } = await supabase.rpc("get_all_user_coupons_admin");
-    
+    const { data, error } = await supabase
+        .from("user_coupons")
+        .select(`
+            *, 
+            profiles (first_name, last_name), 
+            coupons (name, discount_value)
+        `)
+        .order("created_at", { ascending: false });
+        
     if (error) throw error;
-
-    // Mapeia o retorno flat da RPC para o formato aninhado esperado pela UI
-    return (data as any[]).map(item => ({
-        id: item.id,
-        created_at: item.created_at,
-        is_used: item.is_used,
-        expires_at: item.expires_at,
-        order_id: item.order_id,
-        profiles: {
-            first_name: item.profile_first_name,
-            last_name: item.profile_last_name
-        },
-        coupons: {
-            name: item.coupon_name,
-            discount_value: item.coupon_discount_value
-        }
-    })) as UserCoupon[];
+    return data as unknown as UserCoupon[];
 }
 
 const fetchSettings = async () => {
@@ -136,7 +126,7 @@ export default function LoyaltyManagementPage() {
   // Queries
   const { data: tiers, isLoading: loadingTiers } = useQuery({ queryKey: ["adminTiers"], queryFn: fetchTiers });
   const { data: redemptionRules, isLoading: loadingRules } = useQuery({ queryKey: ["adminRewardCoupons"], queryFn: fetchRedemptionRules });
-  const { data: history, isLoading: loadingHistory, refetch: refetchHistory } = useQuery({ queryKey: ["adminLoyaltyHistory"], queryFn: fetchHistory });
+  const { data: history, isLoading: loadingHistory } = useQuery({ queryKey: ["adminLoyaltyHistory"], queryFn: fetchHistory });
   const { data: settings } = useQuery({ queryKey: ["adminLoyaltySettings"], queryFn: fetchSettings });
   const { data: userCoupons, isLoading: loadingUserCoupons, isError: errorUserCoupons, refetch: refetchUserCoupons } = useQuery({ queryKey: ["adminUserCoupons"], queryFn: fetchUserCoupons });
 
@@ -528,9 +518,9 @@ export default function LoyaltyManagementPage() {
                                             <TableCell className="text-emerald-600 font-bold">R$ {uc.coupons?.discount_value}</TableCell>
                                             <TableCell>
                                                 {uc.is_used ? (
-                                                    <Badge variant="secondary" className="text-[10px]">Usado #{uc.order_id}</Badge>
+                                                    <Badge variant="secondary">Usado #{uc.order_id}</Badge>
                                                 ) : (
-                                                    <Badge className="bg-emerald-500 text-[10px] hover:bg-emerald-600">Disponível</Badge>
+                                                    <Badge className="bg-emerald-500 text-white hover:bg-emerald-600">Disponível</Badge>
                                                 )}
                                             </TableCell>
                                             <TableCell className="text-xs text-muted-foreground">{new Date(uc.created_at).toLocaleDateString('pt-BR')}</TableCell>
