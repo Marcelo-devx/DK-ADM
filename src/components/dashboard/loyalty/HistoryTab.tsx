@@ -8,16 +8,25 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Loader2, Database } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { showSuccess, showError } from "@/utils/toast";
-import { LoyaltyHistoryItem } from "./types";
+
+// Interface para o retorno plano da RPC
+interface LoyaltyHistoryRPC {
+  id: number;
+  user_id: string;
+  points: number;
+  description: string;
+  created_at: string;
+  operation_type: string;
+  profile_first_name: string | null;
+  profile_last_name: string | null;
+}
 
 const fetchHistory = async () => {
-  const { data, error } = await supabase
-    .from("loyalty_history")
-    .select("*, profiles(first_name, last_name)")
-    .order("created_at", { ascending: false })
-    .limit(50);
+  // Usa a RPC direta para evitar bloqueios de RLS em JOINs
+  const { data, error } = await supabase.rpc("get_all_loyalty_history_admin");
+  
   if (error) throw error;
-  return data as unknown as LoyaltyHistoryItem[];
+  return data as LoyaltyHistoryRPC[];
 };
 
 export const HistoryTab = () => {
@@ -51,9 +60,13 @@ export const HistoryTab = () => {
                 <TableHeader><TableRow><TableHead>Cliente</TableHead><TableHead>Pontos</TableHead><TableHead>Motivo</TableHead><TableHead>Data</TableHead></TableRow></TableHeader>
                 <TableBody>
                     {isLoading ? <TableRow><TableCell colSpan={4} className="text-center py-10"><Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" /></TableCell></TableRow> :
+                     history?.length === 0 ? <TableRow><TableCell colSpan={4} className="text-center py-10 text-muted-foreground">Nenhum histórico encontrado.</TableCell></TableRow> :
                      history?.map((item) => (
                         <TableRow key={item.id}>
-                            <TableCell className="font-medium">{item.profiles?.first_name} {item.profiles?.last_name}</TableCell>
+                            <TableCell className="font-medium">
+                                {item.profile_first_name || 'Usuário'} {item.profile_last_name || ''}
+                                <div className="text-[10px] text-muted-foreground font-mono">...{item.user_id.substring(0,6)}</div>
+                            </TableCell>
                             <TableCell><Badge variant="outline" className={item.points > 0 ? "text-green-600 bg-green-50" : "text-red-600 bg-red-50"}>{item.points > 0 ? "+" : ""}{item.points}</Badge></TableCell>
                             <TableCell className="text-xs text-muted-foreground">{item.description}</TableCell>
                             <TableCell className="text-xs text-muted-foreground">{new Date(item.created_at).toLocaleString('pt-BR')}</TableCell>
