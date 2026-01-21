@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Database } from "lucide-react";
+import { Loader2, Database, ClipboardList, ArrowUpCircle, ArrowDownCircle, Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { showSuccess, showError } from "@/utils/toast";
 
@@ -59,8 +59,45 @@ export const HistoryTab = () => {
             <Table>
                 <TableHeader><TableRow><TableHead>Cliente</TableHead><TableHead>Pontos</TableHead><TableHead>Motivo</TableHead><TableHead>Data</TableHead></TableRow></TableHeader>
                 <TableBody>
-                    {isLoading ? <TableRow><TableCell colSpan={4} className="text-center py-10"><Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" /></TableCell></TableRow> :
-                     history?.length === 0 ? <TableRow><TableCell colSpan={4} className="text-center py-10 text-muted-foreground">Nenhum histórico encontrado.</TableCell></TableRow> :
+                    {isLoading ? (
+                        <TableRow><TableCell colSpan={4} className="text-center py-10"><Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" /></TableCell></TableRow>
+                    ) : history?.length === 0 ? (
+                        <TableRow>
+                            <TableCell colSpan={4} className="py-12">
+                                <div className="flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-4">
+                                    <div className="p-3 bg-slate-100 rounded-full">
+                                        <ClipboardList className="w-8 h-8 text-slate-400" />
+                                    </div>
+                                    <h3 className="text-lg font-bold text-slate-700">O extrato está vazio no momento</h3>
+                                    
+                                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-left w-full space-y-3">
+                                        <p className="text-xs font-semibold text-slate-500 uppercase mb-2">O que aparecerá aqui?</p>
+                                        
+                                        <div className="flex items-start gap-3">
+                                            <ArrowUpCircle className="w-5 h-5 text-green-500 mt-0.5 shrink-0" />
+                                            <div>
+                                                <p className="text-sm font-bold text-slate-800">Entradas (Créditos)</p>
+                                                <p className="text-xs text-slate-500">Pontos ganhos por compras, bônus de aniversário ou ajustes manuais.</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-start gap-3 border-t pt-3">
+                                            <ArrowDownCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
+                                            <div>
+                                                <p className="text-sm font-bold text-slate-800">Saídas (Débitos)</p>
+                                                <p className="text-xs text-slate-500">Pontos gastos no resgate de cupons de desconto.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <p className="text-xs text-blue-600 bg-blue-50 px-3 py-2 rounded-md border border-blue-100 flex items-center gap-2">
+                                        <Info className="w-4 h-4" />
+                                        Dica: Clique em <strong>Sincronizar Dados</strong> acima para importar resgates de cupons antigos.
+                                    </p>
+                                </div>
+                            </TableCell>
+                        </TableRow>
+                    ) : (
                      history?.map((item) => (
                         <TableRow key={item.id}>
                             <TableCell className="font-medium">
@@ -71,7 +108,7 @@ export const HistoryTab = () => {
                             <TableCell className="text-xs text-muted-foreground">{item.description}</TableCell>
                             <TableCell className="text-xs text-muted-foreground">{new Date(item.created_at).toLocaleString('pt-BR')}</TableCell>
                         </TableRow>
-                    ))}
+                    )))}
                 </TableBody>
             </Table>
         </CardContent>
