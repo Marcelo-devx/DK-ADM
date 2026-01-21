@@ -10,7 +10,8 @@ import {
   Lightbulb, Package, Target, UserMinus, Plus, ArrowRight, 
   Sparkles, Crown, Wallet, Zap, RefreshCw, AlertTriangle,
   TrendingUp, TrendingDown, Clock, BarChart4, AlertOctagon,
-  Hourglass, Brain, Calculator, History, LineChart
+  Hourglass, Brain, Calculator, History, LineChart,
+  Database, Binary, Cpu, Rocket, Search, Coins
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -94,6 +95,18 @@ const MetaflowInsightsPage = () => {
         </div>
     );
   };
+
+  // Componente para os Steps
+  const InsightStep = ({ number, icon: Icon, title, desc, color }: any) => (
+    <div className="relative flex flex-col items-center text-center p-4 bg-white rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all group">
+        <div className={cn("absolute top-2 right-2 text-[10px] font-black opacity-20", color)}>#{number}</div>
+        <div className={cn("p-3 rounded-2xl mb-3 transition-transform group-hover:scale-110", color.replace('text-', 'bg-').replace('600', '100'))}>
+            <Icon className={cn("w-6 h-6", color)} />
+        </div>
+        <h4 className="font-bold text-slate-800 text-sm mb-1">{title}</h4>
+        <p className="text-xs text-slate-500 leading-snug">{desc}</p>
+    </div>
+  );
 
   return (
     <div className="space-y-8 pb-20">
@@ -391,59 +404,57 @@ const MetaflowInsightsPage = () => {
             </Card>
       </div>
 
-      {/* SEÇÃO DIDÁTICA: COMO FUNCIONA (Com quadradinhos para o cliente) */}
-      <Card className="bg-slate-50 border-dashed border-2 border-slate-200 mt-12 mb-8">
-        <CardHeader className="border-b border-dashed border-slate-200 pb-4">
-            <CardTitle className="text-base text-slate-700 font-bold flex items-center gap-2">
-                <Brain className="w-5 h-5" /> Entenda os Bastidores da Inteligência
-            </CardTitle>
-        </CardHeader>
-        <CardContent className="pt-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-                
-                {/* BLOCO 1: Cross-sell */}
-                <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-blue-600 font-bold text-sm">
-                        <Target className="w-4 h-4" /> Análise de Cestas
-                    </div>
-                    <p className="text-xs text-slate-600 leading-relaxed">
-                        O sistema lê todos os pedidos passados e encontra produtos que "andam juntos" frequentemente, sugerindo a criação de Kits promocionais automáticos.
-                    </p>
-                </div>
-
-                {/* BLOCO 2: Estoque */}
-                <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-orange-600 font-bold text-sm">
-                        <Calculator className="w-4 h-4" /> Previsão de Ruptura
-                    </div>
-                    <p className="text-xs text-slate-600 leading-relaxed">
-                        Calculamos a velocidade de vendas dos últimos 30 dias para prever a data exata que seu estoque vai zerar, permitindo reposição antecipada.
-                    </p>
-                </div>
-
-                {/* BLOCO 3: Churn */}
-                <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-rose-600 font-bold text-sm">
-                        <History className="w-4 h-4" /> Radar de Churn
-                    </div>
-                    <p className="text-xs text-slate-600 leading-relaxed">
-                        Identificamos clientes frequentes que pararam de comprar repentinamente (há mais de 30 dias) para que você possa recuperá-los com campanhas.
-                    </p>
-                </div>
-
-                {/* BLOCO 4: Momentum */}
-                <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-teal-600 font-bold text-sm">
-                        <LineChart className="w-4 h-4" /> Momentum de Vendas
-                    </div>
-                    <p className="text-xs text-slate-600 leading-relaxed">
-                        Comparamos a semana atual com a anterior para detectar tendências de alta (trending) ou baixa (cooling) antes que sejam óbvias no caixa.
-                    </p>
-                </div>
-
-            </div>
-        </CardContent>
-      </Card>
+      {/* SEÇÃO EDUCATIVA VISUAL - FLUXO DE DADOS */}
+      <div className="mt-12 mb-8">
+        <h3 className="text-lg font-bold text-slate-700 flex items-center gap-2 mb-6">
+            <Brain className="w-5 h-5" /> Pipeline de Dados: Como funciona?
+        </h3>
+        
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+            <InsightStep 
+                number="1" 
+                icon={Database} 
+                color="text-slate-600" 
+                title="Coleta" 
+                desc="O banco de dados registra cada venda, cliente e estoque." 
+            />
+            <InsightStep 
+                number="2" 
+                icon={Binary} 
+                color="text-blue-600" 
+                title="Processamento" 
+                desc="O código varre milhões de linhas em segundos." 
+            />
+            <InsightStep 
+                number="3" 
+                icon={Calculator} 
+                color="text-purple-600" 
+                title="Análise" 
+                desc="Algoritmos calculam médias, tendências e frequências." 
+            />
+            <InsightStep 
+                number="4" 
+                icon={Search} 
+                color="text-orange-600" 
+                title="Detecção" 
+                desc="Identificação de padrões: quem sumiu, o que combina." 
+            />
+            <InsightStep 
+                number="5" 
+                icon={Lightbulb} 
+                color="text-yellow-600" 
+                title="Insight" 
+                desc="Transformação de dados brutos em sugestões úteis." 
+            />
+            <InsightStep 
+                number="6" 
+                icon={Rocket} 
+                color="text-green-600" 
+                title="Resultado" 
+                desc="Você toma a ação correta e gera mais lucro." 
+            />
+        </div>
+      </div>
 
       <RetentionCampaignModal isOpen={isRetentionModalOpen} onClose={() => setIsRetentionModalOpen(false)} />
     </div>
