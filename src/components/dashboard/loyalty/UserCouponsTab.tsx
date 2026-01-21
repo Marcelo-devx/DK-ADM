@@ -26,7 +26,7 @@ interface UserCouponRPC {
 }
 
 const fetchUserCoupons = async () => {
-    // Agora buscamos também a data de criação do pedido relacionado (orders -> created_at)
+    // Usa a função RPC segura em vez de select direto para evitar erros de RLS
     const { data, error } = await supabase.rpc("get_all_user_coupons_with_usage");
         
     if (error) throw error;
@@ -42,7 +42,8 @@ export const UserCouponsTab = ({ className }: { className?: string }) => {
 
   const deleteUserCouponMutation = useMutation({
     mutationFn: async (id: number) => {
-        const { error } = await supabase.from("user_coupons").delete().eq("id", id);
+        // Usa RPC segura para garantir que admins possam deletar sem erro de RLS
+        const { error } = await supabase.rpc("admin_delete_user_coupon", { target_id: id });
         if (error) throw error;
     },
     onSuccess: () => {
@@ -57,8 +58,8 @@ export const UserCouponsTab = ({ className }: { className?: string }) => {
         <CardHeader>
             <div className="flex justify-between items-center">
                 <div>
-                    <CardTitle className="text-base flex items-center gap-2"><TicketCheck className="w-5 h-5 text-emerald-600" /> Lista Geral de Resgates</CardTitle>
-                    <CardDescription>Visualize quando seus clientes resgataram e quando utilizaram os cupons.</CardDescription>
+                    <CardTitle className="text-base flex items-center gap-2"><TicketCheck className="w-5 h-5 text-emerald-600" /> Histórico Completo de Resgates</CardTitle>
+                    <CardDescription>Visualize o histórico de uso e resgate de pontos por cupons.</CardDescription>
                 </div>
                 <Button variant="outline" size="sm" onClick={() => refetch()}>
                     <RefreshCw className="w-4 h-4 mr-2" /> Atualizar Lista
@@ -88,7 +89,7 @@ export const UserCouponsTab = ({ className }: { className?: string }) => {
                                     <div className="flex flex-col items-center gap-2">
                                         <AlertCircle className="w-6 h-6" />
                                         <span className="font-bold">Erro ao carregar dados.</span>
-                                        <span className="text-xs">Tente recarregar a página. Se persistir, contate o suporte.</span>
+                                        <span className="text-xs">Tente recarregar a página ou verifique suas permissões.</span>
                                     </div>
                                 </TableCell>
                             </TableRow>
@@ -97,7 +98,12 @@ export const UserCouponsTab = ({ className }: { className?: string }) => {
                         ) : (
                             userCoupons?.map((uc) => (
                                 <TableRow key={uc.id} className={uc.is_used ? "opacity-60 bg-gray-50" : ""}>
-                                    <TableCell className="font-medium">{uc.profile_first_name} {uc.profile_last_name}</TableCell>
+                                    <TableCell className="font-medium">
+                                        <div className="flex flex-col">
+                                            <span>{uc.profile_first_name} {uc.profile_last_name}</span>
+                                            <span className="text-[10px] text-muted-foreground font-mono">ID: ...{uc.user_id.substring(0,6)}</span>
+                                        </div>
+                                    </TableCell>
                                     <TableCell className="font-bold text-gray-700">{uc.coupon_name}</TableCell>
                                     <TableCell className="text-emerald-600 font-bold">R$ {uc.coupon_discount_value}</TableCell>
                                     <TableCell>
@@ -116,11 +122,11 @@ export const UserCouponsTab = ({ className }: { className?: string }) => {
                                                 {new Date(uc.usage_date).toLocaleDateString('pt-BR')} <span className="text-[10px] text-gray-400">{new Date(uc.usage_date).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</span>
                                             </>
                                         ) : (
-                                            "-"
+                                            <span className="text-gray-300">-</span>
                                         )}
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        <Button variant="ghost" size="icon" onClick={() => { if(confirm("Deseja apagar este cupom do inventário do cliente?")) deleteUserCouponMutation.mutate(uc.id); }} className="text-red-500 hover:bg-red-50" disabled={deleteUserCouponMutation.isPending}>
+                                        <Button variant="ghost" size="icon" onClick={() => { if(confirm("Deseja apagar este cupom do inventário do cliente permanentemente?")) deleteUserCouponMutation.mutate(uc.id); }} className="text-red-500 hover:bg-red-50" disabled={deleteUserCouponMutation.isPending}>
                                             <Trash2 className="w-4 h-4" />
                                         </Button>
                                     </TableCell>
