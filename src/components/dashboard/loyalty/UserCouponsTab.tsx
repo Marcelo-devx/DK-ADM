@@ -8,27 +8,36 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { TicketCheck, RefreshCw, Loader2, AlertCircle, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { showSuccess, showError } from "@/utils/toast";
-import { UserCoupon } from "./types";
+
+// Interface específica para o retorno da RPC (Flat structure)
+interface UserCouponRPC {
+    id: number;
+    created_at: string;
+    is_used: boolean;
+    expires_at: string;
+    order_id: number | null;
+    user_id: string;
+    profile_first_name: string | null;
+    profile_last_name: string | null;
+    coupon_name: string | null;
+    coupon_discount_value: number | null;
+    usage_date: string | null;
+}
 
 const fetchUserCoupons = async () => {
-    // Agora buscamos também a data de criação do pedido relacionado (orders -> created_at)
-    const { data, error } = await supabase
-        .from("user_coupons")
-        .select(`
-            *, 
-            profiles (first_name, last_name), 
-            coupons (name, discount_value),
-            orders (created_at)
-        `)
-        .order("created_at", { ascending: false });
+    // Usa a função RPC segura em vez de select direto para evitar erros de RLS
+    const { data, error } = await supabase.rpc("get_all_user_coupons_with_usage");
         
     if (error) throw error;
-    return data as unknown as UserCoupon[];
+    return data as UserCouponRPC[];
 }
 
 export const UserCouponsTab = () => {
   const queryClient = useQueryClient();
-  const { data: userCoupons, isLoading, isError, refetch } = useQuery({ queryKey: ["adminUserCoupons"], queryFn: fetchUserCoupons });
+  const { data: userCoupons, isLoading, isError, refetch } = useQuery({ 
+    queryKey: ["adminUserCouponsV2"], 
+    queryFn: fetchUserCoupons 
+  });
 
   const deleteUserCouponMutation = useMutation({
     mutationFn: async (id: number) => {
@@ -36,7 +45,7 @@ export const UserCouponsTab = () => {
         if (error) throw error;
     },
     onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["adminUserCoupons"] });
+        queryClient.invalidateQueries({ queryKey: ["adminUserCouponsV2"] });
         showSuccess("Cupom do usuário removido!");
     },
     onError: (err: any) => showError(err.message),
@@ -48,7 +57,7 @@ export const UserCouponsTab = () => {
             <div className="flex justify-between items-center">
                 <div>
                     <CardTitle className="text-base flex items-center gap-2"><TicketCheck className="w-5 h-5 text-emerald-600" /> Histórico Completo de Cupons</CardTitle>
-                    <CardDescription>Lista de todos os cupons resgatados (usados e disponíveis).</CardDescription>
+                    <CardDescription>Visualize quando seus clientes resgataram e quando utilizaram os cupons.</CardDescription>
                 </div>
                 <Button variant="outline" size="sm" onClick={() => refetch()}>
                     <RefreshCw className="w-4 h-4 mr-2" /> Atualizar Lista
@@ -64,8 +73,8 @@ export const UserCouponsTab = () => {
                             <TableHead>Cupom</TableHead>
                             <TableHead>Valor</TableHead>
                             <TableHead>Status</TableHead>
-                            <TableHead>Data Resgate</TableHead>
-                            <TableHead>Data Uso</TableHead>
+                            <TableHead>Data Resgate (Compra Pontos)</TableHead>
+                            <TableHead>Data Uso (No Pedido)</TableHead>
                             <TableHead className="text-right">Ação</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -78,7 +87,7 @@ export const UserCouponsTab = () => {
                                     <div className="flex flex-col items-center gap-2">
                                         <AlertCircle className="w-6 h-6" />
                                         <span className="font-bold">Erro ao carregar dados.</span>
-                                        <span className="text-xs">Verifique suas permissões de administrador.</span>
+                                        <span className="text-xs">Tente recarregar a página. Se persistir, contate o suporte.</span>
                                     </div>
                                 </TableCell>
                             </TableRow>
@@ -87,9 +96,9 @@ export const UserCouponsTab = () => {
                         ) : (
                             userCoupons?.map((uc) => (
                                 <TableRow key={uc.id} className={uc.is_used ? "opacity-60 bg-gray-50" : ""}>
-                                    <TableCell className="font-medium">{uc.profiles?.first_name} {uc.profiles?.last_name}</TableCell>
-                                    <TableCell className="font-bold text-gray-700">{uc.coupons?.name}</TableCell>
-                                    <TableCell className="text-emerald-600 font-bold">R$ {uc.coupons?.discount_value}</TableCell>
+                                    <TableCell className="font-medium">{uc.profile_first_name} {uc.profile_last_name}</TableCell>
+                                    <TableCell className="font-bold text-gray-700">{uc.coupon_name}</TableCell>
+                                    <TableCell className="text-emerald-600 font-bold">R$ {uc.coupon_discount_value}</TableCell>
                                     <TableCell>
                                         {uc.is_used ? (
                                             <Badge variant="secondary" className="text-[10px]">Usado #{uc.order_id}</Badge>
@@ -98,12 +107,12 @@ export const UserCouponsTab = () => {
                                         )}
                                     </TableCell>
                                     <TableCell className="text-xs text-muted-foreground">
-                                        {new Date(uc.created_at).toLocaleDateString('pt-BR')} <span className="text-[10px]">{new Date(uc.created_at).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</span>
+                                        {new Date(uc.created_at).toLocaleDateString('pt-BR')} <span className="text-[10px] text-gray-400">{new Date(uc.created_at).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</span>
                                     </TableCell>
                                     <TableCell className="text-xs text-muted-foreground font-medium">
-                                        {uc.is_used && uc.orders?.created_at ? (
+                                        {uc.is_used && uc.usage_date ? (
                                             <>
-                                                {new Date(uc.orders.created_at).toLocaleDateString('pt-BR')} <span className="text-[10px]">{new Date(uc.orders.created_at).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</span>
+                                                {new Date(uc.usage_date).toLocaleDateString('pt-BR')} <span className="text-[10px] text-gray-400">{new Date(uc.usage_date).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</span>
                                             </>
                                         ) : (
                                             "-"
