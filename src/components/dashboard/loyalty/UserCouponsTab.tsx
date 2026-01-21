@@ -11,12 +11,14 @@ import { showSuccess, showError } from "@/utils/toast";
 import { UserCoupon } from "./types";
 
 const fetchUserCoupons = async () => {
+    // Agora buscamos também a data de criação do pedido relacionado (orders -> created_at)
     const { data, error } = await supabase
         .from("user_coupons")
         .select(`
             *, 
             profiles (first_name, last_name), 
-            coupons (name, discount_value)
+            coupons (name, discount_value),
+            orders (created_at)
         `)
         .order("created_at", { ascending: false });
         
@@ -45,8 +47,8 @@ export const UserCouponsTab = () => {
         <CardHeader>
             <div className="flex justify-between items-center">
                 <div>
-                    <CardTitle className="text-base flex items-center gap-2"><TicketCheck className="w-5 h-5 text-emerald-600" /> Inventário de Cupons Resgatados</CardTitle>
-                    <CardDescription>Lista de todos os cupons que os clientes compraram com pontos e ainda possuem.</CardDescription>
+                    <CardTitle className="text-base flex items-center gap-2"><TicketCheck className="w-5 h-5 text-emerald-600" /> Histórico Completo de Cupons</CardTitle>
+                    <CardDescription>Lista de todos os cupons resgatados (usados e disponíveis).</CardDescription>
                 </div>
                 <Button variant="outline" size="sm" onClick={() => refetch()}>
                     <RefreshCw className="w-4 h-4 mr-2" /> Atualizar Lista
@@ -62,16 +64,17 @@ export const UserCouponsTab = () => {
                             <TableHead>Cupom</TableHead>
                             <TableHead>Valor</TableHead>
                             <TableHead>Status</TableHead>
-                            <TableHead>Resgatado em</TableHead>
+                            <TableHead>Data Resgate</TableHead>
+                            <TableHead>Data Uso</TableHead>
                             <TableHead className="text-right">Ação</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {isLoading ? (
-                            <TableRow><TableCell colSpan={6} className="text-center py-10"><Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" /></TableCell></TableRow>
+                            <TableRow><TableCell colSpan={7} className="text-center py-10"><Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" /></TableCell></TableRow>
                         ) : isError ? (
                             <TableRow>
-                                <TableCell colSpan={6} className="text-center py-10 text-red-500 bg-red-50">
+                                <TableCell colSpan={7} className="text-center py-10 text-red-500 bg-red-50">
                                     <div className="flex flex-col items-center gap-2">
                                         <AlertCircle className="w-6 h-6" />
                                         <span className="font-bold">Erro ao carregar dados.</span>
@@ -80,10 +83,10 @@ export const UserCouponsTab = () => {
                                 </TableCell>
                             </TableRow>
                         ) : userCoupons?.length === 0 ? (
-                            <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-10">Nenhum cupom resgatado ainda.</TableCell></TableRow>
+                            <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-10">Nenhum cupom resgatado ainda.</TableCell></TableRow>
                         ) : (
                             userCoupons?.map((uc) => (
-                                <TableRow key={uc.id} className={uc.is_used ? "opacity-50 bg-gray-50" : ""}>
+                                <TableRow key={uc.id} className={uc.is_used ? "opacity-60 bg-gray-50" : ""}>
                                     <TableCell className="font-medium">{uc.profiles?.first_name} {uc.profiles?.last_name}</TableCell>
                                     <TableCell className="font-bold text-gray-700">{uc.coupons?.name}</TableCell>
                                     <TableCell className="text-emerald-600 font-bold">R$ {uc.coupons?.discount_value}</TableCell>
@@ -91,10 +94,21 @@ export const UserCouponsTab = () => {
                                         {uc.is_used ? (
                                             <Badge variant="secondary" className="text-[10px]">Usado #{uc.order_id}</Badge>
                                         ) : (
-                                            <Badge className="bg-emerald-500 text-[10px] hover:bg-emerald-600">Disponível</Badge>
+                                            <Badge className="bg-emerald-500 text-white hover:bg-emerald-600 text-[10px]">Disponível</Badge>
                                         )}
                                     </TableCell>
-                                    <TableCell className="text-xs text-muted-foreground">{new Date(uc.created_at).toLocaleDateString('pt-BR')}</TableCell>
+                                    <TableCell className="text-xs text-muted-foreground">
+                                        {new Date(uc.created_at).toLocaleDateString('pt-BR')} <span className="text-[10px]">{new Date(uc.created_at).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</span>
+                                    </TableCell>
+                                    <TableCell className="text-xs text-muted-foreground font-medium">
+                                        {uc.is_used && uc.orders?.created_at ? (
+                                            <>
+                                                {new Date(uc.orders.created_at).toLocaleDateString('pt-BR')} <span className="text-[10px]">{new Date(uc.orders.created_at).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</span>
+                                            </>
+                                        ) : (
+                                            "-"
+                                        )}
+                                    </TableCell>
                                     <TableCell className="text-right">
                                         <Button variant="ghost" size="icon" onClick={() => { if(confirm("Deseja apagar este cupom do inventário do cliente?")) deleteUserCouponMutation.mutate(uc.id); }} className="text-red-500 hover:bg-red-50" disabled={deleteUserCouponMutation.isPending}>
                                             <Trash2 className="w-4 h-4" />

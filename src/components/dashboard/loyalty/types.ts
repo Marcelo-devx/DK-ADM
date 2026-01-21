@@ -33,6 +33,9 @@ export interface UserCoupon {
         name: string;
         discount_value: number;
     } | null;
+    orders?: {
+        created_at: string;
+    } | null;
 }
 
 export interface RewardCoupon {
