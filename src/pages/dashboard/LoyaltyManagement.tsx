@@ -83,13 +83,28 @@ const fetchHistory = async () => {
   return data as unknown as LoyaltyHistoryItem[];
 };
 
+// ATUALIZADO: Usando RPC seguro para Admin
 const fetchUserCoupons = async () => {
-    const { data, error } = await supabase
-        .from("user_coupons")
-        .select("*, profiles(first_name, last_name), coupons(name, discount_value)")
-        .order("created_at", { ascending: false });
+    const { data, error } = await supabase.rpc("get_all_user_coupons_admin");
+    
     if (error) throw error;
-    return data as unknown as UserCoupon[];
+
+    // Mapeia o retorno flat da RPC para o formato aninhado esperado pela UI
+    return (data as any[]).map(item => ({
+        id: item.id,
+        created_at: item.created_at,
+        is_used: item.is_used,
+        expires_at: item.expires_at,
+        order_id: item.order_id,
+        profiles: {
+            first_name: item.profile_first_name,
+            last_name: item.profile_last_name
+        },
+        coupons: {
+            name: item.coupon_name,
+            discount_value: item.coupon_discount_value
+        }
+    })) as UserCoupon[];
 }
 
 const fetchSettings = async () => {
@@ -120,7 +135,7 @@ export default function LoyaltyManagementPage() {
 
   // Queries
   const { data: tiers, isLoading: loadingTiers } = useQuery({ queryKey: ["adminTiers"], queryFn: fetchTiers });
-  const { data: redemptionRules, isLoading: loadingRules } = useQuery({ queryKey: ["adminRedemptionRules"], queryFn: fetchRedemptionRules });
+  const { data: redemptionRules, isLoading: loadingRules } = useQuery({ queryKey: ["adminRewardCoupons"], queryFn: fetchRedemptionRules });
   const { data: history, isLoading: loadingHistory, refetch: refetchHistory } = useQuery({ queryKey: ["adminLoyaltyHistory"], queryFn: fetchHistory });
   const { data: settings } = useQuery({ queryKey: ["adminLoyaltySettings"], queryFn: fetchSettings });
   const { data: userCoupons, isLoading: loadingUserCoupons, isError: errorUserCoupons, refetch: refetchUserCoupons } = useQuery({ queryKey: ["adminUserCoupons"], queryFn: fetchUserCoupons });
@@ -173,7 +188,7 @@ export default function LoyaltyManagementPage() {
     onError: (err: any) => showError(err.message),
   });
 
-  const addRuleMutation = useMutation({
+  const addRewardCouponMutation = useMutation({
     mutationFn: async () => {
       const points = parseInt(newRulePoints);
       const value = parseFloat(newRuleValue.replace(',', '.'));
@@ -184,13 +199,13 @@ export default function LoyaltyManagementPage() {
         discount_value: value,
         points_cost: points,
         minimum_order_value: 0,
-        stock_quantity: 9999, // Estoque virtualmente infinito para resgates
+        stock_quantity: 9999,
         is_active: true
       });
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["adminRedemptionRules"] });
+      queryClient.invalidateQueries({ queryKey: ["adminRewardCoupons"] });
       setNewRulePoints("");
       setNewRuleValue("");
       setNewRuleName("");
@@ -199,13 +214,13 @@ export default function LoyaltyManagementPage() {
     onError: (err: any) => showError(err.message),
   });
 
-  const deleteRuleMutation = useMutation({
+  const deleteRewardCouponMutation = useMutation({
     mutationFn: async (id: number) => {
       const { error } = await supabase.from("coupons").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["adminRedemptionRules"] });
+      queryClient.invalidateQueries({ queryKey: ["adminRewardCoupons"] });
       showSuccess("Opção removida.");
     },
     onError: (err: any) => showError(`Erro ao remover: ${err.message}`),
@@ -258,7 +273,7 @@ export default function LoyaltyManagementPage() {
         <TabsList className="grid w-full grid-cols-3 lg:grid-cols-6 bg-slate-100 p-1">
             <TabsTrigger value="bonus">Regras de Pontuação</TabsTrigger>
             <TabsTrigger value="tiers">Níveis</TabsTrigger>
-            <TabsTrigger value="redemption">Regras de Resgate</TabsTrigger>
+            <TabsTrigger value="redemption">Prêmios (Cupons)</TabsTrigger>
             <TabsTrigger value="user-coupons">Cupons dos Clientes</TabsTrigger>
             <TabsTrigger value="manual">Ajuste Manual</TabsTrigger>
             <TabsTrigger value="history">Extrato Geral</TabsTrigger>
@@ -424,7 +439,7 @@ export default function LoyaltyManagementPage() {
                             <Label>Valor do Desconto (R$)</Label>
                             <Input placeholder="Ex: 10,00" value={newRuleValue} onChange={(e) => setNewRuleValue(e.target.value)} />
                         </div>
-                        <Button className="w-full" disabled={!newRulePoints || !newRuleValue} onClick={() => addRuleMutation.mutate()}>
+                        <Button className="w-full" disabled={!newRulePoints || !newRuleValue} onClick={() => addRewardCouponMutation.mutate()}>
                             <PlusCircle className="w-4 h-4 mr-2" /> Salvar Prêmio
                         </Button>
                     </CardContent>
@@ -450,7 +465,7 @@ export default function LoyaltyManagementPage() {
                                         <TableCell className="font-bold text-yellow-600">{rule.points_cost} pts</TableCell>
                                         <TableCell className="text-green-600 font-bold">R$ {rule.discount_value}</TableCell>
                                         <TableCell>
-                                            <Button variant="ghost" size="icon" onClick={() => deleteRuleMutation.mutate(rule.id)} className="text-red-500">
+                                            <Button variant="ghost" size="icon" onClick={() => deleteRewardCouponMutation.mutate(rule.id)} className="text-red-500">
                                                 <Trash2 className="w-4 h-4" />
                                             </Button>
                                         </TableCell>
@@ -507,15 +522,15 @@ export default function LoyaltyManagementPage() {
                                     <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-10">Nenhum cupom resgatado ainda.</TableCell></TableRow>
                                 ) : (
                                     userCoupons?.map((uc) => (
-                                        <TableRow key={uc.id} className={uc.is_used ? "opacity-50" : ""}>
+                                        <TableRow key={uc.id} className={uc.is_used ? "opacity-50 bg-gray-50" : ""}>
                                             <TableCell className="font-medium">{uc.profiles?.first_name} {uc.profiles?.last_name}</TableCell>
                                             <TableCell className="font-bold text-gray-700">{uc.coupons?.name}</TableCell>
                                             <TableCell className="text-emerald-600 font-bold">R$ {uc.coupons?.discount_value}</TableCell>
                                             <TableCell>
                                                 {uc.is_used ? (
-                                                    <Badge variant="secondary">Usado #{uc.order_id}</Badge>
+                                                    <Badge variant="secondary" className="text-[10px]">Usado #{uc.order_id}</Badge>
                                                 ) : (
-                                                    <Badge className="bg-emerald-500 hover:bg-emerald-600">Disponível</Badge>
+                                                    <Badge className="bg-emerald-500 text-[10px] hover:bg-emerald-600">Disponível</Badge>
                                                 )}
                                             </TableCell>
                                             <TableCell className="text-xs text-muted-foreground">{new Date(uc.created_at).toLocaleDateString('pt-BR')}</TableCell>
