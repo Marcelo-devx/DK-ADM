@@ -34,9 +34,21 @@ serve(async (req) => {
       errors: [] as string[]
     };
 
-    // Cache de sabores para evitar muitas queries
+    // --- CACHE INICIAL (Para evitar muitas consultas repetidas) ---
+    // Busca dados existentes para não criar duplicados
     const { data: allFlavors } = await supabaseAdmin.from('flavors').select('id, name');
+    const { data: allCategories } = await supabaseAdmin.from('categories').select('id, name');
+    const { data: allBrands } = await supabaseAdmin.from('brands').select('id, name');
+    const { data: allSubCategories } = await supabaseAdmin.from('sub_categories').select('id, name, category_id');
+
+    // Mapas para busca rápida (Case Insensitive)
     const flavorMap = new Map(allFlavors?.map(f => [f.name.toLowerCase().trim(), f.id]));
+    const categoryMap = new Map(allCategories?.map(c => [c.name.toLowerCase().trim(), c.id]));
+    const brandMap = new Map(allBrands?.map(b => [b.name.toLowerCase().trim(), b.id]));
+    
+    // Mapa de subcategorias é mais complexo pois depende da categoria pai
+    // Chave: "catId_subNameLower" -> ID
+    const subCategoryMap = new Map(allSubCategories?.map(s => [`${s.category_id}_${s.name.toLowerCase().trim()}`, s.id]));
 
     for (const p of products) {
       try {
@@ -50,8 +62,67 @@ serve(async (req) => {
             productData.sku = null;
         }
 
-        // 1. Upsert do Produto
-        // Se tiver SKU, usa como chave de conflito. Se não, é um INSERT novo.
+        // --- AUTO-CRIAÇÃO DE DEPENDÊNCIAS ---
+
+        // 1. MARCA
+        if (productData.brand) {
+            const brandName = String(productData.brand).trim();
+            const brandKey = brandName.toLowerCase();
+            if (brandName && !brandMap.has(brandKey)) {
+                const { data: newBrand, error: brandError } = await supabaseAdmin
+                    .from('brands')
+                    .insert({ name: brandName, is_visible: true })
+                    .select('id')
+                    .single();
+                
+                if (!brandError && newBrand) {
+                    brandMap.set(brandKey, newBrand.id);
+                }
+            }
+        }
+
+        // 2. CATEGORIA E SUB-CATEGORIA
+        if (productData.category) {
+            const catName = String(productData.category).trim();
+            const catKey = catName.toLowerCase();
+            let catId = categoryMap.get(catKey);
+
+            // Cria Categoria se não existir
+            if (!catId && catName) {
+                const { data: newCat, error: catError } = await supabaseAdmin
+                    .from('categories')
+                    .insert({ name: catName, is_visible: true })
+                    .select('id')
+                    .single();
+                
+                if (!catError && newCat) {
+                    catId = newCat.id;
+                    categoryMap.set(catKey, catId);
+                }
+            }
+
+            // Cria Sub-categoria se não existir (e se tivermos o ID da categoria pai)
+            if (catId && productData.sub_category) {
+                const subName = String(productData.sub_category).trim();
+                const subKey = `${catId}_${subName.toLowerCase()}`;
+                
+                if (subName && !subCategoryMap.has(subKey)) {
+                    const { data: newSub, error: subError } = await supabaseAdmin
+                        .from('sub_categories')
+                        .insert({ name: subName, category_id: catId, is_visible: true })
+                        .select('id')
+                        .single();
+                    
+                    if (!subError && newSub) {
+                        subCategoryMap.set(subKey, newSub.id);
+                    }
+                }
+            }
+        }
+
+        // --- FIM DA AUTO-CRIAÇÃO ---
+
+        // 3. Upsert do Produto
         const options = productData.sku ? { onConflict: 'sku' } : undefined;
         
         const { data: upsertedProduct, error: upsertError } = await supabaseAdmin
@@ -61,18 +132,16 @@ serve(async (req) => {
           .single();
 
         if (upsertError) {
-            // Tratamento específico para erro de SKU duplicado se não capturado pelo upsert
             if (upsertError.code === '23505') throw new Error("SKU já existe em outro produto.");
             throw upsertError;
         }
         
         const productId = upsertedProduct.id;
 
-        // 2. Processar Sabores (Se houver coluna flavor_names na planilha)
+        // 4. Processar Sabores
         if (flavor_names) {
            const names = String(flavor_names).split(',').map((n: string) => n.trim());
            
-           // Remove associações antigas para recriar (estratégia simples de sync)
            await supabaseAdmin.from('product_flavors').delete().eq('product_id', productId);
            
            const flavorsToInsert = [];
@@ -81,7 +150,6 @@ serve(async (req) => {
              const normalized = name.toLowerCase();
              let fId = flavorMap.get(normalized);
              
-             // Cria sabor se não existir (Opcional, mas útil na importação)
              if (!fId) {
                 const { data: newFlavor, error: newFlavorError } = await supabaseAdmin
                     .from('flavors')
