@@ -125,6 +125,21 @@ export const useProductData = () => {
     onError: (error) => showError(error.message),
   });
 
+  const activateAllMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from("products")
+        .update({ is_visible: true })
+        .not("id", "is", null); // Filtro genérico para afetar todos
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      showSuccess("Todos os produtos foram ativados!");
+    },
+    onError: (err: any) => showError(err.message),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (productId: number) => {
       const { error } = await supabase.from("products").delete().eq("id", productId);
@@ -162,6 +177,7 @@ export const useProductData = () => {
     isLoadingBrands,
     addProductMutation,
     updateProductMutation,
+    activateAllMutation,
     deleteMutation,
     bulkInsertMutation
   };

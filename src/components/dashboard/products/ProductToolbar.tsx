@@ -2,7 +2,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { PlusCircle, Search, DownloadCloud, FileUp, FileDown } from "lucide-react";
+import { PlusCircle, Search, DownloadCloud, FileUp, FileDown, Eye, Loader2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ProductToolbarProps {
@@ -19,6 +19,8 @@ interface ProductToolbarProps {
   onImport: () => void;
   onExport: () => void;
   onDownloadTemplate: () => void;
+  onActivateAll: () => void;
+  isActivatingAll: boolean;
 }
 
 export const ProductToolbar = ({
@@ -34,7 +36,9 @@ export const ProductToolbar = ({
   onAddProduct,
   onImport,
   onExport,
-  onDownloadTemplate
+  onDownloadTemplate,
+  onActivateAll,
+  isActivatingAll
 }: ProductToolbarProps) => {
   return (
     <div className="flex flex-col gap-6 mb-8">
@@ -45,9 +49,27 @@ export const ProductToolbar = ({
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
-          {/* GRUPO DE EXCEL */}
+          {/* GRUPO DE EXCEL E AÇÕES EM MASSA */}
           <div className="flex items-center bg-white border p-1 rounded-xl shadow-sm">
               <TooltipProvider>
+                  {/* BOTÃO ATIVAR TUDO */}
+                  <Tooltip>
+                      <TooltipTrigger asChild>
+                          <Button 
+                            variant="ghost" 
+                            className="h-9 px-3 text-green-600 hover:bg-green-50 rounded-lg flex items-center gap-2 font-bold text-xs" 
+                            onClick={onActivateAll}
+                            disabled={isActivatingAll}
+                          >
+                              {isActivatingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
+                              <span>Ativar Tudo</span>
+                          </Button>
+                      </TooltipTrigger>
+                      <TooltipContent><p>Tornar todos os produtos visíveis no site</p></TooltipContent>
+                  </Tooltip>
+
+                  <div className="w-[1px] h-4 bg-gray-200 mx-1" />
+
                   <Tooltip>
                       <TooltipTrigger asChild>
                           <Button variant="ghost" className="h-9 px-3 text-blue-600 hover:bg-blue-50 rounded-lg flex items-center gap-2 font-bold text-xs" onClick={onDownloadTemplate}>

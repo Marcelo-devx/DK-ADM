@@ -21,7 +21,7 @@ const cleanAndParseFloat = (value: any): number => {
 
 const ProductsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { products, categories, subCategories, brands, isLoadingProducts, updateProductMutation } = useProductData();
+  const { products, categories, subCategories, brands, isLoadingProducts, updateProductMutation, activateAllMutation } = useProductData();
   
   // Local state for filters (no need to be in URL unless requested)
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -55,6 +55,12 @@ const ProductsPage = () => {
   // Handlers
   const handleToggleVisibility = (productId: number, isVisible: boolean) => {
     updateProductMutation.mutate({ productId, values: { is_visible: isVisible } });
+  };
+
+  const handleActivateAll = () => {
+    if (confirm("Deseja realmente ativar a visibilidade de TODOS os produtos do catálogo?")) {
+        activateAllMutation.mutate();
+    }
   };
 
   // Excel Handlers
@@ -127,6 +133,8 @@ const ProductsPage = () => {
         onImport={() => document.getElementById('import-input')?.click()}
         onExport={handleExportXLSX}
         onDownloadTemplate={handleDownloadTemplate}
+        onActivateAll={handleActivateAll}
+        isActivatingAll={activateAllMutation.isPending}
       />
       
       {/* Hidden Input for Import */}
