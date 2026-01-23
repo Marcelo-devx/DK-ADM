@@ -3,28 +3,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../../integrations/supabase/client";
 import { Button } from "../../components/ui/button";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "../../components/ui/table";
-import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "../../components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,45 +20,27 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Input } from "@/components/ui/input";
 import { ProductForm } from "../../components/dashboard/product-form";
 import { showSuccess, showError } from "../../utils/toast";
 import { 
   PlusCircle, 
-  MoreHorizontal, 
-  ImageOff, 
   FileDown, 
-  Upload, 
   FileUp, 
-  Star, 
-  Search, 
-  ArrowUpDown, 
-  ChevronUp, 
-  ChevronDown, 
-  Lock, 
   DownloadCloud,
-  RefreshCw 
 } from "lucide-react";
-import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import * as XLSX from 'xlsx';
 import { ImportConfirmationModal } from "@/components/dashboard/ImportConfirmationModal";
 import { ImportResultModal } from "@/components/dashboard/ImportResultModal";
 import { mapRowKeys } from "@/utils/excel-utils";
 import { ProductVariantViewer } from "@/components/dashboard/ProductVariantViewer";
-import { cn } from "@/lib/utils";
+import { ProductFilters } from "@/components/dashboard/products/ProductFilters";
+import { ProductsTable } from "@/components/dashboard/products/ProductsTable";
 
 type Product = {
   id: number;
@@ -158,10 +124,6 @@ const ProductsPage = () => {
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [brandFilter, setBrandFilter] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
-  const [sortConfig, setSortConfig] = useState<{ key: keyof Product | null, direction: 'asc' | 'desc' }>({
-    key: null,
-    direction: 'asc'
-  });
 
   const [isVariantViewerOpen, setIsVariantViewerOpen] = useState(false);
   const [productToViewVariants, setProductToViewVariants] = useState<{ id: number, name: string } | null>(null);
@@ -208,7 +170,7 @@ const ProductsPage = () => {
   const filteredProducts = useMemo(() => {
     if (!products) return [];
     
-    let result = products.filter(product => {
+    return products.filter(product => {
       const matchesCategory = categoryFilter === 'all' || product.category === categoryFilter;
       const matchesBrand = brandFilter === 'all' || product.brand === brandFilter;
       const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -216,19 +178,7 @@ const ProductsPage = () => {
       
       return matchesCategory && matchesBrand && matchesSearch;
     });
-
-    if (sortConfig.key) {
-        result.sort((a, b) => {
-            const aVal = a[sortConfig.key!] ?? "";
-            const bVal = b[sortConfig.key!] ?? "";
-            if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-            if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
-            return 0;
-        });
-    }
-
-    return result;
-  }, [products, categoryFilter, brandFilter, searchTerm, sortConfig]);
+  }, [products, categoryFilter, brandFilter, searchTerm]);
 
   const addProductMutation = useMutation({
     mutationFn: async (newProduct: any) => {
@@ -255,6 +205,26 @@ const ProductsPage = () => {
     },
     onError: (error) => showError(error.message),
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (productId: number) => {
+      const { error } = await supabase.from("products").delete().eq("id", productId);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      setIsDeleteAlertOpen(false);
+      showSuccess("Produto removido com sucesso!");
+    },
+    onError: (error) => {
+      showError(`Erro ao remover produto: ${error.message}`);
+    },
+  });
+
+  const handleDeleteConfirm = () => {
+    if (!selectedProduct) return;
+    deleteMutation.mutate(selectedProduct.id);
+  };
 
   const bulkInsertMutation = useMutation({
     mutationFn: async (products: ProductImportData[]) => {
@@ -337,32 +307,6 @@ const ProductsPage = () => {
     XLSX.writeFile(workbook, "template_importacao_produtos.xlsx");
   };
 
-  const formatCurrency = (val: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
-
-  const getPriceDisplay = (product: Product, isCost: boolean = false) => {
-    if (!product) return "-";
-    const costsArray = Array.isArray(product.variant_costs) ? product.variant_costs : [];
-    const pricesArray = Array.isArray(product.variant_prices) ? product.variant_prices : [];
-    const values = isCost ? (costsArray.filter(v => v !== null) as number[]) : (pricesArray.filter(v => v !== null) as number[]);
-    const baseValue = isCost ? (product.cost_price ?? 0) : (product.price ?? 0);
-    if (values.length === 0) return formatCurrency(baseValue);
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button onClick={() => { setProductToViewVariants({ id: product.id, name: product.name }); setIsVariantViewerOpen(true); }} className="flex items-center gap-1 hover:bg-primary/5 p-1 rounded-md transition-colors cursor-help group">
-                <Star className="h-3 w-3 fill-yellow-400 text-yellow-400 group-hover:scale-110" />
-                <span className="font-bold text-xs">{min === max ? formatCurrency(min) : `${formatCurrency(min)} - ${formatCurrency(max)}`}</span>
-            </button>
-          </TooltipTrigger>
-          <TooltipContent><p>Clique para ver as {values.length} variações</p></TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  };
-
   return (
     <div className="pb-20">
       <div className="flex flex-col gap-6 mb-8">
@@ -419,7 +363,11 @@ const ProductsPage = () => {
                     Adicionar Produto
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogContent 
+                className="max-w-4xl max-h-[90vh] overflow-y-auto"
+                onInteractOutside={(e) => e.preventDefault()}
+                onEscapeKeyDown={(e) => e.preventDefault()}
+              >
                 <DialogHeader><DialogTitle>Adicionar Novo Produto</DialogTitle></DialogHeader>
                 <ProductForm 
                     onSubmit={(v) => addProductMutation.mutate(v)} 
@@ -429,7 +377,7 @@ const ProductsPage = () => {
                     subCategories={subCategories || []} 
                     isLoadingSubCategories={false} 
                     brands={brands || []} 
-                    isLoadingBrands={isLoadingBrands}
+                    isLoadingBrands={isLoadingBrands} 
                     existingProducts={products}
                 />
               </DialogContent>
@@ -437,75 +385,43 @@ const ProductsPage = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 bg-white p-4 rounded-xl border shadow-sm">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Pesquisar produto ou SKU..." className="pl-9 bg-gray-50/50" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-          </div>
-          <Select value={brandFilter} onValueChange={setBrandFilter}>
-            <SelectTrigger className="bg-gray-50/50"><SelectValue placeholder="Todas as Marcas" /></SelectTrigger>
-            <SelectContent><SelectItem value="all">Todas as Marcas</SelectItem>{brands?.map(b => <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>)}</SelectContent>
-          </Select>
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="bg-gray-50/50"><SelectValue placeholder="Todas as Categorias" /></SelectTrigger>
-            <SelectContent><SelectItem value="all">Todas as Categorias</SelectItem>{categories?.map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
-          </Select>
-          <div className="flex items-center justify-end"><span className="text-xs text-muted-foreground font-bold uppercase tracking-wider">{filteredProducts?.length || 0} encontrados</span></div>
-        </div>
+        <ProductFilters
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          brandFilter={brandFilter}
+          setBrandFilter={setBrandFilter}
+          categoryFilter={categoryFilter}
+          setCategoryFilter={setCategoryFilter}
+          brands={brands}
+          categories={categories}
+          totalFound={filteredProducts.length}
+        />
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-        <Table>
-          <TableHeader className="bg-gray-50/50">
-            <TableRow>
-              <TableHead className="w-[64px]">Imagem</TableHead>
-              <TableHead>SKU</TableHead>
-              <TableHead>Nome</TableHead>
-              <TableHead>Categoria</TableHead>
-              <TableHead>Custo</TableHead>
-              <TableHead>Venda</TableHead>
-              <TableHead className="text-green-600">Pix</TableHead>
-              <TableHead>Estoque Disponível</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoadingProducts ? (
-              <TableRow><TableCell colSpan={10} className="text-center py-10"><RefreshCw className="h-6 w-6 animate-spin mx-auto text-muted-foreground" /></TableCell></TableRow>
-            ) : filteredProducts && filteredProducts.length > 0 ? (
-              filteredProducts.map((product) => (
-                <TableRow key={product.id} className="hover:bg-gray-50/50 transition-colors">
-                  <TableCell>{product.image_url ? <img src={product.image_url} alt={product.name} className="h-12 w-12 rounded-lg object-cover shadow-sm border" /> : <div className="h-12 w-12 rounded-lg bg-gray-100 flex items-center justify-center border border-dashed"><ImageOff className="h-5 w-5 text-gray-400" /></div>}</TableCell>
-                  <TableCell className="font-mono text-[10px] font-black text-gray-500">#{product.sku || product.id}</TableCell>
-                  <TableCell className="font-bold text-xs truncate max-w-[200px] text-gray-800">{product.name}</TableCell>
-                  <TableCell className="text-xs font-medium text-muted-foreground">{product.category || "N/A"}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{getPriceDisplay(product, true)}</TableCell>
-                  <TableCell className="text-xs font-bold text-gray-700">{getPriceDisplay(product)}</TableCell>
-                  <TableCell className="text-xs font-black text-green-700">{product.pix_price ? formatCurrency(product.pix_price) : '-'}</TableCell>
-                  <TableCell>
-                    <div className="flex flex-col gap-1">
-                        <Badge variant={product.stock_quantity <= 5 ? "destructive" : "secondary"} className="h-5 text-[10px] w-fit font-black">
-                            {product.stock_quantity} un
-                        </Badge>
-                        {product.allocated_in_kits ? (
-                            <Badge variant="outline" className="h-5 text-[9px] w-fit bg-amber-50 text-amber-700 border-amber-200 gap-1 font-bold" title="Quantidade reservada em Kits">
-                                <Lock className="w-2.5 h-2.5" /> + {product.allocated_in_kits} em Kits
-                            </Badge>
-                        ) : null}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" className="hover:bg-primary/5" onClick={() => { setSelectedProduct(product); setIsEditModalOpen(true); }}><MoreHorizontal className="h-4 w-4 text-primary" /></Button>
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : <TableRow><TableCell colSpan={10} className="text-center py-20 text-muted-foreground italic">Nenhum produto encontrado.</TableCell></TableRow>}
-          </TableBody>
-        </Table>
-      </div>
+      <ProductsTable
+        products={filteredProducts}
+        isLoading={isLoadingProducts}
+        onEdit={(product) => {
+          setSelectedProduct(product);
+          setIsEditModalOpen(true);
+        }}
+        onDelete={(product) => {
+          setSelectedProduct(product);
+          setIsDeleteAlertOpen(true);
+        }}
+        onViewVariants={(product) => {
+          setProductToViewVariants({ id: product.id, name: product.name });
+          setIsVariantViewerOpen(true);
+        }}
+      />
 
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>Editar: {selectedProduct?.name}</DialogTitle></DialogHeader>
+        <DialogContent 
+          className="max-w-4xl max-h-[90vh] overflow-y-auto"
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
+          <DialogHeader><DialogTitle>Editar: {selectedProduct?.name}</DialogTitle></DialogHeader>
           <ProductForm 
             onSubmit={(v) => selectedProduct && updateProductMutation.mutate({ productId: selectedProduct.id, values: v })} 
             isSubmitting={updateProductMutation.isPending} 
@@ -536,6 +452,23 @@ const ProductsPage = () => {
         onClose={() => setIsResultModalOpen(false)} 
         result={importResult} 
       />
+
+      <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Essa ação não pode ser desfeita. Isso removerá permanentemente o produto "{selectedProduct?.name}".
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteConfirm} disabled={deleteMutation.isPending} className="bg-red-600 hover:bg-red-700">
+              {deleteMutation.isPending ? "Removendo..." : "Remover"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
