@@ -17,17 +17,20 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Package } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
-interface ProductImportData {
+export interface ProductImportData {
+  sku?: string;
   name: string;
   description: string | null;
   price: number;
   pix_price: number | null;
+  cost_price?: number | null;
   stock_quantity: number;
   category: string | null;
   sub_category: string | null;
   brand: string | null;
   image_url: string | null;
   is_visible: boolean;
+  flavor_names?: string;
 }
 
 interface ImportConfirmationModalProps {
