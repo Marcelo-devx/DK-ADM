@@ -2,11 +2,10 @@ import { useState, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import * as XLSX from 'xlsx';
 import { mapRowKeys } from "@/utils/excel-utils";
-import { useProductData, ExtendedProduct } from "@/hooks/useProductData";
+import { useProductData } from "@/hooks/useProductData";
 import { ProductTable } from "@/components/dashboard/products/ProductTable";
 import { ProductToolbar } from "@/components/dashboard/products/ProductToolbar";
 import { ProductDialogs } from "@/components/dashboard/products/ProductDialogs";
-import { showSuccess, showError } from "@/utils/toast";
 
 // Helper para limpeza de dados do Excel
 const cleanAndParseFloat = (value: any): number => {
