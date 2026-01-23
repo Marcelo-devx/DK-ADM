@@ -1,7 +1,7 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, ImageOff, Lock, MoreHorizontal, Pencil, Trash2, Star } from "lucide-react";
+import { RefreshCw, ImageOff, Lock, MoreHorizontal, Pencil, Trash2, Star, Eye, EyeOff } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ExtendedProduct } from "@/hooks/useProductData";
+import { Switch } from "@/components/ui/switch";
 
 interface ProductTableProps {
   isLoading: boolean;
@@ -19,11 +20,19 @@ interface ProductTableProps {
   onEdit: (product: ExtendedProduct) => void;
   onDelete: (product: ExtendedProduct) => void;
   onViewVariants: (product: { id: number; name: string }) => void;
+  onToggleVisibility?: (productId: number, isVisible: boolean) => void;
 }
 
 const formatCurrency = (val: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
 
-export const ProductTable = ({ isLoading, products, onEdit, onDelete, onViewVariants }: ProductTableProps) => {
+export const ProductTable = ({ 
+  isLoading, 
+  products, 
+  onEdit, 
+  onDelete, 
+  onViewVariants,
+  onToggleVisibility 
+}: ProductTableProps) => {
   const getPriceDisplay = (product: ExtendedProduct, isCost: boolean = false) => {
     if (!product) return "-";
     const costsArray = Array.isArray(product.variant_costs) ? product.variant_costs : [];
@@ -57,7 +66,8 @@ export const ProductTable = ({ isLoading, products, onEdit, onDelete, onViewVari
         <TableHeader className="bg-gray-50/50">
           <TableRow>
             <TableHead className="w-[64px]">Imagem</TableHead>
-            <TableHead>SKU</TableHead>
+            <TableHead className="w-[120px]">SKU</TableHead>
+            <TableHead className="w-[80px]">Status</TableHead>
             <TableHead>Nome</TableHead>
             <TableHead>Categoria</TableHead>
             <TableHead>Custo</TableHead>
@@ -75,6 +85,24 @@ export const ProductTable = ({ isLoading, products, onEdit, onDelete, onViewVari
               <TableRow key={product.id} className="hover:bg-gray-50/50 transition-colors">
                 <TableCell>{product.image_url ? <img src={product.image_url} alt={product.name} className="h-12 w-12 rounded-lg object-cover shadow-sm border" /> : <div className="h-12 w-12 rounded-lg bg-gray-100 flex items-center justify-center border border-dashed"><ImageOff className="h-5 w-5 text-gray-400" /></div>}</TableCell>
                 <TableCell className="font-mono text-[10px] font-black text-gray-500">#{product.sku || product.id}</TableCell>
+                <TableCell>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center justify-center">
+                          <Switch 
+                            checked={product.is_visible} 
+                            onCheckedChange={(checked) => onToggleVisibility?.(product.id, checked)}
+                            className="scale-75 data-[state=checked]:bg-green-500"
+                          />
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{product.is_visible ? "Visível no site" : "Oculto no site"}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </TableCell>
                 <TableCell className="font-bold text-xs truncate max-w-[200px] text-gray-800">{product.name}</TableCell>
                 <TableCell className="text-xs font-medium text-muted-foreground">{product.category || "N/A"}</TableCell>
                 <TableCell className="text-xs text-muted-foreground">{getPriceDisplay(product, true)}</TableCell>

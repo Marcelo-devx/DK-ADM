@@ -21,7 +21,7 @@ const cleanAndParseFloat = (value: any): number => {
 
 const ProductsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { products, categories, subCategories, brands, isLoadingProducts } = useProductData();
+  const { products, categories, subCategories, brands, isLoadingProducts, updateProductMutation } = useProductData();
   
   // Local state for filters (no need to be in URL unless requested)
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -51,6 +51,11 @@ const ProductsPage = () => {
       return matchesCategory && matchesBrand && matchesSearch;
     });
   }, [products, categoryFilter, brandFilter, searchTerm]);
+
+  // Handlers
+  const handleToggleVisibility = (productId: number, isVisible: boolean) => {
+    updateProductMutation.mutate({ productId, values: { is_visible: isVisible } });
+  };
 
   // Excel Handlers
   const handleImportXLSX = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -133,6 +138,7 @@ const ProductsPage = () => {
         onEdit={(p) => openModal("edit", p.id)}
         onDelete={(p) => openModal("delete", p.id)}
         onViewVariants={(p) => openModal("variants", p.id)}
+        onToggleVisibility={handleToggleVisibility}
       />
 
       <ProductDialogs 
