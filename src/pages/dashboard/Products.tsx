@@ -65,7 +65,9 @@ import {
   ChevronDown, 
   Lock, 
   DownloadCloud,
-  RefreshCw 
+  RefreshCw,
+  Pencil,
+  Trash2
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
@@ -256,6 +258,26 @@ const ProductsPage = () => {
     onError: (error) => showError(error.message),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async (productId: number) => {
+      const { error } = await supabase.from("products").delete().eq("id", productId);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      setIsDeleteAlertOpen(false);
+      showSuccess("Produto removido com sucesso!");
+    },
+    onError: (error) => {
+      showError(`Erro ao remover produto: ${error.message}`);
+    },
+  });
+
+  const handleDeleteConfirm = () => {
+    if (!selectedProduct) return;
+    deleteMutation.mutate(selectedProduct.id);
+  };
+
   const bulkInsertMutation = useMutation({
     mutationFn: async (products: ProductImportData[]) => {
       const { data, error } = await supabase.functions.invoke("bulk-product-upsert", { body: { products } });
@@ -429,7 +451,7 @@ const ProductsPage = () => {
                     subCategories={subCategories || []} 
                     isLoadingSubCategories={false} 
                     brands={brands || []} 
-                    isLoadingBrands={isLoadingBrands}
+                    isLoadingBrands={isLoadingBrands} 
                     existingProducts={products}
                 />
               </DialogContent>
@@ -495,7 +517,35 @@ const ProductsPage = () => {
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" className="hover:bg-primary/5" onClick={() => { setSelectedProduct(product); setIsEditModalOpen(true); }}><MoreHorizontal className="h-4 w-4 text-primary" /></Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="h-8 w-8 p-0">
+                          <span className="sr-only">Abrir menu</span>
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Ações</DropdownMenuLabel>
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            setSelectedProduct(product);
+                            setIsEditModalOpen(true);
+                          }}
+                        >
+                          <Pencil className="mr-2 h-4 w-4" /> Editar
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="text-red-600"
+                          onSelect={() => {
+                            setSelectedProduct(product);
+                            setIsDeleteAlertOpen(true);
+                          }}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" /> Remover
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableCell>
                 </TableRow>
               ))
@@ -536,6 +586,23 @@ const ProductsPage = () => {
         onClose={() => setIsResultModalOpen(false)} 
         result={importResult} 
       />
+
+      <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Essa ação não pode ser desfeita. Isso removerá permanentemente o produto "{selectedProduct?.name}".
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteConfirm} disabled={deleteMutation.isPending} className="bg-red-600 hover:bg-red-700">
+              {deleteMutation.isPending ? "Removendo..." : "Remover"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
