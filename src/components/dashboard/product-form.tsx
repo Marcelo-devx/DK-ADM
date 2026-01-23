@@ -113,6 +113,7 @@ export const ProductForm = ({
   const currentPrice = form.watch("price");
   const currentPixPrice = form.watch("pix_price");
   const currentCostPrice = form.watch("cost_price");
+  const currentSku = form.watch("sku");
 
   const { data: variants } = useQuery({
     queryKey: ["productVariants", productId],
@@ -364,6 +365,7 @@ export const ProductForm = ({
                 basePrice={currentPrice}
                 basePixPrice={currentPixPrice || 0}
                 baseCostPrice={currentCostPrice || 0}
+                baseSku={currentSku}
               />
           </div>
 
