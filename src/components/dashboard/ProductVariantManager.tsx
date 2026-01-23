@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Package, Ruler, Droplets, Pencil, X, Check, Loader2, RefreshCcw, Palette, Hash } from "lucide-react";
+import { Plus, Trash2, Package, Ruler, Droplets, Pencil, X, Check, Loader2, RefreshCcw, Palette } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -31,15 +31,13 @@ interface ProductVariantManagerProps {
   basePrice: number;
   basePixPrice: number;
   baseCostPrice: number;
-  baseSku?: string;
 }
 
 export const ProductVariantManager = ({ 
   productId,
   basePrice,
   basePixPrice,
-  baseCostPrice,
-  baseSku
+  baseCostPrice
 }: ProductVariantManagerProps) => {
   const queryClient = useQueryClient();
   const [isAdding, setIsAdding] = useState(false);
@@ -167,33 +165,6 @@ export const ProductVariantManager = ({
     onError: (err: any) => showError(`Erro ao atualizar em massa: ${err.message}`),
   });
 
-  const bulkUpdateSkusMutation = useMutation({
-    mutationFn: async () => {
-        if (!productId) throw new Error("Produto não identificado.");
-        if (!baseSku) throw new Error("SKU Base não definido no produto principal.");
-
-        const { data: currentVariants } = await supabase
-            .from("product_variants")
-            .select("id")
-            .eq("product_id", productId)
-            .order('created_at', { ascending: true });
-            
-        if (!currentVariants) return;
-
-        let index = 1;
-        for (const v of currentVariants) {
-            const newSku = `${baseSku}-${index}`;
-            await supabase.from("product_variants").update({ sku: newSku }).eq("id", v.id);
-            index++;
-        }
-    },
-    onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["productVariants", productId] });
-        showSuccess("SKUs gerados em sequência (Base-1, Base-2...)!");
-    },
-    onError: (err: any) => showError(`Erro ao gerar SKUs: ${err.message}`),
-  });
-
   const startEditing = (v: Variant) => {
     setEditingId(v.id);
     setEditValues({ ...v, flavor_name: v.flavors?.name || "" });
@@ -216,22 +187,6 @@ export const ProductVariantManager = ({
             <p className="text-xs text-muted-foreground">Gerencie sabores, cores e tamanhos específicos.</p>
         </div>
         <div className="flex gap-2">
-            <Button 
-                type="button" 
-                variant="secondary" 
-                size="sm" 
-                className="bg-white border text-blue-600 hover:bg-blue-50"
-                onClick={() => {
-                    if (confirm(`Gerar SKUs sequenciais baseados em "${baseSku}"? Ex: ${baseSku}-1, ${baseSku}-2...`)) {
-                        bulkUpdateSkusMutation.mutate();
-                    }
-                }}
-                disabled={bulkUpdateSkusMutation.isPending || !variants || variants.length === 0 || !baseSku}
-            >
-                {bulkUpdateSkusMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Hash className="w-4 h-4 mr-2" />}
-                Gerar SKUs
-            </Button>
-
             <Button 
                 type="button" 
                 variant="secondary" 
