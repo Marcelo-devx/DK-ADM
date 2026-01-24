@@ -217,9 +217,9 @@ const N8nIntegrationPage = () => {
         if (error) throw error;
     },
     onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["webhookConfigs"] });
-        showSuccess("Webhook adicionado!");
-        setWebhookUrl("");
+      queryClient.invalidateQueries({ queryKey: ["webhookConfigs"] });
+      showSuccess("Webhook adicionado!");
+      setWebhookUrl("");
     },
     onError: (err: any) => showError(err.message),
   });
@@ -293,7 +293,7 @@ const N8nIntegrationPage = () => {
 
         {/* Coluna Direita: Tabs (Docs e Webhooks) */}
         <div className="lg:col-span-2">
-            <Tabs defaultValue="endpoints">
+            <Tabs defaultValue="webhooks">
                 <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="endpoints"><Globe className="w-4 h-4 mr-2" /> Swagger / Docs</TabsTrigger>
                     <TabsTrigger value="webhooks"><Webhook className="w-4 h-4 mr-2" /> Webhooks</TabsTrigger>
@@ -378,7 +378,7 @@ const N8nIntegrationPage = () => {
                                 <Label className="text-xs font-bold uppercase text-gray-500">Adicionar Novo Webhook</Label>
                                 <div className="flex flex-col sm:flex-row gap-3">
                                     <Select value={selectedEvent} onValueChange={setSelectedEvent}>
-                                        <SelectTrigger className="w-[200px] bg-white"><SelectValue /></SelectTrigger>
+                                        <SelectTrigger className="w-[250px] bg-white"><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="order_created">Pedido Criado</SelectItem>
                                             <SelectItem value="payment_confirmed">Pagamento Confirmado</SelectItem>
@@ -386,7 +386,7 @@ const N8nIntegrationPage = () => {
                                             <SelectItem value="product_updated">Produto Atualizado</SelectItem>
                                             <SelectItem value="product_deleted">Produto Excluído</SelectItem>
                                             <SelectItem value="retention_campaign">Campanha de Retenção</SelectItem>
-                                            <SelectItem value="abandoned_cart">Carrinho Abandonado (Monitor)</SelectItem>
+                                            <SelectItem value="abandoned_cart">Carrinho Abandonado</SelectItem>
                                         </SelectContent>
                                     </Select>
                                     <Input placeholder="https://seu-n8n.com/webhook/..." value={webhookUrl} onChange={(e) => setWebhookUrl(e.target.value)} className="bg-white" />
