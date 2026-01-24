@@ -378,10 +378,13 @@ const N8nIntegrationPage = () => {
                                 <Label className="text-xs font-bold uppercase text-gray-500">Adicionar Novo Webhook</Label>
                                 <div className="flex flex-col sm:flex-row gap-3">
                                     <Select value={selectedEvent} onValueChange={setSelectedEvent}>
-                                        <SelectTrigger className="w-[180px] bg-white"><SelectValue /></SelectTrigger>
+                                        <SelectTrigger className="w-[200px] bg-white"><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="order_created">Pedido Criado</SelectItem>
                                             <SelectItem value="payment_confirmed">Pagamento Confirmado</SelectItem>
+                                            <SelectItem value="product_created">Produto Criado</SelectItem>
+                                            <SelectItem value="product_updated">Produto Atualizado</SelectItem>
+                                            <SelectItem value="product_deleted">Produto Excluído</SelectItem>
                                             <SelectItem value="retention_campaign">Campanha de Retenção</SelectItem>
                                             <SelectItem value="abandoned_cart">Carrinho Abandonado (Monitor)</SelectItem>
                                         </SelectContent>
