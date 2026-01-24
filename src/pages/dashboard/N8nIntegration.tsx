@@ -47,31 +47,53 @@ const N8nIntegrationPage = () => {
   // --- Documentação dos Payloads ---
   const apiDocs = [
     { 
+      method: "WEBHOOK", 
+      name: "Eventos de Produto (Novo)", 
+      url: "Seu Endpoint N8N (Configurar na aba Webhooks)", 
+      desc: "Disparado automaticamente quando um produto é criado, alterado ou excluído.",
+      request: `{
+  "event": "product_created", // ou "product_updated", "product_deleted"
+  "timestamp": "2024-03-20T10:00:00Z",
+  "data": {
+    "id": 10,
+    "name": "Essência Zomo",
+    "price": 15.90,
+    "stock_quantity": 100,
+    "is_visible": true,
+    ...outros_campos
+  }
+}`,
+      response: `200 OK`
+    },
+    { 
+      method: "WEBHOOK", 
+      name: "Pedido Criado (Enriquecido)", 
+      url: "Seu Endpoint N8N", 
+      desc: "Enviado quando uma venda entra no sistema. Inclui dados do cliente.",
+      request: `{
+  "event": "order_created",
+  "timestamp": "...",
+  "data": {
+    "id": 5050,
+    "total_price": 150.00,
+    "status": "Pendente",
+    "customer": {
+       "full_name": "João Silva",
+       "phone": "11999999999",
+       "email": "joao@email.com"
+    },
+    ...dados_do_pedido
+  }
+}`,
+      response: `200 OK`
+    },
+    { 
       method: "POST", 
       name: "Listar Produtos", 
       url: `${baseUrl}/n8n-list-products`, 
       desc: "Retorna o catálogo completo, incluindo variações (sabores, tamanhos).",
       request: null,
-      response: `[
-  {
-    "id": "uuid-do-produto",
-    "type": "simple",
-    "name": "Whey Protein Isolado",
-    "sku": "WHEY-ISO",
-    "price": 149.90,
-    "stock": 50,
-    "image": "url-da-imagem"
-  },
-  {
-    "id": "uuid-do-produto-2",
-    "type": "variations",
-    "base_product": "Camiseta Treino",
-    "options": [
-       { "variant_id": "v1", "name": "Camiseta - Azul P", "price": 89.90, "stock": 10 },
-       { "variant_id": "v2", "name": "Camiseta - Azul M", "price": 89.90, "stock": 5 }
-    ]
-  }
-]`
+      response: `[ ... lista de produtos ... ]`
     },
     { 
         method: "POST", 
@@ -79,91 +101,30 @@ const N8nIntegrationPage = () => {
         url: `${baseUrl}/n8n-list-clients`, 
         desc: "Lista todos os clientes cadastrados com pontos e estatísticas.",
         request: null,
-        response: `[
-  {
-    "id": "uuid-do-usuario",
-    "name": "João da Silva",
-    "email": "joao@email.com",
-    "phone": "11999999999",
-    "points": 150,
-    "role": "customer",
-    "created_at": "2024-03-20T10:00:00Z"
-  }
-]` 
+        response: `[ ... lista de clientes ... ]` 
       },
     { 
       method: "POST", 
       name: "Criar Cliente", 
       url: `${baseUrl}/n8n-create-client`, 
       desc: "Cadastra um novo usuário no sistema (Auth + Profile).",
-      request: `{
-  "email": "novo.cliente@email.com",
-  "name": "Maria Souza",
-  "phone": "11988888888",
-  "password": "SenhaSegura123!" // Opcional (será gerada se omitida)
-}`,
-      response: `{
-  "success": true,
-  "id": "uuid-gerado",
-  "email": "novo.cliente@email.com"
-}`
+      request: `{ "email": "...", "name": "...", "phone": "..." }`,
+      response: `{ "success": true, "id": "..." }`
     },
     { 
         method: "POST", 
         name: "Receber Pedido (Checkout)", 
         url: `${baseUrl}/n8n-receive-order`, 
         desc: "Cria um pedido completo e gera o pagamento.",
-        request: `{
-  "email": "cliente@email.com", // Se não existir, tenta criar ou falha
-  "payment_method": "pix", // ou 'credit_card'
-  "products": [
-    { 
-      "id": "uuid-do-produto", 
-      "quantity": 2, 
-      "variant_id": "uuid-variacao" // Opcional se for produto simples
-    }
-  ],
-  "shipping_address": {
-    "street": "Rua das Flores",
-    "number": "123",
-    "neighborhood": "Centro",
-    "city": "São Paulo",
-    "state": "SP",
-    "zip_code": "01000-000"
-  }
-}`,
-        response: `{
-  "success": true,
-  "order_id": 1050,
-  "total": 299.80,
-  "status": "pending"
-}`
+        request: `{ "email": "...", "products": [...] }`,
+        response: `{ "success": true, "order_id": ... }`
       },
       { 
         method: "WEBHOOK", 
-        name: "Campanha de Retenção (Disparo)", 
-        url: "Seu Endpoint N8N (Configurar na aba Webhooks)", 
-        desc: "JSON enviado para o N8N quando você dispara uma campanha de recuperação. Contém a mensagem já personalizada com o nome do cliente.",
-        request: `{
-  "event": "retention_campaign",
-  "campaign_size": 2,
-  "recipients": [
-    {
-      "client_id": "uuid-cliente-1",
-      "name": "João Silva",
-      "phone": "11999998888",
-      "email": "joao@email.com",
-      "message_content": "Oi João! Sentimos sua falta na Tabacaria. Chegaram muitas novidades..."
-    },
-    {
-      "client_id": "uuid-cliente-2",
-      "name": "Maria Oliveira",
-      "phone": "21988887777",
-      "email": "maria@email.com",
-      "message_content": "Oi Maria! Sentimos sua falta na Tabacaria. Chegaram muitas novidades..."
-    }
-  ]
-}`,
+        name: "Campanha de Retenção", 
+        url: "Seu Endpoint N8N", 
+        desc: "Disparo manual via painel de Clientes (Recuperação).",
+        request: `{ "event": "retention_campaign", "recipients": [...] }`,
         response: `200 OK`
       },
   ];
