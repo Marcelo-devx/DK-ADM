@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Workflow, Copy, Eye, EyeOff, Save, Check, Key, Webhook, Plus, Trash2, Globe, ChevronDown, ChevronRight, FileJson, Zap, Loader2 } from "lucide-react";
+import { Workflow, Copy, Eye, EyeOff, Save, Check, Key, Webhook, Plus, Trash2, Globe, ChevronDown, ChevronRight, FileJson, Zap, Loader2, Pencil, X } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +43,10 @@ const N8nIntegrationPage = () => {
   const [selectedEvent, setSelectedEvent] = useState("order_created");
   const [openEndpoints, setOpenEndpoints] = useState<number[]>([]);
   const [testingId, setTestingId] = useState<number | null>(null);
+  
+  // Estados para edição inline
+  const [editingWebhookId, setEditingWebhookId] = useState<number | null>(null);
+  const [tempUrl, setTempUrl] = useState("");
   
   const baseUrl = "https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1";
 
@@ -187,6 +191,20 @@ const N8nIntegrationPage = () => {
     onError: (err: any) => showError(err.message),
   });
 
+  const updateWebhookUrlMutation = useMutation({
+    mutationFn: async ({ id, url }: { id: number, url: string }) => {
+        if (!url) throw new Error("URL não pode ficar vazia.");
+        const { error } = await supabase.from("webhook_configs").update({ target_url: url }).eq("id", id);
+        if (error) throw error;
+    },
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["webhookConfigs"] });
+        showSuccess("URL atualizada!");
+        setEditingWebhookId(null);
+    },
+    onError: (err: any) => showError(err.message),
+  });
+
   const deleteWebhookMutation = useMutation({
     mutationFn: async (id: number) => {
         const { error } = await supabase.from("webhook_configs").delete().eq("id", id);
@@ -241,6 +259,11 @@ const N8nIntegrationPage = () => {
     setOpenEndpoints(prev => 
       prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
     );
+  };
+
+  const startEditing = (hook: any) => {
+    setEditingWebhookId(hook.id);
+    setTempUrl(hook.target_url);
   };
 
   return (
@@ -395,7 +418,51 @@ const N8nIntegrationPage = () => {
                                             webhooks.map((hook) => (
                                                 <TableRow key={hook.id}>
                                                     <TableCell><Badge variant="secondary">{hook.trigger_event}</Badge></TableCell>
-                                                    <TableCell className="font-mono text-xs max-w-[200px] truncate" title={hook.target_url}>{hook.target_url}</TableCell>
+                                                    
+                                                    {/* CÉLULA DE URL EDITÁVEL */}
+                                                    <TableCell>
+                                                        {editingWebhookId === hook.id ? (
+                                                            <div className="flex items-center gap-1">
+                                                                <Input 
+                                                                    value={tempUrl} 
+                                                                    onChange={(e) => setTempUrl(e.target.value)} 
+                                                                    className="h-8 text-xs font-mono"
+                                                                    autoFocus
+                                                                />
+                                                                <Button 
+                                                                    size="icon" 
+                                                                    variant="ghost" 
+                                                                    className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                                                    onClick={() => updateWebhookUrlMutation.mutate({ id: hook.id, url: tempUrl })}
+                                                                >
+                                                                    <Check className="w-4 h-4" />
+                                                                </Button>
+                                                                <Button 
+                                                                    size="icon" 
+                                                                    variant="ghost" 
+                                                                    className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                                    onClick={() => setEditingWebhookId(null)}
+                                                                >
+                                                                    <X className="w-4 h-4" />
+                                                                </Button>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex items-center justify-between group">
+                                                                <span className="font-mono text-xs max-w-[250px] truncate" title={hook.target_url}>
+                                                                    {hook.target_url}
+                                                                </span>
+                                                                <Button 
+                                                                    variant="ghost" 
+                                                                    size="icon" 
+                                                                    className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-blue-500"
+                                                                    onClick={() => startEditing(hook)}
+                                                                >
+                                                                    <Pencil className="w-3 h-3" />
+                                                                </Button>
+                                                            </div>
+                                                        )}
+                                                    </TableCell>
+
                                                     <TableCell className="text-center">
                                                         <Button 
                                                             variant="secondary" 
