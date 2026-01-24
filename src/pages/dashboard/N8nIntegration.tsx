@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Workflow, Copy, Eye, EyeOff, Save, Check, Key, Webhook, Plus, Trash2, Globe, ChevronDown, ChevronRight, FileJson } from "lucide-react";
+import { Workflow, Copy, Eye, EyeOff, Save, Check, Key, Webhook, Plus, Trash2, Globe, ChevronDown, ChevronRight, FileJson, Zap, Loader2 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +33,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { toast } from "sonner";
 
 const N8nIntegrationPage = () => {
   const queryClient = useQueryClient();
@@ -41,6 +42,7 @@ const N8nIntegrationPage = () => {
   const [webhookUrl, setWebhookUrl] = useState("");
   const [selectedEvent, setSelectedEvent] = useState("order_created");
   const [openEndpoints, setOpenEndpoints] = useState<number[]>([]);
+  const [testingId, setTestingId] = useState<number | null>(null);
   
   const baseUrl = "https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1";
 
@@ -204,6 +206,33 @@ const N8nIntegrationPage = () => {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["webhookConfigs"] }),
   });
 
+  const testWebhookMutation = useMutation({
+    mutationFn: async ({ id, url, event }: { id: number, url: string, event: string }) => {
+        setTestingId(id);
+        const { data, error } = await supabase.functions.invoke("test-webhook-endpoint", {
+            body: { url, event_type: event }
+        });
+        
+        if (error) throw error;
+        return data;
+    },
+    onSuccess: (data) => {
+        if (data.success) {
+            showSuccess(`Sucesso! Status: ${data.status}`);
+        } else {
+            // Mostra o erro retornado pelo N8N
+            toast.error(`Falha: ${data.error}`, {
+                description: `Código: ${data.status}. Resposta: ${JSON.stringify(data.remote_response).substring(0, 50)}...`
+            });
+        }
+        setTestingId(null);
+    },
+    onError: (err: any) => {
+        showError(`Erro ao testar: ${err.message}`);
+        setTestingId(null);
+    }
+  });
+
   // --- Helpers ---
   const generateToken = () => setToken("n8n_" + Math.random().toString(36).slice(2).toUpperCase() + Math.random().toString(36).slice(2).toUpperCase());
   const copyToClipboard = (text: string) => { navigator.clipboard.writeText(text); showSuccess("Copiado!"); };
@@ -358,15 +387,27 @@ const N8nIntegrationPage = () => {
                             {/* Lista */}
                             <div className="border rounded-lg overflow-hidden">
                                 <Table>
-                                    <TableHeader><TableRow><TableHead>Evento</TableHead><TableHead>URL de Destino</TableHead><TableHead className="w-12">Ativo</TableHead><TableHead className="w-12"></TableHead></TableRow></TableHeader>
+                                    <TableHeader><TableRow><TableHead>Evento</TableHead><TableHead>URL de Destino</TableHead><TableHead className="w-12 text-center">Teste</TableHead><TableHead className="w-12">Ativo</TableHead><TableHead className="w-12"></TableHead></TableRow></TableHeader>
                                     <TableBody>
                                         {isLoadingWebhooks ? (
-                                            <TableRow><TableCell colSpan={4} className="text-center py-4">Carregando...</TableCell></TableRow>
+                                            <TableRow><TableCell colSpan={5} className="text-center py-4">Carregando...</TableCell></TableRow>
                                         ) : webhooks && webhooks.length > 0 ? (
                                             webhooks.map((hook) => (
                                                 <TableRow key={hook.id}>
                                                     <TableCell><Badge variant="secondary">{hook.trigger_event}</Badge></TableCell>
                                                     <TableCell className="font-mono text-xs max-w-[200px] truncate" title={hook.target_url}>{hook.target_url}</TableCell>
+                                                    <TableCell className="text-center">
+                                                        <Button 
+                                                            variant="secondary" 
+                                                            size="icon" 
+                                                            className="h-8 w-8 bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-200 border"
+                                                            onClick={() => testWebhookMutation.mutate({ id: hook.id, url: hook.target_url, event: hook.trigger_event })}
+                                                            disabled={testWebhookMutation.isPending}
+                                                            title="Enviar dados de teste"
+                                                        >
+                                                            {testingId === hook.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                                                        </Button>
+                                                    </TableCell>
                                                     <TableCell>
                                                         <Switch checked={hook.is_active} onCheckedChange={(val) => toggleWebhookMutation.mutate({ id: hook.id, status: val })} />
                                                     </TableCell>
@@ -376,7 +417,7 @@ const N8nIntegrationPage = () => {
                                                 </TableRow>
                                             ))
                                         ) : (
-                                            <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">Nenhum webhook configurado.</TableCell></TableRow>
+                                            <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Nenhum webhook configurado.</TableCell></TableRow>
                                         )}
                                     </TableBody>
                                 </Table>
