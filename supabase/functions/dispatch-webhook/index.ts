@@ -23,18 +23,53 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    // --- ENRIQUECIMENTO DE DADOS (NOVO) ---
+    // --- ENRIQUECIMENTO DE DADOS ---
     let enrichedPayload = { ...payload };
 
+    // 1. Correção de Timezone (UTC -> São Paulo)
+    if (payload.created_at) {
+        const dateObj = new Date(payload.created_at);
+        // Formato legível: DD/MM/YYYY HH:mm:ss
+        enrichedPayload.created_at_br = dateObj.toLocaleString('pt-BR', {
+            timeZone: 'America/Sao_Paulo',
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+        });
+        // Formato ISO com offset correto (útil para sistemas)
+        // Como o Deno Deploy roda em UTC, a conversão manual simples é mais segura para exibição
+        enrichedPayload.created_at_iso_br = dateObj.toLocaleString('en-CA', {
+            timeZone: 'America/Sao_Paulo',
+            hour12: false
+        }).replace(', ', 'T');
+    }
+
+    // 2. Correção do Valor Total (Soma Frete)
+    // No banco: total_price = (produtos - desconto). O frete fica separado.
+    if (payload.total_price !== undefined) {
+        const subtotal = Number(payload.total_price || 0);
+        const shipping = Number(payload.shipping_cost || 0);
+        const discount = Number(payload.coupon_discount || 0);
+        
+        // Cria um campo explícito para o valor final que o cliente pagou
+        enrichedPayload.final_total_value = subtotal + shipping;
+        
+        // Adiciona detalhes para clareza no N8N
+        enrichedPayload.financial_breakdown = {
+            products_subtotal: subtotal + discount, // Valor original dos produtos
+            discount_applied: discount,
+            shipping_cost: shipping,
+            total_paid: subtotal + shipping
+        };
+    }
+
+    // 3. Dados do Cliente
     if (event_type === 'order_created' && payload.user_id) {
-        // Busca dados do perfil (Telefone, Nome)
         const { data: profile } = await supabaseAdmin
             .from('profiles')
-            .select('first_name, last_name, phone, email, cpf_cnpj') // email pode não estar no profile se não foi syncado, mas tentamos
+            .select('first_name, last_name, phone, email, cpf_cnpj') 
             .eq('id', payload.user_id)
             .single();
         
-        // Busca email do Auth se não estiver no profile (opcional, mas bom ter)
         const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(payload.user_id);
 
         if (profile || user) {
@@ -50,7 +85,6 @@ serve(async (req) => {
             console.log(`[Webhook] Dados do cliente anexados para pedido #${payload.id}`);
         }
     }
-    // --------------------------------------
 
     // Buscar webhooks ativos para este evento
     const { data: webhooks } = await supabaseAdmin
@@ -86,7 +120,6 @@ serve(async (req) => {
         }
     });
 
-    // Fire and Forget (processa em background para não travar o banco)
     await Promise.all(promises);
 
     return new Response(JSON.stringify({ success: true, dispatched: webhooks.length }), {

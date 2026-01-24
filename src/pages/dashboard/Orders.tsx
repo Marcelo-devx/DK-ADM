@@ -286,6 +286,9 @@ const OrdersPage = () => {
                 const isNextRoute = checkIsNextRoute(order.created_at);
                 const paymentDetails = getPaymentMethodDetails(order.payment_method);
                 const PaymentIcon = paymentDetails.icon;
+                
+                // CÁLCULO CORRIGIDO: Soma o frete ao total do banco
+                const finalTotal = order.total_price + (order.shipping_cost || 0);
 
                 return (
                   <TableRow key={order.id} className={cn(
@@ -314,7 +317,7 @@ const OrdersPage = () => {
                       </div>
                     </TableCell>
                     <TableCell className="font-medium text-sm">{order.profiles?.first_name} {order.profiles?.last_name}</TableCell>
-                    <TableCell className="font-bold">{formatCurrency(order.total_price)}</TableCell>
+                    <TableCell className="font-bold">{formatCurrency(finalTotal)}</TableCell>
                     <TableCell>
                         <div className="flex flex-col gap-1">
                             {needsValidation ? (
