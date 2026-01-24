@@ -54,8 +54,44 @@ const N8nIntegrationPage = () => {
   const apiDocs = [
     { 
       method: "WEBHOOK", 
-      name: "Eventos de Produto (Novo)", 
-      url: "Seu Endpoint N8N (Configurar na aba Webhooks)", 
+      name: "Pedido Criado (Enriquecido V2)", 
+      url: "Seu Endpoint N8N", 
+      desc: "Enviado quando uma venda entra no sistema. Agora inclui data formatada BR e totais somados.",
+      request: `{
+  "event": "order_created",
+  "timestamp": "2024-03-20T10:00:00.000Z",
+  "data": {
+    "id": 5050,
+    "status": "Pendente",
+    "created_at_br": "20/03/2024 07:00:00", // Data formatada SP
+    "final_total_value": 170.00, // (Produtos - Desconto) + Frete
+    "total_price": 150.00, // Apenas produtos (Base)
+    "shipping_cost": 20.00,
+    "customer": {
+       "full_name": "João Silva",
+       "phone": "11999999999",
+       "email": "joao@email.com",
+       "cpf": "123.456.789-00"
+    },
+    "shipping_address": {
+       "street": "Rua Exemplo",
+       "number": "100",
+       "neighborhood": "Centro"
+    },
+    "financial_breakdown": {
+       "products_subtotal": 150.00,
+       "discount_applied": 0,
+       "shipping_cost": 20.00,
+       "total_paid": 170.00
+    }
+  }
+}`,
+      response: `200 OK`
+    },
+    { 
+      method: "WEBHOOK", 
+      name: "Eventos de Produto", 
+      url: "Seu Endpoint N8N", 
       desc: "Disparado automaticamente quando um produto é criado, alterado ou excluído.",
       request: `{
   "event": "product_created", // ou "product_updated", "product_deleted"
@@ -67,28 +103,6 @@ const N8nIntegrationPage = () => {
     "stock_quantity": 100,
     "is_visible": true,
     ...outros_campos
-  }
-}`,
-      response: `200 OK`
-    },
-    { 
-      method: "WEBHOOK", 
-      name: "Pedido Criado (Enriquecido)", 
-      url: "Seu Endpoint N8N", 
-      desc: "Enviado quando uma venda entra no sistema. Inclui dados do cliente.",
-      request: `{
-  "event": "order_created",
-  "timestamp": "...",
-  "data": {
-    "id": 5050,
-    "total_price": 150.00,
-    "status": "Pendente",
-    "customer": {
-       "full_name": "João Silva",
-       "phone": "11999999999",
-       "email": "joao@email.com"
-    },
-    ...dados_do_pedido
   }
 }`,
       response: `200 OK`
