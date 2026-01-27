@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -21,10 +21,17 @@ import {
   DialogTitle, 
   DialogTrigger 
 } from "@/components/ui/dialog";
-import { MapPin, Plus, Trash2, Pencil, Bike, Building2 } from "lucide-react";
+import { MapPin, Plus, Trash2, Pencil, Bike, Building2, Search } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface ShippingRate {
   id: number;
@@ -38,6 +45,10 @@ export default function ShippingRatesPage() {
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRate, setEditingRate] = useState<ShippingRate | null>(null);
+  
+  // Filtros
+  const [searchTerm, setSearchTerm] = useState("");
+  const [cityFilter, setCityFilter] = useState("all");
   
   // Form States
   const [neighborhood, setNeighborhood] = useState("");
@@ -56,6 +67,24 @@ export default function ShippingRatesPage() {
       return data as ShippingRate[];
     },
   });
+
+  const uniqueCities = useMemo(() => {
+    if (!rates) return [];
+    return Array.from(new Set(rates.map(r => r.city))).sort();
+  }, [rates]);
+
+  const filteredRates = useMemo(() => {
+    if (!rates) return [];
+    return rates.filter(rate => {
+      const matchesSearch = 
+        rate.neighborhood.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        rate.city.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesCity = cityFilter === "all" || rate.city === cityFilter;
+
+      return matchesSearch && matchesCity;
+    });
+  }, [rates, searchTerm, cityFilter]);
 
   const upsertMutation = useMutation({
     mutationFn: async () => {
@@ -126,7 +155,7 @@ export default function ShippingRatesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
             <h1 className="text-3xl font-bold flex items-center gap-2">
                 <Bike className="h-8 w-8 text-indigo-600" /> Tabela de Fretes
@@ -183,6 +212,29 @@ export default function ShippingRatesPage() {
         </Dialog>
       </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-4 rounded-xl border shadow-sm">
+        <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input 
+                placeholder="Buscar por bairro..." 
+                className="pl-9 bg-gray-50/50" 
+                value={searchTerm} 
+                onChange={(e) => setSearchTerm(e.target.value)} 
+            />
+        </div>
+        <Select value={cityFilter} onValueChange={setCityFilter}>
+            <SelectTrigger className="bg-gray-50/50">
+                <SelectValue placeholder="Filtrar por Cidade" />
+            </SelectTrigger>
+            <SelectContent>
+                <SelectItem value="all">Todas as Cidades</SelectItem>
+                {uniqueCities.map(city => (
+                    <SelectItem key={city} value={city}>{city}</SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
+      </div>
+
       <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
         <Table>
             <TableHeader className="bg-gray-50">
@@ -197,10 +249,10 @@ export default function ShippingRatesPage() {
             <TableBody>
                 {isLoading ? (
                     <TableRow><TableCell colSpan={5} className="text-center py-8">Carregando...</TableCell></TableRow>
-                ) : rates?.length === 0 ? (
-                    <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Nenhum frete cadastrado.</TableCell></TableRow>
+                ) : filteredRates?.length === 0 ? (
+                    <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Nenhum local encontrado com os filtros atuais.</TableCell></TableRow>
                 ) : (
-                    rates?.map((rate) => (
+                    filteredRates?.map((rate) => (
                         <TableRow key={rate.id}>
                             <TableCell className="font-bold flex items-center gap-2">
                                 <MapPin className="w-4 h-4 text-gray-400" />
