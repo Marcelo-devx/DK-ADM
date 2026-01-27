@@ -1,0 +1,25 @@
+INSERT INTO public.shipping_rates (neighborhood, city, price, is_active)
+VALUES 
+  ('Areias', 'Almirante Tamandaré', 0, true),
+  ('Boichininga', 'Almirante Tamandaré', 0, true),
+  ('Bonfim', 'Almirante Tamandaré', 0, true),
+  ('Botiatuba', 'Almirante Tamandaré', 0, true),
+  ('Cachoeira', 'Almirante Tamandaré', 0, true),
+  ('Campina do Arruda', 'Almirante Tamandaré', 0, true),
+  ('Campo Grande', 'Almirante Tamandaré', 0, true),
+  ('Centro', 'Almirante Tamandaré', 0, true),
+  ('Colônia Antônio Prado', 'Almirante Tamandaré', 0, true),
+  ('Colônia Santa Gabriela', 'Almirante Tamandaré', 0, true),
+  ('Colônia São Venâncio', 'Almirante Tamandaré', 0, true),
+  ('Jardim Água Boa', 'Almirante Tamandaré', 0, true),
+  ('Jardim Alvorada', 'Almirante Tamandaré', 0, true),
+  ('Jardim Alvorada II', 'Almirante Tamandaré', 0, true),
+  ('Jardim Amazonas', 'Almirante Tamandaré', 0, true),
+  ('Jardim Anita', 'Almirante Tamandaré', 0, true),
+  ('Jardim Colonial', 'Almirante Tamandaré', 0, true),
+  ('Jardim Monte Santo', 'Almirante Tamandaré', 0, true),
+  ('Jardim São José', 'Almirante Tamandaré', 0, true),
+  ('São Felipe', 'Almirante Tamandaré', 0, true),
+  ('Vila Rachel', 'Almirante Tamandaré', 0, true),
+  ('Vila Santa Terezinha', 'Almirante Tamandaré', 0, true)
+ON CONFLICT (neighborhood, city) DO NOTHING;
