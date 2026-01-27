@@ -38,7 +38,7 @@ serve(async (req) => {
       });
     }
 
-    const { customer, items, payment_method } = await req.json();
+    const { customer, items, payment_method, shipping_address } = await req.json();
 
     if (!items || !Array.isArray(items)) {
       throw new Error("Formato inválido. Necessário enviar 'items' (array).");
@@ -187,17 +187,60 @@ serve(async (req) => {
         throw new Error("Nenhum produto encontrado. Verifique SKUs ou Nomes.");
     }
 
-    // --- 4. CRIAR PEDIDO ---
+    // --- 4. CALCULAR FRETE (NOVO) ---
+    let shippingCost = 0;
+    
+    // Se endereço foi fornecido, tenta buscar taxa
+    const addr = shipping_address || {};
+    const locationsToSearch = [
+        addr.neighborhood, // Bairro
+        addr.city,         // Cidade
+        addr.state         // Estado (menos comum, mas possível)
+    ].filter(Boolean);
+
+    if (locationsToSearch.length > 0) {
+        // Busca na tabela de taxas
+        const { data: rates } = await supabaseAdmin
+            .from('shipping_rates')
+            .select('price, location_name')
+            .eq('is_active', true);
+        
+        if (rates && rates.length > 0) {
+            // Tenta encontrar match (insensível a maiúsculas)
+            // Prioridade: Exato -> Contains
+            for (const loc of locationsToSearch) {
+                const term = loc.toLowerCase().trim();
+                
+                // Match exato
+                const exactMatch = rates.find(r => r.location_name.toLowerCase().trim() === term);
+                if (exactMatch) {
+                    shippingCost = Number(exactMatch.price);
+                    console.log(`[Frete] Match exato encontrado: ${exactMatch.location_name} - R$ ${shippingCost}`);
+                    break;
+                }
+
+                // Match parcial (se o bairro contém o nome da taxa ou vice-versa)
+                const partialMatch = rates.find(r => term.includes(r.location_name.toLowerCase().trim()));
+                if (partialMatch) {
+                    shippingCost = Number(partialMatch.price);
+                    console.log(`[Frete] Match parcial encontrado: ${partialMatch.location_name} - R$ ${shippingCost}`);
+                    break;
+                }
+            }
+        }
+    }
+
+    // --- 5. CRIAR PEDIDO ---
     const { data: order, error: orderError } = await supabaseAdmin
       .from('orders')
       .insert({
         user_id: userId,
-        total_price: totalOrderPrice,
-        shipping_cost: 0,
+        total_price: totalOrderPrice, // O valor do pedido NÃO inclui frete na coluna total_price (padrão legado), frete é separado
+        shipping_cost: shippingCost,
         status: 'Pendente',
         payment_method: payment_method || 'Pix',
         delivery_status: 'Pendente',
-        shipping_address: { 
+        shipping_address: shipping_address || { 
             street: "Whatsapp Order", 
             number: "S/N", 
             neighborhood: "A verificar", 
@@ -214,12 +257,15 @@ serve(async (req) => {
     const itemsWithOrderId = orderItemsToInsert.map(i => ({ ...i, order_id: order.id }));
     await supabaseAdmin.from('order_items').insert(itemsWithOrderId);
 
-    // --- 5. GERAR PIX (MERCADO PAGO) ---
+    // --- 6. GERAR PIX (MERCADO PAGO) ---
+    // O valor a cobrar deve ser Produtos + Frete
+    const totalToCharge = totalOrderPrice + shippingCost;
+    
     let paymentData = null;
     const mpToken = settings.mercadopago_access_token;
     const isPix = (payment_method || '').toLowerCase().includes('pix');
 
-    if (isPix && mpToken && totalOrderPrice > 0) {
+    if (isPix && mpToken && totalToCharge > 0) {
         try {
             const payerEmail = customer.email || `${phoneClean}@whatsapp.loja`;
             
@@ -231,7 +277,7 @@ serve(async (req) => {
                     'X-Idempotency-Key': `order-${order.id}-${Date.now()}`
                 },
                 body: JSON.stringify({
-                    transaction_amount: totalOrderPrice,
+                    transaction_amount: totalToCharge,
                     description: `Pedido #${order.id} - ${customer.name || 'Cliente'}`,
                     payment_method_id: 'pix',
                     payer: {
@@ -262,7 +308,9 @@ serve(async (req) => {
       JSON.stringify({ 
         success: true, 
         order_id: order.id, 
-        total: totalOrderPrice,
+        products_total: totalOrderPrice,
+        shipping_cost: shippingCost,
+        final_total: totalToCharge,
         payment_info: paymentData
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }

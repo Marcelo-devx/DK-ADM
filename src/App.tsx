@@ -47,6 +47,7 @@ import IncomingWebhooksPage from "./pages/dashboard/IncomingWebhooks";
 import ClubDKPage from "./pages/ClubDK";
 import LoyaltyManagementPage from "./pages/dashboard/LoyaltyManagement";
 import UserCouponsHistoryPage from "./pages/dashboard/UserCouponsHistory";
+import ShippingRatesPage from "./pages/dashboard/ShippingRates";
 
 const queryClient = new QueryClient();
 
@@ -83,6 +84,7 @@ const AppContent = () => {
           <Route path="delivery-routes" element={<DeliveryRoutesPage />} />
           <Route path="spoke-export" element={<SpokeExportPage />} />
           <Route path="print-labels" element={<PrintLabelsPage />} />
+          <Route path="shipping-rates" element={<ShippingRatesPage />} />
           <Route path="prices" element={<PriceManagementPage />} />
           <Route path="supplier-orders" element={<SupplierOrdersPage />} />
           <Route path="products" element={<ProductsPage />} />
