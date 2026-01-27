@@ -21,14 +21,15 @@ import {
   DialogTitle, 
   DialogTrigger 
 } from "@/components/ui/dialog";
-import { MapPin, Plus, Trash2, Pencil, Bike } from "lucide-react";
+import { MapPin, Plus, Trash2, Pencil, Bike, Building2 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 
 interface ShippingRate {
   id: number;
-  location_name: string;
+  neighborhood: string;
+  city: string;
   price: number;
   is_active: boolean;
 }
@@ -39,7 +40,8 @@ export default function ShippingRatesPage() {
   const [editingRate, setEditingRate] = useState<ShippingRate | null>(null);
   
   // Form States
-  const [locationName, setLocationName] = useState("");
+  const [neighborhood, setNeighborhood] = useState("");
+  const [city, setCity] = useState("Curitiba");
   const [price, setPrice] = useState("");
 
   const { data: rates, isLoading } = useQuery({
@@ -48,7 +50,8 @@ export default function ShippingRatesPage() {
       const { data, error } = await supabase
         .from("shipping_rates")
         .select("*")
-        .order("location_name");
+        .order("city")
+        .order("neighborhood");
       if (error) throw error;
       return data as ShippingRate[];
     },
@@ -57,7 +60,8 @@ export default function ShippingRatesPage() {
   const upsertMutation = useMutation({
     mutationFn: async () => {
       const payload = {
-        location_name: locationName,
+        neighborhood: neighborhood,
+        city: city,
         price: parseFloat(price.replace(',', '.')),
         is_active: true
       };
@@ -105,13 +109,15 @@ export default function ShippingRatesPage() {
 
   const resetForm = () => {
     setEditingRate(null);
-    setLocationName("");
+    setNeighborhood("");
+    setCity("Curitiba");
     setPrice("");
   };
 
   const handleEdit = (rate: ShippingRate) => {
     setEditingRate(rate);
-    setLocationName(rate.location_name);
+    setNeighborhood(rate.neighborhood);
+    setCity(rate.city || "Curitiba");
     setPrice(rate.price.toString());
     setIsModalOpen(true);
   };
@@ -125,7 +131,7 @@ export default function ShippingRatesPage() {
             <h1 className="text-3xl font-bold flex items-center gap-2">
                 <Bike className="h-8 w-8 text-indigo-600" /> Tabela de Fretes
             </h1>
-            <p className="text-muted-foreground">Defina os valores de entrega automática por Bairro ou Cidade.</p>
+            <p className="text-muted-foreground">Defina os valores de entrega por bairro e cidade.</p>
         </div>
         
         <Dialog open={isModalOpen} onOpenChange={(open) => { setIsModalOpen(open); if(!open) resetForm(); }}>
@@ -140,15 +146,20 @@ export default function ShippingRatesPage() {
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                     <div className="space-y-2">
-                        <Label>Nome do Local (Bairro/Cidade)</Label>
+                        <Label>Cidade</Label>
                         <Input 
-                            placeholder="Ex: Centro, Zona Sul, Cotia..." 
-                            value={locationName} 
-                            onChange={(e) => setLocationName(e.target.value)} 
+                            placeholder="Ex: Curitiba" 
+                            value={city} 
+                            onChange={(e) => setCity(e.target.value)} 
                         />
-                        <p className="text-[10px] text-muted-foreground">
-                            O sistema tentará encontrar este nome no endereço do cliente.
-                        </p>
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Bairro</Label>
+                        <Input 
+                            placeholder="Ex: Batel, Centro..." 
+                            value={neighborhood} 
+                            onChange={(e) => setNeighborhood(e.target.value)} 
+                        />
                     </div>
                     <div className="space-y-2">
                         <Label>Valor da Entrega (R$)</Label>
@@ -162,7 +173,7 @@ export default function ShippingRatesPage() {
                     </div>
                     <Button 
                         onClick={() => upsertMutation.mutate()} 
-                        disabled={upsertMutation.isPending || !locationName || !price}
+                        disabled={upsertMutation.isPending || !neighborhood || !city || !price}
                         className="w-full font-bold"
                     >
                         {upsertMutation.isPending ? "Salvando..." : "Salvar"}
@@ -176,7 +187,8 @@ export default function ShippingRatesPage() {
         <Table>
             <TableHeader className="bg-gray-50">
                 <TableRow>
-                    <TableHead>Localidade</TableHead>
+                    <TableHead>Bairro</TableHead>
+                    <TableHead>Cidade</TableHead>
                     <TableHead>Valor</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
@@ -184,15 +196,20 @@ export default function ShippingRatesPage() {
             </TableHeader>
             <TableBody>
                 {isLoading ? (
-                    <TableRow><TableCell colSpan={4} className="text-center py-8">Carregando...</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={5} className="text-center py-8">Carregando...</TableCell></TableRow>
                 ) : rates?.length === 0 ? (
-                    <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">Nenhum frete cadastrado.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Nenhum frete cadastrado.</TableCell></TableRow>
                 ) : (
                     rates?.map((rate) => (
                         <TableRow key={rate.id}>
-                            <TableCell className="font-medium flex items-center gap-2">
+                            <TableCell className="font-bold flex items-center gap-2">
                                 <MapPin className="w-4 h-4 text-gray-400" />
-                                {rate.location_name}
+                                {rate.neighborhood}
+                            </TableCell>
+                            <TableCell>
+                                <div className="flex items-center gap-1 text-muted-foreground text-sm">
+                                    <Building2 className="w-3 h-3" /> {rate.city}
+                                </div>
                             </TableCell>
                             <TableCell className="font-bold text-green-700">
                                 {formatCurrency(rate.price)}

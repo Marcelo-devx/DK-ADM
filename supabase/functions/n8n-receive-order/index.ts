@@ -47,13 +47,12 @@ serve(async (req) => {
     // --- 2. IDENTIFICAÇÃO DO CLIENTE (PRIORIDADE: ZAP) ---
     let userId = null;
     
-    // Limpa o telefone para garantir busca correta (remove tudo que não for número)
+    // Limpa o telefone para garantir busca correta
     const phoneRaw = customer.phone ? String(customer.phone) : "";
     const phoneClean = phoneRaw.replace(/\D/g, ""); 
 
     // A. Tenta achar pelo Telefone na tabela de perfis
     if (phoneClean.length >= 8) {
-        // Busca flexível: Tenta match exato OU match contendo o número (ex: com ou sem 55)
         const { data: profiles } = await supabaseAdmin
             .from('profiles')
             .select('id, phone')
@@ -62,7 +61,6 @@ serve(async (req) => {
         
         if (profiles && profiles.length > 0) {
             userId = profiles[0].id;
-            console.log(`[n8n] Cliente identificado pelo telefone: ${phoneClean}`);
         }
     }
 
@@ -71,9 +69,6 @@ serve(async (req) => {
         const { data: uid } = await supabaseAdmin.rpc('get_user_id_by_email', { user_email: customer.email });
         if (uid) {
             userId = uid;
-            console.log(`[n8n] Cliente identificado pelo e-mail: ${customer.email}`);
-            
-            // Aproveita para salvar o telefone nesse perfil se não tiver
             if (phoneClean) {
                 await supabaseAdmin.from('profiles').update({ phone: phoneClean }).eq('id', userId);
             }
@@ -82,12 +77,9 @@ serve(async (req) => {
 
     // C. Se não achou de jeito nenhum, CRIA UM NOVO
     if (!userId) {
-        // Se não veio e-mail, gera um fictício com o telefone para permitir o cadastro
         const emailToUse = customer.email || `${phoneClean || Math.floor(Math.random()*1000000)}@whatsapp.loja`;
         const tempPassword = Math.random().toString(36).slice(-8) + "Aa1!";
         
-        console.log(`[n8n] Criando novo cliente: ${emailToUse}`);
-
         const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
             email: emailToUse,
             password: tempPassword,
@@ -99,7 +91,6 @@ serve(async (req) => {
         });
 
         if (createError) {
-            // Se der erro de e-mail duplicado (caso raro de concorrência), tenta buscar ID de novo
             if (createError.message.includes("registered")) {
                  const { data: retryUid } = await supabaseAdmin.rpc('get_user_id_by_email', { user_email: emailToUse });
                  userId = retryUid;
@@ -110,7 +101,6 @@ serve(async (req) => {
             userId = newUser.user.id;
         }
 
-        // Cria/Atualiza perfil com telefone
         if (userId) {
             await supabaseAdmin.from('profiles').upsert({ 
                 id: userId,
@@ -132,7 +122,6 @@ serve(async (req) => {
       let variantData;
 
       if (itemRequest.sku) {
-        // Busca Variação
         const { data: variant } = await supabaseAdmin
             .from('product_variants')
             .select('id, price, product_id, flavors(name), volume_ml')
@@ -144,13 +133,11 @@ serve(async (req) => {
             const { data: prod } = await supabaseAdmin.from('products').select('name, image_url').eq('id', variant.product_id).single();
             productData = prod;
         } else {
-            // Busca Produto Base
             const { data: prod } = await supabaseAdmin.from('products').select('id, price, name, image_url').eq('sku', itemRequest.sku).maybeSingle();
             productData = prod;
         }
       } 
       
-      // Fallback: Busca por Nome (Aproximado)
       if (!productData && itemRequest.name) {
          const { data: prod } = await supabaseAdmin.from('products').select('id, price, name, image_url').ilike('name', `%${itemRequest.name}%`).limit(1).maybeSingle();
          productData = prod;
@@ -174,7 +161,6 @@ serve(async (req) => {
             image_url_at_purchase: productData.image_url
         });
 
-        // Deduz Estoque
         if (variantData) {
             await supabaseAdmin.rpc('decrement_variant_stock', { variant_id: variantData.id, quantity });
         } else {
@@ -187,55 +173,39 @@ serve(async (req) => {
         throw new Error("Nenhum produto encontrado. Verifique SKUs ou Nomes.");
     }
 
-    // --- 4. CALCULAR FRETE (NOVO) ---
+    // --- 4. CALCULAR FRETE (ATUALIZADO) ---
     let shippingCost = 0;
-    
-    // Se endereço foi fornecido, tenta buscar taxa
     const addr = shipping_address || {};
-    const locationsToSearch = [
-        addr.neighborhood, // Bairro
-        addr.city,         // Cidade
-        addr.state         // Estado (menos comum, mas possível)
-    ].filter(Boolean);
+    
+    // Busca dados de endereço enviados
+    const customerNeighborhood = (addr.neighborhood || "").toLowerCase().trim();
+    const customerCity = (addr.city || "Curitiba").toLowerCase().trim();
 
-    if (locationsToSearch.length > 0) {
-        // Busca na tabela de taxas
+    if (customerNeighborhood) {
+        // Busca na tabela de taxas por cidade e bairro
         const { data: rates } = await supabaseAdmin
             .from('shipping_rates')
-            .select('price, location_name')
+            .select('price, neighborhood, city')
             .eq('is_active', true);
         
         if (rates && rates.length > 0) {
-            // Tenta encontrar match (insensível a maiúsculas)
-            // Prioridade: Exato -> Contains (Cliente no Banco) -> Reverse Contains (Banco no Cliente)
-            for (const loc of locationsToSearch) {
-                const term = loc.toLowerCase().trim();
-                
-                // 1. Match exato
-                const exactMatch = rates.find(r => r.location_name.toLowerCase().trim() === term);
-                if (exactMatch) {
-                    shippingCost = Number(exactMatch.price);
-                    console.log(`[Frete] Match exato encontrado: ${exactMatch.location_name} - R$ ${shippingCost}`);
-                    break;
-                }
+            // Tenta encontrar match exato de Bairro E Cidade
+            let match = rates.find(r => 
+                r.neighborhood.toLowerCase().trim() === customerNeighborhood && 
+                r.city.toLowerCase().trim() === customerCity
+            );
 
-                // 2. Match parcial (se o termo de busca está CONTIDO no nome da taxa)
-                // Ex: Busca "Centro", Taxa "Centro - Curitiba"
-                const reversePartialMatch = rates.find(r => r.location_name.toLowerCase().trim().includes(term));
-                if (reversePartialMatch) {
-                    shippingCost = Number(reversePartialMatch.price);
-                    console.log(`[Frete] Match reverso encontrado: ${reversePartialMatch.location_name} - R$ ${shippingCost}`);
-                    break;
-                }
+            // Se não achar exato, tenta match parcial no Bairro (dentro da mesma cidade)
+            if (!match) {
+                match = rates.find(r => 
+                    r.city.toLowerCase().trim() === customerCity &&
+                    (r.neighborhood.toLowerCase().includes(customerNeighborhood) || customerNeighborhood.includes(r.neighborhood.toLowerCase()))
+                );
+            }
 
-                // 3. Match parcial (se o nome da taxa está CONTIDO no termo de busca)
-                // Ex: Busca "Bairro Alto da XV", Taxa "Alto da XV"
-                const partialMatch = rates.find(r => term.includes(r.location_name.toLowerCase().trim()));
-                if (partialMatch) {
-                    shippingCost = Number(partialMatch.price);
-                    console.log(`[Frete] Match parcial encontrado: ${partialMatch.location_name} - R$ ${shippingCost}`);
-                    break;
-                }
+            if (match) {
+                shippingCost = Number(match.price);
+                console.log(`[Frete] Taxa encontrada: ${match.neighborhood} (${match.city}) - R$ ${shippingCost}`);
             }
         }
     }
@@ -245,7 +215,7 @@ serve(async (req) => {
       .from('orders')
       .insert({
         user_id: userId,
-        total_price: totalOrderPrice, // O valor do pedido NÃO inclui frete na coluna total_price (padrão legado), frete é separado
+        total_price: totalOrderPrice, 
         shipping_cost: shippingCost,
         status: 'Pendente',
         payment_method: payment_method || 'Pix',
@@ -268,7 +238,6 @@ serve(async (req) => {
     await supabaseAdmin.from('order_items').insert(itemsWithOrderId);
 
     // --- 6. GERAR PIX (MERCADO PAGO) ---
-    // O valor a cobrar deve ser Produtos + Frete
     const totalToCharge = totalOrderPrice + shippingCost;
     
     let paymentData = null;
@@ -306,8 +275,6 @@ serve(async (req) => {
                     ticket_url: mpJson.point_of_interaction?.transaction_data?.ticket_url,
                     id: mpJson.id
                 };
-            } else {
-                console.error("Erro MP:", await mpResponse.text());
             }
         } catch (e) {
             console.error("Falha ao gerar Pix:", e);
@@ -326,7 +293,6 @@ serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     )
   } catch (error) {
-    console.error('Erro:', error);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 400,
