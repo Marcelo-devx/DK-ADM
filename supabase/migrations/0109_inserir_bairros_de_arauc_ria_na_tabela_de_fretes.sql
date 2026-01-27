@@ -1,0 +1,26 @@
+INSERT INTO public.shipping_rates (neighborhood, city, price, is_active)
+VALUES 
+  ('Área Rural de Araucária', 'Araucária', 0, true),
+  ('Barigui', 'Araucária', 0, true),
+  ('Boqueirão', 'Araucária', 0, true),
+  ('Cachoeira', 'Araucária', 0, true),
+  ('Campina da Barra', 'Araucária', 0, true),
+  ('Capela Velha', 'Araucária', 0, true),
+  ('Capinzal', 'Araucária', 0, true),
+  ('Centro', 'Araucária', 0, true),
+  ('Chapada', 'Araucária', 0, true),
+  ('Colônia Cristina', 'Araucária', 0, true),
+  ('Costeira', 'Araucária', 0, true),
+  ('Estação', 'Araucária', 0, true),
+  ('Fazenda Velha', 'Araucária', 0, true),
+  ('Guajuvira', 'Araucária', 0, true),
+  ('Iguaçu', 'Araucária', 0, true),
+  ('Passaúna', 'Araucária', 0, true),
+  ('Porto das Laranjeiras', 'Araucária', 0, true),
+  ('Sabiá', 'Araucária', 0, true),
+  ('Tietê', 'Araucária', 0, true),
+  ('Thomaz Coelho', 'Araucária', 0, true),
+  ('Tindiquera', 'Araucária', 0, true),
+  ('Vila Nova', 'Araucária', 0, true),
+  ('São Miguel', 'Araucária', 0, true)
+ON CONFLICT (neighborhood, city) DO NOTHING;
