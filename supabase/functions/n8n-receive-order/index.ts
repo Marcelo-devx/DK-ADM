@@ -207,11 +207,11 @@ serve(async (req) => {
         
         if (rates && rates.length > 0) {
             // Tenta encontrar match (insensível a maiúsculas)
-            // Prioridade: Exato -> Contains
+            // Prioridade: Exato -> Contains (Cliente no Banco) -> Reverse Contains (Banco no Cliente)
             for (const loc of locationsToSearch) {
                 const term = loc.toLowerCase().trim();
                 
-                // Match exato
+                // 1. Match exato
                 const exactMatch = rates.find(r => r.location_name.toLowerCase().trim() === term);
                 if (exactMatch) {
                     shippingCost = Number(exactMatch.price);
@@ -219,7 +219,17 @@ serve(async (req) => {
                     break;
                 }
 
-                // Match parcial (se o bairro contém o nome da taxa ou vice-versa)
+                // 2. Match parcial (se o termo de busca está CONTIDO no nome da taxa)
+                // Ex: Busca "Centro", Taxa "Centro - Curitiba"
+                const reversePartialMatch = rates.find(r => r.location_name.toLowerCase().trim().includes(term));
+                if (reversePartialMatch) {
+                    shippingCost = Number(reversePartialMatch.price);
+                    console.log(`[Frete] Match reverso encontrado: ${reversePartialMatch.location_name} - R$ ${shippingCost}`);
+                    break;
+                }
+
+                // 3. Match parcial (se o nome da taxa está CONTIDO no termo de busca)
+                // Ex: Busca "Bairro Alto da XV", Taxa "Alto da XV"
                 const partialMatch = rates.find(r => term.includes(r.location_name.toLowerCase().trim()));
                 if (partialMatch) {
                     shippingCost = Number(partialMatch.price);
