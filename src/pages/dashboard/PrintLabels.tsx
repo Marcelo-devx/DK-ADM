@@ -3,14 +3,12 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { FileSpreadsheet, Download, Settings, Save, Search, Loader2, CheckSquare, Square, FileDown } from "lucide-react";
+import { FileSpreadsheet, Download, Search, Loader2, CheckSquare, Square, FileDown } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -19,12 +17,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import * as XLSX from 'xlsx';
 import { format } from "date-fns";
 
@@ -47,12 +39,11 @@ interface Order {
 }
 
 export default function PrintLabelsPage() {
-  const queryClient = useQueryClient();
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [searchTerm, setSearchTerm] = useState("");
   const [isExporting, setIsExporting] = useState(false);
 
-  // Configurações do Remetente (Estado Local)
+  // Configurações do Remetente (Estado Local - Carregado do Banco)
   const [senderInfo, setSenderInfo] = useState({
     name: "",
     address: "",
@@ -61,8 +52,8 @@ export default function PrintLabelsPage() {
     cep: ""
   });
 
-  // 1. Buscar Configurações do Remetente salvas no banco
-  const { data: savedSettings } = useQuery({
+  // 1. Buscar Configurações do Remetente (Silencioso para uso na exportação)
+  useQuery({
     queryKey: ["senderSettingsExport"],
     queryFn: async () => {
       const { data } = await supabase
@@ -84,24 +75,7 @@ export default function PrintLabelsPage() {
     }
   });
 
-  // 2. Mutation para Salvar Configurações
-  const saveSettingsMutation = useMutation({
-    mutationFn: async () => {
-      const updates = [
-        { key: "sender_name", value: senderInfo.name },
-        { key: "sender_address", value: senderInfo.address },
-        { key: "sender_city", value: senderInfo.city },
-        { key: "sender_state", value: senderInfo.state },
-        { key: "sender_cep", value: senderInfo.cep }
-      ];
-      const { error } = await supabase.from("app_settings").upsert(updates, { onConflict: "key" });
-      if (error) throw error;
-    },
-    onSuccess: () => showSuccess("Dados do remetente salvos!"),
-    onError: (err: any) => showError(err.message),
-  });
-
-  // 3. Buscar Pedidos (Com perfis e e-mails)
+  // 2. Buscar Pedidos (Com perfis e e-mails)
   const { data: orders, isLoading } = useQuery<Order[]>({
     queryKey: ["ordersForExcelExport"],
     queryFn: async () => {
@@ -118,7 +92,7 @@ export default function PrintLabelsPage() {
 
       if (error) throw error;
 
-      // Buscar emails via edge function (pois auth.users é protegido)
+      // Buscar emails via edge function
       let emailMap = new Map<string, string>();
       try {
           const { data: usersData } = await supabase.functions.invoke("get-users");
@@ -190,17 +164,17 @@ export default function PrintLabelsPage() {
           "Nome Entrega": fullName,
           "Endereço": `${addr.street || ''}, ${addr.number || ''}`,
           "Complemento Entrega": addr.complement || "",
-          "Observações": "", // Campo solicitado vazio ou customizável
+          "Observações": "",
           "Telefone Comprador": p?.phone || "",
           "Comprador": fullName,
-          "F": "", // Campo solicitado
+          "F": "",
           "Bairro Entrega": addr.neighborhood || "",
           "Cidade Entrega": addr.city || "",
           "CEP Entrega": addr.cep || "",
           "CPF/CNPJ Comprador": p?.cpf_cnpj || "",
           "E-mail Comprador": order.email || "",
           
-          // Dados do Remetente (Fixos da Configuração)
+          // Dados do Remetente (Automáticos do Banco)
           "Remetente": senderInfo.name,
           "Endereço Remetente": senderInfo.address,
           "Cidade Remetente": senderInfo.city,
@@ -261,73 +235,29 @@ export default function PrintLabelsPage() {
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold flex items-center gap-2">
           <FileSpreadsheet className="h-8 w-8 text-green-600" />
-          Exportação de Etiquetas (Excel)
+          Exportação de Etiquetas
         </h1>
         <p className="text-muted-foreground">
-          Gere planilhas compatíveis com sua transportadora contendo dados do comprador e do remetente.
+          Gere planilhas para envio com dados completos de remetente e destinatário.
         </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* COLUNA ESQUERDA: CONFIGURAÇÕES E AÇÕES */}
-        <div className="lg:col-span-1 space-y-6">
-            
-            {/* CONFIGURAÇÃO DO REMETENTE */}
-            <Card className="border-blue-200 bg-blue-50/30">
-                <CardHeader className="pb-3">
-                    <CardTitle className="text-base flex items-center gap-2 text-blue-800">
-                        <Settings className="w-4 h-4" /> Dados do Remetente
-                    </CardTitle>
-                    <CardDescription className="text-xs">
-                        Estes dados preencherão automaticamente as colunas de remetente na planilha.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                    <div className="space-y-1">
-                        <Label className="text-xs">Nome da Loja / Remetente</Label>
-                        <Input value={senderInfo.name} onChange={e => setSenderInfo({...senderInfo, name: e.target.value})} className="bg-white h-8" />
-                    </div>
-                    <div className="space-y-1">
-                        <Label className="text-xs">Endereço Completo</Label>
-                        <Input value={senderInfo.address} onChange={e => setSenderInfo({...senderInfo, address: e.target.value})} className="bg-white h-8" placeholder="Rua, Número" />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1">
-                            <Label className="text-xs">Cidade</Label>
-                            <Input value={senderInfo.city} onChange={e => setSenderInfo({...senderInfo, city: e.target.value})} className="bg-white h-8" />
-                        </div>
-                        <div className="space-y-1">
-                            <Label className="text-xs">Estado (UF)</Label>
-                            <Input value={senderInfo.state} onChange={e => setSenderInfo({...senderInfo, state: e.target.value})} className="bg-white h-8" placeholder="PR" maxLength={2} />
-                        </div>
-                    </div>
-                    <div className="space-y-1">
-                        <Label className="text-xs">CEP de Origem</Label>
-                        <Input value={senderInfo.cep} onChange={e => setSenderInfo({...senderInfo, cep: e.target.value})} className="bg-white h-8" />
-                    </div>
-                    <Button 
-                        onClick={() => saveSettingsMutation.mutate()} 
-                        disabled={saveSettingsMutation.isPending} 
-                        className="w-full h-8 text-xs font-bold bg-blue-600 hover:bg-blue-700"
-                    >
-                        {saveSettingsMutation.isPending ? "Salvando..." : "Salvar Configuração"}
-                    </Button>
-                </CardContent>
-            </Card>
-
-            {/* BOTÕES DE AÇÃO */}
+        
+        {/* COLUNA ESQUERDA: APENAS OS BOTÕES DE AÇÃO */}
+        <div className="lg:col-span-1">
             <Card>
-                <CardContent className="p-4 space-y-3">
-                    <Button variant="outline" className="w-full justify-start" onClick={handleDownloadTemplate}>
-                        <FileDown className="w-4 h-4 mr-2 text-gray-500" />
+                <CardContent className="p-4 space-y-4">
+                    <Button variant="outline" className="w-full justify-start h-12" onClick={handleDownloadTemplate}>
+                        <FileDown className="w-5 h-5 mr-3 text-gray-500" />
                         Baixar Planilha de Exemplo
                     </Button>
                     <Button 
-                        className="w-full justify-start bg-green-600 hover:bg-green-700 text-white font-bold"
+                        className="w-full justify-start h-12 bg-green-500 hover:bg-green-600 text-white font-bold"
                         onClick={handleExport}
                         disabled={selectedIds.size === 0 || isExporting}
                     >
-                        {isExporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+                        {isExporting ? <Loader2 className="w-5 h-5 mr-3 animate-spin" /> : <Download className="w-5 h-5 mr-3" />}
                         Exportar Selecionados ({selectedIds.size})
                     </Button>
                 </CardContent>
