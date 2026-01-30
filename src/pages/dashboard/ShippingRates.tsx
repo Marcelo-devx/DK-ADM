@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -19,9 +19,10 @@ import {
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
-  DialogTrigger 
+  DialogTrigger,
+  DialogDescription
 } from "@/components/ui/dialog";
-import { MapPin, Plus, Trash2, Pencil, Bike, Building2, Search } from "lucide-react";
+import { MapPin, Plus, Trash2, Pencil, Bike, Building2, Search, Settings, Truck } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
@@ -44,17 +45,22 @@ interface ShippingRate {
 export default function ShippingRatesPage() {
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSedexModalOpen, setIsSedexModalOpen] = useState(false);
   const [editingRate, setEditingRate] = useState<ShippingRate | null>(null);
   
   // Filtros
   const [searchTerm, setSearchTerm] = useState("");
   const [cityFilter, setCityFilter] = useState("all");
   
-  // Form States
+  // Form States (Tabela)
   const [neighborhood, setNeighborhood] = useState("");
   const [city, setCity] = useState("Curitiba");
   const [price, setPrice] = useState("");
 
+  // Form State (Sedex)
+  const [sedexPrice, setSedexPrice] = useState("");
+
+  // Busca Taxas Individuais
   const { data: rates, isLoading } = useQuery({
     queryKey: ["shippingRates"],
     queryFn: async () => {
@@ -67,6 +73,25 @@ export default function ShippingRatesPage() {
       return data as ShippingRate[];
     },
   });
+
+  // Busca Valor do Sedex (Configuração Global)
+  const { data: sedexSetting, isLoading: isLoadingSedex } = useQuery({
+    queryKey: ["sedexPriceSetting"],
+    queryFn: async () => {
+        const { data } = await supabase
+            .from("app_settings")
+            .select("value")
+            .eq("key", "default_sedex_price")
+            .single();
+        return data?.value || "0";
+    }
+  });
+
+  useEffect(() => {
+    if (sedexSetting) {
+        setSedexPrice(sedexSetting);
+    }
+  }, [sedexSetting]);
 
   const uniqueCities = useMemo(() => {
     if (!rates) return [];
@@ -85,6 +110,22 @@ export default function ShippingRatesPage() {
       return matchesSearch && matchesCity;
     });
   }, [rates, searchTerm, cityFilter]);
+
+  // Mutation para salvar configuração do Sedex
+  const saveSedexMutation = useMutation({
+    mutationFn: async (value: string) => {
+        const { error } = await supabase
+            .from("app_settings")
+            .upsert({ key: "default_sedex_price", value: value }, { onConflict: "key" });
+        if (error) throw error;
+    },
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["sedexPriceSetting"] });
+        setIsSedexModalOpen(false);
+        showSuccess("Valor do Sedex padrão atualizado!");
+    },
+    onError: (err: any) => showError(err.message),
+  });
 
   const upsertMutation = useMutation({
     mutationFn: async () => {
@@ -163,53 +204,92 @@ export default function ShippingRatesPage() {
             <p className="text-muted-foreground">Defina os valores de entrega por bairro e cidade.</p>
         </div>
         
-        <Dialog open={isModalOpen} onOpenChange={(open) => { setIsModalOpen(open); if(!open) resetForm(); }}>
-            <DialogTrigger asChild>
-                <Button className="bg-indigo-600 hover:bg-indigo-700">
-                    <Plus className="w-4 h-4 mr-2" /> Novo Local
-                </Button>
-            </DialogTrigger>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>{editingRate ? "Editar Taxa" : "Adicionar Local de Entrega"}</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                        <Label>Cidade</Label>
-                        <Input 
-                            placeholder="Ex: Curitiba" 
-                            value={city} 
-                            onChange={(e) => setCity(e.target.value)} 
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label>Bairro</Label>
-                        <Input 
-                            placeholder="Ex: Batel, Centro..." 
-                            value={neighborhood} 
-                            onChange={(e) => setNeighborhood(e.target.value)} 
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label>Valor da Entrega (R$)</Label>
-                        <Input 
-                            type="number" 
-                            step="0.01" 
-                            placeholder="0.00" 
-                            value={price} 
-                            onChange={(e) => setPrice(e.target.value)} 
-                        />
-                    </div>
-                    <Button 
-                        onClick={() => upsertMutation.mutate()} 
-                        disabled={upsertMutation.isPending || !neighborhood || !city || !price}
-                        className="w-full font-bold"
-                    >
-                        {upsertMutation.isPending ? "Salvando..." : "Salvar"}
+        <div className="flex gap-2">
+            {/* BOTÃO CONFIGURAR SEDEX */}
+            <Dialog open={isSedexModalOpen} onOpenChange={setIsSedexModalOpen}>
+                <DialogTrigger asChild>
+                    <Button variant="outline" className="border-indigo-200 text-indigo-700 hover:bg-indigo-50">
+                        <Truck className="w-4 h-4 mr-2" /> Configurar Sedex
                     </Button>
-                </div>
-            </DialogContent>
-        </Dialog>
+                </DialogTrigger>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Frete Padrão (Sedex)</DialogTitle>
+                        <DialogDescription>
+                            Este valor será cobrado quando o endereço do cliente <strong>não for encontrado</strong> na tabela de bairros.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label>Valor Fixo do Sedex (R$)</Label>
+                            <Input 
+                                type="number" 
+                                step="0.01" 
+                                placeholder="0.00" 
+                                value={sedexPrice} 
+                                onChange={(e) => setSedexPrice(e.target.value)} 
+                            />
+                        </div>
+                        <Button 
+                            onClick={() => saveSedexMutation.mutate(sedexPrice)} 
+                            disabled={saveSedexMutation.isPending}
+                            className="w-full font-bold bg-indigo-600 hover:bg-indigo-700"
+                        >
+                            {saveSedexMutation.isPending ? "Salvando..." : "Salvar Valor Padrão"}
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* BOTÃO NOVO LOCAL */}
+            <Dialog open={isModalOpen} onOpenChange={(open) => { setIsModalOpen(open); if(!open) resetForm(); }}>
+                <DialogTrigger asChild>
+                    <Button className="bg-indigo-600 hover:bg-indigo-700">
+                        <Plus className="w-4 h-4 mr-2" /> Novo Local
+                    </Button>
+                </DialogTrigger>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>{editingRate ? "Editar Taxa" : "Adicionar Local de Entrega"}</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label>Cidade</Label>
+                            <Input 
+                                placeholder="Ex: Curitiba" 
+                                value={city} 
+                                onChange={(e) => setCity(e.target.value)} 
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Bairro</Label>
+                            <Input 
+                                placeholder="Ex: Batel, Centro..." 
+                                value={neighborhood} 
+                                onChange={(e) => setNeighborhood(e.target.value)} 
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Valor da Entrega (R$)</Label>
+                            <Input 
+                                type="number" 
+                                step="0.01" 
+                                placeholder="0.00" 
+                                value={price} 
+                                onChange={(e) => setPrice(e.target.value)} 
+                            />
+                        </div>
+                        <Button 
+                            onClick={() => upsertMutation.mutate()} 
+                            disabled={upsertMutation.isPending || !neighborhood || !city || !price}
+                            className="w-full font-bold"
+                        >
+                            {upsertMutation.isPending ? "Salvando..." : "Salvar"}
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-4 rounded-xl border shadow-sm">
