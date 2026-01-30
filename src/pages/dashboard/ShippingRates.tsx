@@ -208,8 +208,9 @@ export default function ShippingRatesPage() {
             {/* BOTÃO CONFIGURAR SEDEX */}
             <Dialog open={isSedexModalOpen} onOpenChange={setIsSedexModalOpen}>
                 <DialogTrigger asChild>
-                    <Button variant="outline" className="border-indigo-200 text-indigo-700 hover:bg-indigo-50">
-                        <Truck className="w-4 h-4 mr-2" /> Configurar Sedex
+                    <Button variant="outline" className="border-indigo-200 text-indigo-700 hover:bg-indigo-50 font-bold">
+                        <Truck className="w-4 h-4 mr-2" /> 
+                        Sedex: {isLoadingSedex ? "..." : formatCurrency(parseFloat(sedexSetting || "0"))}
                     </Button>
                 </DialogTrigger>
                 <DialogContent>
