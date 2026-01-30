@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { MoreHorizontal, Mail, KeyRound, RotateCcw, CheckCircle, Lock, Unlock, UserPlus } from "lucide-react";
+import { MoreHorizontal, Mail, KeyRound, RotateCcw, CheckCircle, Lock, Unlock, UserPlus, Eye } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { showSuccess, showError } from "@/utils/toast";
 import { CreateClientForm } from "@/components/dashboard/CreateClientForm";
+import { ClientDetailsModal } from "@/components/dashboard/ClientDetailsModal";
 
 interface Client {
   id: string;
@@ -67,6 +68,11 @@ const ClientsPage = () => {
   const queryClient = useQueryClient();
   const [showOnlyFlagged, setShowOnlyFlagged] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  
+  // Estado para o modal de detalhes
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+
   const [actionToConfirm, setActionToConfirm] = useState<{
     action: 'resend_confirmation' | 'send_password_reset' | 'delete_orders' | 'mark_as_recurrent';
     client: Client;
@@ -130,7 +136,6 @@ const ClientsPage = () => {
       } else {
         functionName = 'admin-user-actions';
         body.action = action;
-        // Define o URL de produção explicitamente para evitar links localhost
         body.redirectTo = 'https://dk-l-andpage.vercel.app/login'; 
       }
 
@@ -267,59 +272,71 @@ const ClientsPage = () => {
                       : '-'}
                   </TableCell>
                   <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                          <span className="sr-only">Abrir menu de ações</span>
-                          <MoreHorizontal className="h-4 w-4" />
+                    <div className="flex items-center justify-end gap-1">
+                        <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="text-gray-500 hover:text-blue-600"
+                            onClick={() => { setSelectedClient(client); setIsDetailsModalOpen(true); }}
+                            title="Ver Detalhes do Cliente"
+                        >
+                            <Eye className="h-4 w-4" />
                         </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Ações do Usuário</DropdownMenuLabel>
-                        
-                        <DropdownMenuItem
-                            onSelect={() => toggleSecurityMutation.mutate({ userId: client.id, forcePix: !client.force_pix_on_next_purchase })}
-                            disabled={toggleSecurityMutation.isPending}
-                            className={client.force_pix_on_next_purchase ? "text-green-600" : "text-red-600"}
-                        >
-                            {client.force_pix_on_next_purchase ? (
-                                <><Unlock className="h-4 w-4 mr-2" /><span>Liberar Cartão</span></>
-                            ) : (
-                                <><Lock className="h-4 w-4 mr-2" /><span>Exigir PIX (Bloquear Cartão)</span></>
-                            )}
-                        </DropdownMenuItem>
 
-                        {client.completed_order_count === 0 && (
-                          <DropdownMenuItem
-                            onSelect={() => setActionToConfirm({ action: 'mark_as_recurrent', client })}
-                          >
-                            <CheckCircle className="mr-2 h-4 w-4" />
-                            <span>Marcar como Recorrente</span>
-                          </DropdownMenuItem>
-                        )}
-                        {client.order_count > 0 && (
-                          <DropdownMenuItem
-                            onSelect={() => setActionToConfirm({ action: 'delete_orders', client })}
-                            className="text-red-600"
-                          >
-                            <RotateCcw className="mr-2 h-4 w-4" />
-                            <span>Redefinir Status Compra</span>
-                          </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem
-                          onSelect={() => setActionToConfirm({ action: 'resend_confirmation', client })}
-                        >
-                          <Mail className="mr-2 h-4 w-4" />
-                          <span>Reenviar Confirmação</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onSelect={() => setActionToConfirm({ action: 'send_password_reset', client })}
-                        >
-                          <KeyRound className="mr-2 h-4 w-4" />
-                          <span>Enviar Redefinição de Senha</span>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                        <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="h-8 w-8 p-0">
+                            <span className="sr-only">Abrir menu de ações</span>
+                            <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>Ações do Usuário</DropdownMenuLabel>
+                            
+                            <DropdownMenuItem
+                                onSelect={() => toggleSecurityMutation.mutate({ userId: client.id, forcePix: !client.force_pix_on_next_purchase })}
+                                disabled={toggleSecurityMutation.isPending}
+                                className={client.force_pix_on_next_purchase ? "text-green-600" : "text-red-600"}
+                            >
+                                {client.force_pix_on_next_purchase ? (
+                                    <><Unlock className="h-4 w-4 mr-2" /><span>Liberar Cartão</span></>
+                                ) : (
+                                    <><Lock className="h-4 w-4 mr-2" /><span>Exigir PIX (Bloquear Cartão)</span></>
+                                )}
+                            </DropdownMenuItem>
+
+                            {client.completed_order_count === 0 && (
+                            <DropdownMenuItem
+                                onSelect={() => setActionToConfirm({ action: 'mark_as_recurrent', client })}
+                            >
+                                <CheckCircle className="mr-2 h-4 w-4" />
+                                <span>Marcar como Recorrente</span>
+                            </DropdownMenuItem>
+                            )}
+                            {client.order_count > 0 && (
+                            <DropdownMenuItem
+                                onSelect={() => setActionToConfirm({ action: 'delete_orders', client })}
+                                className="text-red-600"
+                            >
+                                <RotateCcw className="mr-2 h-4 w-4" />
+                                <span>Redefinir Status Compra</span>
+                            </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem
+                            onSelect={() => setActionToConfirm({ action: 'resend_confirmation', client })}
+                            >
+                            <Mail className="mr-2 h-4 w-4" />
+                            <span>Reenviar Confirmação</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                            onSelect={() => setActionToConfirm({ action: 'send_password_reset', client })}
+                            >
+                            <KeyRound className="mr-2 h-4 w-4" />
+                            <span>Enviar Redefinição de Senha</span>
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
@@ -360,6 +377,13 @@ const ClientsPage = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Modal de Detalhes do Cliente */}
+      <ClientDetailsModal 
+        client={selectedClient} 
+        isOpen={isDetailsModalOpen} 
+        onClose={() => setIsDetailsModalOpen(false)} 
+      />
     </div>
   );
 };
