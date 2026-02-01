@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Workflow, Copy, Eye, EyeOff, Save, Check, Key, Webhook, Plus, Trash2, Globe, ChevronDown, ChevronRight, FileJson, Zap, Loader2, Pencil, X } from "lucide-react";
+import { Workflow, Copy, Eye, EyeOff, Save, Check, Key, Webhook, Plus, Trash2, Globe, ChevronDown, ChevronRight, FileJson, Zap, Loader2, Pencil, X, ArrowUpRight, ArrowDownLeft } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -41,7 +41,7 @@ const N8nIntegrationPage = () => {
   const [showToken, setShowToken] = useState(false);
   const [webhookUrl, setWebhookUrl] = useState("");
   const [selectedEvent, setSelectedEvent] = useState("order_created");
-  const [openEndpoints, setOpenEndpoints] = useState<number[]>([]);
+  const [openEndpoints, setOpenEndpoints] = useState<string[]>([]); // Mudado para string para suportar IDs únicos
   const [testingId, setTestingId] = useState<number | null>(null);
   
   // Estados para edição inline
@@ -50,28 +50,24 @@ const N8nIntegrationPage = () => {
   
   const baseUrl = "https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1";
 
-  // --- Documentação dos Payloads ---
-  const apiDocs = [
+  // --- Documentação Organizada ---
+  const webhookEvents = [
     { 
-      method: "WEBHOOK", 
-      name: "Pedido Criado (Enriquecido V2)", 
-      url: "Seu Endpoint N8N", 
-      desc: "Enviado quando uma venda entra no sistema. Agora inclui data formatada BR e totais somados.",
-      request: `{
+      id: "wh_order",
+      name: "Pedido Criado (V2)", 
+      desc: "Enviado automaticamente quando uma nova venda entra no sistema.",
+      payload: `{
   "event": "order_created",
   "timestamp": "2024-03-20T10:00:00.000Z",
   "data": {
     "id": 5050,
     "status": "Pendente",
-    "created_at_br": "20/03/2024 07:00:00", // Data formatada SP
-    "final_total_value": 170.00, // (Produtos - Desconto) + Frete
-    "total_price": 150.00, // Apenas produtos (Base)
-    "shipping_cost": 20.00,
+    "created_at_br": "20/03/2024 07:00:00",
+    "final_total_value": 170.00,
     "customer": {
        "full_name": "João Silva",
        "phone": "11999999999",
-       "email": "joao@email.com",
-       "cpf": "123.456.789-00"
+       "email": "joao@email.com"
     },
     "shipping_address": {
        "street": "Rua Exemplo",
@@ -80,73 +76,90 @@ const N8nIntegrationPage = () => {
     },
     "financial_breakdown": {
        "products_subtotal": 150.00,
-       "discount_applied": 0,
        "shipping_cost": 20.00,
        "total_paid": 170.00
     }
   }
-}`,
-      response: `200 OK`
+}`
     },
     { 
-      method: "WEBHOOK", 
-      name: "Eventos de Produto", 
-      url: "Seu Endpoint N8N", 
-      desc: "Disparado automaticamente quando um produto é criado, alterado ou excluído.",
-      request: `{
-  "event": "product_created", // ou "product_updated", "product_deleted"
+      id: "wh_product",
+      name: "Atualizações de Produto", 
+      desc: "Disparado quando um produto é criado, alterado ou excluído.",
+      payload: `{
+  "event": "product_updated",
   "timestamp": "2024-03-20T10:00:00Z",
   "data": {
     "id": 10,
     "name": "Essência Zomo",
     "price": 15.90,
-    "stock_quantity": 100,
-    "is_visible": true,
-    ...outros_campos
+    "stock_quantity": 99,
+    "is_visible": true
   }
-}`,
-      response: `200 OK`
+}`
     },
     { 
-      method: "POST", 
-      name: "Listar Produtos", 
-      url: `${baseUrl}/n8n-list-products`, 
-      desc: "Retorna o catálogo completo, incluindo variações (sabores, tamanhos).",
-      request: null,
-      response: `[ ... lista de produtos ... ]`
-    },
-    { 
-        method: "POST", 
-        name: "Listar Clientes", 
-        url: `${baseUrl}/n8n-list-clients`, 
-        desc: "Lista todos os clientes cadastrados com pontos e estatísticas.",
-        request: null,
-        response: `[ ... lista de clientes ... ]` 
-      },
-    { 
-      method: "POST", 
-      name: "Criar Cliente", 
-      url: `${baseUrl}/n8n-create-client`, 
-      desc: "Cadastra um novo usuário no sistema (Auth + Profile).",
-      request: `{ "email": "...", "name": "...", "phone": "..." }`,
-      response: `{ "success": true, "id": "..." }`
-    },
-    { 
-        method: "POST", 
-        name: "Receber Pedido (Checkout)", 
-        url: `${baseUrl}/n8n-receive-order`, 
-        desc: "Cria um pedido completo e gera o pagamento.",
-        request: `{ "email": "...", "products": [...] }`,
-        response: `{ "success": true, "order_id": ... }`
-      },
-      { 
-        method: "WEBHOOK", 
+        id: "wh_retention",
         name: "Campanha de Retenção", 
-        url: "Seu Endpoint N8N", 
-        desc: "Disparo manual via painel de Clientes (Recuperação).",
-        request: `{ "event": "retention_campaign", "recipients": [...] }`,
-        response: `200 OK`
+        desc: "Disparo manual via painel de Clientes para recuperação.",
+        payload: `{
+  "event": "retention_campaign",
+  "campaign_size": 1,
+  "recipients": [
+    {
+      "client_id": "uuid-...",
+      "name": "Maria",
+      "phone": "11999999999",
+      "message_content": "Oi Maria! Volte para a loja..."
+    }
+  ]
+}`
       },
+  ];
+
+  const apiActions = [
+    { 
+      id: "api_list_products",
+      method: "POST", 
+      path: "/n8n-list-products", 
+      desc: "Retorna o catálogo completo, incluindo variações (sabores, tamanhos).",
+      body: `{}`,
+      response: `[ { "id": 1, "name": "Produto A", "options": [...] } ]`
+    },
+    { 
+      id: "api_list_clients",
+      method: "POST", 
+      path: "/n8n-list-clients", 
+      desc: "Lista todos os clientes cadastrados com pontos e estatísticas.",
+      body: `{}`,
+      response: `[ { "id": "uuid", "name": "João", "points": 150 } ]` 
+    },
+    { 
+      id: "api_create_client",
+      method: "POST", 
+      path: "/n8n-create-client", 
+      desc: "Cadastra um novo usuário no sistema (Auth + Profile).",
+      body: `{ 
+  "email": "novo@email.com", 
+  "name": "Nome Completo", 
+  "phone": "11999999999" 
+}`,
+      response: `{ "success": true, "id": "uuid-novo" }`
+    },
+    { 
+      id: "api_receive_order",
+      method: "POST", 
+      path: "/n8n-receive-order", 
+      desc: "Cria um pedido completo e gera o pagamento (Pix).",
+      body: `{ 
+  "customer": { "phone": "11999999999", "name": "João" },
+  "items": [
+    { "sku": "PROD-001", "quantity": 2 }
+  ],
+  "payment_method": "pix"
+}`,
+      response: `{ "success": true, "order_id": 123, "payment_info": { ... } }`
+    }
   ];
 
   // --- Queries ---
@@ -173,7 +186,7 @@ const N8nIntegrationPage = () => {
     }
   }, [settings]);
 
-  // --- Mutations ---
+  // --- Mutations (Mantidas iguais) ---
   const saveTokenMutation = useMutation({
     mutationFn: async () => {
       if (token.length < 8) throw new Error("O token deve ter pelo menos 8 caracteres.");
@@ -252,7 +265,6 @@ const N8nIntegrationPage = () => {
         if (data.success) {
             showSuccess(`Sucesso! Status: ${data.status}`);
         } else {
-            // Mostra o erro retornado pelo N8N
             toast.error(`Falha: ${data.error}`, {
                 description: `Código: ${data.status}. Resposta: ${JSON.stringify(data.remote_response).substring(0, 50)}...`
             });
@@ -269,9 +281,9 @@ const N8nIntegrationPage = () => {
   const generateToken = () => setToken("n8n_" + Math.random().toString(36).slice(2).toUpperCase() + Math.random().toString(36).slice(2).toUpperCase());
   const copyToClipboard = (text: string) => { navigator.clipboard.writeText(text); showSuccess("Copiado!"); };
   
-  const toggleEndpoint = (index: number) => {
+  const toggleEndpoint = (id: string) => {
     setOpenEndpoints(prev => 
-      prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
     );
   };
 
@@ -284,9 +296,9 @@ const N8nIntegrationPage = () => {
     <div className="space-y-6 pb-20">
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold flex items-center gap-2">
-          <Workflow className="h-8 w-8 text-orange-600" /> Automação & API
+          <Workflow className="h-8 w-8 text-orange-600" /> Automação (N8n / Typebot)
         </h1>
-        <p className="text-muted-foreground">Documentação técnica e configuração de integração com N8n/Typebot.</p>
+        <p className="text-muted-foreground">Documentação técnica e configuração de eventos.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -314,7 +326,7 @@ const N8nIntegrationPage = () => {
             <Alert className="bg-blue-50 border-blue-200">
                 <Check className="h-4 w-4 text-blue-600" />
                 <AlertTitle className="text-blue-800 font-bold">Autenticação</AlertTitle>
-                <AlertDescription className="text-blue-700 text-xs">Todos os endpoints exigem o header: <br/><code className="bg-blue-100 px-1 rounded">Authorization: Bearer SEU_TOKEN</code></AlertDescription>
+                <AlertDescription className="text-blue-700 text-xs">Todos os endpoints exigem o header: <br/><code className="bg-blue-100 px-1 rounded block mt-1 p-1">Authorization: Bearer SEU_TOKEN</code></AlertDescription>
             </Alert>
         </div>
 
@@ -323,82 +335,127 @@ const N8nIntegrationPage = () => {
             <Tabs defaultValue="webhooks">
                 <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="endpoints"><Globe className="w-4 h-4 mr-2" /> Swagger / Docs</TabsTrigger>
-                    <TabsTrigger value="webhooks"><Webhook className="w-4 h-4 mr-2" /> Webhooks</TabsTrigger>
+                    <TabsTrigger value="webhooks"><Webhook className="w-4 h-4 mr-2" /> Meus Webhooks</TabsTrigger>
                 </TabsList>
 
-                {/* ABA ENDPOINTS (Estilo Swagger) */}
+                {/* ABA ENDPOINTS (SWAGGER MELHORADO) */}
                 <TabsContent value="endpoints">
                     <Card>
                         <CardHeader className="pb-4">
-                            <CardTitle>Endpoints Disponíveis</CardTitle>
-                            <CardDescription>Clique para expandir e ver o Schema (JSON) de envio e resposta.</CardDescription>
+                            <CardTitle>Documentação Técnica</CardTitle>
+                            <CardDescription>Referência completa de eventos e ações disponíveis.</CardDescription>
                         </CardHeader>
-                        <CardContent className="space-y-4">
-                            {apiDocs.map((ep, i) => (
-                                <Collapsible 
-                                    key={i} 
-                                    open={openEndpoints.includes(i)}
-                                    onOpenChange={() => toggleEndpoint(i)}
-                                    className="border rounded-lg overflow-hidden bg-white shadow-sm"
-                                >
-                                    <div className="flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 cursor-pointer transition-colors" onClick={() => toggleEndpoint(i)}>
-                                        <div className="flex items-center gap-3 overflow-hidden">
-                                            <Badge className={`uppercase w-20 justify-center ${ep.method === 'GET' ? 'bg-blue-600' : ep.method === 'WEBHOOK' ? 'bg-purple-600' : 'bg-emerald-600'}`}>{ep.method}</Badge>
-                                            <span className="font-semibold text-sm truncate">{ep.url.replace(baseUrl, '')}</span>
-                                            <span className="text-xs text-muted-foreground hidden sm:inline-block">- {ep.name}</span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs text-muted-foreground hidden sm:block">{ep.desc.substring(0, 40)}...</span>
-                                            {openEndpoints.includes(i) ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
-                                        </div>
-                                    </div>
-
-                                    <CollapsibleContent>
-                                        <div className="p-4 bg-slate-50 border-t space-y-4">
-                                            <p className="text-sm text-gray-600 mb-2">{ep.desc}</p>
-                                            
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-xs font-mono bg-white border px-2 py-1 rounded text-gray-600 w-full truncate select-all">{ep.url}</span>
-                                                <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); copyToClipboard(ep.url); }}><Copy className="w-3 h-3" /></Button>
+                        <CardContent className="space-y-8">
+                            
+                            {/* SEÇÃO 1: GATILHOS / WEBHOOKS (SAÍDA) */}
+                            <div>
+                                <h3 className="text-sm font-black uppercase text-purple-600 mb-3 flex items-center gap-2">
+                                    <ArrowUpRight className="w-4 h-4" /> Gatilhos (Sistema &rarr; N8N)
+                                </h3>
+                                <div className="space-y-3">
+                                    {webhookEvents.map((evt) => (
+                                        <Collapsible 
+                                            key={evt.id} 
+                                            open={openEndpoints.includes(evt.id)}
+                                            onOpenChange={() => toggleEndpoint(evt.id)}
+                                            className="border rounded-lg overflow-hidden bg-white shadow-sm"
+                                        >
+                                            <div className="flex items-center justify-between p-3 bg-purple-50/50 hover:bg-purple-50 cursor-pointer transition-colors" onClick={() => toggleEndpoint(evt.id)}>
+                                                <div className="flex items-center gap-3 overflow-hidden">
+                                                    <Badge className="bg-purple-600 hover:bg-purple-700 w-24 justify-center">WEBHOOK</Badge>
+                                                    <span className="font-semibold text-sm truncate">{evt.name}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs text-muted-foreground hidden sm:block">{evt.desc.substring(0, 40)}...</span>
+                                                    {openEndpoints.includes(evt.id) ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
+                                                </div>
                                             </div>
 
-                                            {ep.request && (
-                                                <div className="space-y-1">
-                                                    <div className="flex justify-between items-center">
-                                                        <Label className="text-xs font-bold text-gray-700">
-                                                            {ep.method === 'WEBHOOK' ? "Payload Enviado (Webhook Body)" : "Request Body (JSON)"}
-                                                        </Label>
-                                                        <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => copyToClipboard(ep.request!)}>Copiar</Button>
-                                                    </div>
-                                                    <div className="bg-slate-900 text-slate-50 p-3 rounded-md font-mono text-xs overflow-x-auto">
-                                                        <pre>{ep.request}</pre>
+                                            <CollapsibleContent>
+                                                <div className="p-4 bg-slate-50 border-t space-y-3">
+                                                    <p className="text-sm text-gray-600">{evt.desc}</p>
+                                                    <div className="space-y-1">
+                                                        <div className="flex justify-between items-center">
+                                                            <Label className="text-xs font-bold text-gray-700">Payload Exemplo (Body JSON)</Label>
+                                                            <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => copyToClipboard(evt.payload)}>Copiar</Button>
+                                                        </div>
+                                                        <div className="bg-slate-900 text-slate-50 p-3 rounded-md font-mono text-xs overflow-x-auto border border-slate-700">
+                                                            <pre>{evt.payload}</pre>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            )}
+                                            </CollapsibleContent>
+                                        </Collapsible>
+                                    ))}
+                                </div>
+                            </div>
 
-                                            {ep.response && (
-                                                <div className="space-y-1">
-                                                    <div className="flex justify-between items-center">
-                                                        <Label className="text-xs font-bold text-gray-700">Response Example</Label>
-                                                        <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => copyToClipboard(ep.response!)}>Copiar</Button>
+                            {/* SEÇÃO 2: API (ENTRADA) */}
+                            <div>
+                                <h3 className="text-sm font-black uppercase text-emerald-600 mb-3 flex items-center gap-2">
+                                    <ArrowDownLeft className="w-4 h-4" /> API (N8N &rarr; Sistema)
+                                </h3>
+                                <div className="space-y-3">
+                                    {apiActions.map((api) => (
+                                        <Collapsible 
+                                            key={api.id} 
+                                            open={openEndpoints.includes(api.id)}
+                                            onOpenChange={() => toggleEndpoint(api.id)}
+                                            className="border rounded-lg overflow-hidden bg-white shadow-sm"
+                                        >
+                                            <div className="flex items-center justify-between p-3 bg-emerald-50/50 hover:bg-emerald-50 cursor-pointer transition-colors" onClick={() => toggleEndpoint(api.id)}>
+                                                <div className="flex items-center gap-3 overflow-hidden">
+                                                    <Badge className="bg-emerald-600 hover:bg-emerald-700 w-24 justify-center">POST</Badge>
+                                                    <span className="font-mono text-xs font-bold text-slate-700 truncate">{api.path}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    {openEndpoints.includes(api.id) ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
+                                                </div>
+                                            </div>
+
+                                            <CollapsibleContent>
+                                                <div className="p-4 bg-slate-50 border-t space-y-4">
+                                                    <p className="text-sm text-gray-600">{api.desc}</p>
+                                                    
+                                                    <div className="flex items-center gap-2 bg-white border p-2 rounded">
+                                                        <span className="text-xs font-mono text-gray-600 select-all flex-1">{baseUrl}{api.path}</span>
+                                                        <Button variant="ghost" size="sm" className="h-6" onClick={() => copyToClipboard(baseUrl + api.path)}><Copy className="w-3 h-3" /></Button>
                                                     </div>
-                                                    <div className="bg-slate-800 text-green-400 p-3 rounded-md font-mono text-xs overflow-x-auto">
-                                                        <pre>{ep.response}</pre>
+
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        <div className="space-y-1">
+                                                            <div className="flex justify-between items-center">
+                                                                <Label className="text-xs font-bold text-gray-700">Body (Requisição)</Label>
+                                                                <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => copyToClipboard(api.body)}>Copiar</Button>
+                                                            </div>
+                                                            <div className="bg-slate-900 text-yellow-300 p-3 rounded-md font-mono text-xs overflow-x-auto h-32 border border-slate-700">
+                                                                <pre>{api.body}</pre>
+                                                            </div>
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <div className="flex justify-between items-center">
+                                                                <Label className="text-xs font-bold text-gray-700">Exemplo de Resposta</Label>
+                                                            </div>
+                                                            <div className="bg-slate-900 text-green-400 p-3 rounded-md font-mono text-xs overflow-x-auto h-32 border border-slate-700">
+                                                                <pre>{api.response}</pre>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            )}
-                                        </div>
-                                    </CollapsibleContent>
-                                </Collapsible>
-                            ))}
+                                            </CollapsibleContent>
+                                        </Collapsible>
+                                    ))}
+                                </div>
+                            </div>
+
                         </CardContent>
                     </Card>
                 </TabsContent>
 
-                {/* ABA WEBHOOKS */}
+                {/* ABA WEBHOOKS (CONFIGURAÇÃO) */}
                 <TabsContent value="webhooks">
                     <Card>
-                        <CardHeader><CardTitle>Gatilhos Ativos</CardTitle><CardDescription>Quando um evento ocorre, notificaremos estas URLs (POST).</CardDescription></CardHeader>
+                        <CardHeader><CardTitle>Configuração de Gatilhos</CardTitle><CardDescription>Defina para onde enviar os dados quando um evento ocorrer.</CardDescription></CardHeader>
                         <CardContent className="space-y-6">
                             {/* Form de Adição */}
                             <div className="flex flex-col gap-3 p-4 bg-gray-50 rounded-lg border border-dashed">
