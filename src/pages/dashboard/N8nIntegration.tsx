@@ -49,24 +49,34 @@ const N8nIntegrationPage = () => {
   
   const baseUrl = "https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1";
 
-  // --- Documentação ---
+  // --- Documentação Atualizada com Frete ---
   const webhookEvents = [
     { 
       id: "wh_order",
       name: "Pedido Finalizado (Checkout)", 
-      desc: "Disparado quando o cliente conclui a compra no site (Status: Pendente). Ideal para enviar mensagem de 'Pedido Recebido' no WhatsApp.",
+      desc: "Enviado quando uma venda é concluída. Inclui o valor do frete calculado e o total pago.",
       payload: `{
   "event": "order_created",
   "timestamp": "2024-03-20T10:00:00.000Z",
   "data": {
     "id": 5050,
     "status": "Pendente",
-    "final_total_value": 170.00,
     "payment_method": "Pix",
+    "shipping_cost": 15.00,  // <-- Valor do Frete
+    "final_total_value": 185.00, // (Produtos + Frete)
+    "financial_breakdown": {
+        "products_subtotal": 170.00,
+        "shipping_cost": 15.00,
+        "total_paid": 185.00
+    },
     "customer": {
        "full_name": "João Silva",
        "phone": "5511999999999",
        "email": "joao@email.com"
+    },
+    "shipping_address": {
+       "neighborhood": "Centro",
+       "city": "Curitiba"
     },
     "items": [
         { "name": "Pod Zomo", "quantity": 2, "price": 85.00 }
@@ -77,7 +87,7 @@ const N8nIntegrationPage = () => {
     { 
       id: "wh_support",
       name: "Solicitação de Suporte", 
-      desc: "Disparado quando o cliente clica no botão de 'Falar com Atendente' ou pede ajuda no painel.",
+      desc: "Disparado quando o cliente solicita ajuda.",
       payload: `{
   "event": "support_request",
   "timestamp": "2024-03-20T10:05:00Z",
@@ -85,8 +95,7 @@ const N8nIntegrationPage = () => {
     "user_id": "uuid-cliente",
     "customer_name": "Maria Souza",
     "phone": "5511988888888",
-    "reason": "Dúvida sobre entrega",
-    "order_id": 5050
+    "reason": "Dúvida sobre entrega"
   }
 }`
     }
@@ -97,17 +106,30 @@ const N8nIntegrationPage = () => {
       id: "api_create_client",
       method: "POST", 
       path: "/n8n-create-client", 
-      desc: "Cria um cliente novo via WhatsApp (se não existir).",
+      desc: "Cria ou recupera um cliente (Idempotente: não duplica).",
       body: `{ "email": "zap@loja.com", "name": "João", "phone": "5511..." }`,
-      response: `{ "success": true, "id": "uuid" }`
+      response: `{ "success": true, "id": "uuid", "is_new_user": false }`
     },
     { 
       id: "api_receive_order",
       method: "POST", 
       path: "/n8n-receive-order", 
-      desc: "Recebe um pedido feito pelo WhatsApp e gera o Pix.",
-      body: `{ "customer": {...}, "items": [...], "payment_method": "pix" }`,
-      response: `{ "success": true, "payment_info": { "qr_code": "..." } }`
+      desc: "Cria o pedido e CALCULA O FRETE AUTOMATICAMENTE pelo bairro.",
+      body: `{ 
+  "customer": { "email": "..." }, 
+  "items": [{ "sku": "...", "quantity": 1 }], 
+  "shipping_address": { 
+     "neighborhood": "Batel", 
+     "city": "Curitiba" 
+  },
+  "payment_method": "pix" 
+}`,
+      response: `{ 
+  "success": true, 
+  "shipping_cost": 12.00, 
+  "final_total": 112.00,
+  "payment_info": { "qr_code": "..." } 
+}`
     }
   ];
 
@@ -257,7 +279,7 @@ const N8nIntegrationPage = () => {
     <div className="space-y-6 pb-20">
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold flex items-center gap-2">
-          <Workflow className="h-8 w-8 text-orange-600" /> Automação (N8n / Typebot)
+          <Workflow className="h-8 w-8 text-green-600" /> Automação WhatsApp (N8n)
         </h1>
         <p className="text-muted-foreground">Documentação técnica e configuração de eventos.</p>
       </div>
@@ -265,13 +287,13 @@ const N8nIntegrationPage = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Coluna Esquerda: Credenciais */}
         <div className="lg:col-span-1 space-y-6">
-            <Card className="border-orange-200 shadow-md">
-                <CardHeader className="bg-orange-50/30 border-b pb-4">
-                    <CardTitle className="text-lg flex items-center gap-2"><Key className="w-5 h-5 text-orange-600" /> Token de Segurança</CardTitle>
+            <Card className="border-green-200 shadow-md">
+                <CardHeader className="bg-green-50/30 border-b pb-4">
+                    <CardTitle className="text-lg flex items-center gap-2"><Key className="w-5 h-5 text-green-600" /> Token de Segurança</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4 pt-6">
                     <div className="space-y-2">
-                        <div className="flex justify-between items-center"><Label>Authorization Bearer</Label><Button variant="link" size="sm" className="h-auto p-0 text-orange-600" onClick={generateToken}>Gerar Novo</Button></div>
+                        <div className="flex justify-between items-center"><Label>Authorization Bearer</Label><Button variant="link" size="sm" className="h-auto p-0 text-green-600" onClick={generateToken}>Gerar Novo</Button></div>
                         <div className="flex gap-2">
                             <div className="relative flex-1">
                                 <Input type={showToken ? "text" : "password"} value={token} onChange={(e) => setToken(e.target.value)} className="font-mono pr-10" />
@@ -280,7 +302,7 @@ const N8nIntegrationPage = () => {
                             <Button variant="outline" size="icon" onClick={() => copyToClipboard(token)}><Copy className="h-4 w-4" /></Button>
                         </div>
                     </div>
-                    <Button onClick={() => saveTokenMutation.mutate()} disabled={saveTokenMutation.isPending || !token} className="w-full bg-orange-600 hover:bg-orange-700 font-bold">{saveTokenMutation.isPending ? "Salvando..." : <><Save className="w-4 h-4 mr-2" /> Salvar Token</>}</Button>
+                    <Button onClick={() => saveTokenMutation.mutate()} disabled={saveTokenMutation.isPending || !token} className="w-full bg-green-600 hover:bg-green-700 font-bold">{saveTokenMutation.isPending ? "Salvando..." : <><Save className="w-4 h-4 mr-2" /> Salvar Token</>}</Button>
                 </CardContent>
             </Card>
 
@@ -296,7 +318,7 @@ const N8nIntegrationPage = () => {
             <Tabs defaultValue="webhooks">
                 <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="endpoints"><Globe className="w-4 h-4 mr-2" /> Swagger / Docs</TabsTrigger>
-                    <TabsTrigger value="webhooks"><Webhook className="w-4 h-4 mr-2" /> Meus Webhooks</TabsTrigger>
+                    <TabsTrigger value="webhooks"><Webhook className="w-4 h-4 mr-2" /> Configurar Gatilhos</TabsTrigger>
                 </TabsList>
 
                 {/* ABA ENDPOINTS */}
@@ -457,36 +479,13 @@ const N8nIntegrationPage = () => {
                                                                     className="h-8 text-xs font-mono"
                                                                     autoFocus
                                                                 />
-                                                                <Button 
-                                                                    size="icon" 
-                                                                    variant="ghost" 
-                                                                    className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
-                                                                    onClick={() => updateWebhookUrlMutation.mutate({ id: hook.id, url: tempUrl })}
-                                                                >
-                                                                    <Check className="w-4 h-4" />
-                                                                </Button>
-                                                                <Button 
-                                                                    size="icon" 
-                                                                    variant="ghost" 
-                                                                    className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
-                                                                    onClick={() => setEditingWebhookId(null)}
-                                                                >
-                                                                    <X className="w-4 h-4" />
-                                                                </Button>
+                                                                <Button size="icon" variant="ghost" className="h-8 w-8 text-green-600" onClick={() => updateWebhookUrlMutation.mutate({ id: hook.id, url: tempUrl })}><Check className="w-4 h-4" /></Button>
+                                                                <Button size="icon" variant="ghost" className="h-8 w-8 text-red-500" onClick={() => setEditingWebhookId(null)}><X className="w-4 h-4" /></Button>
                                                             </div>
                                                         ) : (
                                                             <div className="flex items-center justify-between group">
-                                                                <span className="font-mono text-xs max-w-[250px] truncate" title={hook.target_url}>
-                                                                    {hook.target_url}
-                                                                </span>
-                                                                <Button 
-                                                                    variant="ghost" 
-                                                                    size="icon" 
-                                                                    className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-blue-500"
-                                                                    onClick={() => startEditing(hook)}
-                                                                >
-                                                                    <Pencil className="w-3 h-3" />
-                                                                </Button>
+                                                                <span className="font-mono text-xs max-w-[250px] truncate" title={hook.target_url}>{hook.target_url}</span>
+                                                                <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-blue-500" onClick={() => startEditing(hook)}><Pencil className="w-3 h-3" /></Button>
                                                             </div>
                                                         )}
                                                     </TableCell>
@@ -495,12 +494,12 @@ const N8nIntegrationPage = () => {
                                                         <Button 
                                                             variant="secondary" 
                                                             size="icon" 
-                                                            className="h-8 w-8 bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-200 border"
+                                                            className="h-8 w-8 bg-slate-100 hover:bg-slate-200"
                                                             onClick={() => testWebhookMutation.mutate({ id: hook.id, url: hook.target_url, event: hook.trigger_event })}
                                                             disabled={testWebhookMutation.isPending}
                                                             title="Enviar dados de teste"
                                                         >
-                                                            {testingId === hook.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                                                            {testingId === hook.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4 text-orange-500" />}
                                                         </Button>
                                                     </TableCell>
                                                     <TableCell>
