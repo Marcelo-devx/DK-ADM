@@ -49,7 +49,7 @@ const N8nIntegrationPage = () => {
   
   const baseUrl = "https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1";
 
-  // --- Documentação Focada (Apenas os 2 solicitados) ---
+  // --- Documentação ---
   const webhookEvents = [
     { 
       id: "wh_order",
@@ -241,25 +241,37 @@ const N8nIntegrationPage = () => {
     setTempUrl(hook.target_url);
   };
 
+  // Função para renderizar o Badge correto
+  const getEventBadge = (event: string) => {
+    switch (event) {
+        case 'order_created':
+            return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Pedido Finalizado</Badge>;
+        case 'support_request':
+            return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Suporte</Badge>;
+        default:
+            return <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200">{event}</Badge>;
+    }
+  };
+
   return (
     <div className="space-y-6 pb-20">
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold flex items-center gap-2">
-          <Workflow className="h-8 w-8 text-green-600" /> Automação WhatsApp (N8n)
+          <Workflow className="h-8 w-8 text-orange-600" /> Automação (N8n / Typebot)
         </h1>
-        <p className="text-muted-foreground">Configure as mensagens automáticas de pedidos e suporte.</p>
+        <p className="text-muted-foreground">Documentação técnica e configuração de eventos.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Coluna Esquerda: Credenciais */}
         <div className="lg:col-span-1 space-y-6">
-            <Card className="border-green-200 shadow-md">
-                <CardHeader className="bg-green-50/30 border-b pb-4">
-                    <CardTitle className="text-lg flex items-center gap-2"><Key className="w-5 h-5 text-green-600" /> Token de Segurança</CardTitle>
+            <Card className="border-orange-200 shadow-md">
+                <CardHeader className="bg-orange-50/30 border-b pb-4">
+                    <CardTitle className="text-lg flex items-center gap-2"><Key className="w-5 h-5 text-orange-600" /> Token de Segurança</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4 pt-6">
                     <div className="space-y-2">
-                        <div className="flex justify-between items-center"><Label>Authorization Bearer</Label><Button variant="link" size="sm" className="h-auto p-0 text-green-600" onClick={generateToken}>Gerar Novo</Button></div>
+                        <div className="flex justify-between items-center"><Label>Authorization Bearer</Label><Button variant="link" size="sm" className="h-auto p-0 text-orange-600" onClick={generateToken}>Gerar Novo</Button></div>
                         <div className="flex gap-2">
                             <div className="relative flex-1">
                                 <Input type={showToken ? "text" : "password"} value={token} onChange={(e) => setToken(e.target.value)} className="font-mono pr-10" />
@@ -268,14 +280,14 @@ const N8nIntegrationPage = () => {
                             <Button variant="outline" size="icon" onClick={() => copyToClipboard(token)}><Copy className="h-4 w-4" /></Button>
                         </div>
                     </div>
-                    <Button onClick={() => saveTokenMutation.mutate()} disabled={saveTokenMutation.isPending || !token} className="w-full bg-green-600 hover:bg-green-700 font-bold">{saveTokenMutation.isPending ? "Salvando..." : <><Save className="w-4 h-4 mr-2" /> Salvar Token</>}</Button>
+                    <Button onClick={() => saveTokenMutation.mutate()} disabled={saveTokenMutation.isPending || !token} className="w-full bg-orange-600 hover:bg-orange-700 font-bold">{saveTokenMutation.isPending ? "Salvando..." : <><Save className="w-4 h-4 mr-2" /> Salvar Token</>}</Button>
                 </CardContent>
             </Card>
 
             <Alert className="bg-blue-50 border-blue-200">
                 <Check className="h-4 w-4 text-blue-600" />
-                <AlertTitle className="text-blue-800 font-bold">Como usar no N8N?</AlertTitle>
-                <AlertDescription className="text-blue-700 text-xs">Use o nó <strong>Webhook</strong> para receber eventos e o nó <strong>HTTP Request</strong> para usar a API, sempre com o Header: <br/><code className="bg-blue-100 px-1 rounded block mt-1 p-1">Authorization: Bearer SEU_TOKEN</code></AlertDescription>
+                <AlertTitle className="text-blue-800 font-bold">Autenticação</AlertTitle>
+                <AlertDescription className="text-blue-700 text-xs">Todos os endpoints exigem o header: <br/><code className="bg-blue-100 px-1 rounded block mt-1 p-1">Authorization: Bearer SEU_TOKEN</code></AlertDescription>
             </Alert>
         </div>
 
@@ -283,8 +295,8 @@ const N8nIntegrationPage = () => {
         <div className="lg:col-span-2">
             <Tabs defaultValue="webhooks">
                 <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="endpoints"><Globe className="w-4 h-4 mr-2" /> Documentação</TabsTrigger>
-                    <TabsTrigger value="webhooks"><Webhook className="w-4 h-4 mr-2" /> Configurar Gatilhos</TabsTrigger>
+                    <TabsTrigger value="endpoints"><Globe className="w-4 h-4 mr-2" /> Swagger / Docs</TabsTrigger>
+                    <TabsTrigger value="webhooks"><Webhook className="w-4 h-4 mr-2" /> Meus Webhooks</TabsTrigger>
                 </TabsList>
 
                 {/* ABA ENDPOINTS */}
@@ -299,7 +311,7 @@ const N8nIntegrationPage = () => {
                             {/* SEÇÃO 1: GATILHOS (SAÍDA) */}
                             <div>
                                 <h3 className="text-sm font-black uppercase text-purple-600 mb-3 flex items-center gap-2">
-                                    <ArrowUpRight className="w-4 h-4" /> Gatilhos (Envio para N8N)
+                                    <ArrowUpRight className="w-4 h-4" /> Gatilhos (Sistema &rarr; N8N)
                                 </h3>
                                 <div className="space-y-3">
                                     {webhookEvents.map((evt) => (
@@ -315,6 +327,7 @@ const N8nIntegrationPage = () => {
                                                     <span className="font-semibold text-sm truncate">{evt.name}</span>
                                                 </div>
                                                 <div className="flex items-center gap-2">
+                                                    <span className="text-xs text-muted-foreground hidden sm:block">{evt.desc.substring(0, 40)}...</span>
                                                     {openEndpoints.includes(evt.id) ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
                                                 </div>
                                             </div>
@@ -364,9 +377,30 @@ const N8nIntegrationPage = () => {
                                             <CollapsibleContent>
                                                 <div className="p-4 bg-slate-50 border-t space-y-4">
                                                     <p className="text-sm text-gray-600">{api.desc}</p>
+                                                    
                                                     <div className="flex items-center gap-2 bg-white border p-2 rounded">
                                                         <span className="text-xs font-mono text-gray-600 select-all flex-1">{baseUrl}{api.path}</span>
                                                         <Button variant="ghost" size="sm" className="h-6" onClick={() => copyToClipboard(baseUrl + api.path)}><Copy className="w-3 h-3" /></Button>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        <div className="space-y-1">
+                                                            <div className="flex justify-between items-center">
+                                                                <Label className="text-xs font-bold text-gray-700">Body (Requisição)</Label>
+                                                                <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => copyToClipboard(api.body)}>Copiar</Button>
+                                                            </div>
+                                                            <div className="bg-slate-900 text-yellow-300 p-3 rounded-md font-mono text-xs overflow-x-auto h-32 border border-slate-700">
+                                                                <pre>{api.body}</pre>
+                                                            </div>
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <div className="flex justify-between items-center">
+                                                                <Label className="text-xs font-bold text-gray-700">Exemplo de Resposta</Label>
+                                                            </div>
+                                                            <div className="bg-slate-900 text-green-400 p-3 rounded-md font-mono text-xs overflow-x-auto h-32 border border-slate-700">
+                                                                <pre>{api.response}</pre>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </CollapsibleContent>
@@ -411,10 +445,7 @@ const N8nIntegrationPage = () => {
                                             webhooks.map((hook) => (
                                                 <TableRow key={hook.id}>
                                                     <TableCell>
-                                                        {hook.trigger_event === 'order_created' ? 
-                                                            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Pedido Finalizado</Badge> : 
-                                                            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Suporte</Badge>
-                                                        }
+                                                        {getEventBadge(hook.trigger_event)}
                                                     </TableCell>
                                                     
                                                     <TableCell>
@@ -426,13 +457,36 @@ const N8nIntegrationPage = () => {
                                                                     className="h-8 text-xs font-mono"
                                                                     autoFocus
                                                                 />
-                                                                <Button size="icon" variant="ghost" className="h-8 w-8 text-green-600" onClick={() => updateWebhookUrlMutation.mutate({ id: hook.id, url: tempUrl })}><Check className="w-4 h-4" /></Button>
-                                                                <Button size="icon" variant="ghost" className="h-8 w-8 text-red-500" onClick={() => setEditingWebhookId(null)}><X className="w-4 h-4" /></Button>
+                                                                <Button 
+                                                                    size="icon" 
+                                                                    variant="ghost" 
+                                                                    className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                                                    onClick={() => updateWebhookUrlMutation.mutate({ id: hook.id, url: tempUrl })}
+                                                                >
+                                                                    <Check className="w-4 h-4" />
+                                                                </Button>
+                                                                <Button 
+                                                                    size="icon" 
+                                                                    variant="ghost" 
+                                                                    className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                                    onClick={() => setEditingWebhookId(null)}
+                                                                >
+                                                                    <X className="w-4 h-4" />
+                                                                </Button>
                                                             </div>
                                                         ) : (
                                                             <div className="flex items-center justify-between group">
-                                                                <span className="font-mono text-xs max-w-[250px] truncate" title={hook.target_url}>{hook.target_url}</span>
-                                                                <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-blue-500" onClick={() => startEditing(hook)}><Pencil className="w-3 h-3" /></Button>
+                                                                <span className="font-mono text-xs max-w-[250px] truncate" title={hook.target_url}>
+                                                                    {hook.target_url}
+                                                                </span>
+                                                                <Button 
+                                                                    variant="ghost" 
+                                                                    size="icon" 
+                                                                    className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-blue-500"
+                                                                    onClick={() => startEditing(hook)}
+                                                                >
+                                                                    <Pencil className="w-3 h-3" />
+                                                                </Button>
                                                             </div>
                                                         )}
                                                     </TableCell>
@@ -441,12 +495,12 @@ const N8nIntegrationPage = () => {
                                                         <Button 
                                                             variant="secondary" 
                                                             size="icon" 
-                                                            className="h-8 w-8 bg-slate-100 hover:bg-slate-200"
+                                                            className="h-8 w-8 bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-200 border"
                                                             onClick={() => testWebhookMutation.mutate({ id: hook.id, url: hook.target_url, event: hook.trigger_event })}
                                                             disabled={testWebhookMutation.isPending}
-                                                            title="Testar envio"
+                                                            title="Enviar dados de teste"
                                                         >
-                                                            {testingId === hook.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4 text-orange-500" />}
+                                                            {testingId === hook.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
                                                         </Button>
                                                     </TableCell>
                                                     <TableCell>
