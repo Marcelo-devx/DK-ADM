@@ -21,7 +21,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard } from "lucide-react";
+import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { showSuccess, showError } from "@/utils/toast";
 import { OrderDetailModal } from "@/components/dashboard/OrderDetailModal";
@@ -86,26 +86,38 @@ const fetchOrders = async (): Promise<Order[]> => {
 // Função para verificar se o pedido caiu na próxima rota
 const checkIsNextRoute = (dateString: string) => {
   const orderDate = new Date(dateString);
-  const day = orderDate.getDay(); // 0 = Domingo, 1 = Segunda, ..., 6 = Sábado
+  const day = orderDate.getDay();
 
-  // Cria data de corte baseada no dia do pedido
   const cutoff = new Date(orderDate);
   cutoff.setSeconds(0);
   cutoff.setMilliseconds(0);
 
   if (day === 0) {
-    // Domingo: Tudo vai para próxima rota (Segunda)
     return true;
   } else if (day === 6) {
-    // Sábado: Corte às 12:30
     cutoff.setHours(12, 30, 0);
   } else {
-    // Segunda a Sexta: Corte às 14:00
     cutoff.setHours(14, 0, 0);
   }
 
-  // Se o pedido foi feito DEPOIS do corte, é próxima rota
   return orderDate > cutoff;
+};
+
+// Helpers de WhatsApp
+const formatPhone = (phone: string | null) => {
+    if (!phone) return "-";
+    const cleaned = phone.replace(/\D/g, "");
+    if (cleaned.length === 11) {
+        return `(${cleaned.substring(0, 2)}) ${cleaned.substring(2, 7)}-${cleaned.substring(7)}`;
+    }
+    return phone;
+};
+
+const getWhatsAppLink = (phone: string | null, message: string = "") => {
+    if (!phone) return "#";
+    const cleaned = phone.replace(/\D/g, "");
+    const fullNumber = cleaned.startsWith("55") ? cleaned : `55${cleaned}`;
+    return `https://wa.me/${fullNumber}?text=${encodeURIComponent(message)}`;
 };
 
 const OrdersPage = () => {
@@ -117,7 +129,6 @@ const OrdersPage = () => {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [readyToShipOnly, setReadyToShipOnly] = useState(false);
   
-  // Estado para seleção múltipla
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [isProcessingBulk, setIsProcessingBulk] = useState(false);
 
@@ -145,7 +156,9 @@ const OrdersPage = () => {
     },
     onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
+        showSuccess("Pagamento confirmado!");
     },
+    onError: (err: any) => showError(err.message),
   });
 
   const updateDeliveryStatusMutation = useMutation({
@@ -174,14 +187,12 @@ const OrdersPage = () => {
     onError: (err: any) => showError(`Erro ao deletar: ${err.message}`),
   });
 
-  // Funções de Ação em Massa
   const handleBulkValidate = async () => {
     setIsProcessingBulk(true);
     let successCount = 0;
     
     for (const id of Array.from(selectedIds)) {
         const order = orders?.find(o => o.id === id);
-        // Só tenta validar se for Pix e não estiver pago
         if (order && order.payment_method?.toLowerCase().includes('pix') && order.status !== "Finalizada" && order.status !== "Pago") {
             try {
                 await validatePaymentMutation.mutateAsync(id);
@@ -246,7 +257,7 @@ const OrdersPage = () => {
             className={cn("h-8 gap-2", readyToShipOnly && "bg-blue-600")}
             onClick={() => {
                 setReadyToShipOnly(!readyToShipOnly);
-                setSelectedIds(new Set()); // Limpa seleção ao trocar filtro
+                setSelectedIds(new Set()); 
             }}
           >
             <Package className="w-4 h-4" /> Somente Prontos para Envio
@@ -266,11 +277,11 @@ const OrdersPage = () => {
               </TableHead>
               <TableHead>Pedido ID</TableHead>
               <TableHead>Data</TableHead>
-              <TableHead>Cliente</TableHead>
+              <TableHead>Cliente & Contato</TableHead>
               <TableHead>Valor Total</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Entrega</TableHead>
-              <TableHead>Origem Pagto</TableHead>
+              <TableHead>Pagamento</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
@@ -286,13 +297,16 @@ const OrdersPage = () => {
                 const isNextRoute = checkIsNextRoute(order.created_at);
                 const paymentDetails = getPaymentMethodDetails(order.payment_method);
                 const PaymentIcon = paymentDetails.icon;
-                
-                // CÁLCULO CORRIGIDO: Soma o frete ao total do banco
                 const finalTotal = order.total_price + (order.shipping_cost || 0);
+                
+                // Mensagem pronta para o WhatsApp
+                const phone = order.profiles?.phone;
+                const name = order.profiles?.first_name || "Cliente";
+                const checkPixMessage = `Olá ${name}! Tudo bem? Recebemos seu pedido #${order.id} (R$ ${finalTotal.toFixed(2)}). Poderia me enviar o comprovante do Pix para agilizarmos o envio? 🚀`;
+                const waLink = getWhatsAppLink(phone || "", checkPixMessage);
 
                 return (
                   <TableRow key={order.id} className={cn(
-                    // Prioridade de cores: Selecionado > Validação > Próxima Rota > Padrão
                     isSelected ? "bg-primary/5 border-l-4 border-l-primary" : 
                     needsValidation ? "bg-orange-50/40" : 
                     (isNextRoute && order.delivery_status === 'Pendente') ? "bg-yellow-50/60 border-l-4 border-l-yellow-400" : ""
@@ -316,16 +330,45 @@ const OrdersPage = () => {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="font-medium text-sm">{order.profiles?.first_name} {order.profiles?.last_name}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm text-gray-900">{order.profiles?.first_name} {order.profiles?.last_name}</span>
+                            {phone && (
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <a 
+                                                href={getWhatsAppLink(phone, `Olá ${name}, sobre seu pedido #${order.id}...`)} 
+                                                target="_blank" 
+                                                rel="noreferrer"
+                                                className="bg-green-100 p-1 rounded-full text-green-600 hover:bg-green-200 hover:scale-110 transition-all"
+                                            >
+                                                <MessageCircle className="w-3 h-3" />
+                                            </a>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Abrir WhatsApp</TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            )}
+                        </div>
+                        <span className="text-[11px] text-muted-foreground font-mono">{formatPhone(phone || "")}</span>
+                      </div>
+                    </TableCell>
                     <TableCell className="font-bold">{formatCurrency(finalTotal)}</TableCell>
                     <TableCell>
                         <div className="flex flex-col gap-1">
                             {needsValidation ? (
-                                <Badge variant="default" className="bg-orange-500 hover:bg-orange-600 text-[10px] gap-1">
-                                    <AlertCircle className="w-3 h-3" /> Conferir Whats
-                                </Badge>
+                                <a 
+                                    href={waLink} 
+                                    target="_blank" 
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1 bg-orange-100 text-orange-800 border border-orange-200 px-2 py-0.5 rounded text-[10px] font-bold hover:bg-orange-200 transition-colors w-fit"
+                                >
+                                    <Send className="w-3 h-3" /> Cobrar Pix
+                                </a>
                             ) : (
-                                <Badge variant="secondary" className={cn("text-[10px]", isPaid && "bg-green-100 text-green-800")}>
+                                <Badge variant="secondary" className={cn("text-[10px] w-fit", isPaid && "bg-green-100 text-green-800")}>
                                     {order.status}
                                 </Badge>
                             )}
@@ -333,6 +376,7 @@ const OrdersPage = () => {
                     </TableCell>
                     <TableCell>
                         <Badge variant="secondary" className={cn(
+                            "w-fit",
                             order.delivery_status === 'Entregue' && "bg-green-100 text-green-800",
                             order.delivery_status === 'Despachado' && "bg-blue-100 text-blue-800 animate-pulse"
                         )}>
@@ -340,7 +384,7 @@ const OrdersPage = () => {
                         </Badge>
                     </TableCell>
                     <TableCell>
-                        <Badge variant="outline" className={cn("gap-1 pr-3", paymentDetails.style)}>
+                        <Badge variant="outline" className={cn("gap-1 pr-3 w-fit", paymentDetails.style)}>
                             <PaymentIcon className="w-3 h-3" />
                             {paymentDetails.label}
                         </Badge>
@@ -353,7 +397,7 @@ const OrdersPage = () => {
                                     <TooltipTrigger asChild>
                                         <Button 
                                             size="sm" 
-                                            className="bg-green-600 hover:bg-green-700 font-bold h-8 px-3 text-xs"
+                                            className="bg-green-600 hover:bg-green-700 font-bold h-8 px-3 text-xs shadow-sm"
                                             onClick={() => validatePaymentMutation.mutate(order.id)}
                                             disabled={validatePaymentMutation.isPending}
                                         >
@@ -391,6 +435,13 @@ const OrdersPage = () => {
                             <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                                 <DropdownMenuLabel>Ações do Pedido</DropdownMenuLabel>
+                                {phone && (
+                                    <DropdownMenuItem asChild>
+                                        <a href={getWhatsAppLink(phone, `Olá ${name}, falando sobre o pedido #${order.id}...`)} target="_blank" rel="noreferrer" className="cursor-pointer text-green-600 font-medium">
+                                            <MessageCircle className="w-4 h-4 mr-2" /> Abrir WhatsApp
+                                        </a>
+                                    </DropdownMenuItem>
+                                )}
                                 {needsValidation && (
                                     <DropdownMenuItem onSelect={() => validatePaymentMutation.mutate(order.id)} className="text-green-600 font-bold">
                                         <CheckCircle2 className="w-4 h-4 mr-2" /> Validar Pagamento
@@ -421,7 +472,6 @@ const OrdersPage = () => {
         </Table>
       </div>
 
-      {/* BARRA DE AÇÕES EM MASSA (FIXA NO RODAPÉ) */}
       {selectedIds.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-10 duration-300">
             <div className="bg-primary text-white shadow-2xl rounded-2xl p-4 flex items-center gap-6 border-4 border-white">
