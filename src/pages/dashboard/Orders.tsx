@@ -299,11 +299,8 @@ const OrdersPage = () => {
                 const PaymentIcon = paymentDetails.icon;
                 const finalTotal = order.total_price + (order.shipping_cost || 0);
                 
-                // Mensagem pronta para o WhatsApp
                 const phone = order.profiles?.phone;
                 const name = order.profiles?.first_name || "Cliente";
-                const checkPixMessage = `Olá ${name}! Tudo bem? Recebemos seu pedido #${order.id} (R$ ${finalTotal.toFixed(2)}). Poderia me enviar o comprovante do Pix para agilizarmos o envio? 🚀`;
-                const waLink = getWhatsAppLink(phone || "", checkPixMessage);
 
                 return (
                   <TableRow key={order.id} className={cn(
@@ -357,22 +354,9 @@ const OrdersPage = () => {
                     </TableCell>
                     <TableCell className="font-bold">{formatCurrency(finalTotal)}</TableCell>
                     <TableCell>
-                        <div className="flex flex-col gap-1">
-                            {needsValidation ? (
-                                <a 
-                                    href={waLink} 
-                                    target="_blank" 
-                                    rel="noreferrer"
-                                    className="inline-flex items-center gap-1 bg-orange-100 text-orange-800 border border-orange-200 px-2 py-0.5 rounded text-[10px] font-bold hover:bg-orange-200 transition-colors w-fit"
-                                >
-                                    <Send className="w-3 h-3" /> Cobrar Pix
-                                </a>
-                            ) : (
-                                <Badge variant="secondary" className={cn("text-[10px] w-fit", isPaid && "bg-green-100 text-green-800")}>
-                                    {order.status}
-                                </Badge>
-                            )}
-                        </div>
+                        <Badge variant="secondary" className={cn("text-[10px] w-fit", isPaid && "bg-green-100 text-green-800")}>
+                            {order.status}
+                        </Badge>
                     </TableCell>
                     <TableCell>
                         <Badge variant="secondary" className={cn(
