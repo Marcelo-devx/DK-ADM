@@ -28,7 +28,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Busca Perfis
+    // Busca Perfis com dados relevantes para o CRM
     const { data: profiles, error } = await supabaseAdmin
         .from('profiles')
         .select('id, first_name, last_name, phone, points, role, created_at')
@@ -36,16 +36,16 @@ serve(async (req) => {
 
     if (error) throw error;
 
-    // Busca usuários do Auth para pegar o email (opcional, pois profiles deveria ter email se sincronizado, mas o auth é a fonte da verdade)
+    // Busca usuários do Auth para cruzar o e-mail (O Auth é a fonte da verdade para e-mail)
     const { data: { users } } = await supabaseAdmin.auth.admin.listUsers();
     const emailMap = new Map(users.map(u => [u.id, u.email]));
 
     const result = profiles.map(p => ({
         id: p.id,
-        name: `${p.first_name || ''} ${p.last_name || ''}`.trim(),
+        name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Sem Nome',
         email: emailMap.get(p.id) || null,
         phone: p.phone,
-        points: p.points,
+        points: p.points || 0,
         role: p.role,
         created_at: p.created_at
     }));

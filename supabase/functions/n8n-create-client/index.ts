@@ -31,10 +31,14 @@ serve(async (req) => {
 
     if (!email) throw new Error("Email is required");
 
-    // 1. Criar Auth User
+    let userId = null;
+    let isNewUser = false;
+    let userEmail = email;
+
+    // 1. Tentar criar usuário no Auth
     const tempPassword = password || Math.random().toString(36).slice(-8) + "Aa1!";
     const firstName = name ? name.split(' ')[0] : 'Cliente';
-    const lastName = name ? name.split(' ').slice(1).join(' ') : 'Novo';
+    const lastName = name ? name.split(' ').slice(1).join(' ') : 'WhatsApp';
 
     const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
         email: email,
@@ -43,22 +47,44 @@ serve(async (req) => {
         user_metadata: { first_name: firstName, last_name: lastName }
     });
 
-    if (createError) throw createError;
+    if (createError) {
+        // Se já existe, buscamos o ID
+        if (createError.message?.includes("already registered") || createError.status === 422) {
+             const { data: existingId } = await supabaseAdmin.rpc('get_user_id_by_email', { user_email: email });
+             if (existingId) {
+                 userId = existingId;
+                 console.log(`[n8n-create-client] Usuário já existia: ${userId}`);
+             } else {
+                 throw new Error("Usuário existe mas não foi possível recuperar ID.");
+             }
+        } else {
+            throw createError;
+        }
+    } else {
+        userId = newUser.user?.id;
+        isNewUser = true;
+    }
 
-    // 2. Atualizar Profile
-    if (newUser.user) {
-        await supabaseAdmin.from('profiles').update({
-            phone: phone || null,
-            first_name: firstName,
-            last_name: lastName
-        }).eq('id', newUser.user.id);
+    // 2. Garantir/Atualizar Profile
+    if (userId) {
+        const updateData: any = {};
+        if (phone) updateData.phone = phone;
+        if (name && isNewUser) { // Só atualiza nome se for novo, para não sobrescrever dados reais
+            updateData.first_name = firstName;
+            updateData.last_name = lastName;
+        }
+
+        if (Object.keys(updateData).length > 0) {
+            await supabaseAdmin.from('profiles').update(updateData).eq('id', userId);
+        }
     }
 
     return new Response(JSON.stringify({ 
         success: true, 
-        id: newUser.user.id, 
-        email: newUser.user.email,
-        generated_password: password ? 'provided' : tempPassword 
+        id: userId, 
+        email: userEmail,
+        is_new_user: isNewUser,
+        message: isNewUser ? "Usuário criado com sucesso." : "Usuário já existia, ID retornado."
     }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
