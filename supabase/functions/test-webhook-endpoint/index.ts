@@ -12,90 +12,99 @@ serve(async (req) => {
   }
 
   try {
-    const { url, event_type } = await req.json();
+    const { url, event_type, method = 'POST' } = await req.json();
 
     if (!url) throw new Error("URL é obrigatória");
+
+    // Codifica a URL para lidar com acentos (ex: testar-conexão)
+    const encodedUrl = encodeURI(url);
 
     let payload = {};
     const timestamp = new Date().toISOString();
 
-    // Gera dados falsos baseados no tipo de evento
-    if (event_type === 'order_created' || event_type === 'payment_confirmed') {
-        payload = {
-            event: event_type,
-            timestamp: timestamp,
-            data: {
-                id: 12345,
-                total_price: 150.00,
-                status: "Pendente",
-                payment_method: "pix",
-                created_at: timestamp,
-                customer: {
-                    id: "user-uuid-teste",
-                    full_name: "Cliente Teste da Silva",
-                    phone: "11999999999",
-                    email: "teste@exemplo.com",
-                    cpf: "000.000.000-00"
-                },
-                items: [
-                    { name: "Produto Teste A", quantity: 1, price: 50.00 },
-                    { name: "Produto Teste B", quantity: 2, price: 50.00 }
-                ],
-                shipping_address: {
-                    street: "Rua Exemplo",
-                    number: "100",
-                    neighborhood: "Centro",
-                    city: "São Paulo",
-                    state: "SP",
-                    cep: "01000-000"
+    console.log(`Disparando teste (${method}) para: ${encodedUrl}`);
+
+    const fetchOptions: any = {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+    };
+
+    // Apenas adiciona corpo se for POST
+    if (method === 'POST') {
+        // Gera dados falsos baseados no tipo de evento
+        if (event_type === 'order_created' || event_type === 'payment_confirmed') {
+            payload = {
+                event: event_type,
+                timestamp: timestamp,
+                data: {
+                    id: 12345,
+                    total_price: 150.00,
+                    status: "Pendente",
+                    payment_method: "pix",
+                    created_at: timestamp,
+                    customer: {
+                        id: "user-uuid-teste",
+                        full_name: "Cliente Teste da Silva",
+                        phone: "11999999999",
+                        email: "teste@exemplo.com",
+                        cpf: "000.000.000-00"
+                    },
+                    items: [
+                        { name: "Produto Teste A", quantity: 1, price: 50.00 },
+                        { name: "Produto Teste B", quantity: 2, price: 50.00 }
+                    ],
+                    shipping_address: {
+                        street: "Rua Exemplo",
+                        number: "100",
+                        neighborhood: "Centro",
+                        city: "São Paulo",
+                        state: "SP",
+                        cep: "01000-000"
+                    }
                 }
-            }
-        };
-    } else if (event_type.startsWith('product_')) {
-        payload = {
-            event: event_type,
-            timestamp: timestamp,
-            data: {
-                id: 999,
-                name: "Produto de Teste N8N",
-                sku: "TEST-SKU-001",
-                price: 99.90,
-                stock_quantity: 50,
-                is_visible: true,
-                category: "Testes"
-            }
-        };
-    } else if (event_type === 'retention_campaign') {
-        payload = {
-            event: 'retention_campaign',
-            campaign_size: 1,
-            recipients: [
-                {
-                    client_id: "user-uuid-teste",
-                    name: "Cliente Teste",
-                    phone: "11999999999",
-                    email: "teste@exemplo.com",
-                    message_content: "Oi Cliente Teste! Esta é uma mensagem de teste enviada pelo painel."
+            };
+        } else if (event_type && event_type.startsWith('product_')) {
+            payload = {
+                event: event_type,
+                timestamp: timestamp,
+                data: {
+                    id: 999,
+                    name: "Produto de Teste N8N",
+                    sku: "TEST-SKU-001",
+                    price: 99.90,
+                    stock_quantity: 50,
+                    is_visible: true,
+                    category: "Testes"
                 }
-            ]
-        };
-    } else {
-        // Genérico
-        payload = {
-            event: event_type,
-            timestamp: timestamp,
-            message: "Este é um evento de teste genérico.",
-            test_data: true
-        };
+            };
+        } else if (event_type === 'retention_campaign') {
+            payload = {
+                event: 'retention_campaign',
+                campaign_size: 1,
+                recipients: [
+                    {
+                        client_id: "user-uuid-teste",
+                        name: "Cliente Teste",
+                        phone: "11999999999",
+                        email: "teste@exemplo.com",
+                        message_content: "Oi Cliente Teste! Esta é uma mensagem de teste enviada pelo painel."
+                    }
+                ]
+            };
+        } else {
+            // Genérico
+            payload = {
+                event: event_type || 'ping',
+                timestamp: timestamp,
+                message: "Este é um evento de teste genérico.",
+                test_data: true
+            };
+        }
+        
+        fetchOptions.body = JSON.stringify(payload);
     }
 
-    console.log(`Disparando teste para: ${url}`);
-
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-    });
+    const response = await fetch(encodedUrl, fetchOptions);
 
     const responseText = await response.text();
     let responseData;
@@ -110,10 +119,10 @@ serve(async (req) => {
             JSON.stringify({ 
                 success: false, 
                 status: response.status, 
-                error: "O N8N retornou erro.", 
+                error: `O servidor remoto retornou erro ${response.status}`, 
                 remote_response: responseData 
             }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 } // Retorna 200 para o frontend tratar o erro lógico
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
         );
     }
 
@@ -121,7 +130,7 @@ serve(async (req) => {
       JSON.stringify({ 
           success: true, 
           status: response.status, 
-          message: "Enviado com sucesso!",
+          message: "Conexão estabelecida com sucesso!",
           remote_response: responseData
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
