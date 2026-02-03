@@ -75,23 +75,28 @@ const ImportClientsPage = () => {
         const workbook = XLSX.read(data, { type: 'array' });
         const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]) as any[];
         
-        const mappedClients = json.map(mapRowKeys).map((row: any) => ({
-            email: row.email,
-            password: row.senha ? String(row.senha) : undefined,
-            full_name: row.nomecompleto || '',
-            cpf_cnpj: row.cpfcnpj ? String(row.cpfcnpj) : '',
-            gender: row.sexo || '',
-            date_of_birth: formatDateToISO(row.datadenascimento),
-            client_since: formatDateToISO(row.clientedesde),
-            phone: row.telefone ? String(row.telefone) : '',
-            cep: row.cep ? String(row.cep) : '',
-            street: row.rua || '',
-            number: row.numero ? String(row.numero) : '',
-            complement: row.complemento || '',
-            neighborhood: row.bairro || '',
-            city: row.cidade || '',
-            state: row.estado || '',
-        })).filter((c: any) => c.email && c.email.includes('@'));
+        const mappedClients = json.map(mapRowKeys).map((row: any) => {
+            // Lógica robusta para encontrar CPF/CNPJ independente da formatação do cabeçalho
+            const cpfCnpjValue = row.cpfcnpj || row['cpf/cnpj'] || row.cpf || row.cnpj || row['cpf/cnp'];
+
+            return {
+                email: row.email,
+                password: row.senha ? String(row.senha) : undefined,
+                full_name: row.nomecompleto || '',
+                cpf_cnpj: cpfCnpjValue ? String(cpfCnpjValue) : '',
+                gender: row.sexo || '',
+                date_of_birth: formatDateToISO(row.datadenascimento),
+                client_since: formatDateToISO(row.clientedesde),
+                phone: row.telefone ? String(row.telefone) : '',
+                cep: row.cep ? String(row.cep) : '',
+                street: row.rua || '',
+                number: row.numero ? String(row.numero) : '',
+                complement: row.complemento || '',
+                neighborhood: row.bairro || '',
+                city: row.cidade || '',
+                state: row.estado || '',
+            };
+        }).filter((c: any) => c.email && c.email.includes('@'));
 
         if (mappedClients.length === 0) {
             showError("Nenhum cliente válido encontrado. Verifique a coluna 'Email'.");
