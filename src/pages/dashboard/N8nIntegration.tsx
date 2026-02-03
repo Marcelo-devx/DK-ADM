@@ -149,6 +149,19 @@ const N8nIntegrationPage = () => {
   "success": true, 
   "message": "Pedido atualizado com sucesso."
 }`
+    },
+    { 
+      id: "api_get_order",
+      method: "GET", 
+      path: "/get-order-details?id=12345", 
+      desc: "Consulta dados completos de um pedido específico.",
+      body: `(Sem corpo - use Query Param ?id=)`,
+      response: `{ 
+  "id": 12345, 
+  "status": "Pendente", 
+  "total_price": 150.00,
+  "order_items": [...]
+}`
     }
   ];
 
@@ -411,7 +424,7 @@ const N8nIntegrationPage = () => {
                                         <Collapsible key={api.id} open={openEndpoints.includes(api.id)} onOpenChange={() => toggleEndpoint(api.id)} className="border rounded-lg overflow-hidden bg-white shadow-sm">
                                             <div className="flex items-center justify-between p-3 bg-emerald-50/50 hover:bg-emerald-50 cursor-pointer transition-colors" onClick={() => toggleEndpoint(api.id)}>
                                                 <div className="flex items-center gap-3 overflow-hidden">
-                                                    <Badge className="bg-emerald-600 hover:bg-emerald-700 w-24 justify-center">POST</Badge>
+                                                    <Badge className={api.method === "GET" ? "bg-blue-600 hover:bg-blue-700 w-24 justify-center" : "bg-emerald-600 hover:bg-emerald-700 w-24 justify-center"}>{api.method}</Badge>
                                                     <span className="font-mono text-xs font-bold text-slate-700 truncate">{api.path}</span>
                                                 </div>
                                                 <div className="flex items-center gap-2">
@@ -420,7 +433,8 @@ const N8nIntegrationPage = () => {
                                             </div>
                                             <CollapsibleContent>
                                                 <div className="p-4 bg-slate-50 border-t space-y-4">
-                                                    <div className="flex items-center gap-2 bg-white border p-2 rounded"><span className="text-xs font-mono text-gray-600 select-all flex-1">{baseUrl}{api.path}</span><Button variant="ghost" size="sm" className="h-6" onClick={() => copyToClipboard(baseUrl + api.path)}><Copy className="w-3 h-3" /></Button></div>
+                                                    <div className="flex items-center gap-2 bg-white border p-2 rounded"><span className="text-xs font-mono text-gray-600 select-all flex-1">{baseUrl}{api.path.split('?')[0]}</span><Button variant="ghost" size="sm" className="h-6" onClick={() => copyToClipboard(baseUrl + api.path.split('?')[0])}><Copy className="w-3 h-3" /></Button></div>
+                                                    <p className="text-xs text-gray-500 font-medium mt-2">{api.desc}</p>
                                                     <div className="bg-slate-900 text-yellow-300 p-3 rounded-md font-mono text-xs overflow-x-auto h-32 border border-slate-700"><pre>{api.body}</pre></div>
                                                 </div>
                                             </CollapsibleContent>
