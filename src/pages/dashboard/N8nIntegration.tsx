@@ -53,7 +53,6 @@ const N8nIntegrationPage = () => {
   
   const baseUrl = "https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1";
 
-  // ... (manter definições de webhookEvents e apiActions) ...
   const webhookEvents = [
     { 
       id: "wh_order",
@@ -133,6 +132,22 @@ const N8nIntegrationPage = () => {
   "shipping_cost": 12.00, 
   "final_total": 112.00,
   "payment_info": { "qr_code": "..." } 
+}`
+    },
+    { 
+      id: "api_update_order",
+      method: "POST", 
+      path: "/update-order-status", 
+      desc: "Atualiza status do pedido e adiciona rastreio.",
+      body: `{ 
+  "order_id": 12345,
+  "status": "Em Trânsito",
+  "delivery_status": "Despachado",
+  "tracking_code": "BR123456789"
+}`,
+      response: `{ 
+  "success": true, 
+  "message": "Pedido atualizado com sucesso."
 }`
     }
   ];
