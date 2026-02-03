@@ -1,22 +1,13 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { FileSpreadsheet, Download, Search, Loader2, CheckSquare, Square, FileDown } from "lucide-react";
+import { FileSpreadsheet, Loader2, PackageCheck } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import * as XLSX from 'xlsx';
 import { format } from "date-fns";
 
@@ -39,11 +30,7 @@ interface Order {
 }
 
 export default function PrintLabelsPage() {
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [searchTerm, setSearchTerm] = useState("");
   const [isExporting, setIsExporting] = useState(false);
-
-  // Configurações do Remetente (Estado Local - Carregado do Banco)
   const [senderInfo, setSenderInfo] = useState({
     name: "",
     address: "",
@@ -52,7 +39,7 @@ export default function PrintLabelsPage() {
     cep: ""
   });
 
-  // 1. Buscar Configurações do Remetente (Silencioso para uso na exportação)
+  // 1. Buscar Configurações do Remetente (Silencioso)
   useQuery({
     queryKey: ["senderSettingsExport"],
     queryFn: async () => {
@@ -75,11 +62,10 @@ export default function PrintLabelsPage() {
     }
   });
 
-  // 2. Buscar Pedidos (Com perfis e e-mails)
-  const { data: orders, isLoading } = useQuery<Order[]>({
-    queryKey: ["ordersForExcelExport"],
+  // 2. Buscar Pedidos Pendentes de Envio
+  const { data: pendingOrders, isLoading } = useQuery<Order[]>({
+    queryKey: ["pendingOrdersForLabels"],
     queryFn: async () => {
-      // Pedidos Pagos e Pendentes de Envio
       const { data: ordersData, error } = await supabase
         .from("orders")
         .select(`
@@ -88,11 +74,11 @@ export default function PrintLabelsPage() {
         `)
         .in("status", ["Finalizada", "Pago"])
         .eq("delivery_status", "Pendente")
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: true }); // Mais antigos primeiro
 
       if (error) throw error;
 
-      // Buscar emails via edge function
+      // Buscar emails
       let emailMap = new Map<string, string>();
       try {
           const { data: usersData } = await supabase.functions.invoke("get-users");
@@ -110,64 +96,33 @@ export default function PrintLabelsPage() {
     },
   });
 
-  // Filtragem local
-  const filteredOrders = useMemo(() => {
-    if (!orders) return [];
-    return orders.filter(o => {
-      const term = searchTerm.toLowerCase();
-      return (
-        String(o.id).includes(term) ||
-        o.profiles?.first_name?.toLowerCase().includes(term) ||
-        o.profiles?.last_name?.toLowerCase().includes(term)
-      );
-    });
-  }, [orders, searchTerm]);
-
-  // Seleção
-  const toggleSelectAll = () => {
-    if (selectedIds.size === filteredOrders.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filteredOrders.map(o => o.id)));
-    }
-  };
-
-  const toggleSelectOne = (id: number) => {
-    const next = new Set(selectedIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setSelectedIds(next);
-  };
-
   // Funções Auxiliares
   const cleanStr = (val: string | null | undefined) => val || "";
-  const formatCurrency = (val: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
 
-  // GERAR EXCEL
-  const handleExport = () => {
-    if (selectedIds.size === 0) {
-      showError("Selecione pelo menos um pedido.");
+  // GERAR RELATÓRIO REAL
+  const handleGenerateReport = () => {
+    if (!pendingOrders || pendingOrders.length === 0) {
+      showError("Não há pedidos pendentes para gerar etiquetas.");
       return;
     }
 
     setIsExporting(true);
     try {
-      const selectedOrders = orders?.filter(o => selectedIds.has(o.id)) || [];
-
-      const exportData = selectedOrders.map(order => {
+      const exportData = pendingOrders.map(order => {
         const p = order.profiles;
         const addr = order.shipping_address || {};
         const fullName = `${cleanStr(p?.first_name)} ${cleanStr(p?.last_name)}`.trim();
 
+        // Mapeamento EXATO conforme o modelo solicitado
         return {
           "Número pedido": order.id,
           "Nome Entrega": fullName,
           "Endereço": `${addr.street || ''}, ${addr.number || ''}`,
           "Complemento Entrega": addr.complement || "",
-          "Observações": "",
+          "Observações": "", // Campo fixo conforme modelo
           "Telefone Comprador": p?.phone || "",
           "Comprador": fullName,
-          "F": "",
+          "F": "", // Campo fixo conforme modelo
           "Bairro Entrega": addr.neighborhood || "",
           "Cidade Entrega": addr.city || "",
           "CEP Entrega": addr.cep || "",
@@ -185,49 +140,18 @@ export default function PrintLabelsPage() {
 
       const worksheet = XLSX.utils.json_to_sheet(exportData);
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Envios");
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Etiquetas");
       
-      const fileName = `Envios_${format(new Date(), "yyyy-MM-dd_HH-mm")}.xlsx`;
+      const fileName = `Etiquetas_Envio_${format(new Date(), "dd-MM-yyyy_HH-mm")}.xlsx`;
       XLSX.writeFile(workbook, fileName);
       
-      showSuccess(`${selectedOrders.length} pedidos exportados!`);
+      showSuccess(`${pendingOrders.length} etiquetas geradas com sucesso!`);
     } catch (err) {
       console.error(err);
-      showError("Erro ao gerar Excel.");
+      showError("Erro ao gerar o arquivo Excel.");
     } finally {
       setIsExporting(false);
     }
-  };
-
-  // BAIXAR EXEMPLO
-  const handleDownloadTemplate = () => {
-    const headers = [
-      {
-        "Número pedido": "12345",
-        "Nome Entrega": "João Silva",
-        "Endereço": "Rua das Flores, 123",
-        "Complemento Entrega": "Apto 101",
-        "Observações": "Frágil",
-        "Telefone Comprador": "11999999999",
-        "Comprador": "João Silva",
-        "F": "",
-        "Bairro Entrega": "Centro",
-        "Cidade Entrega": "São Paulo",
-        "CEP Entrega": "01000-000",
-        "CPF/CNPJ Comprador": "123.456.789-00",
-        "E-mail Comprador": "joao@email.com",
-        "Remetente": "Minha Loja",
-        "Endereço Remetente": "Av Paulista, 1000",
-        "Cidade Remetente": "São Paulo",
-        "Estado Remetente": "SP",
-        "CEP Remetente": "01310-100"
-      }
-    ];
-    
-    const worksheet = XLSX.utils.json_to_sheet(headers);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Modelo");
-    XLSX.writeFile(workbook, "modelo_envios.xlsx");
   };
 
   return (
@@ -238,26 +162,46 @@ export default function PrintLabelsPage() {
           Exportação de Etiquetas
         </h1>
         <p className="text-muted-foreground">
-          Gere planilhas para envio com dados completos de remetente e destinatário.
+          Gere o arquivo Excel formatado para impressão de etiquetas com dados completos de remetente e destinatário.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        
-        {/* COLUNA ESQUERDA: APENAS OS BOTÕES DE AÇÃO */}
-        <div className="lg:col-span-1">
-            <Card>
-                <CardContent className="p-4 space-y-4">
-                    <Button variant="outline" className="w-full justify-start h-12" onClick={handleDownloadTemplate}>
-                        <FileDown className="w-5 h-5 mr-3 text-gray-500" />
-                        Baixar Planilha de Exemplo
-                    </Button>
-                </CardContent>
-            </Card>
-        </div>
-
-        {/* Tabela de Pedidos Removida conforme solicitado */}
-        
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card className="border-green-200 bg-green-50/20 shadow-lg">
+            <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                    <span>Relatório de Envio</span>
+                    {isLoading ? (
+                        <Skeleton className="h-6 w-20" />
+                    ) : (
+                        <span className="text-sm bg-green-100 text-green-800 px-3 py-1 rounded-full border border-green-200">
+                            {pendingOrders?.length || 0} Pendentes
+                        </span>
+                    )}
+                </CardTitle>
+                <CardDescription>
+                    Este botão processa todos os pedidos com pagamento confirmado que ainda não foram enviados e gera a planilha no formato padrão.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Button 
+                    onClick={handleGenerateReport} 
+                    disabled={isExporting || isLoading || !pendingOrders || pendingOrders.length === 0} 
+                    className="w-full h-14 text-lg font-bold bg-green-600 hover:bg-green-700 shadow-md"
+                >
+                    {isExporting ? (
+                        <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Gerando Arquivo...</>
+                    ) : (
+                        <><PackageCheck className="w-6 h-6 mr-2" /> Gerar Arquivo de Etiquetas</>
+                    )}
+                </Button>
+                {(!pendingOrders || pendingOrders.length === 0) && !isLoading && (
+                    <p className="text-center text-sm text-muted-foreground mt-3">
+                        Não há pedidos aguardando envio no momento.
+                    </p>
+                )}
+            </CardContent>
+        </Card>
       </div>
     </div>
   );
