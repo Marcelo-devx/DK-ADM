@@ -13,7 +13,6 @@ import {
   ShoppingBag, Package, ChevronRight 
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Accordion,
@@ -152,7 +151,8 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                     </TabsList>
                 </div>
 
-                <ScrollArea className="flex-1">
+                {/* Substituído ScrollArea por div com overflow nativo para melhor controle */}
+                <div className="flex-1 overflow-y-auto">
                     <div className="p-6">
                         <TabsContent value="details" className="mt-0 space-y-6">
                             {isLoadingProfile ? (
@@ -312,7 +312,7 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                             )}
                         </TabsContent>
                     </div>
-                </ScrollArea>
+                </div>
             </Tabs>
         </div>
       </DialogContent>

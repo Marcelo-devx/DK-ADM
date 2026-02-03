@@ -271,222 +271,225 @@ const OrdersPage = () => {
       </div>
 
       <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-12 text-center">
-                <Checkbox 
-                  checked={filteredOrders.length > 0 && selectedIds.size === filteredOrders.length}
-                  onCheckedChange={toggleSelectAll}
-                />
-              </TableHead>
-              <TableHead>Pedido ID</TableHead>
-              <TableHead>Data</TableHead>
-              <TableHead>Cliente & Contato</TableHead>
-              <TableHead>Valor Total</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Entrega</TableHead>
-              <TableHead>Pagamento</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-                <TableRow><TableCell colSpan={9}><Skeleton className="h-10 w-full" /></TableCell></TableRow>
-            ) : filteredOrders.map((order) => {
-                const isPaid = order.status === "Finalizada" || order.status === "Pago";
-                const isPix = order.payment_method?.toLowerCase().includes('pix');
-                const needsValidation = isPix && !isPaid;
-                const isInRoute = order.delivery_status === "Despachado";
-                const isSelected = selectedIds.has(order.id);
-                const isNextRoute = checkIsNextRoute(order.created_at);
-                const paymentDetails = getPaymentMethodDetails(order.payment_method);
-                const PaymentIcon = paymentDetails.icon;
-                const finalTotal = order.total_price + (order.shipping_cost || 0);
-                
-                const phone = order.profiles?.phone;
-                const name = order.profiles?.first_name || "Cliente";
+        {/* Container com scroll vertical fixo para a tabela */}
+        <div className="max-h-[calc(100vh-280px)] overflow-y-auto relative">
+            <Table>
+            <TableHeader className="sticky top-0 bg-white z-10 shadow-sm">
+                <TableRow>
+                <TableHead className="w-12 text-center">
+                    <Checkbox 
+                    checked={filteredOrders.length > 0 && selectedIds.size === filteredOrders.length}
+                    onCheckedChange={toggleSelectAll}
+                    />
+                </TableHead>
+                <TableHead>Pedido ID</TableHead>
+                <TableHead>Data</TableHead>
+                <TableHead>Cliente & Contato</TableHead>
+                <TableHead>Valor Total</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Entrega</TableHead>
+                <TableHead>Pagamento</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+            </TableHeader>
+            <TableBody>
+                {isLoading ? (
+                    <TableRow><TableCell colSpan={9}><Skeleton className="h-10 w-full" /></TableCell></TableRow>
+                ) : filteredOrders.map((order) => {
+                    const isPaid = order.status === "Finalizada" || order.status === "Pago";
+                    const isPix = order.payment_method?.toLowerCase().includes('pix');
+                    const needsValidation = isPix && !isPaid;
+                    const isInRoute = order.delivery_status === "Despachado";
+                    const isSelected = selectedIds.has(order.id);
+                    const isNextRoute = checkIsNextRoute(order.created_at);
+                    const paymentDetails = getPaymentMethodDetails(order.payment_method);
+                    const PaymentIcon = paymentDetails.icon;
+                    const finalTotal = order.total_price + (order.shipping_cost || 0);
+                    
+                    const phone = order.profiles?.phone;
+                    const name = order.profiles?.first_name || "Cliente";
 
-                return (
-                  <TableRow key={order.id} className={cn(
-                    isSelected ? "bg-primary/5 border-l-4 border-l-primary" : 
-                    needsValidation ? "bg-orange-50/40" : 
-                    (isNextRoute && order.delivery_status === 'Pendente') ? "bg-yellow-50/60 border-l-4 border-l-yellow-400" : ""
-                  )}>
-                    <TableCell className="text-center">
-                        <Checkbox 
-                            checked={isSelected}
-                            onCheckedChange={() => toggleSelectOne(order.id)}
-                        />
-                    </TableCell>
-                    <TableCell className="font-mono text-sm font-bold">#{order.id}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-col">
-                        <span className="text-xs">{new Date(order.created_at).toLocaleDateString("pt-BR")}</span>
-                        <span className="text-[10px] text-muted-foreground">{new Date(order.created_at).toLocaleTimeString("pt-BR", { hour: '2-digit', minute: '2-digit' })}</span>
-                        
-                        {isNextRoute && order.delivery_status === 'Pendente' && (
-                          <Badge variant="outline" className="mt-1 w-fit text-[9px] bg-yellow-100 text-yellow-800 border-yellow-300 gap-1 px-1">
-                            <CalendarClock className="w-3 h-3" /> Próx. Dia
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col gap-0.5">
-                        <div className="flex items-center gap-2">
-                            <span className="font-medium text-sm text-gray-900">{order.profiles?.first_name} {order.profiles?.last_name}</span>
-                            {phone && (
+                    return (
+                    <TableRow key={order.id} className={cn(
+                        isSelected ? "bg-primary/5 border-l-4 border-l-primary" : 
+                        needsValidation ? "bg-orange-50/40" : 
+                        (isNextRoute && order.delivery_status === 'Pendente') ? "bg-yellow-50/60 border-l-4 border-l-yellow-400" : ""
+                    )}>
+                        <TableCell className="text-center">
+                            <Checkbox 
+                                checked={isSelected}
+                                onCheckedChange={() => toggleSelectOne(order.id)}
+                            />
+                        </TableCell>
+                        <TableCell className="font-mono text-sm font-bold">#{order.id}</TableCell>
+                        <TableCell>
+                        <div className="flex flex-col">
+                            <span className="text-xs">{new Date(order.created_at).toLocaleDateString("pt-BR")}</span>
+                            <span className="text-[10px] text-muted-foreground">{new Date(order.created_at).toLocaleTimeString("pt-BR", { hour: '2-digit', minute: '2-digit' })}</span>
+                            
+                            {isNextRoute && order.delivery_status === 'Pendente' && (
+                            <Badge variant="outline" className="mt-1 w-fit text-[9px] bg-yellow-100 text-yellow-800 border-yellow-300 gap-1 px-1">
+                                <CalendarClock className="w-3 h-3" /> Próx. Dia
+                            </Badge>
+                            )}
+                        </div>
+                        </TableCell>
+                        <TableCell>
+                        <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-2">
+                                <span className="font-medium text-sm text-gray-900">{order.profiles?.first_name} {order.profiles?.last_name}</span>
+                                {phone && (
+                                    <TooltipProvider>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <a 
+                                                    href={getWhatsAppLink(phone, `Olá ${name}, sobre seu pedido #${order.id}...`)} 
+                                                    target="_blank" 
+                                                    rel="noreferrer"
+                                                    className="bg-green-100 p-1 rounded-full text-green-600 hover:bg-green-200 hover:scale-110 transition-all"
+                                                >
+                                                    <MessageCircle className="w-3 h-3" />
+                                                </a>
+                                            </TooltipTrigger>
+                                            <TooltipContent>Abrir WhatsApp</TooltipContent>
+                                        </Tooltip>
+                                    </TooltipProvider>
+                                )}
+                                {/* Botão de Histórico */}
                                 <TooltipProvider>
                                     <Tooltip>
                                         <TooltipTrigger asChild>
-                                            <a 
-                                                href={getWhatsAppLink(phone, `Olá ${name}, sobre seu pedido #${order.id}...`)} 
-                                                target="_blank" 
-                                                rel="noreferrer"
-                                                className="bg-green-100 p-1 rounded-full text-green-600 hover:bg-green-200 hover:scale-110 transition-all"
+                                            <Button 
+                                                variant="ghost" 
+                                                size="icon" 
+                                                className="h-6 w-6 text-blue-600 hover:bg-blue-50 rounded-full"
+                                                onClick={() => {
+                                                    setSelectedClientForHistory({
+                                                        id: order.user_id,
+                                                        first_name: order.profiles?.first_name,
+                                                        last_name: order.profiles?.last_name,
+                                                        email: "", // Será carregado pelo modal
+                                                        created_at: null,
+                                                        force_pix_on_next_purchase: false,
+                                                        order_count: 0, 
+                                                        completed_order_count: 0
+                                                    });
+                                                    setIsClientHistoryOpen(true);
+                                                }}
                                             >
-                                                <MessageCircle className="w-3 h-3" />
-                                            </a>
+                                                <History className="w-3 h-3" />
+                                            </Button>
                                         </TooltipTrigger>
-                                        <TooltipContent>Abrir WhatsApp</TooltipContent>
+                                        <TooltipContent>Histórico de Pedidos</TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            </div>
+                            <span className="text-[11px] text-muted-foreground font-mono">{formatPhone(phone || "")}</span>
+                        </div>
+                        </TableCell>
+                        <TableCell className="font-bold">{formatCurrency(finalTotal)}</TableCell>
+                        <TableCell>
+                            <Badge variant="secondary" className={cn("text-[10px] w-fit", isPaid && "bg-green-100 text-green-800")}>
+                                {order.status}
+                            </Badge>
+                        </TableCell>
+                        <TableCell>
+                            <Badge variant="secondary" className={cn(
+                                "w-fit",
+                                order.delivery_status === 'Entregue' && "bg-green-100 text-green-800",
+                                order.delivery_status === 'Despachado' && "bg-blue-100 text-blue-800 animate-pulse"
+                            )}>
+                                {order.delivery_status}
+                            </Badge>
+                        </TableCell>
+                        <TableCell>
+                            <Badge variant="outline" className={cn("gap-1 pr-3 w-fit", paymentDetails.style)}>
+                                <PaymentIcon className="w-3 h-3" />
+                                {paymentDetails.label}
+                            </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                            {needsValidation && (
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button 
+                                                size="sm" 
+                                                className="bg-green-600 hover:bg-green-700 font-bold h-8 px-3 text-xs shadow-sm"
+                                                onClick={() => validatePaymentMutation.mutate(order.id)}
+                                                disabled={validatePaymentMutation.isPending}
+                                            >
+                                                {validatePaymentMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <CheckCircle2 className="w-3 h-3 mr-1" />}
+                                                Validar
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Confirmar recebimento do Pix</TooltipContent>
                                     </Tooltip>
                                 </TooltipProvider>
                             )}
-                            {/* Botão de Histórico */}
-                            <TooltipProvider>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Button 
-                                            variant="ghost" 
-                                            size="icon" 
-                                            className="h-6 w-6 text-blue-600 hover:bg-blue-50 rounded-full"
-                                            onClick={() => {
-                                                setSelectedClientForHistory({
-                                                    id: order.user_id,
-                                                    first_name: order.profiles?.first_name,
-                                                    last_name: order.profiles?.last_name,
-                                                    email: "", // Será carregado pelo modal
-                                                    created_at: null,
-                                                    force_pix_on_next_purchase: false,
-                                                    order_count: 0, 
-                                                    completed_order_count: 0
-                                                });
-                                                setIsClientHistoryOpen(true);
-                                            }}
-                                        >
-                                            <History className="w-3 h-3" />
-                                        </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Histórico de Pedidos</TooltipContent>
-                                </Tooltip>
-                            </TooltipProvider>
-                        </div>
-                        <span className="text-[11px] text-muted-foreground font-mono">{formatPhone(phone || "")}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-bold">{formatCurrency(finalTotal)}</TableCell>
-                    <TableCell>
-                        <Badge variant="secondary" className={cn("text-[10px] w-fit", isPaid && "bg-green-100 text-green-800")}>
-                            {order.status}
-                        </Badge>
-                    </TableCell>
-                    <TableCell>
-                        <Badge variant="secondary" className={cn(
-                            "w-fit",
-                            order.delivery_status === 'Entregue' && "bg-green-100 text-green-800",
-                            order.delivery_status === 'Despachado' && "bg-blue-100 text-blue-800 animate-pulse"
-                        )}>
-                            {order.delivery_status}
-                        </Badge>
-                    </TableCell>
-                    <TableCell>
-                        <Badge variant="outline" className={cn("gap-1 pr-3 w-fit", paymentDetails.style)}>
-                            <PaymentIcon className="w-3 h-3" />
-                            {paymentDetails.label}
-                        </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        {needsValidation && (
-                            <TooltipProvider>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Button 
-                                            size="sm" 
-                                            className="bg-green-600 hover:bg-green-700 font-bold h-8 px-3 text-xs shadow-sm"
-                                            onClick={() => validatePaymentMutation.mutate(order.id)}
-                                            disabled={validatePaymentMutation.isPending}
-                                        >
-                                            {validatePaymentMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <CheckCircle2 className="w-3 h-3 mr-1" />}
-                                            Validar
-                                        </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Confirmar recebimento do Pix</TooltipContent>
-                                </Tooltip>
-                            </TooltipProvider>
-                        )}
 
-                        {isInRoute && (
-                             <TooltipProvider>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Button 
-                                            size="sm" 
-                                            variant="outline"
-                                            className="text-green-600 border-green-200 bg-green-50 hover:bg-green-100 font-bold h-8 px-3 text-xs"
-                                            onClick={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: 'Entregue', info: 'Confirmado pelo painel' })}
-                                            disabled={updateDeliveryStatusMutation.isPending}
-                                        >
-                                            <CheckCircle2 className="w-3 h-3 mr-1" /> Entregue
-                                        </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Marcar pedido como entregue</TooltipContent>
-                                </Tooltip>
-                            </TooltipProvider>
-                        )}
-                        
-                        <Button variant="ghost" size="icon" onClick={() => { setSelectedOrder(order); setIsDetailModalOpen(true); }}><Eye className="h-4 w-4 text-primary" /></Button>
-                        
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuLabel>Ações do Pedido</DropdownMenuLabel>
-                                {phone && (
-                                    <DropdownMenuItem asChild>
-                                        <a href={getWhatsAppLink(phone, `Olá ${name}, falando sobre o pedido #${order.id}...`)} target="_blank" rel="noreferrer" className="cursor-pointer text-green-600 font-medium">
-                                            <MessageCircle className="w-4 h-4 mr-2" /> Abrir WhatsApp
-                                        </a>
+                            {isInRoute && (
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button 
+                                                size="sm" 
+                                                variant="outline"
+                                                className="text-green-600 border-green-200 bg-green-50 hover:bg-green-100 font-bold h-8 px-3 text-xs"
+                                                onClick={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: 'Entregue', info: 'Confirmado pelo painel' })}
+                                                disabled={updateDeliveryStatusMutation.isPending}
+                                            >
+                                                <CheckCircle2 className="w-3 h-3 mr-1" /> Entregue
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Marcar pedido como entregue</TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            )}
+                            
+                            <Button variant="ghost" size="icon" onClick={() => { setSelectedOrder(order); setIsDetailModalOpen(true); }}><Eye className="h-4 w-4 text-primary" /></Button>
+                            
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuLabel>Ações do Pedido</DropdownMenuLabel>
+                                    {phone && (
+                                        <DropdownMenuItem asChild>
+                                            <a href={getWhatsAppLink(phone, `Olá ${name}, falando sobre o pedido #${order.id}...`)} target="_blank" rel="noreferrer" className="cursor-pointer text-green-600 font-medium">
+                                                <MessageCircle className="w-4 h-4 mr-2" /> Abrir WhatsApp
+                                            </a>
+                                        </DropdownMenuItem>
+                                    )}
+                                    {needsValidation && (
+                                        <DropdownMenuItem onSelect={() => validatePaymentMutation.mutate(order.id)} className="text-green-600 font-bold">
+                                            <CheckCircle2 className="w-4 h-4 mr-2" /> Validar Pagamento
+                                        </DropdownMenuItem>
+                                    )}
+                                    <DropdownMenuItem onSelect={() => { setSelectedOrder(order); setIsLabelModalOpen(true); }} disabled={!isPaid}>
+                                        <Printer className="w-4 h-4 mr-2" /> Imprimir Etiqueta
                                     </DropdownMenuItem>
-                                )}
-                                {needsValidation && (
-                                    <DropdownMenuItem onSelect={() => validatePaymentMutation.mutate(order.id)} className="text-green-600 font-bold">
-                                        <CheckCircle2 className="w-4 h-4 mr-2" /> Validar Pagamento
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: 'Despachado', info: 'Despachado manualmente' })} disabled={!isPaid || isInRoute || order.delivery_status === 'Entregue'}>
+                                        <Truck className="w-4 h-4 mr-2" /> Marcar como Despachado
                                     </DropdownMenuItem>
-                                )}
-                                <DropdownMenuItem onSelect={() => { setSelectedOrder(order); setIsLabelModalOpen(true); }} disabled={!isPaid}>
-                                    <Printer className="w-4 h-4 mr-2" /> Imprimir Etiqueta
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: 'Despachado', info: 'Despachado manualmente' })} disabled={!isPaid || isInRoute || order.delivery_status === 'Entregue'}>
-                                    <Truck className="w-4 h-4 mr-2" /> Marcar como Despachado
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: 'Entregue', info: 'Entregue manualmente' })} disabled={order.delivery_status === 'Entregue'}>
-                                    <CheckCircle2 className="w-4 h-4 mr-2" /> Marcar como Entregue
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem onSelect={() => { setSelectedOrder(order); setIsDeleteAlertOpen(true); }} className="text-red-600">
-                                    <Trash2 className="w-4 h-4 mr-2" /> Excluir Pedido
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-            })}
-          </TableBody>
-        </Table>
+                                    <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: 'Entregue', info: 'Entregue manualmente' })} disabled={order.delivery_status === 'Entregue'}>
+                                        <CheckCircle2 className="w-4 h-4 mr-2" /> Marcar como Entregue
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onSelect={() => { setSelectedOrder(order); setIsDeleteAlertOpen(true); }} className="text-red-600">
+                                        <Trash2 className="w-4 h-4 mr-2" /> Excluir Pedido
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        </div>
+                        </TableCell>
+                    </TableRow>
+                    );
+                })}
+            </TableBody>
+            </Table>
+        </div>
       </div>
 
       {selectedIds.size > 0 && (
