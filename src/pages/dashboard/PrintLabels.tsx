@@ -242,7 +242,7 @@ export default function PrintLabelsPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         
         {/* COLUNA ESQUERDA: APENAS OS BOTÕES DE AÇÃO */}
         <div className="lg:col-span-1">
@@ -252,106 +252,12 @@ export default function PrintLabelsPage() {
                         <FileDown className="w-5 h-5 mr-3 text-gray-500" />
                         Baixar Planilha de Exemplo
                     </Button>
-                    <Button 
-                        className="w-full justify-start h-12 bg-green-500 hover:bg-green-600 text-white font-bold"
-                        onClick={handleExport}
-                        disabled={selectedIds.size === 0 || isExporting}
-                    >
-                        {isExporting ? <Loader2 className="w-5 h-5 mr-3 animate-spin" /> : <Download className="w-5 h-5 mr-3" />}
-                        Exportar Selecionados ({selectedIds.size})
-                    </Button>
                 </CardContent>
             </Card>
         </div>
 
-        {/* COLUNA DIREITA: LISTA DE PEDIDOS */}
-        <div className="lg:col-span-2">
-            <Card className="h-full flex flex-col">
-                <CardHeader className="pb-3 border-b bg-gray-50/50">
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                        <CardTitle className="text-lg">Pedidos Pendentes</CardTitle>
-                        <div className="relative w-full sm:w-64">
-                            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                            <Input 
-                                placeholder="Filtrar por nome ou ID..." 
-                                value={searchTerm}
-                                onChange={e => setSearchTerm(e.target.value)}
-                                className="pl-8 h-9 text-sm bg-white"
-                            />
-                        </div>
-                    </div>
-                </CardHeader>
-                <CardContent className="p-0 flex-1 overflow-hidden">
-                    <div className="overflow-auto max-h-[600px]">
-                        <Table>
-                            <TableHeader className="bg-white sticky top-0 shadow-sm z-10">
-                                <TableRow>
-                                    <TableHead className="w-10 text-center">
-                                        <button onClick={toggleSelectAll}>
-                                            {filteredOrders.length > 0 && selectedIds.size === filteredOrders.length ? (
-                                                <CheckSquare className="w-5 h-5 text-primary" />
-                                            ) : (
-                                                <Square className="w-5 h-5 text-gray-400" />
-                                            )}
-                                        </button>
-                                    </TableHead>
-                                    <TableHead>Pedido</TableHead>
-                                    <TableHead>Destinatário</TableHead>
-                                    <TableHead>Cidade/UF</TableHead>
-                                    <TableHead className="text-right">Valor</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {isLoading ? (
-                                    Array.from({length: 5}).map((_, i) => (
-                                        <TableRow key={i}><TableCell colSpan={5}><Skeleton className="h-12 w-full" /></TableCell></TableRow>
-                                    ))
-                                ) : filteredOrders.length === 0 ? (
-                                    <TableRow>
-                                        <TableCell colSpan={5} className="text-center py-10 text-muted-foreground">
-                                            Nenhum pedido pendente encontrado.
-                                        </TableCell>
-                                    </TableRow>
-                                ) : (
-                                    filteredOrders.map(order => {
-                                        const isSelected = selectedIds.has(order.id);
-                                        const addr = order.shipping_address || {};
-                                        return (
-                                            <TableRow 
-                                                key={order.id} 
-                                                className={`cursor-pointer transition-colors ${isSelected ? 'bg-green-50 hover:bg-green-100' : 'hover:bg-gray-50'}`}
-                                                onClick={() => toggleSelectOne(order.id)}
-                                            >
-                                                <TableCell className="text-center">
-                                                    {isSelected ? <CheckSquare className="w-5 h-5 text-green-600" /> : <Square className="w-5 h-5 text-gray-300" />}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <span className="font-mono font-bold">#{order.id}</span>
-                                                    <div className="text-[10px] text-gray-500">{new Date(order.created_at).toLocaleDateString('pt-BR')}</div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <span className="font-medium text-sm">
-                                                        {order.profiles?.first_name} {order.profiles?.last_name}
-                                                    </span>
-                                                    <div className="text-xs text-gray-500">{order.profiles?.phone}</div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="text-sm">{addr.neighborhood}</div>
-                                                    <div className="text-xs text-gray-500">{addr.city}/{addr.state}</div>
-                                                </TableCell>
-                                                <TableCell className="text-right font-bold text-gray-700">
-                                                    {formatCurrency(order.total_price)}
-                                                </TableCell>
-                                            </TableRow>
-                                        );
-                                    })
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
-                </CardContent>
-            </Card>
-        </div>
+        {/* Tabela de Pedidos Removida conforme solicitado */}
+        
       </div>
     </div>
   );
