@@ -21,11 +21,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send } from "lucide-react";
+import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send, History } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { showSuccess, showError } from "@/utils/toast";
 import { OrderDetailModal } from "@/components/dashboard/OrderDetailModal";
 import { ShippingLabelModal } from "@/components/dashboard/ShippingLabelModal";
+import { ClientDetailsModal } from "@/components/dashboard/ClientDetailsModal";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -125,6 +126,10 @@ const OrdersPage = () => {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
+  
+  // States para Histórico do Cliente
+  const [isClientHistoryOpen, setIsClientHistoryOpen] = useState(false);
+  const [selectedClientForHistory, setSelectedClientForHistory] = useState<any>(null);
   
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [readyToShipOnly, setReadyToShipOnly] = useState(false);
@@ -348,6 +353,34 @@ const OrdersPage = () => {
                                     </Tooltip>
                                 </TooltipProvider>
                             )}
+                            {/* Botão de Histórico */}
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button 
+                                            variant="ghost" 
+                                            size="icon" 
+                                            className="h-6 w-6 text-blue-600 hover:bg-blue-50 rounded-full"
+                                            onClick={() => {
+                                                setSelectedClientForHistory({
+                                                    id: order.user_id,
+                                                    first_name: order.profiles?.first_name,
+                                                    last_name: order.profiles?.last_name,
+                                                    email: "", // Será carregado pelo modal
+                                                    created_at: null,
+                                                    force_pix_on_next_purchase: false,
+                                                    order_count: 0, 
+                                                    completed_order_count: 0
+                                                });
+                                                setIsClientHistoryOpen(true);
+                                            }}
+                                        >
+                                            <History className="w-3 h-3" />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Histórico de Pedidos</TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
                         </div>
                         <span className="text-[11px] text-muted-foreground font-mono">{formatPhone(phone || "")}</span>
                       </div>
@@ -494,6 +527,13 @@ const OrdersPage = () => {
 
       {selectedOrder && <OrderDetailModal order={selectedOrder} isOpen={isDetailModalOpen} onClose={() => setIsDetailModalOpen(false)} />}
       {selectedOrder && <ShippingLabelModal order={selectedOrder} isOpen={isLabelModalOpen} onClose={() => { setIsLabelModalOpen(false); setSelectedOrder(null); }} />}
+      
+      {/* Modal de Histórico do Cliente */}
+      <ClientDetailsModal 
+        client={selectedClientForHistory} 
+        isOpen={isClientHistoryOpen} 
+        onClose={() => setIsClientHistoryOpen(false)} 
+      />
 
       <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
         <AlertDialogContent>

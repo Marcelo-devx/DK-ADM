@@ -121,7 +121,7 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                                 {client.first_name} {client.last_name}
                             </h3>
                             <div className="flex items-center gap-2 text-sm text-slate-500 mt-1">
-                                <Mail className="w-3 h-3" /> {client.email}
+                                <Mail className="w-3 h-3" /> {client.email || profile?.email || "..."}
                             </div>
                             <div className="flex gap-2 mt-2">
                                 {profile?.role === 'adm' && <Badge className="bg-red-500">Administrador</Badge>}
@@ -135,19 +135,19 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                     </div>
                     <div className="text-right hidden sm:block">
                         <p className="text-[10px] text-muted-foreground uppercase font-bold">Cliente desde</p>
-                        <p className="text-sm font-medium">{formatDate(client.created_at)}</p>
+                        <p className="text-sm font-medium">{formatDate(client.created_at || profile?.created_at)}</p>
                     </div>
                 </div>
             </div>
 
-            <Tabs defaultValue="details" className="flex-1 flex flex-col overflow-hidden bg-white">
+            <Tabs defaultValue="orders" className="flex-1 flex flex-col overflow-hidden bg-white">
                 <div className="px-6 border-b">
                     <TabsList className="w-full justify-start h-12 bg-transparent p-0 gap-6">
-                        <TabsTrigger value="details" className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none rounded-none px-0 pb-2 h-full font-bold text-slate-500 data-[state=active]:text-primary bg-transparent">
-                            Dados Pessoais
-                        </TabsTrigger>
                         <TabsTrigger value="orders" className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none rounded-none px-0 pb-2 h-full font-bold text-slate-500 data-[state=active]:text-primary bg-transparent">
                             Histórico de Pedidos ({orders?.length || 0})
+                        </TabsTrigger>
+                        <TabsTrigger value="details" className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none rounded-none px-0 pb-2 h-full font-bold text-slate-500 data-[state=active]:text-primary bg-transparent">
+                            Dados Pessoais
                         </TabsTrigger>
                     </TabsList>
                 </div>
@@ -231,7 +231,7 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                                             <div className="bg-white p-3 rounded shadow-sm border border-yellow-100">
                                                 <p className="text-[10px] text-muted-foreground uppercase font-bold">Total Pedidos</p>
                                                 <p className="font-black text-blue-600 flex items-center justify-center gap-1">
-                                                    <History className="w-3 h-3" /> {client.order_count}
+                                                    <History className="w-3 h-3" /> {orders?.length || 0}
                                                 </p>
                                             </div>
                                             <div className="bg-white p-3 rounded shadow-sm border border-yellow-100">
