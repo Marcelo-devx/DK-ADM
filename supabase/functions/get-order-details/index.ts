@@ -56,7 +56,7 @@ serve(async (req) => {
         throw new Error("O parâmetro 'id' é obrigatório na URL (ex: ?id=123).");
     }
 
-    // 3. Buscar Dados Completos
+    // 3. Buscar Dados do Pedido e Perfil (Sem email aqui)
     const { data: order, error } = await supabaseAdmin
         .from('orders')
         .select(`
@@ -73,7 +73,6 @@ serve(async (req) => {
                 first_name,
                 last_name,
                 phone,
-                email,
                 cpf_cnpj
             )
         `)
@@ -83,8 +82,25 @@ serve(async (req) => {
     if (error) throw error;
     if (!order) throw new Error("Pedido não encontrado.");
 
+    // 4. Buscar E-mail do Usuário no Auth (separado por segurança)
+    let userEmail = null;
+    if (order.user_id) {
+        const { data: userData } = await supabaseAdmin.auth.admin.getUserById(order.user_id);
+        userEmail = userData?.user?.email;
+    }
+
+    // Montar resposta final
+    const responseData = {
+        ...order,
+        customer_email: userEmail, // Adiciona o e-mail no nível superior para facilitar
+        profiles: {
+            ...order.profiles,
+            email: userEmail // Adiciona também dentro do perfil para compatibilidade
+        }
+    };
+
     return new Response(
-      JSON.stringify(order),
+      JSON.stringify(responseData),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
