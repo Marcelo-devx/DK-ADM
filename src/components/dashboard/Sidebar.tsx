@@ -6,7 +6,7 @@ import {
   MessageSquare, Users, ListTree, GalleryHorizontal, Star, Ticket, Plug, 
   ShoppingCart, DollarSign, Truck, Coins, Printer, Map as MapIcon, 
   Lock, FileOutput, FileUp, Workflow, BarChart3, Box, LogOut, Brain, Sparkles,
-  Lightbulb, Webhook, Crown, TicketCheck, Bike
+  Lightbulb, Webhook, Crown, TicketCheck, Bike, Bitcoin
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -65,6 +65,10 @@ const Sidebar = () => {
         <NavLink to="/dashboard/prices" className={navLinkClass}>
           <Coins className="w-4 h-4 mr-3 text-yellow-600" />
           Gestão de Preços
+        </NavLink>
+        <NavLink to="/dashboard/crypto" className={navLinkClass}>
+          <Bitcoin className="w-4 h-4 mr-3 text-orange-500" />
+          Cripto
         </NavLink>
 
         {/* LOGÍSTICA */}

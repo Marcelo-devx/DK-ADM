@@ -48,6 +48,7 @@ import ClubDKPage from "./pages/ClubDK";
 import LoyaltyManagementPage from "./pages/dashboard/LoyaltyManagement";
 import UserCouponsHistoryPage from "./pages/dashboard/UserCouponsHistory";
 import ShippingRatesPage from "./pages/dashboard/ShippingRates";
+import CryptoPage from "./pages/dashboard/Crypto";
 
 const queryClient = new QueryClient();
 
@@ -105,6 +106,7 @@ const AppContent = () => {
           <Route path="integrations" element={<IntegrationsPage />} />
           <Route path="secrets" element={<SecretsPage />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="crypto" element={<CryptoPage />} />
         </Route>
 
         <Route path="*" element={<NotFound />} />
