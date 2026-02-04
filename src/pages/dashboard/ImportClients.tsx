@@ -11,7 +11,6 @@ import * as XLSX from 'xlsx';
 import { mapRowKeys } from "@/utils/excel-utils";
 import { ClientImportModal } from "@/components/dashboard/ClientImportModal";
 import { ImportResultModal } from "@/components/dashboard/ImportResultModal";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Table,
   TableBody,
@@ -25,21 +24,40 @@ const ImportClientsPage = () => {
   const queryClient = useQueryClient();
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [clientsToImport, setClientsToImport] = useState<any[]>([]);
-  
-  // Estado para o Modal de Resultados
   const [isResultModalOpen, setIsResultModalOpen] = useState(false);
   const [importResult, setImportResult] = useState<{ success: number; failed: number; errors: string[] } | null>(null);
 
-  // Função para converter formatos de data brasileiros para ISO
-  const formatDateToISO = (val: any) => {
-    if (!val) return null;
+  // Função robusta para converter datas da planilha para ISO (YYYY-MM-DD)
+  const formatAnyDateToISO = (val: any) => {
+    if (val === undefined || val === null || val === '') return null;
+
+    // 1. Se for um número (Data serial do Excel)
+    if (typeof val === 'number') {
+        const date = XLSX.SSF.parse_date_code(val);
+        return `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
+    }
+
     const str = String(val).trim();
-    const match = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+    
+    // 2. Se já estiver no formato ISO (YYYY-MM-DD)
+    if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.split('T')[0];
+
+    // 3. Tenta converter DD/MM/AAAA ou DD-MM-AAAA
+    const match = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/);
     if (match) {
-        const [_, d, m, y] = match;
+        let [_, d, m, y] = match;
+        // Ajusta ano de 2 dígitos
+        if (y.length === 2) y = "20" + y;
         return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
     }
-    return val;
+
+    // 4. Fallback: Tenta o construtor nativo de data
+    try {
+        const d = new Date(val);
+        if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+    } catch (e) {}
+
+    return null;
   };
 
   const bulkImportMutation = useMutation({
@@ -52,12 +70,8 @@ const ImportClientsPage = () => {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
-      
-      // Fecha modal de confirmação e limpa seleção
       setIsImportModalOpen(false);
       setClientsToImport([]);
-
-      // Define os resultados e abre o modal de relatório
       setImportResult(data.details);
       setIsResultModalOpen(true);
     },
@@ -72,11 +86,10 @@ const ImportClientsPage = () => {
     const reader = new FileReader();
     reader.onload = (e) => {
         const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'array' });
+        const workbook = XLSX.read(data, { type: 'array', cellDates: false }); // Mantém formato original para tratarmos
         const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]) as any[];
         
         const mappedClients = json.map(mapRowKeys).map((row: any) => {
-            // Lógica robusta para encontrar CPF/CNPJ independente da formatação do cabeçalho
             const cpfCnpjValue = row.cpfcnpj || row['cpf/cnpj'] || row.cpf || row.cnpj || row['cpf/cnp'];
 
             return {
@@ -85,8 +98,8 @@ const ImportClientsPage = () => {
                 full_name: row.nomecompleto || '',
                 cpf_cnpj: cpfCnpjValue ? String(cpfCnpjValue) : '',
                 gender: row.sexo || '',
-                date_of_birth: formatDateToISO(row.datadenascimento),
-                client_since: formatDateToISO(row.clientedesde),
+                date_of_birth: formatAnyDateToISO(row.datadenascimento),
+                client_since: formatAnyDateToISO(row.clientedesde), // Usa a nova função de conversão
                 phone: row.telefone ? String(row.telefone) : '',
                 cep: row.cep ? String(row.cep) : '',
                 street: row.rua || '',
@@ -115,7 +128,7 @@ const ImportClientsPage = () => {
         "Email", "Senha", "Nome Completo", "CPF/CNPJ", "Sexo", "Data de Nascimento", "Cliente Desde", "Telefone", "CEP", "Rua", "Numero", "Complemento", "Bairro", "Cidade", "Estado"
     ];
     const exampleRow = [
-        "cliente@exemplo.com", "123456", "João da Silva", "123.456.789-00", "Masculino", "15-05-1990", "01-01-2023", "11999998888", "01001000", "Rua das Flores", "123", "Apto 12", "Centro", "São Paulo", "SP"
+        "cliente@exemplo.com", "123456", "João da Silva", "123.456.789-00", "Masculino", "15/05/1990", "01/01/2023", "11999998888", "01001000", "Rua das Flores", "123", "Apto 12", "Centro", "São Paulo", "SP"
     ];
 
     const worksheet = XLSX.utils.aoa_to_sheet([headers, exampleRow]);
@@ -208,11 +221,6 @@ const ImportClientsPage = () => {
                 </TableRow>
               </TableBody>
             </Table>
-          </div>
-          <div className="mt-4 text-sm bg-gray-50 p-4 rounded-lg border text-gray-600 space-y-2">
-            <p><span className="font-bold text-gray-900">Datas:</span> Use o formato <code className="bg-white px-2 py-0.5 rounded border border-gray-300 font-bold">DD-MM-AAAA</code>.</p>
-            <p><span className="font-bold text-gray-900">Senha:</span> Se não for fornecida na planilha, será definida como <code className="bg-white px-2 py-0.5 rounded border border-gray-300 font-bold">123456</code> por padrão.</p>
-            <p><span className="font-bold text-gray-900">Cliente Desde:</span> Se deixar em branco, o sistema registrará a data atual da importação.</p>
           </div>
         </CardContent>
       </Card>
