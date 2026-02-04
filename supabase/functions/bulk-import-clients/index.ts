@@ -46,8 +46,6 @@ serve(async (req) => {
         const firstName = nameParts[0] || '';
         const lastName = nameParts.slice(1).join(' ') || '';
         
-        // Objeto com os campos que vieram da planilha (limpando vazios)
-        // A lógica é: Se veio na planilha, queremos usar. Se veio vazio, ignoramos para não apagar dados existentes.
         const fieldsToUpdate: any = {};
         
         if (firstName) fieldsToUpdate.first_name = firstName;
@@ -66,20 +64,18 @@ serve(async (req) => {
         if (client.city) fieldsToUpdate.city = client.city;
         if (client.state) fieldsToUpdate.state = client.state;
 
-        // Data de atualização
+        // SE TIVER DATA DE CLIENTE DESDE, USA ELA COMO DATA DE CRIAÇÃO DO PERFIL
+        if (client.client_since) {
+            fieldsToUpdate.created_at = client.client_since;
+        }
+
         fieldsToUpdate.updated_at = new Date().toISOString();
 
-        // 1. Verifica se o usuário já existe no Auth
-        // Nota: listUsers é paginado, mas getUserByEmail não é exposto diretamente na API admin de forma simples sem ID
-        // Vamos tentar criar. Se der erro de "já existe", então atualizamos.
-        
         let userId = null;
         let isNewUser = false;
 
-        // Tentativa de Criação
         const password = client.password ? String(client.password) : "123456";
         
-        // Tenta criar usuário
         const { data: createdData, error: createError } = await supabaseAdmin.auth.admin.createUser({
             email: email,
             password: password,
@@ -88,22 +84,9 @@ serve(async (req) => {
         });
 
         if (createError) {
-            // Se o erro for "User already registered", buscamos o ID dele para atualizar
             if (createError.message?.includes("already registered") || createError.status === 422) {
-                // Como não temos getUser(email) direto eficiente sem escopo, usamos uma RPC auxiliar segura ou listUsers filtrado
-                // Para simplificar e garantir performance, vamos assumir que precisamos achar esse ID.
-                // Uma maneira robusta é tentar um "invite" ou usar uma função Postgres se disponível.
-                // Mas aqui, vamos usar listUsers com filtro (funciona bem para volumes moderados)
-                // OBS: Supabase Admin API não tem "getByEmail" direto documentado publicamente no JS client moderno além do list.
-                // Truque: Tentar logar não funciona (admin context).
-                // Solução: Usar uma query na tabela `auth.users` não é permitido via API Client padrão (schema auth é protegido).
-                
-                // Vamos usar a RPC `get_user_id_by_email` que já criamos em passos anteriores.
                 const { data: existingId, error: rpcError } = await supabaseAdmin.rpc('get_user_id_by_email', { user_email: email });
-                
-                if (rpcError || !existingId) {
-                    throw new Error("Usuário existe mas não foi possível recuperar ID para atualização.");
-                }
+                if (rpcError || !existingId) throw new Error("Usuário existe mas erro ao recuperar ID.");
                 userId = existingId;
             } else {
                 throw createError;
@@ -115,25 +98,15 @@ serve(async (req) => {
 
         if (!userId) throw new Error("ID do usuário não identificado.");
 
-        // 2. Atualizar Perfil (Upsert/Update)
-        // Se for novo, inserimos tudo.
-        // Se for antigo, fazemos update apenas dos campos que vieram no excel (fieldsToUpdate).
-        
+        // Atualizar Perfil
         if (isNewUser) {
-            // Se o cliente é novo, podemos forçar a data de criação se fornecida
-            if (client.client_since) {
-                fieldsToUpdate.created_at = client.client_since;
-            }
-            
             const { error: profileError } = await supabaseAdmin
                 .from('profiles')
-                .upsert({ id: userId, ...fieldsToUpdate }); // Upsert garante criação
+                .upsert({ id: userId, ...fieldsToUpdate });
             
             if (profileError) throw profileError;
             results.created++;
         } else {
-            // Se já existe, fazemos UPDATE para não sobrescrever campos não mencionados com null
-            // O objeto fieldsToUpdate já contém apenas as chaves que tinham valor no Excel
             const { error: profileError } = await supabaseAdmin
                 .from('profiles')
                 .update(fieldsToUpdate)

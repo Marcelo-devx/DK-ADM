@@ -49,7 +49,7 @@ serve(async (req) => {
 
     const { data: profiles, error: profilesError } = await supabaseAdmin
       .from('profiles')
-      .select('id, first_name, last_name, role, force_pix_on_next_purchase, updated_at');
+      .select('id, first_name, last_name, role, force_pix_on_next_purchase, updated_at, created_at'); // ADICIONADO created_at
     if (profilesError) throw profilesError;
 
     // Fetch all orders to calculate order count per user
@@ -66,7 +66,7 @@ serve(async (req) => {
         orderCountMap.set(order.user_id, (orderCountMap.get(order.user_id) || 0) + 1);
         
         // Completed count
-        if (order.status === 'Finalizada') {
+        if (order.status === 'Finalizada' || order.status === 'Pago') {
             completedOrderMap.set(order.user_id, (completedOrderMap.get(order.user_id) || 0) + 1);
         }
     }
@@ -81,14 +81,14 @@ serve(async (req) => {
       return {
         id: u.id,
         email: u.email,
-        created_at: u.created_at,
+        created_at: p.created_at || u.created_at, // PRIORIDADE para a data do perfil (importada)
         updated_at: p.updated_at || null,
         first_name: p.first_name || null,
         last_name: p.last_name || null,
         role: p.role || 'user',
         force_pix_on_next_purchase: p.force_pix_on_next_purchase || false,
         order_count: order_count,
-        completed_order_count: completed_order_count, // Novo campo
+        completed_order_count: completed_order_count,
       };
     });
 
