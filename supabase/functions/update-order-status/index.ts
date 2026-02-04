@@ -21,7 +21,6 @@ serve(async (req) => {
     );
 
     // 1. Validação de Segurança
-    // Aceita tanto o Token de Integração N8N (configurado no painel) quanto a Service Role Key direta
     const authHeader = req.headers.get('Authorization');
     const token = authHeader?.replace('Bearer ', '');
     
@@ -63,9 +62,14 @@ serve(async (req) => {
     if (status) updateData.status = status;
     if (delivery_status) updateData.delivery_status = delivery_status;
     
-    // Se enviar tracking_code, salva em delivery_info (compatibilidade)
-    // Se enviar delivery_info explícito, usa ele.
-    if (tracking_code) updateData.delivery_info = `Rastreio: ${tracking_code}`;
+    // --- LÓGICA DE RASTREIO (TEMPORÁRIA) ---
+    // TODO: Lembrar de refatorar quando a coluna tracking_code oficial for criada no banco.
+    // Por enquanto, salvamos dentro de delivery_info para não quebrar a integração.
+    if (tracking_code) {
+        updateData.delivery_info = `Rastreio: ${tracking_code}`;
+    }
+    
+    // Se enviar delivery_info explícito, usa ele (tem prioridade sobre o tracking_code isolado)
     if (delivery_info) updateData.delivery_info = delivery_info;
 
     if (Object.keys(updateData).length === 0) {
