@@ -26,7 +26,6 @@ serve(async (req) => {
     
     let isAuthorized = false;
 
-    // Aceita Service Key ou Token N8N
     if (token === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')) {
         isAuthorized = true;
     } else {
@@ -48,7 +47,7 @@ serve(async (req) => {
       });
     }
 
-    // 2. Obter ID do Pedido (Query Param)
+    // 2. Obter ID do Pedido
     const url = new URL(req.url);
     const orderId = url.searchParams.get('id');
 
@@ -56,7 +55,7 @@ serve(async (req) => {
         throw new Error("O parâmetro 'id' é obrigatório na URL (ex: ?id=123).");
     }
 
-    // 3. Buscar Dados do Pedido e Perfil (Sem email aqui)
+    // 3. Buscar Dados do Pedido + Itens (Sem JOIN com profiles para evitar erro de schema)
     const { data: order, error } = await supabaseAdmin
         .from('orders')
         .select(`
@@ -68,12 +67,6 @@ serve(async (req) => {
                 quantity,
                 price_at_purchase,
                 item_type
-            ),
-            profiles (
-                first_name,
-                last_name,
-                phone,
-                cpf_cnpj
             )
         `)
         .eq('id', orderId)
@@ -82,7 +75,19 @@ serve(async (req) => {
     if (error) throw error;
     if (!order) throw new Error("Pedido não encontrado.");
 
-    // 4. Buscar E-mail do Usuário no Auth (separado por segurança)
+    // 4. Buscar Perfil Manualmente (Resolve o erro de relacionamento)
+    let profileData = null;
+    if (order.user_id) {
+        const { data: profile } = await supabaseAdmin
+            .from('profiles')
+            .select('first_name, last_name, phone, cpf_cnpj')
+            .eq('id', order.user_id)
+            .maybeSingle();
+        
+        profileData = profile;
+    }
+
+    // 5. Buscar E-mail do Usuário no Auth
     let userEmail = null;
     if (order.user_id) {
         const { data: userData } = await supabaseAdmin.auth.admin.getUserById(order.user_id);
@@ -92,10 +97,10 @@ serve(async (req) => {
     // Montar resposta final
     const responseData = {
         ...order,
-        customer_email: userEmail, // Adiciona o e-mail no nível superior para facilitar
+        customer_email: userEmail,
         profiles: {
-            ...order.profiles,
-            email: userEmail // Adiciona também dentro do perfil para compatibilidade
+            ...(profileData || {}),
+            email: userEmail
         }
     };
 
