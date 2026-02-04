@@ -160,15 +160,30 @@ const N8nIntegrationPage = () => {
 }`
     },
     { 
-      id: "api_update_order",
-      name: "Atualizar Status",
+      id: "api_confirm_payment",
+      name: "Confirmar Pagamento (Pix)",
       method: "POST", 
       path: "/update-order-status", 
       type: "api",
-      desc: "Atualiza status do pedido e adiciona rastreio.",
+      desc: "Muda o status do pedido para 'Pago'. Use isto quando receber o webhook do banco.",
       body: `{ 
   "order_id": 12345,
-  "status": "Em Trânsito",
+  "status": "Pago"
+}`,
+      response: `{ 
+  "success": true, 
+  "message": "Pedido atualizado com sucesso."
+}`
+    },
+    { 
+      id: "api_update_logistics",
+      name: "Atualizar Logística",
+      method: "POST", 
+      path: "/update-order-status", 
+      type: "api",
+      desc: "Atualiza status de entrega e rastreio.",
+      body: `{ 
+  "order_id": 12345,
   "delivery_status": "Despachado",
   "tracking_code": "BR123456789"
 }`,
@@ -184,7 +199,7 @@ const N8nIntegrationPage = () => {
       path: "/get-order-details?id=12345", 
       type: "api",
       desc: "Consulta dados completos de um pedido específico.",
-      body: ``,
+      body: `(Sem corpo - use Query Param ?id=)`,
       response: `{ 
   "id": 12345, 
   "status": "Pendente", 
