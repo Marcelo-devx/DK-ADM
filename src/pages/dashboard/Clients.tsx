@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { MoreHorizontal, Mail, KeyRound, RotateCcw, CheckCircle, Lock, Unlock, UserPlus, Eye } from "lucide-react";
+import { MoreHorizontal, Mail, KeyRound, RotateCcw, CheckCircle, Lock, Unlock, UserPlus, Eye, CalendarDays } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -218,7 +218,7 @@ const ClientsPage = () => {
               <TableHead>Nome</TableHead>
               <TableHead>Status Compra</TableHead>
               <TableHead>Segurança (Exigir PIX)</TableHead>
-              <TableHead>Data da Alteração</TableHead>
+              <TableHead>Cliente Desde</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
@@ -267,9 +267,12 @@ const ClientsPage = () => {
                     </div>
                   </TableCell>
                   <TableCell>
-                    {client.updated_at 
-                      ? new Date(client.updated_at).toLocaleString("pt-BR") 
-                      : '-'}
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <CalendarDays className="w-3 h-3" />
+                        {client.created_at 
+                          ? new Date(client.created_at).toLocaleDateString("pt-BR") 
+                          : '-'}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
