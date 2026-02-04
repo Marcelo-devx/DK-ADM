@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Workflow, Copy, Eye, EyeOff, Save, Check, Key, Webhook, Plus, Trash2, Globe, ChevronDown, ChevronRight, Zap, Loader2, Pencil, X, ArrowUpRight, ArrowDownLeft, Network, FileJson } from "lucide-react";
+import { Workflow, Copy, Eye, EyeOff, Save, Check, Key, Webhook, Plus, Trash2, Globe, ChevronDown, ChevronRight, Zap, Loader2, Pencil, X, ArrowUpRight, ArrowDownLeft, Network, FileJson, Play } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
 
 const N8nIntegrationPage = () => {
   const queryClient = useQueryClient();
@@ -59,12 +60,20 @@ const N8nIntegrationPage = () => {
   
   // Estado para Modal de Documentação
   const [selectedDoc, setSelectedDoc] = useState<any>(null);
+
+  // Estados para Modal de Teste/Simulação
+  const [isTestModalOpen, setIsTestModalOpen] = useState(false);
+  const [testItem, setTestItem] = useState<any>(null);
+  const [testTargetUrl, setTestTargetUrl] = useState("");
+  const [testRequestBody, setTestRequestBody] = useState("");
+  const [testResponse, setTestResponse] = useState<any>(null);
   
   const baseUrl = "https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1";
 
   const webhookEvents = [
     { 
       id: "wh_order",
+      event_key: "order_created",
       name: "Pedido Finalizado (Checkout)", 
       type: "webhook",
       desc: "Enviado quando uma venda é concluída. Inclui o valor do frete calculado e o total pago.",
@@ -99,6 +108,7 @@ const N8nIntegrationPage = () => {
     },
     { 
       id: "wh_support",
+      event_key: "support_request",
       name: "Solicitação de Suporte", 
       type: "webhook",
       desc: "Disparado quando o cliente solicita ajuda.",
@@ -123,7 +133,7 @@ const N8nIntegrationPage = () => {
       path: "/n8n-create-client", 
       type: "api",
       desc: "Cria ou recupera um cliente (Idempotente: não duplica).",
-      body: `{ "email": "zap@loja.com", "name": "João", "phone": "5511..." }`,
+      body: `{ "email": "teste@exemplo.com", "name": "Teste", "phone": "11999999999" }`,
       response: `{ "success": true, "id": "uuid", "is_new_user": false }`
     },
     { 
@@ -134,10 +144,10 @@ const N8nIntegrationPage = () => {
       type: "api",
       desc: "Cria o pedido e CALCULA O FRETE AUTOMATICAMENTE pelo bairro.",
       body: `{ 
-  "customer": { "email": "..." }, 
-  "items": [{ "sku": "...", "quantity": 1 }], 
+  "customer": { "email": "teste@exemplo.com", "name": "Teste da Silva" }, 
+  "items": [{ "name": "Produto Teste", "quantity": 1 }], 
   "shipping_address": { 
-     "neighborhood": "Batel", 
+     "neighborhood": "Centro", 
      "city": "Curitiba" 
   },
   "payment_method": "pix" 
@@ -174,7 +184,7 @@ const N8nIntegrationPage = () => {
       path: "/get-order-details?id=12345", 
       type: "api",
       desc: "Consulta dados completos de um pedido específico.",
-      body: `(Sem corpo - use Query Param ?id=)`,
+      body: ``,
       response: `{ 
   "id": 12345, 
   "status": "Pendente", 
@@ -272,6 +282,7 @@ const N8nIntegrationPage = () => {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["webhookConfigs"] }),
   });
 
+  // Teste de Webhooks da Tabela
   const testWebhookMutation = useMutation({
     mutationFn: async ({ id, url, event }: { id: number, url: string, event: string }) => {
         setTestingId(id);
@@ -293,6 +304,60 @@ const N8nIntegrationPage = () => {
     onError: (err: any) => {
         showError(`Erro ao testar: ${err.message}`);
         setTestingId(null);
+    }
+  });
+
+  // Simulação Interativa (Modal)
+  const simulationMutation = useMutation({
+    mutationFn: async () => {
+        setTestResponse(null);
+        if (testItem.type === 'webhook') {
+            // Simular envio para URL
+            if (!testTargetUrl) throw new Error("Insira uma URL de destino.");
+            const { data, error } = await supabase.functions.invoke("test-webhook-endpoint", {
+                body: { url: testTargetUrl, event_type: testItem.event_key, method: 'POST' }
+            });
+            if (error) throw error;
+            return data;
+        } else {
+            // Executar API Local
+            if (!testItem.path) throw new Error("Endpoint inválido.");
+            
+            // Tratamento especial para GET com Query Params
+            let url = baseUrl + testItem.path;
+            let options: any = {
+                method: testItem.method,
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                }
+            };
+
+            if (testItem.method === "POST" || testItem.method === "PUT") {
+                try {
+                    // Valida JSON
+                    JSON.parse(testRequestBody); 
+                    options.body = testRequestBody;
+                } catch (e) {
+                    throw new Error("O corpo da requisição deve ser um JSON válido.");
+                }
+            } else if (testItem.method === "GET") {
+                // Se o usuário editou o path no input (para mudar o ID por exemplo), poderíamos usar um input separado
+                // Mas aqui estamos simplificando
+            }
+
+            const response = await fetch(url, options);
+            const data = await response.json();
+            return { status: response.status, data };
+        }
+    },
+    onSuccess: (data) => {
+        setTestResponse(data);
+        showSuccess("Teste executado!");
+    },
+    onError: (err: any) => {
+        setTestResponse({ error: err.message });
+        showError(err.message);
     }
   });
 
@@ -325,6 +390,17 @@ const N8nIntegrationPage = () => {
   const startEditing = (hook: any) => {
     setEditingWebhookId(hook.id);
     setTempUrl(hook.target_url);
+  };
+
+  const handleOpenTest = (item: any) => {
+    setTestItem(item);
+    setTestResponse(null);
+    if (item.type === 'webhook') {
+        setTestTargetUrl(""); 
+    } else {
+        setTestRequestBody(item.body || "{}");
+    }
+    setIsTestModalOpen(true);
   };
 
   const getEventBadge = (event: string) => {
@@ -422,6 +498,9 @@ const N8nIntegrationPage = () => {
                                                     <span className="font-semibold text-sm truncate">{evt.name}</span>
                                                 </div>
                                                 <div className="flex items-center gap-2">
+                                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-purple-600 hover:bg-purple-100" onClick={(e) => { e.stopPropagation(); handleOpenTest(evt); }} title="Testar Disparo">
+                                                        <Play className="w-4 h-4" />
+                                                    </Button>
                                                     <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-600 hover:bg-blue-100" onClick={(e) => { e.stopPropagation(); setSelectedDoc(evt); }}>
                                                         <Eye className="w-4 h-4" />
                                                     </Button>
@@ -451,6 +530,9 @@ const N8nIntegrationPage = () => {
                                                     <span className="font-mono text-xs font-bold text-slate-700 truncate">{api.path}</span>
                                                 </div>
                                                 <div className="flex items-center gap-2">
+                                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-emerald-600 hover:bg-emerald-100" onClick={(e) => { e.stopPropagation(); handleOpenTest(api); }} title="Testar Endpoint">
+                                                        <Play className="w-4 h-4" />
+                                                    </Button>
                                                     <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-600 hover:bg-blue-100" onClick={(e) => { e.stopPropagation(); setSelectedDoc(api); }}>
                                                         <Eye className="w-4 h-4" />
                                                     </Button>
@@ -584,6 +666,91 @@ const N8nIntegrationPage = () => {
             </div>
             <DialogFooter>
                 <Button onClick={() => setSelectedDoc(null)}>Fechar</Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Simulação/Teste */}
+      <Dialog open={isTestModalOpen} onOpenChange={(open) => { setIsTestModalOpen(open); if(!open) setTestResponse(null); }}>
+        <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
+            <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                    <Zap className="w-5 h-5 text-orange-500" />
+                    Simulador: {testItem?.name}
+                </DialogTitle>
+                <DialogDescription>
+                    {testItem?.type === 'webhook' 
+                        ? "Envie o payload de exemplo para sua URL do N8N/Typebot." 
+                        : "Execute o endpoint real no seu backend (usando o token salvo)."}
+                </DialogDescription>
+            </DialogHeader>
+
+            <div className="flex-1 overflow-y-auto py-4 space-y-4">
+                {testItem?.type === 'webhook' ? (
+                    <div className="space-y-3">
+                        <div className="space-y-1">
+                            <Label>URL de Destino (Webhook URL)</Label>
+                            <Input 
+                                placeholder="https://seu-n8n.com/webhook/teste" 
+                                value={testTargetUrl} 
+                                onChange={(e) => setTestTargetUrl(e.target.value)} 
+                            />
+                        </div>
+                        <div className="bg-slate-100 p-3 rounded text-xs font-mono border">
+                            <p className="text-slate-500 font-bold mb-1">Payload a ser enviado:</p>
+                            <pre className="whitespace-pre-wrap">{testItem?.payload}</pre>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        <div className="space-y-1">
+                            <Label>Endpoint</Label>
+                            <div className="p-2 bg-slate-100 rounded border font-mono text-sm">
+                                <Badge className="mr-2">{testItem?.method}</Badge>
+                                {baseUrl}{testItem?.path.split('?')[0]}
+                            </div>
+                        </div>
+                        {testItem?.method !== 'GET' && (
+                            <div className="space-y-1">
+                                <Label>Corpo da Requisição (Body)</Label>
+                                <Textarea 
+                                    className="font-mono text-xs h-32 bg-slate-50"
+                                    value={testRequestBody}
+                                    onChange={(e) => setTestRequestBody(e.target.value)}
+                                />
+                            </div>
+                        )}
+                        {testItem?.method === 'GET' && testItem?.path.includes('?') && (
+                            <p className="text-xs text-orange-600 bg-orange-50 p-2 rounded">
+                                Nota: Esta simulação usa o ID fixo da documentação. Para IDs reais, use o Postman.
+                            </p>
+                        )}
+                    </div>
+                )}
+
+                {testResponse && (
+                    <div className="mt-4 pt-4 border-t animate-in fade-in slide-in-from-bottom-4">
+                        <div className="flex items-center justify-between mb-2">
+                            <Label className="text-green-700 font-bold">Resposta do Servidor</Label>
+                            {testResponse.status && <Badge variant="outline">{testResponse.status}</Badge>}
+                        </div>
+                        <div className="bg-slate-900 text-green-400 p-4 rounded-lg font-mono text-xs overflow-x-auto shadow-inner max-h-60 border border-slate-700">
+                            <pre>{JSON.stringify(testResponse, null, 2)}</pre>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setIsTestModalOpen(false)}>Fechar</Button>
+                <Button 
+                    onClick={() => simulationMutation.mutate()} 
+                    disabled={simulationMutation.isPending || (testItem?.type === 'webhook' && !testTargetUrl)}
+                    className="bg-orange-600 hover:bg-orange-700 font-bold"
+                >
+                    {simulationMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Play className="w-4 h-4 mr-2" />}
+                    Executar Teste
+                </Button>
             </DialogFooter>
         </DialogContent>
       </Dialog>
