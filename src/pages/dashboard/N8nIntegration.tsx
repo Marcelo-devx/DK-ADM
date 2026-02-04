@@ -7,9 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Workflow, Copy, Eye, EyeOff, Save, Check, Key, Webhook, Plus, Trash2, Globe, ChevronDown, ChevronRight, FileJson, Zap, Loader2, Pencil, X, ArrowUpRight, ArrowDownLeft, MessageSquare, Network } from "lucide-react";
+import { Workflow, Copy, Eye, EyeOff, Save, Check, Key, Webhook, Plus, Trash2, Globe, ChevronDown, ChevronRight, Zap, Loader2, Pencil, X, ArrowUpRight, ArrowDownLeft, Network, FileJson } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -31,9 +30,17 @@ import { Switch } from "@/components/ui/switch";
 import {
   Collapsible,
   CollapsibleContent,
-  CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const N8nIntegrationPage = () => {
   const queryClient = useQueryClient();
@@ -49,7 +56,9 @@ const N8nIntegrationPage = () => {
   
   // Estado para Diagnóstico
   const [diagnosticUrl, setDiagnosticUrl] = useState("https://n8n-ws.dkcwb.cloud/webhook/testar-conexão");
-  const [isDiagnosticRunning, setIsDiagnosticRunning] = useState(false);
+  
+  // Estado para Modal de Documentação
+  const [selectedDoc, setSelectedDoc] = useState<any>(null);
   
   const baseUrl = "https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1";
 
@@ -57,6 +66,7 @@ const N8nIntegrationPage = () => {
     { 
       id: "wh_order",
       name: "Pedido Finalizado (Checkout)", 
+      type: "webhook",
       desc: "Enviado quando uma venda é concluída. Inclui o valor do frete calculado e o total pago.",
       payload: `{
   "event": "order_created",
@@ -90,6 +100,7 @@ const N8nIntegrationPage = () => {
     { 
       id: "wh_support",
       name: "Solicitação de Suporte", 
+      type: "webhook",
       desc: "Disparado quando o cliente solicita ajuda.",
       payload: `{
   "event": "support_request",
@@ -107,16 +118,20 @@ const N8nIntegrationPage = () => {
   const apiActions = [
     { 
       id: "api_create_client",
+      name: "Criar Cliente",
       method: "POST", 
       path: "/n8n-create-client", 
+      type: "api",
       desc: "Cria ou recupera um cliente (Idempotente: não duplica).",
       body: `{ "email": "zap@loja.com", "name": "João", "phone": "5511..." }`,
       response: `{ "success": true, "id": "uuid", "is_new_user": false }`
     },
     { 
       id: "api_receive_order",
+      name: "Receber Pedido",
       method: "POST", 
       path: "/n8n-receive-order", 
+      type: "api",
       desc: "Cria o pedido e CALCULA O FRETE AUTOMATICAMENTE pelo bairro.",
       body: `{ 
   "customer": { "email": "..." }, 
@@ -136,8 +151,10 @@ const N8nIntegrationPage = () => {
     },
     { 
       id: "api_update_order",
+      name: "Atualizar Status",
       method: "POST", 
       path: "/update-order-status", 
+      type: "api",
       desc: "Atualiza status do pedido e adiciona rastreio.",
       body: `{ 
   "order_id": 12345,
@@ -152,8 +169,10 @@ const N8nIntegrationPage = () => {
     },
     { 
       id: "api_get_order",
+      name: "Consultar Pedido",
       method: "GET", 
       path: "/get-order-details?id=12345", 
+      type: "api",
       desc: "Consulta dados completos de um pedido específico.",
       body: `(Sem corpo - use Query Param ?id=)`,
       response: `{ 
@@ -386,7 +405,6 @@ const N8nIntegrationPage = () => {
                 </TabsList>
 
                 <TabsContent value="endpoints">
-                    {/* Mantido igual ao original... */}
                     <Card>
                         <CardHeader className="pb-4">
                             <CardTitle>Eventos Disponíveis</CardTitle>
@@ -398,13 +416,18 @@ const N8nIntegrationPage = () => {
                                 <div className="space-y-3">
                                     {webhookEvents.map((evt) => (
                                         <Collapsible key={evt.id} open={openEndpoints.includes(evt.id)} onOpenChange={() => toggleEndpoint(evt.id)} className="border rounded-lg overflow-hidden bg-white shadow-sm">
-                                            <div className="flex items-center justify-between p-3 bg-purple-50/50 hover:bg-purple-50 cursor-pointer transition-colors" onClick={() => toggleEndpoint(evt.id)}>
-                                                <div className="flex items-center gap-3 overflow-hidden">
+                                            <div className="flex items-center justify-between p-3 bg-purple-50/50 hover:bg-purple-50 cursor-pointer transition-colors">
+                                                <div className="flex items-center gap-3 overflow-hidden" onClick={() => toggleEndpoint(evt.id)}>
                                                     <Badge className="bg-purple-600 hover:bg-purple-700 w-24 justify-center">EVENTO</Badge>
                                                     <span className="font-semibold text-sm truncate">{evt.name}</span>
                                                 </div>
                                                 <div className="flex items-center gap-2">
-                                                    {openEndpoints.includes(evt.id) ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
+                                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-600 hover:bg-blue-100" onClick={(e) => { e.stopPropagation(); setSelectedDoc(evt); }}>
+                                                        <Eye className="w-4 h-4" />
+                                                    </Button>
+                                                    <div onClick={() => toggleEndpoint(evt.id)} className="cursor-pointer">
+                                                        {openEndpoints.includes(evt.id) ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
+                                                    </div>
                                                 </div>
                                             </div>
                                             <CollapsibleContent>
@@ -422,13 +445,18 @@ const N8nIntegrationPage = () => {
                                 <div className="space-y-3">
                                     {apiActions.map((api) => (
                                         <Collapsible key={api.id} open={openEndpoints.includes(api.id)} onOpenChange={() => toggleEndpoint(api.id)} className="border rounded-lg overflow-hidden bg-white shadow-sm">
-                                            <div className="flex items-center justify-between p-3 bg-emerald-50/50 hover:bg-emerald-50 cursor-pointer transition-colors" onClick={() => toggleEndpoint(api.id)}>
-                                                <div className="flex items-center gap-3 overflow-hidden">
+                                            <div className="flex items-center justify-between p-3 bg-emerald-50/50 hover:bg-emerald-50 cursor-pointer transition-colors">
+                                                <div className="flex items-center gap-3 overflow-hidden" onClick={() => toggleEndpoint(api.id)}>
                                                     <Badge className={api.method === "GET" ? "bg-blue-600 hover:bg-blue-700 w-24 justify-center" : "bg-emerald-600 hover:bg-emerald-700 w-24 justify-center"}>{api.method}</Badge>
                                                     <span className="font-mono text-xs font-bold text-slate-700 truncate">{api.path}</span>
                                                 </div>
                                                 <div className="flex items-center gap-2">
-                                                    {openEndpoints.includes(api.id) ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
+                                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-blue-600 hover:bg-blue-100" onClick={(e) => { e.stopPropagation(); setSelectedDoc(api); }}>
+                                                        <Eye className="w-4 h-4" />
+                                                    </Button>
+                                                    <div onClick={() => toggleEndpoint(api.id)} className="cursor-pointer">
+                                                        {openEndpoints.includes(api.id) ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
+                                                    </div>
                                                 </div>
                                             </div>
                                             <CollapsibleContent>
@@ -510,6 +538,55 @@ const N8nIntegrationPage = () => {
             </Tabs>
         </div>
       </div>
+
+      <Dialog open={!!selectedDoc} onOpenChange={(open) => !open && setSelectedDoc(null)}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
+            <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                    {selectedDoc?.type === 'webhook' ? <ArrowUpRight className="w-5 h-5 text-purple-600" /> : <ArrowDownLeft className="w-5 h-5 text-emerald-600" />}
+                    {selectedDoc?.name || "Detalhes"}
+                </DialogTitle>
+                <DialogDescription>
+                    {selectedDoc?.desc}
+                </DialogDescription>
+            </DialogHeader>
+            <div className="flex-1 overflow-y-auto py-4 space-y-4">
+                {selectedDoc?.path && (
+                    <div className="space-y-1">
+                        <Label>URL do Endpoint</Label>
+                        <div className="flex items-center gap-2 bg-slate-100 border p-2 rounded">
+                            <span className="font-mono text-sm text-slate-800 break-all">{baseUrl}{selectedDoc.path.split('?')[0]}</span>
+                            <Button variant="ghost" size="sm" onClick={() => copyToClipboard(baseUrl + selectedDoc.path.split('?')[0])}><Copy className="w-4 h-4" /></Button>
+                        </div>
+                    </div>
+                )}
+
+                <div className="space-y-1">
+                    <div className="flex justify-between items-center">
+                        <Label>{selectedDoc?.type === 'webhook' ? 'JSON Enviado (Payload)' : 'Corpo da Requisição (Body)'}</Label>
+                        <Button variant="link" size="sm" className="h-auto p-0" onClick={() => copyToClipboard(selectedDoc?.payload || selectedDoc?.body)}>
+                            <Copy className="w-3 h-3 mr-1" /> Copiar JSON
+                        </Button>
+                    </div>
+                    <div className="bg-slate-900 text-slate-50 p-4 rounded-lg font-mono text-sm overflow-x-auto border border-slate-700 shadow-inner">
+                        <pre>{selectedDoc?.payload || selectedDoc?.body}</pre>
+                    </div>
+                </div>
+
+                {selectedDoc?.response && (
+                    <div className="space-y-1 pt-2 border-t">
+                        <Label>Exemplo de Resposta</Label>
+                        <div className="bg-slate-900 text-yellow-300 p-4 rounded-lg font-mono text-sm overflow-x-auto border border-slate-700 shadow-inner">
+                            <pre>{selectedDoc.response}</pre>
+                        </div>
+                    </div>
+                )}
+            </div>
+            <DialogFooter>
+                <Button onClick={() => setSelectedDoc(null)}>Fechar</Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
