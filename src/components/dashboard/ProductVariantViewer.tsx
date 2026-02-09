@@ -111,6 +111,7 @@ export const ProductVariantViewer = ({
                                     <Ruler className="w-3 h-3" /> {v.volume_ml}ml
                                 </span>
                             )}
+                            {/* EXIBIÇÃO DE OHMS */}
                             {v.ohms && (
                                 <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                                     <Zap className="w-3 h-3" /> {v.ohms}

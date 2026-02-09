@@ -197,7 +197,7 @@ export const ProductVariantManager = ({
             <h3 className="text-lg font-bold flex items-center gap-2">
                 <Package className="w-5 h-5" /> Grade de Variações
             </h3>
-            <p className="text-xs text-muted-foreground">Gerencie sabores, cores e tamanhos específicos.</p>
+            <p className="text-xs text-muted-foreground">Gerencie sabores, cores, resistências e tamanhos.</p>
         </div>
         <div className="flex gap-2">
             <Button 
@@ -223,7 +223,6 @@ export const ProductVariantManager = ({
       </div>
 
       {isAdding && (
-        // Ajustado para grid-cols-10 para acomodar o novo campo
         <div className="grid grid-cols-1 md:grid-cols-5 lg:grid-cols-10 gap-3 p-4 border rounded-lg bg-white shadow-sm animate-in fade-in slide-in-from-top-2">
           <div className="space-y-1">
             <Label className="text-[10px] uppercase font-bold">Sabor</Label>
@@ -247,6 +246,8 @@ export const ProductVariantManager = ({
             <Label className="text-[10px] uppercase font-bold">ML</Label>
             <Input type="number" className="h-8" value={newVariant.volume_ml || ""} onChange={(e) => setNewVariant({ ...newVariant, volume_ml: Number(e.target.value) })} />
           </div>
+          
+          {/* CAMPO OHMS ADICIONADO AQUI */}
           <div className="space-y-1">
             <Label className="text-[10px] uppercase font-bold">Ohms</Label>
             <Input 
@@ -256,6 +257,7 @@ export const ProductVariantManager = ({
                 onChange={(e) => setNewVariant({ ...newVariant, ohms: e.target.value })} 
             />
           </div>
+
           <div className="space-y-1">
             <Label className="text-[10px] uppercase font-bold">SKU</Label>
             <Input className="h-8" placeholder="Auto" value={newVariant.sku || ""} onChange={(e) => setNewVariant({ ...newVariant, sku: e.target.value.toUpperCase() })} />
@@ -317,6 +319,7 @@ export const ProductVariantManager = ({
                     )}
                     
                     <div className="flex flex-wrap gap-2 items-center">
+                        {/* Cor */}
                         {editingId === v.id ? (
                             <div className="flex items-center gap-1">
                                 <Palette className="w-3 h-3 text-muted-foreground" />
@@ -331,6 +334,7 @@ export const ProductVariantManager = ({
                             v.color && <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Palette className="w-3 h-3" /> {v.color}</span>
                         )}
 
+                        {/* ML */}
                         {editingId === v.id ? (
                             <div className="flex items-center gap-1">
                                 <Ruler className="w-3 h-3 text-muted-foreground" />
@@ -346,7 +350,7 @@ export const ProductVariantManager = ({
                             v.volume_ml && <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Ruler className="w-3 h-3" /> {v.volume_ml}ml</span>
                         )}
 
-                        {/* Campo de OHMS */}
+                        {/* Campo de OHMS (Edição) */}
                         {editingId === v.id ? (
                             <div className="flex items-center gap-1">
                                 <Zap className="w-3 h-3 text-muted-foreground" />
