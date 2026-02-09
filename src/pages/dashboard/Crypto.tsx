@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { 
   Bitcoin, Wallet, RefreshCw, ShieldCheck, ArrowRightLeft, 
   AlertTriangle, Zap, Search, CheckCircle2, XCircle, Loader2, 
-  Copy, ExternalLink, Hash, FileJson, Workflow, Play, Eye, ChevronDown, ChevronRight, ArrowDownLeft 
+  Copy, ExternalLink, Hash, FileJson, Workflow, Play, Eye, ChevronDown, ChevronRight, ArrowDownLeft, ArrowUpRight 
 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
@@ -55,6 +55,31 @@ const CryptoPage = () => {
   const [apiTestResponse, setApiTestResponse] = useState<any>(null);
 
   // -- DADOS DA DOCUMENTAÇÃO --
+  const webhookEvents = [
+    { 
+      id: "wh_order_crypto",
+      event_key: "order_created",
+      name: "Pedido Realizado (Gatilho)", 
+      type: "webhook",
+      desc: "O sistema envia este JSON para o seu N8N assim que o cliente finaliza o pedido com pagamento 'Crypto'.",
+      payload: `{
+  "event": "order_created",
+  "timestamp": "2024-02-10T15:30:00Z",
+  "data": {
+    "id": 12345,
+    "total_price": 50.00,
+    "payment_method": "USDT (Crypto)",
+    "status": "Pendente",
+    "customer": {
+      "name": "Cliente Crypto",
+      "phone": "5511999999999",
+      "email": "cliente@exemplo.com"
+    }
+  }
+}`
+    }
+  ];
+
   const cryptoEndpoints = [
     { 
       id: "api_verify_tx",
@@ -433,16 +458,58 @@ const CryptoPage = () => {
             </div>
         </TabsContent>
 
-        {/* ABA 3: API & N8N (VISUAL ATUALIZADO IGUAL AO N8N PAGE) */}
+        {/* ABA 3: API & N8N (ATUALIZADA COM WEBHOOKS) */}
         <TabsContent value="api" className="mt-6">
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2"><Workflow className="w-5 h-5 text-purple-600" /> Integração N8N / Typebot</CardTitle>
                     <CardDescription>Documentação técnica para configurar o robô de validação automática.</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-6">
+                <CardContent className="space-y-8">
+                    {/* WEBHOOKS (SAÍDA) */}
                     <div>
-                        <h3 className="text-sm font-black uppercase text-emerald-600 mb-3 flex items-center gap-2"><ArrowDownLeft className="w-4 h-4" /> API (Recebimento do N8N)</h3>
+                        <h3 className="text-sm font-black uppercase text-purple-600 mb-3 flex items-center gap-2">
+                            <ArrowUpRight className="w-4 h-4" /> Gatilhos (Sistema &rarr; N8N)
+                        </h3>
+                        <div className="space-y-3">
+                            {webhookEvents.map((evt) => (
+                                <Collapsible key={evt.id} open={openEndpoints.includes(evt.id)} onOpenChange={() => toggleEndpoint(evt.id)} className="border rounded-lg overflow-hidden bg-white shadow-sm">
+                                    <div className="flex items-center justify-between p-3 bg-purple-50/50 hover:bg-purple-50 cursor-pointer transition-colors">
+                                        <div className="flex items-center gap-3 overflow-hidden" onClick={() => toggleEndpoint(evt.id)}>
+                                            <Badge className="bg-purple-600 hover:bg-purple-700 w-24 justify-center">EVENTO</Badge>
+                                            <span className="font-semibold text-sm truncate">{evt.name}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            {/* Webhooks apenas exibem o payload, não testam envio aqui */}
+                                            <div onClick={() => toggleEndpoint(evt.id)} className="cursor-pointer">
+                                                {openEndpoints.includes(evt.id) ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <CollapsibleContent>
+                                        <div className="p-4 bg-slate-50 border-t space-y-3">
+                                            <p className="text-sm text-gray-600">{evt.desc}</p>
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <Label className="text-xs font-bold text-gray-500">Payload JSON (Exemplo)</Label>
+                                                <Button variant="ghost" size="sm" className="h-5 text-[10px] p-0" onClick={() => copyToClipboard(evt.payload)}>
+                                                    <Copy className="w-3 h-3 mr-1" /> Copiar
+                                                </Button>
+                                            </div>
+                                            <div className="bg-slate-900 text-slate-50 p-3 rounded-md font-mono text-xs overflow-x-auto border border-slate-700">
+                                                <pre>{evt.payload}</pre>
+                                            </div>
+                                        </div>
+                                    </CollapsibleContent>
+                                </Collapsible>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* API (ENTRADA) */}
+                    <div>
+                        <h3 className="text-sm font-black uppercase text-emerald-600 mb-3 flex items-center gap-2">
+                            <ArrowDownLeft className="w-4 h-4" /> API (Recebimento do N8N)
+                        </h3>
                         <div className="space-y-3">
                             {cryptoEndpoints.map((api) => (
                                 <Collapsible key={api.id} open={openEndpoints.includes(api.id)} onOpenChange={() => toggleEndpoint(api.id)} className="border rounded-lg overflow-hidden bg-white shadow-sm">
@@ -452,7 +519,7 @@ const CryptoPage = () => {
                                             <span className="font-mono text-xs font-bold text-slate-700 truncate">{api.path}</span>
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            {/* BOTÃO DE TESTE AQUI */}
+                                            {/* BOTÃO DE TESTE */}
                                             <Button size="icon" variant="ghost" className="h-8 w-8 text-emerald-600 hover:bg-emerald-100" onClick={(e) => { e.stopPropagation(); handleOpenApiTest(api); }} title="Simular Requisição">
                                                 <Play className="w-4 h-4" />
                                             </Button>
