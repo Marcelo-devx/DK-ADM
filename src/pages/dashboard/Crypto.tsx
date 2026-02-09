@@ -49,10 +49,12 @@ const CryptoPage = () => {
   const [validationResult, setValidationResult] = useState<any>(null);
   const [isValidating, setIsValidating] = useState(false);
 
-  // -- ESTADOS DE TESTE (MODAL API) --
-  const [isApiTestModalOpen, setIsApiTestModalOpen] = useState(false);
-  const [apiTestBody, setApiTestBody] = useState("");
-  const [apiTestResponse, setApiTestResponse] = useState<any>(null);
+  // -- ESTADOS DE TESTE (MODAL API & WEBHOOK) --
+  const [isTestModalOpen, setIsTestModalOpen] = useState(false);
+  const [testItem, setTestItem] = useState<any>(null); // Item sendo testado (API ou Webhook)
+  const [testBody, setTestBody] = useState(""); // Corpo JSON para APIs
+  const [testTargetUrl, setTestTargetUrl] = useState(""); // URL destino para Webhooks
+  const [testResponse, setTestResponse] = useState<any>(null);
 
   // -- DADOS DA DOCUMENTAÇÃO --
   const webhookEvents = [
@@ -188,35 +190,67 @@ const CryptoPage = () => {
     }
   };
 
-  // Teste de API via Modal (Simulador N8N)
-  const apiTestMutation = useMutation({
+  // Teste de Integração (API ou Webhook)
+  const testIntegrationMutation = useMutation({
     mutationFn: async () => {
-        try {
-            const body = JSON.parse(apiTestBody);
-            const { data, error } = await supabase.functions.invoke('verify-blockchain-tx', { body });
+        // MODO WEBHOOK: Envia para URL externa
+        if (testItem.type === 'webhook') {
+            if (!testTargetUrl) throw new Error("Insira a URL do seu N8N/Typebot.");
+            
+            const { data, error } = await supabase.functions.invoke('test-webhook-endpoint', {
+                body: { 
+                    url: testTargetUrl,
+                    event_type: testItem.event_key,
+                    method: 'POST'
+                }
+            });
             if (error) throw error;
             return data;
-        } catch (e: any) {
-            throw new Error(e.message.includes("JSON") ? "JSON inválido no corpo da requisição." : e.message);
+        } 
+        
+        // MODO API: Executa função interna
+        else {
+            try {
+                const body = JSON.parse(testBody);
+                // Determina qual função chamar baseado no path
+                const functionName = testItem.path.replace('/', '');
+                
+                const { data, error } = await supabase.functions.invoke(functionName, { body });
+                if (error) throw error;
+                return data;
+            } catch (e: any) {
+                throw new Error(e.message.includes("JSON") ? "JSON inválido no corpo da requisição." : e.message);
+            }
         }
     },
     onSuccess: (data) => {
-        setApiTestResponse(data);
-        if (data.valid) showSuccess("Teste executado: Hash Válido!");
-        else showSuccess("Teste executado (Hash Inválido ou não encontrado).");
+        setTestResponse(data);
+        if (testItem.type === 'webhook') {
+            if (data.success) showSuccess("Webhook disparado com sucesso!");
+            else showError(`Erro no destino: ${data.status}`);
+        } else {
+            if (data.valid) showSuccess("Teste executado: Hash Válido!");
+            else showSuccess("Teste executado (Resposta recebida).");
+        }
     },
     onError: (err: any) => {
-        setApiTestResponse({ error: err.message });
+        setTestResponse({ error: err.message });
         showError(err.message);
     }
   });
 
-  const handleOpenApiTest = (endpoint: any) => {
-    // Injeta a carteira atual no corpo do teste para facilitar
-    const dynamicBody = endpoint.body.replace('SUA_CARTEIRA_AQUI', walletAddress || 'SUA_CARTEIRA_AQUI');
-    setApiTestBody(dynamicBody);
-    setApiTestResponse(null);
-    setIsApiTestModalOpen(true);
+  const handleOpenTestModal = (item: any) => {
+    setTestItem(item);
+    setTestResponse(null);
+    setTestTargetUrl("");
+
+    if (item.type === 'api') {
+        // Injeta a carteira atual no corpo do teste para facilitar
+        const dynamicBody = item.body.replace('SUA_CARTEIRA_AQUI', walletAddress || 'SUA_CARTEIRA_AQUI');
+        setTestBody(dynamicBody);
+    }
+    
+    setIsTestModalOpen(true);
   };
 
   const copyToClipboard = (text: string) => {
@@ -458,7 +492,7 @@ const CryptoPage = () => {
             </div>
         </TabsContent>
 
-        {/* ABA 3: API & N8N (ATUALIZADA COM WEBHOOKS) */}
+        {/* ABA 3: API & N8N (ATUALIZADA) */}
         <TabsContent value="api" className="mt-6">
             <Card>
                 <CardHeader>
@@ -480,7 +514,11 @@ const CryptoPage = () => {
                                             <span className="font-semibold text-sm truncate">{evt.name}</span>
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            {/* Webhooks apenas exibem o payload, não testam envio aqui */}
+                                            {/* BOTÃO TESTAR (PLAY) */}
+                                            <Button size="icon" variant="ghost" className="h-8 w-8 text-purple-600 hover:bg-purple-100" onClick={(e) => { e.stopPropagation(); handleOpenTestModal(evt); }} title="Testar Disparo">
+                                                <Play className="w-4 h-4" />
+                                            </Button>
+                                            
                                             <div onClick={() => toggleEndpoint(evt.id)} className="cursor-pointer">
                                                 {openEndpoints.includes(evt.id) ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
                                             </div>
@@ -519,8 +557,8 @@ const CryptoPage = () => {
                                             <span className="font-mono text-xs font-bold text-slate-700 truncate">{api.path}</span>
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            {/* BOTÃO DE TESTE */}
-                                            <Button size="icon" variant="ghost" className="h-8 w-8 text-emerald-600 hover:bg-emerald-100" onClick={(e) => { e.stopPropagation(); handleOpenApiTest(api); }} title="Simular Requisição">
+                                            {/* BOTÃO TESTAR (PLAY) */}
+                                            <Button size="icon" variant="ghost" className="h-8 w-8 text-emerald-600 hover:bg-emerald-100" onClick={(e) => { e.stopPropagation(); handleOpenTestModal(api); }} title="Simular Requisição">
                                                 <Play className="w-4 h-4" />
                                             </Button>
                                             
@@ -564,61 +602,85 @@ const CryptoPage = () => {
         </TabsContent>
       </Tabs>
 
-      {/* MODAL DE TESTE DE API */}
-      <Dialog open={isApiTestModalOpen} onOpenChange={(open) => { setIsApiTestModalOpen(open); if(!open) setApiTestResponse(null); }}>
+      {/* MODAL DE TESTE UNIFICADO (API & WEBHOOK) */}
+      <Dialog open={isTestModalOpen} onOpenChange={(open) => { setIsTestModalOpen(open); if(!open) setTestResponse(null); }}>
         <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
             <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                     <Zap className="w-5 h-5 text-orange-500" />
-                    Simulador: Validação Blockchain
+                    Simulador: {testItem?.name}
                 </DialogTitle>
                 <DialogDescription>
-                    Teste o endpoint real que o N8N chamará. Cole um hash válido para ver a resposta.
+                    {testItem?.type === 'webhook' 
+                        ? "Envie o payload de exemplo para sua URL do N8N/Typebot." 
+                        : "Execute o endpoint real no seu backend (usando o token salvo)."}
                 </DialogDescription>
             </DialogHeader>
 
             <div className="flex-1 overflow-y-auto py-4 space-y-4">
-                <div className="space-y-1">
-                    <Label>Endpoint (POST)</Label>
-                    <div className="p-2 bg-slate-100 rounded border font-mono text-sm">
-                        {API_URL}/verify-blockchain-tx
+                {testItem?.type === 'webhook' ? (
+                    <div className="space-y-3">
+                        <div className="space-y-1">
+                            <Label>URL de Destino (Webhook URL)</Label>
+                            <Input 
+                                placeholder="https://seu-n8n.com/webhook/teste" 
+                                value={testTargetUrl} 
+                                onChange={(e) => setTestTargetUrl(e.target.value)} 
+                            />
+                        </div>
+                        <div className="bg-slate-100 p-3 rounded text-xs font-mono border">
+                            <p className="text-slate-500 font-bold mb-1">Payload a ser enviado:</p>
+                            <pre className="whitespace-pre-wrap">{testItem?.payload}</pre>
+                        </div>
                     </div>
-                </div>
-                
-                <div className="space-y-1">
-                    <Label>Corpo da Requisição (JSON)</Label>
-                    <Textarea 
-                        className="font-mono text-xs h-32 bg-slate-50"
-                        value={apiTestBody}
-                        onChange={(e) => setApiTestBody(e.target.value)}
-                    />
-                    <p className="text-[10px] text-muted-foreground">
-                        Certifique-se de que a <code>wallet_address</code> é a sua carteira real configurada.
-                    </p>
-                </div>
+                ) : (
+                    <div className="space-y-3">
+                        <div className="space-y-1">
+                            <Label>Endpoint</Label>
+                            <div className="p-2 bg-slate-100 rounded border font-mono text-sm">
+                                <Badge className="mr-2">{testItem?.method}</Badge>
+                                {API_URL}{testItem?.path.split('?')[0]}
+                            </div>
+                        </div>
+                        
+                        <div className="space-y-1">
+                            <Label>Corpo da Requisição (JSON)</Label>
+                            <Textarea 
+                                className="font-mono text-xs h-32 bg-slate-50"
+                                value={testBody}
+                                onChange={(e) => setTestBody(e.target.value)}
+                            />
+                            {testItem?.path.includes("verify") && (
+                                <p className="text-[10px] text-muted-foreground">
+                                    Certifique-se de que a <code>wallet_address</code> é a sua carteira real configurada.
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                )}
 
-                {apiTestResponse && (
+                {testResponse && (
                     <div className="mt-4 pt-4 border-t animate-in fade-in slide-in-from-bottom-4">
                         <div className="flex items-center justify-between mb-2">
-                            <Label className={apiTestResponse.valid ? "text-green-700 font-bold" : "text-red-700 font-bold"}>
-                                Resposta do Servidor ({apiTestResponse.valid ? "VALIDADO" : "INVÁLIDO"})
+                            <Label className={testResponse.valid !== false && !testResponse.error ? "text-green-700 font-bold" : "text-red-700 font-bold"}>
+                                Resposta do Servidor {testResponse.status ? `(Status: ${testResponse.status})` : ""}
                             </Label>
                         </div>
                         <div className="bg-slate-900 text-green-400 p-4 rounded-lg font-mono text-xs overflow-x-auto shadow-inner max-h-60 border border-slate-700">
-                            <pre>{JSON.stringify(apiTestResponse, null, 2)}</pre>
+                            <pre>{JSON.stringify(testResponse, null, 2)}</pre>
                         </div>
                     </div>
                 )}
             </div>
 
             <DialogFooter>
-                <Button variant="outline" onClick={() => setIsApiTestModalOpen(false)}>Fechar</Button>
+                <Button variant="outline" onClick={() => setIsTestModalOpen(false)}>Fechar</Button>
                 <Button 
-                    onClick={() => apiTestMutation.mutate()} 
-                    disabled={apiTestMutation.isPending}
+                    onClick={() => testIntegrationMutation.mutate()} 
+                    disabled={testIntegrationMutation.isPending || (testItem?.type === 'webhook' && !testTargetUrl)}
                     className="bg-orange-600 hover:bg-orange-700 font-bold"
                 >
-                    {apiTestMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Play className="w-4 h-4 mr-2" />}
+                    {testIntegrationMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Play className="w-4 h-4 mr-2" />}
                     Executar Teste
                 </Button>
             </DialogFooter>
