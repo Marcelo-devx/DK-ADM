@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Package, Ruler, Droplets, Palette } from "lucide-react";
+import { Package, Ruler, Droplets, Palette, Zap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -23,6 +23,7 @@ interface Variant {
   flavor_id: number | null;
   volume_ml: number | null;
   color: string | null;
+  ohms: string | null;
   sku: string | null;
   price: number;
   stock_quantity: number;
@@ -99,7 +100,7 @@ export const ProductVariantViewer = ({
                         <span className="font-bold text-sm flex items-center gap-1">
                           <Droplets className="w-3 h-3 text-primary" /> {v.flavors?.name || "Sem Sabor"}
                         </span>
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2 mt-1">
                             {v.color && (
                                 <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                                     <Palette className="w-3 h-3" /> {v.color}
@@ -108,6 +109,11 @@ export const ProductVariantViewer = ({
                             {v.volume_ml && (
                                 <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                                     <Ruler className="w-3 h-3" /> {v.volume_ml}ml
+                                </span>
+                            )}
+                            {v.ohms && (
+                                <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                    <Zap className="w-3 h-3" /> {v.ohms}
                                 </span>
                             )}
                         </div>

@@ -7,17 +7,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Package, Ruler, Droplets, Pencil, X, Check, Loader2, RefreshCcw, Palette } from "lucide-react";
+import { Plus, Trash2, Package, Ruler, Droplets, Pencil, X, Check, Loader2, RefreshCcw, Palette, Zap } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface Variant {
   id: string;
   flavor_id: number | null;
   volume_ml: number | null;
   color: string | null;
+  ohms: string | null;
   sku: string | null;
   price: number;
   pix_price: number | null;
@@ -32,6 +32,11 @@ interface ProductVariantManagerProps {
   basePixPrice: number;
   baseCostPrice: number;
 }
+
+const generateVariantSku = () => {
+  const randomStr = Math.random().toString(36).substring(2, 8).toUpperCase();
+  return `VAR-${randomStr}`;
+};
 
 export const ProductVariantManager = ({ 
   productId,
@@ -48,6 +53,7 @@ export const ProductVariantManager = ({
     flavor_name: "",
     volume_ml: null,
     color: "",
+    ohms: "",
     sku: "",
     price: basePrice || 0,
     pix_price: basePixPrice || 0,
@@ -65,6 +71,13 @@ export const ProductVariantManager = ({
         }));
     }
   }, [basePrice, basePixPrice, baseCostPrice, isAdding]);
+
+  // Gera SKU automático quando abre o formulário de adição
+  useEffect(() => {
+    if (isAdding && !newVariant.sku) {
+        setNewVariant(prev => ({ ...prev, sku: generateVariantSku() }));
+    }
+  }, [isAdding]);
 
   const { data: variants, isLoading } = useQuery({
     queryKey: ["productVariants", productId],
@@ -113,7 +126,7 @@ export const ProductVariantManager = ({
       queryClient.invalidateQueries({ queryKey: ["productVariants", productId] });
       showSuccess("Variação adicionada!");
       setIsAdding(false);
-      setNewVariant({ flavor_name: "", volume_ml: null, color: "", sku: "", price: basePrice, pix_price: basePixPrice, cost_price: baseCostPrice, stock_quantity: 0 });
+      setNewVariant({ flavor_name: "", volume_ml: null, color: "", ohms: "", sku: "", price: basePrice, pix_price: basePixPrice, cost_price: baseCostPrice, stock_quantity: 0 });
     },
     onError: (err: any) => showError(err.message),
   });
@@ -210,7 +223,8 @@ export const ProductVariantManager = ({
       </div>
 
       {isAdding && (
-        <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-9 gap-3 p-4 border rounded-lg bg-white shadow-sm animate-in fade-in slide-in-from-top-2">
+        // Ajustado para grid-cols-10 para acomodar o novo campo
+        <div className="grid grid-cols-1 md:grid-cols-5 lg:grid-cols-10 gap-3 p-4 border rounded-lg bg-white shadow-sm animate-in fade-in slide-in-from-top-2">
           <div className="space-y-1">
             <Label className="text-[10px] uppercase font-bold">Sabor</Label>
             <Input 
@@ -234,8 +248,17 @@ export const ProductVariantManager = ({
             <Input type="number" className="h-8" value={newVariant.volume_ml || ""} onChange={(e) => setNewVariant({ ...newVariant, volume_ml: Number(e.target.value) })} />
           </div>
           <div className="space-y-1">
+            <Label className="text-[10px] uppercase font-bold">Ohms</Label>
+            <Input 
+                className="h-8" 
+                placeholder="Ex: 0.6" 
+                value={newVariant.ohms || ""} 
+                onChange={(e) => setNewVariant({ ...newVariant, ohms: e.target.value })} 
+            />
+          </div>
+          <div className="space-y-1">
             <Label className="text-[10px] uppercase font-bold">SKU</Label>
-            <Input className="h-8" placeholder="Opcional" value={newVariant.sku || ""} onChange={(e) => setNewVariant({ ...newVariant, sku: e.target.value.toUpperCase() })} />
+            <Input className="h-8" placeholder="Auto" value={newVariant.sku || ""} onChange={(e) => setNewVariant({ ...newVariant, sku: e.target.value.toUpperCase() })} />
           </div>
           <div className="space-y-1">
             <Label className="text-[10px] uppercase font-bold">Custo</Label>
@@ -321,6 +344,21 @@ export const ProductVariantManager = ({
                             </div>
                         ) : (
                             v.volume_ml && <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Ruler className="w-3 h-3" /> {v.volume_ml}ml</span>
+                        )}
+
+                        {/* Campo de OHMS */}
+                        {editingId === v.id ? (
+                            <div className="flex items-center gap-1">
+                                <Zap className="w-3 h-3 text-muted-foreground" />
+                                <Input 
+                                    className="h-7 text-[10px] w-16" 
+                                    value={editValues.ohms || ""} 
+                                    onChange={(e) => setEditValues({ ...editValues, ohms: e.target.value })}
+                                    placeholder="Ohms"
+                                />
+                            </div>
+                        ) : (
+                            v.ohms && <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Zap className="w-3 h-3" /> {v.ohms}</span>
                         )}
                     </div>
                   </div>
