@@ -14,17 +14,22 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { 
   Bitcoin, Wallet, RefreshCw, ShieldCheck, ArrowRightLeft, 
   AlertTriangle, Zap, Search, CheckCircle2, XCircle, Loader2, 
-  Copy, ExternalLink, Hash, FileJson, Workflow 
+  Copy, ExternalLink, Hash, FileJson, Workflow, Play, Eye, ChevronDown, ChevronRight, ArrowDownLeft 
 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
 import { API_URL } from "@/data/constants";
+import {
+  Collapsible,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
 
 const CryptoPage = () => {
   const queryClient = useQueryClient();
   
   // -- ESTADOS GERAIS --
   const [activeTab, setActiveTab] = useState("orders");
+  const [openEndpoints, setOpenEndpoints] = useState<string[]>([]);
 
   // -- ESTADOS DE CONFIGURAÇÃO --
   const [isEnabled, setIsEnabled] = useState(false);
@@ -34,6 +39,29 @@ const CryptoPage = () => {
   const [testHash, setTestHash] = useState("");
   const [validationResult, setValidationResult] = useState<any>(null);
   const [isValidating, setIsValidating] = useState(false);
+
+  // -- DADOS DA DOCUMENTAÇÃO --
+  const cryptoEndpoints = [
+    { 
+      id: "api_verify_tx",
+      name: "Validar Transação (Blockchain)",
+      method: "POST", 
+      path: "/verify-blockchain-tx", 
+      type: "api",
+      desc: "Lê a Blockchain (BSC), procura pelo Hash e verifica se houve transferência de USDT para a sua carteira.",
+      body: `{
+  "tx_hash": "0x...", 
+  "wallet_address": "${walletAddress || 'SUA_CARTEIRA_AQUI'}",
+  "order_id": 12345 
+}`,
+      response: `{ 
+  "valid": true, 
+  "currency": "USDT",
+  "amount": 50.0,
+  "message": "Pagamento de 50 USDT confirmado!" 
+}`
+    }
+  ];
 
   // -- QUERIES --
 
@@ -126,6 +154,10 @@ const CryptoPage = () => {
   };
 
   const formatCurrency = (val: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
+
+  const toggleEndpoint = (id: string) => {
+    setOpenEndpoints(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  };
 
   return (
     <div className="space-y-6 pb-20">
@@ -355,55 +387,59 @@ const CryptoPage = () => {
             </div>
         </TabsContent>
 
-        {/* ABA 3: API & N8N */}
+        {/* ABA 3: API & N8N (ATUALIZADA) */}
         <TabsContent value="api" className="mt-6">
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2"><Workflow className="w-5 h-5 text-purple-600" /> Integração N8N / Typebot</CardTitle>
-                    <CardDescription>Use esta API no seu fluxo de WhatsApp para validar o comprovante enviado pelo cliente.</CardDescription>
+                    <CardDescription>Documentação técnica para configurar o robô de validação automática.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                    <div className="space-y-2">
-                        <Label>Endpoint de Validação (POST)</Label>
-                        <div className="flex gap-2">
-                            <Input readOnly value={`${API_URL}/verify-blockchain-tx`} className="font-mono bg-slate-50" />
-                            <Button variant="outline" onClick={() => copyToClipboard(`${API_URL}/verify-blockchain-tx`)}><Copy className="w-4 h-4" /></Button>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                            <Label className="flex items-center gap-2"><FileJson className="w-4 h-4" /> Corpo da Requisição (JSON)</Label>
-                            <div className="bg-slate-900 text-slate-50 p-4 rounded-lg font-mono text-xs overflow-x-auto border border-slate-700 shadow-inner">
-<pre>{`{
-  "tx_hash": "0x...", 
-  "wallet_address": "${walletAddress || 'SUA_CARTEIRA_AQUI'}",
-  "order_id": 12345 
-}`}</pre>
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-2">
-                                * <strong>order_id</strong> é opcional. Se enviado, o sistema atualiza o status do pedido para 'Pago' automaticamente se o hash for válido.
-                            </p>
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-green-600" /> Resposta de Sucesso</Label>
-                            <div className="bg-slate-50 text-slate-800 p-4 rounded-lg font-mono text-xs overflow-x-auto border border-slate-200">
-<pre>{`{
-  "valid": true,
-  "currency": "USDT",
-  "amount": 50.0,
-  "message": "Pagamento de 50 USDT confirmado!"
-}`}</pre>
-                            </div>
+                    <div>
+                        <h3 className="text-sm font-black uppercase text-emerald-600 mb-3 flex items-center gap-2"><ArrowDownLeft className="w-4 h-4" /> API (Recebimento do N8N)</h3>
+                        <div className="space-y-3">
+                            {cryptoEndpoints.map((api) => (
+                                <Collapsible key={api.id} open={openEndpoints.includes(api.id)} onOpenChange={() => toggleEndpoint(api.id)} className="border rounded-lg overflow-hidden bg-white shadow-sm">
+                                    <div className="flex items-center justify-between p-3 bg-emerald-50/50 hover:bg-emerald-50 cursor-pointer transition-colors">
+                                        <div className="flex items-center gap-3 overflow-hidden" onClick={() => toggleEndpoint(api.id)}>
+                                            <Badge className="bg-emerald-600 hover:bg-emerald-700 w-24 justify-center">{api.method}</Badge>
+                                            <span className="font-mono text-xs font-bold text-slate-700 truncate">{api.path}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <div onClick={() => toggleEndpoint(api.id)} className="cursor-pointer">
+                                                {openEndpoints.includes(api.id) ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <CollapsibleContent>
+                                        <div className="p-4 bg-slate-50 border-t space-y-4">
+                                            <div className="flex items-center gap-2 bg-white border p-2 rounded"><span className="text-xs font-mono text-gray-600 select-all flex-1">{API_URL}{api.path.split('?')[0]}</span><Button variant="ghost" size="sm" className="h-6" onClick={() => copyToClipboard(API_URL + api.path.split('?')[0])}><Copy className="w-3 h-3" /></Button></div>
+                                            <p className="text-xs text-gray-500 font-medium mt-2">{api.desc}</p>
+                                            
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div>
+                                                    <Label className="text-xs mb-1 block font-bold text-gray-500">Corpo da Requisição (Body)</Label>
+                                                    <div className="bg-slate-900 text-yellow-300 p-3 rounded-md font-mono text-xs overflow-x-auto h-32 border border-slate-700"><pre>{api.body}</pre></div>
+                                                </div>
+                                                <div>
+                                                    <Label className="text-xs mb-1 block font-bold text-gray-500">Exemplo de Resposta</Label>
+                                                    <div className="bg-slate-900 text-green-300 p-3 rounded-md font-mono text-xs overflow-x-auto h-32 border border-slate-700"><pre>{api.response}</pre></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </CollapsibleContent>
+                                </Collapsible>
+                            ))}
                         </div>
                     </div>
 
                     <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 text-blue-800 text-sm">
-                        <p className="font-bold flex items-center gap-2 mb-1"><Zap className="w-4 h-4" /> Dica de Fluxo:</p>
-                        <p>1. O N8N pergunta o hash ao cliente.</p>
-                        <p>2. O N8N chama este endpoint.</p>
-                        <p>3. Se <code>valid: true</code>, o N8N responde "Recebido!" e o pedido já estará pago no painel.</p>
+                        <p className="font-bold flex items-center gap-2 mb-1"><Zap className="w-4 h-4" /> Dica de Fluxo N8N:</p>
+                        <p>1. O cliente escolhe "Cripto" no site.</p>
+                        <p>2. O N8N manda mensagem: "Envie o Hash da transação".</p>
+                        <p>3. O cliente manda o Hash.</p>
+                        <p>4. O N8N chama este endpoint (<code>/verify-blockchain-tx</code>).</p>
+                        <p>5. Se a resposta for <code>valid: true</code>, o pedido já é marcado como Pago automaticamente.</p>
                     </div>
                 </CardContent>
             </Card>
