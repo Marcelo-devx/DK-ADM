@@ -23,6 +23,15 @@ import {
   Collapsible,
   CollapsibleContent,
 } from "@/components/ui/collapsible";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 
 const CryptoPage = () => {
   const queryClient = useQueryClient();
@@ -35,10 +44,15 @@ const CryptoPage = () => {
   const [isEnabled, setIsEnabled] = useState(false);
   const [walletAddress, setWalletAddress] = useState("");
   
-  // -- ESTADOS DE TESTE --
+  // -- ESTADOS DE TESTE (VALIDADOR MANUAL) --
   const [testHash, setTestHash] = useState("");
   const [validationResult, setValidationResult] = useState<any>(null);
   const [isValidating, setIsValidating] = useState(false);
+
+  // -- ESTADOS DE TESTE (MODAL API) --
+  const [isApiTestModalOpen, setIsApiTestModalOpen] = useState(false);
+  const [apiTestBody, setApiTestBody] = useState("");
+  const [apiTestResponse, setApiTestResponse] = useState<any>(null);
 
   // -- DADOS DA DOCUMENTAÇÃO --
   const cryptoEndpoints = [
@@ -121,6 +135,7 @@ const CryptoPage = () => {
     onError: (err: any) => showError(err.message)
   });
 
+  // Validação Manual (Botão na lista de pedidos ou aba de config)
   const handleValidateHash = async (hashToTest?: string) => {
     const hash = hashToTest || testHash;
     
@@ -146,6 +161,37 @@ const CryptoPage = () => {
     } finally {
         setIsValidating(false);
     }
+  };
+
+  // Teste de API via Modal (Simulador N8N)
+  const apiTestMutation = useMutation({
+    mutationFn: async () => {
+        try {
+            const body = JSON.parse(apiTestBody);
+            const { data, error } = await supabase.functions.invoke('verify-blockchain-tx', { body });
+            if (error) throw error;
+            return data;
+        } catch (e: any) {
+            throw new Error(e.message.includes("JSON") ? "JSON inválido no corpo da requisição." : e.message);
+        }
+    },
+    onSuccess: (data) => {
+        setApiTestResponse(data);
+        if (data.valid) showSuccess("Teste executado: Hash Válido!");
+        else showSuccess("Teste executado (Hash Inválido ou não encontrado).");
+    },
+    onError: (err: any) => {
+        setApiTestResponse({ error: err.message });
+        showError(err.message);
+    }
+  });
+
+  const handleOpenApiTest = (endpoint: any) => {
+    // Injeta a carteira atual no corpo do teste para facilitar
+    const dynamicBody = endpoint.body.replace('SUA_CARTEIRA_AQUI', walletAddress || 'SUA_CARTEIRA_AQUI');
+    setApiTestBody(dynamicBody);
+    setApiTestResponse(null);
+    setIsApiTestModalOpen(true);
   };
 
   const copyToClipboard = (text: string) => {
@@ -387,7 +433,7 @@ const CryptoPage = () => {
             </div>
         </TabsContent>
 
-        {/* ABA 3: API & N8N (ATUALIZADA) */}
+        {/* ABA 3: API & N8N (VISUAL ATUALIZADO IGUAL AO N8N PAGE) */}
         <TabsContent value="api" className="mt-6">
             <Card>
                 <CardHeader>
@@ -406,6 +452,11 @@ const CryptoPage = () => {
                                             <span className="font-mono text-xs font-bold text-slate-700 truncate">{api.path}</span>
                                         </div>
                                         <div className="flex items-center gap-2">
+                                            {/* BOTÃO DE TESTE AQUI */}
+                                            <Button size="icon" variant="ghost" className="h-8 w-8 text-emerald-600 hover:bg-emerald-100" onClick={(e) => { e.stopPropagation(); handleOpenApiTest(api); }} title="Simular Requisição">
+                                                <Play className="w-4 h-4" />
+                                            </Button>
+                                            
                                             <div onClick={() => toggleEndpoint(api.id)} className="cursor-pointer">
                                                 {openEndpoints.includes(api.id) ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
                                             </div>
@@ -439,12 +490,73 @@ const CryptoPage = () => {
                         <p>2. O N8N manda mensagem: "Envie o Hash da transação".</p>
                         <p>3. O cliente manda o Hash.</p>
                         <p>4. O N8N chama este endpoint (<code>/verify-blockchain-tx</code>).</p>
-                        <p>5. Se a resposta for <code>valid: true</code>, o pedido já é marcado como Pago automaticamente.</p>
+                        <p>5. Se a resposta for <code>valid: true</code>, o N8N responde "Recebido!" e o pedido já estará pago no painel.</p>
                     </div>
                 </CardContent>
             </Card>
         </TabsContent>
       </Tabs>
+
+      {/* MODAL DE TESTE DE API */}
+      <Dialog open={isApiTestModalOpen} onOpenChange={(open) => { setIsApiTestModalOpen(open); if(!open) setApiTestResponse(null); }}>
+        <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
+            <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                    <Zap className="w-5 h-5 text-orange-500" />
+                    Simulador: Validação Blockchain
+                </DialogTitle>
+                <DialogDescription>
+                    Teste o endpoint real que o N8N chamará. Cole um hash válido para ver a resposta.
+                </DialogDescription>
+            </DialogHeader>
+
+            <div className="flex-1 overflow-y-auto py-4 space-y-4">
+                <div className="space-y-1">
+                    <Label>Endpoint (POST)</Label>
+                    <div className="p-2 bg-slate-100 rounded border font-mono text-sm">
+                        {API_URL}/verify-blockchain-tx
+                    </div>
+                </div>
+                
+                <div className="space-y-1">
+                    <Label>Corpo da Requisição (JSON)</Label>
+                    <Textarea 
+                        className="font-mono text-xs h-32 bg-slate-50"
+                        value={apiTestBody}
+                        onChange={(e) => setApiTestBody(e.target.value)}
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                        Certifique-se de que a <code>wallet_address</code> é a sua carteira real configurada.
+                    </p>
+                </div>
+
+                {apiTestResponse && (
+                    <div className="mt-4 pt-4 border-t animate-in fade-in slide-in-from-bottom-4">
+                        <div className="flex items-center justify-between mb-2">
+                            <Label className={apiTestResponse.valid ? "text-green-700 font-bold" : "text-red-700 font-bold"}>
+                                Resposta do Servidor ({apiTestResponse.valid ? "VALIDADO" : "INVÁLIDO"})
+                            </Label>
+                        </div>
+                        <div className="bg-slate-900 text-green-400 p-4 rounded-lg font-mono text-xs overflow-x-auto shadow-inner max-h-60 border border-slate-700">
+                            <pre>{JSON.stringify(apiTestResponse, null, 2)}</pre>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setIsApiTestModalOpen(false)}>Fechar</Button>
+                <Button 
+                    onClick={() => apiTestMutation.mutate()} 
+                    disabled={apiTestMutation.isPending}
+                    className="bg-orange-600 hover:bg-orange-700 font-bold"
+                >
+                    {apiTestMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Play className="w-4 h-4 mr-2" />}
+                    Executar Teste
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
