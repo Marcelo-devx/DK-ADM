@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Package, Ruler, Droplets, Pencil, X, Check, Loader2, RefreshCcw, Palette, Zap } from "lucide-react";
+import { Plus, Trash2, Package, Ruler, Droplets, Pencil, X, Check, Loader2, RefreshCcw, Palette, Zap, RefreshCw } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -34,7 +34,8 @@ interface ProductVariantManagerProps {
 }
 
 const generateVariantSku = () => {
-  const randomStr = Math.random().toString(36).substring(2, 8).toUpperCase();
+  // Gera um SKU mais único com 8 caracteres aleatórios
+  const randomStr = Math.random().toString(36).substring(2, 10).toUpperCase();
   return `VAR-${randomStr}`;
 };
 
@@ -72,7 +73,7 @@ export const ProductVariantManager = ({
     }
   }, [basePrice, basePixPrice, baseCostPrice, isAdding]);
 
-  // Gera SKU automático quando abre o formulário de adição
+  // Gera SKU automático quando abre o formulário de adição (apenas se estiver vazio)
   useEffect(() => {
     if (isAdding && !newVariant.sku) {
         setNewVariant(prev => ({ ...prev, sku: generateVariantSku() }));
@@ -183,6 +184,14 @@ export const ProductVariantManager = ({
     setEditValues({ ...v, flavor_name: v.flavors?.name || "" });
   };
 
+  const handleRegenerateSku = () => {
+    setNewVariant(prev => ({ ...prev, sku: generateVariantSku() }));
+  };
+
+  const handleRegenerateEditSku = () => {
+    setEditValues(prev => ({ ...prev, sku: generateVariantSku() }));
+  };
+
   const formatCurrency = (val: number | null) => 
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
 
@@ -247,7 +256,6 @@ export const ProductVariantManager = ({
             <Input type="number" className="h-8" value={newVariant.volume_ml || ""} onChange={(e) => setNewVariant({ ...newVariant, volume_ml: Number(e.target.value) })} />
           </div>
           
-          {/* CAMPO OHMS ADICIONADO AQUI */}
           <div className="space-y-1">
             <Label className="text-[10px] uppercase font-bold">Ohms</Label>
             <Input 
@@ -258,13 +266,14 @@ export const ProductVariantManager = ({
             />
           </div>
 
-          <div className="space-y-1">
+          <div className="space-y-1 lg:col-span-2">
             <Label className="text-[10px] uppercase font-bold">SKU</Label>
-            <Input className="h-8" placeholder="Auto" value={newVariant.sku || ""} onChange={(e) => setNewVariant({ ...newVariant, sku: e.target.value.toUpperCase() })} />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-[10px] uppercase font-bold">Custo</Label>
-            <Input type="number" step="0.01" className="h-8" value={newVariant.cost_price || ""} onChange={(e) => setNewVariant({ ...newVariant, cost_price: Number(e.target.value) })} />
+            <div className="flex gap-1">
+                <Input className="h-8" placeholder="Auto" value={newVariant.sku || ""} onChange={(e) => setNewVariant({ ...newVariant, sku: e.target.value.toUpperCase() })} />
+                <Button type="button" size="icon" variant="outline" className="h-8 w-8 shrink-0" onClick={handleRegenerateSku} title="Gerar novo código">
+                    <RefreshCw className="h-3 h-3" />
+                </Button>
+            </div>
           </div>
           <div className="space-y-1">
             <Label className="text-[10px] uppercase font-bold">Venda</Label>
@@ -324,7 +333,7 @@ export const ProductVariantManager = ({
                             <div className="flex items-center gap-1">
                                 <Palette className="w-3 h-3 text-muted-foreground" />
                                 <Input 
-                                    className="h-7 text-[10px] w-20" 
+                                    className="h-7 text-[10px] w-16" 
                                     value={editValues.color || ""} 
                                     onChange={(e) => setEditValues({ ...editValues, color: e.target.value })}
                                     placeholder="Cor..."
@@ -340,7 +349,7 @@ export const ProductVariantManager = ({
                                 <Ruler className="w-3 h-3 text-muted-foreground" />
                                 <Input 
                                     type="number" 
-                                    className="h-7 text-[10px] w-16" 
+                                    className="h-7 text-[10px] w-14" 
                                     value={editValues.volume_ml || ""} 
                                     onChange={(e) => setEditValues({ ...editValues, volume_ml: Number(e.target.value) })}
                                     placeholder="ML"
@@ -355,7 +364,7 @@ export const ProductVariantManager = ({
                             <div className="flex items-center gap-1">
                                 <Zap className="w-3 h-3 text-muted-foreground" />
                                 <Input 
-                                    className="h-7 text-[10px] w-16" 
+                                    className="h-7 text-[10px] w-14" 
                                     value={editValues.ohms || ""} 
                                     onChange={(e) => setEditValues({ ...editValues, ohms: e.target.value })}
                                     placeholder="Ohms"
@@ -369,11 +378,16 @@ export const ProductVariantManager = ({
                 </TableCell>
                 <TableCell>
                   {editingId === v.id ? (
-                    <Input 
-                        className="h-7 text-[10px] font-mono p-1" 
-                        value={editValues.sku || ""} 
-                        onChange={(e) => setEditValues({ ...editValues, sku: e.target.value.toUpperCase() })} 
-                    />
+                    <div className="flex gap-1">
+                        <Input 
+                            className="h-7 text-[10px] font-mono p-1 w-24" 
+                            value={editValues.sku || ""} 
+                            onChange={(e) => setEditValues({ ...editValues, sku: e.target.value.toUpperCase() })} 
+                        />
+                        <Button type="button" size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={handleRegenerateEditSku} title="Gerar novo SKU">
+                            <RefreshCw className="h-3 w-3" />
+                        </Button>
+                    </div>
                   ) : (
                     <span className="font-mono text-[10px] text-muted-foreground bg-gray-100 px-1 rounded">{v.sku || "-"}</span>
                   )}
