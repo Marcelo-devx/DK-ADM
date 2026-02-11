@@ -89,7 +89,7 @@ export const ProductDialogs = ({
       <AlertDialog open={mode === 'delete' && !!selectedProduct} onOpenChange={(open) => !open && handleClose()}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <DialogTitle>Excluir Produto?</DialogTitle>
+            <AlertDialogTitle>Excluir Produto?</AlertDialogTitle>
             <AlertDialogDescription>
               Tem certeza que deseja excluir "{selectedProduct?.name}"? Essa ação não pode ser desfeita.
             </AlertDialogDescription>
