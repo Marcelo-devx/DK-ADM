@@ -21,7 +21,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send, History, FileDown, Calendar } from "lucide-react";
+import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send, History, FileDown, Calendar, FilterX } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { showSuccess, showError } from "@/utils/toast";
 import { OrderDetailModal } from "@/components/dashboard/OrderDetailModal";
@@ -314,31 +314,46 @@ const OrdersPage = () => {
           </Button>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 bg-white p-3 rounded-lg border shadow-sm">
+        <div className="flex flex-wrap items-center gap-3 bg-white p-2 rounded-xl border shadow-sm">
           {/* Filtros de Data */}
-          <div className="flex items-center gap-2 border-r pr-3 mr-1">
-            <div className="flex items-center gap-1">
-                <Calendar className="w-4 h-4 text-gray-400" />
-                <Input 
-                    type="date" 
-                    className="h-8 w-32 text-xs" 
-                    value={startDate} 
-                    onChange={(e) => setStartDate(e.target.value)} 
-                />
+          <div className="flex items-center gap-3 border-r pr-4 mr-2">
+            <div className="flex items-center gap-2">
+                <div className="bg-gray-100 p-1.5 rounded-md">
+                  <Calendar className="w-4 h-4 text-gray-500" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input 
+                      type="date" 
+                      className="h-9 w-[130px] text-xs bg-gray-50 border-gray-200" 
+                      value={startDate} 
+                      onChange={(e) => setStartDate(e.target.value)} 
+                  />
+                  <span className="text-gray-400 text-xs font-medium">até</span>
+                  <Input 
+                      type="date" 
+                      className="h-9 w-[130px] text-xs bg-gray-50 border-gray-200" 
+                      value={endDate} 
+                      onChange={(e) => setEndDate(e.target.value)} 
+                  />
+                </div>
             </div>
-            <span className="text-gray-400">-</span>
-            <Input 
-                type="date" 
-                className="h-8 w-32 text-xs" 
-                value={endDate} 
-                onChange={(e) => setEndDate(e.target.value)} 
-            />
+            {(startDate || endDate) && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-8 px-2 text-xs text-red-500 hover:bg-red-50 hover:text-red-600"
+                  onClick={() => { setStartDate(""); setEndDate(""); }}
+                  title="Limpar filtro de data"
+                >
+                  <FilterX className="w-4 h-4" />
+                </Button>
+            )}
           </div>
 
           <Button 
             variant={readyToShipOnly ? "default" : "outline"} 
             size="sm" 
-            className={cn("h-8 gap-2", readyToShipOnly && "bg-blue-600")}
+            className={cn("h-9 gap-2 text-xs", readyToShipOnly && "bg-blue-600")}
             onClick={() => {
                 setReadyToShipOnly(!readyToShipOnly);
                 setSelectedIds(new Set()); 
@@ -350,11 +365,11 @@ const OrdersPage = () => {
           <Button 
             variant="outline" 
             size="sm" 
-            className="h-8 gap-2 text-green-700 border-green-200 hover:bg-green-50"
+            className="h-9 gap-2 text-xs text-green-700 border-green-200 hover:bg-green-50"
             onClick={handleExportExcel}
             disabled={selectedIds.size === 0}
           >
-            <FileDown className="w-4 h-4" /> Excel ({selectedIds.size})
+            <FileDown className="w-4 h-4" /> Exportar ({selectedIds.size})
           </Button>
         </div>
       </div>
