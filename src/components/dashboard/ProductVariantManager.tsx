@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Package, Ruler, Droplets, Pencil, X, Check, Loader2, RefreshCcw, Palette, Zap, RefreshCw } from "lucide-react";
+import { Plus, Trash2, Package, Ruler, Droplets, Pencil, X, Check, Loader2, RefreshCcw, Palette, Zap, RefreshCw, Maximize } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,6 +18,7 @@ interface Variant {
   volume_ml: number | null;
   color: string | null;
   ohms: string | null;
+  size: string | null;
   sku: string | null;
   price: number;
   pix_price: number | null;
@@ -34,7 +35,6 @@ interface ProductVariantManagerProps {
 }
 
 const generateVariantSku = () => {
-  // Gera um SKU mais único com 8 caracteres aleatórios
   const randomStr = Math.random().toString(36).substring(2, 10).toUpperCase();
   return `VAR-${randomStr}`;
 };
@@ -55,6 +55,7 @@ export const ProductVariantManager = ({
     volume_ml: null,
     color: "",
     ohms: "",
+    size: "",
     sku: "",
     price: basePrice || 0,
     pix_price: basePixPrice || 0,
@@ -73,7 +74,6 @@ export const ProductVariantManager = ({
     }
   }, [basePrice, basePixPrice, baseCostPrice, isAdding]);
 
-  // Gera SKU automático quando abre o formulário de adição (apenas se estiver vazio)
   useEffect(() => {
     if (isAdding && !newVariant.sku) {
         setNewVariant(prev => ({ ...prev, sku: generateVariantSku() }));
@@ -127,7 +127,7 @@ export const ProductVariantManager = ({
       queryClient.invalidateQueries({ queryKey: ["productVariants", productId] });
       showSuccess("Variação adicionada!");
       setIsAdding(false);
-      setNewVariant({ flavor_name: "", volume_ml: null, color: "", ohms: "", sku: "", price: basePrice, pix_price: basePixPrice, cost_price: baseCostPrice, stock_quantity: 0 });
+      setNewVariant({ flavor_name: "", volume_ml: null, color: "", ohms: "", size: "", sku: "", price: basePrice, pix_price: basePixPrice, cost_price: baseCostPrice, stock_quantity: 0 });
     },
     onError: (err: any) => showError(err.message),
   });
@@ -150,7 +150,6 @@ export const ProductVariantManager = ({
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      // Usa a RPC segura para deletar mesmo com dependências
       const { error } = await supabase.rpc("admin_delete_variant", { p_variant_id: id });
       if (error) throw new Error(error.message);
     },
@@ -208,7 +207,7 @@ export const ProductVariantManager = ({
             <h3 className="text-lg font-bold flex items-center gap-2">
                 <Package className="w-5 h-5" /> Grade de Variações
             </h3>
-            <p className="text-xs text-muted-foreground">Gerencie sabores, cores, resistências e tamanhos.</p>
+            <p className="text-xs text-muted-foreground">Gerencie sabores, cores, tamanhos e especificações.</p>
         </div>
         <div className="flex gap-2">
             <Button 
@@ -234,7 +233,7 @@ export const ProductVariantManager = ({
       </div>
 
       {isAdding && (
-        <div className="grid grid-cols-1 md:grid-cols-5 lg:grid-cols-10 gap-3 p-4 border rounded-lg bg-white shadow-sm animate-in fade-in slide-in-from-top-2">
+        <div className="grid grid-cols-1 md:grid-cols-5 lg:grid-cols-11 gap-3 p-4 border rounded-lg bg-white shadow-sm animate-in fade-in slide-in-from-top-2">
           <div className="space-y-1">
             <Label className="text-[10px] uppercase font-bold">Sabor</Label>
             <Input 
@@ -257,12 +256,20 @@ export const ProductVariantManager = ({
             <Label className="text-[10px] uppercase font-bold">ML</Label>
             <Input type="number" className="h-8" value={newVariant.volume_ml || ""} onChange={(e) => setNewVariant({ ...newVariant, volume_ml: Number(e.target.value) })} />
           </div>
-          
+          <div className="space-y-1">
+            <Label className="text-[10px] uppercase font-bold">Tamanho</Label>
+            <Input 
+                className="h-8" 
+                placeholder="P/M/G" 
+                value={newVariant.size || ""} 
+                onChange={(e) => setNewVariant({ ...newVariant, size: e.target.value })} 
+            />
+          </div>
           <div className="space-y-1">
             <Label className="text-[10px] uppercase font-bold">Ohms</Label>
             <Input 
                 className="h-8" 
-                placeholder="Ex: 0.6" 
+                placeholder="0.6" 
                 value={newVariant.ohms || ""} 
                 onChange={(e) => setNewVariant({ ...newVariant, ohms: e.target.value })} 
             />
@@ -335,7 +342,7 @@ export const ProductVariantManager = ({
                             <div className="flex items-center gap-1">
                                 <Palette className="w-3 h-3 text-muted-foreground" />
                                 <Input 
-                                    className="h-7 text-[10px] w-16" 
+                                    className="h-7 text-[10px] w-14" 
                                     value={editValues.color || ""} 
                                     onChange={(e) => setEditValues({ ...editValues, color: e.target.value })}
                                     placeholder="Cor..."
@@ -343,6 +350,21 @@ export const ProductVariantManager = ({
                             </div>
                         ) : (
                             v.color && <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Palette className="w-3 h-3" /> {v.color}</span>
+                        )}
+
+                        {/* Tamanho (Size) - Novo */}
+                        {editingId === v.id ? (
+                            <div className="flex items-center gap-1">
+                                <Maximize className="w-3 h-3 text-muted-foreground" />
+                                <Input 
+                                    className="h-7 text-[10px] w-14" 
+                                    value={editValues.size || ""} 
+                                    onChange={(e) => setEditValues({ ...editValues, size: e.target.value })}
+                                    placeholder="Tam..."
+                                />
+                            </div>
+                        ) : (
+                            v.size && <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Maximize className="w-3 h-3" /> {v.size}</span>
                         )}
 
                         {/* ML */}
@@ -361,7 +383,7 @@ export const ProductVariantManager = ({
                             v.volume_ml && <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Ruler className="w-3 h-3" /> {v.volume_ml}ml</span>
                         )}
 
-                        {/* Campo de OHMS (Edição) */}
+                        {/* Ohms */}
                         {editingId === v.id ? (
                             <div className="flex items-center gap-1">
                                 <Zap className="w-3 h-3 text-muted-foreground" />
