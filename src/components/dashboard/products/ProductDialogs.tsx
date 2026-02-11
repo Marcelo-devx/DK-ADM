@@ -53,11 +53,12 @@ export const ProductDialogs = ({
     setSearchParams(newParams);
   };
 
-  const handleFormSubmit = async (values: any) => {
+  const handleFormSubmit = async (values: any, variantsToClone?: any[]) => {
     if (mode === 'edit' && selectedProduct) {
       await updateProductMutation.mutateAsync({ productId: selectedProduct.id, values });
     } else {
-      await addProductMutation.mutateAsync(values);
+      // Passa as variações para a mutação de criação
+      await addProductMutation.mutateAsync({ productData: values, variants: variantsToClone });
     }
     handleClose(); // Fecha apenas após sucesso (o mutation faz throw se errar)
   };

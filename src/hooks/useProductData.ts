@@ -101,13 +101,46 @@ export const useProductData = () => {
   });
 
   const addProductMutation = useMutation({
-    mutationFn: async (newProduct: any) => {
-      const { error } = await supabase.from("products").insert([newProduct]);
+    mutationFn: async ({ productData, variants }: { productData: any, variants?: any[] }) => {
+      // 1. Criar Produto Base
+      const { data: newProduct, error } = await supabase
+        .from("products")
+        .insert([productData])
+        .select()
+        .single();
+      
       if (error) throw new Error(error.message);
+
+      // 2. Clonar Variações (se houver)
+      if (variants && variants.length > 0 && newProduct) {
+        const variantsToInsert = variants.map(v => ({
+          product_id: newProduct.id,
+          flavor_id: v.flavor_id,
+          volume_ml: v.volume_ml,
+          color: v.color,
+          ohms: v.ohms,
+          size: v.size,
+          // Gera novo SKU para evitar colisão
+          sku: `VAR-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
+          price: v.price,
+          pix_price: v.pix_price,
+          cost_price: v.cost_price,
+          stock_quantity: 0, // Começa zerado por segurança na clonagem
+          is_active: true
+        }));
+
+        const { error: varError } = await supabase
+          .from("product_variants")
+          .insert(variantsToInsert);
+        
+        if (varError) throw new Error(`Produto criado, mas erro ao clonar variações: ${varError.message}`);
+      }
+
+      return newProduct;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
-      showSuccess("Produto adicionado!");
+      showSuccess("Produto adicionado com sucesso!");
     },
     onError: (error) => showError(error.message),
   });

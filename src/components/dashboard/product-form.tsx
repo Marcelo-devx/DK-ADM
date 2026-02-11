@@ -26,7 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { CategoryForm } from "./category-form";
-import { PlusCircle, Layers, Copy, RefreshCw } from "lucide-react";
+import { PlusCircle, Layers, Copy, RefreshCw, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -56,7 +56,7 @@ const formSchema = z.object({
 type ProductFormValues = z.infer<typeof formSchema>;
 
 interface ProductFormProps {
-  onSubmit: (values: ProductFormValues) => void;
+  onSubmit: (values: ProductFormValues, variantsToClone?: any[]) => void;
   isSubmitting: boolean;
   categories: { id: number; name: string }[];
   isLoadingCategories: boolean;
@@ -106,6 +106,8 @@ export const ProductForm = ({
   const queryClient = useQueryClient();
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [filteredSubCategories, setFilteredSubCategories] = useState<{ id: number; name: string; }[]>([]);
+  const [variantsToClone, setVariantsToClone] = useState<any[]>([]);
+  const [isCloning, setIsCloning] = useState(false);
 
   const selectedCategoryName = form.watch("category");
   const productId = initialData?.id;
@@ -159,9 +161,25 @@ export const ProductForm = ({
     form.setValue("sku", generateRandomSku());
   };
 
-  const handleCloneProduct = (productIdStr: string) => {
+  const handleCloneProduct = async (productIdStr: string) => {
+    setIsCloning(true);
     const productToClone = existingProducts.find(p => String(p.id) === productIdStr);
+    
     if (productToClone) {
+        // 1. Busca as variações completas do produto original
+        const { data: fullVariants } = await supabase
+            .from("product_variants")
+            .select("*")
+            .eq("product_id", productIdStr);
+        
+        // 2. Armazena para enviar no submit
+        if (fullVariants && fullVariants.length > 0) {
+            setVariantsToClone(fullVariants);
+        } else {
+            setVariantsToClone([]);
+        }
+
+        // 3. Preenche o formulário
         const { id, created_at, updated_at, variants: v, variant_prices, variant_costs, ...cloneData } = productToClone;
         
         form.reset({
@@ -171,8 +189,10 @@ export const ProductForm = ({
             stock_quantity: 0, 
             is_visible: cloneData.is_visible ?? true,
         });
-        showSuccess(`Dados de "${productToClone.name}" copiados! Ajuste o nome e o SKU se desejar.`);
+        
+        showSuccess(`Dados de "${productToClone.name}" copiados! ${fullVariants?.length || 0} variações incluídas.`);
     }
+    setIsCloning(false);
   };
 
   return (
@@ -181,15 +201,15 @@ export const ProductForm = ({
         <div className="bg-primary/5 p-4 rounded-xl border border-primary/10 flex flex-col sm:flex-row items-center gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
             <div className="flex items-center gap-3">
                 <div className="bg-primary/10 p-2 rounded-lg text-primary">
-                    <Copy className="h-5 w-5" />
+                    {isCloning ? <Loader2 className="h-5 w-5 animate-spin" /> : <Copy className="h-5 w-5" />}
                 </div>
                 <div>
                     <p className="text-sm font-bold text-primary">Clonar Produto Existente</p>
-                    <p className="text-[10px] text-muted-foreground uppercase font-medium">Os dados serão copiados para um novo registro</p>
+                    <p className="text-[10px] text-muted-foreground uppercase font-medium">Os dados e variações serão copiados para um novo registro</p>
                 </div>
             </div>
             <div className="flex-1 w-full">
-                <Select onValueChange={handleCloneProduct}>
+                <Select onValueChange={handleCloneProduct} disabled={isCloning}>
                     <SelectTrigger className="bg-white">
                         <SelectValue placeholder="Selecione um produto para copiar..." />
                     </SelectTrigger>
@@ -205,8 +225,15 @@ export const ProductForm = ({
         </div>
       )}
 
+      {variantsToClone.length > 0 && !initialData && (
+          <div className="bg-blue-50 border border-blue-100 p-3 rounded-lg flex items-center gap-2 text-sm text-blue-700">
+              <Layers className="h-4 w-4" />
+              <span>Este produto será criado com <strong>{variantsToClone.length} variações</strong> copiadas do original (com estoque zerado).</span>
+          </div>
+      )}
+
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <form onSubmit={form.handleSubmit((values) => onSubmit(values, variantsToClone))} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField
               control={form.control}
@@ -310,7 +337,7 @@ export const ProductForm = ({
           <div className="bg-gray-50 p-4 rounded-lg space-y-4">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-bold uppercase text-gray-500">Valores Padrão / Base</p>
-                {hasVariants && (
+                {(hasVariants || variantsToClone.length > 0) && (
                     <Badge variant="secondary" className="text-[10px]">Usado como padrão para novas variações</Badge>
                 )}
               </div>
@@ -359,12 +386,21 @@ export const ProductForm = ({
 
           <div className="border-t pt-6">
               <h4 className="text-sm font-bold flex items-center gap-2 mb-4 text-primary"><Layers className="w-4 h-4" /> Configurações de Variações</h4>
-              <ProductVariantManager 
-                productId={productId} 
-                basePrice={currentPrice}
-                basePixPrice={currentPixPrice || 0}
-                baseCostPrice={currentCostPrice || 0}
-              />
+              
+              {!initialData ? (
+                  <div className="p-4 bg-gray-50 border rounded-lg text-center text-sm text-muted-foreground">
+                      {variantsToClone.length > 0 
+                        ? "As variações do produto original serão copiadas ao salvar." 
+                        : "Salve o produto primeiro para gerenciar variações manualmente."}
+                  </div>
+              ) : (
+                  <ProductVariantManager 
+                    productId={productId} 
+                    basePrice={currentPrice}
+                    basePixPrice={currentPixPrice || 0}
+                    baseCostPrice={currentCostPrice || 0}
+                  />
+              )}
           </div>
 
           <FormField
