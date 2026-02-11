@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { showSuccess, showError } from "@/utils/toast";
-import { Product } from "@/types"; // Assumindo que você pode mover os tipos para lá ou defini-los aqui
 
 // Definição local se não estiver global
 export interface ExtendedProduct {
@@ -140,9 +139,10 @@ export const useProductData = () => {
     onError: (err: any) => showError(err.message),
   });
 
+  // UPDATED: Using RPC for safe deletion
   const deleteMutation = useMutation({
     mutationFn: async (productId: number) => {
-      const { error } = await supabase.from("products").delete().eq("id", productId);
+      const { error } = await supabase.rpc("admin_delete_product", { p_product_id: productId });
       if (error) throw new Error(error.message);
     },
     onSuccess: () => {
