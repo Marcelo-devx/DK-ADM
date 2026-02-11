@@ -21,7 +21,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send, History } from "lucide-react";
+import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send, History, FileDown, Calendar } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { showSuccess, showError } from "@/utils/toast";
 import { OrderDetailModal } from "@/components/dashboard/OrderDetailModal";
@@ -40,6 +40,8 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import * as XLSX from 'xlsx';
 
 interface Order {
   id: number;
@@ -58,12 +60,13 @@ interface Order {
     last_name: string | null;
     phone: string | null;
   } | null;
+  order_items?: any[]; // Adicionado para exportação se necessário, mas fetchOrders precisa trazer se for usar detalhado
 }
 
 const fetchOrders = async (): Promise<Order[]> => {
   const { data: orders, error: ordersError } = await supabase
     .from("orders")
-    .select("id, created_at, total_price, shipping_cost, coupon_discount, status, delivery_status, user_id, shipping_address, delivery_info, payment_method")
+    .select("*, order_items(name_at_purchase, quantity, price_at_purchase)") // Buscando itens para o export
     .order("created_at", { ascending: false });
 
   if (ordersError) throw new Error(ordersError.message);
@@ -134,6 +137,10 @@ const OrdersPage = () => {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [readyToShipOnly, setReadyToShipOnly] = useState(false);
   
+  // Filtros de Data
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [isProcessingBulk, setIsProcessingBulk] = useState(false);
 
@@ -145,14 +152,31 @@ const OrdersPage = () => {
 
   const filteredOrders = useMemo(() => {
     return orders?.filter(order => {
+      // Filtro de "Prontos para Envio"
       if (readyToShipOnly) {
           const isPaid = order.status === "Finalizada" || order.status === "Pago";
           const isPendingDelivery = order.delivery_status === "Pendente";
-          return isPaid && isPendingDelivery;
+          if (!(isPaid && isPendingDelivery)) return false;
       }
+
+      // Filtro de Data
+      if (startDate) {
+        const orderDate = new Date(order.created_at);
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0); // Início do dia
+        if (orderDate < start) return false;
+      }
+
+      if (endDate) {
+        const orderDate = new Date(order.created_at);
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999); // Final do dia
+        if (orderDate > end) return false;
+      }
+
       return true;
     }) || [];
-  }, [orders, readyToShipOnly]);
+  }, [orders, readyToShipOnly, startDate, endDate]);
 
   const validatePaymentMutation = useMutation({
     mutationFn: async (orderId: number) => {
@@ -212,6 +236,41 @@ const OrdersPage = () => {
     else showError("Nenhum pedido apto para validação foi processado.");
   };
 
+  const handleExportExcel = () => {
+    if (selectedIds.size === 0) {
+      showError("Selecione pelo menos um pedido para exportar.");
+      return;
+    }
+
+    const ordersToExport = orders?.filter(o => selectedIds.has(o.id)) || [];
+    
+    const data = ordersToExport.map(order => {
+        const itemsList = order.order_items?.map((i: any) => `${i.quantity}x ${i.name_at_purchase}`).join(", ") || "";
+        
+        return {
+            "ID": order.id,
+            "Data": new Date(order.created_at).toLocaleDateString("pt-BR"),
+            "Hora": new Date(order.created_at).toLocaleTimeString("pt-BR"),
+            "Cliente": `${order.profiles?.first_name || ''} ${order.profiles?.last_name || ''}`.trim(),
+            "Telefone": order.profiles?.phone || "",
+            "Endereço": `${order.shipping_address?.street}, ${order.shipping_address?.number} - ${order.shipping_address?.neighborhood}`,
+            "Cidade": order.shipping_address?.city,
+            "Itens": itemsList,
+            "Total (R$)": order.total_price + (order.shipping_cost || 0),
+            "Status": order.status,
+            "Pagamento": order.payment_method || "Pix",
+            "Entrega": order.delivery_status
+        };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Pedidos");
+    XLSX.writeFile(workbook, `Pedidos_Exportados_${new Date().toLocaleDateString("pt-BR").replace(/\//g, '-')}.xlsx`);
+    
+    showSuccess(`${ordersToExport.length} pedidos exportados!`);
+  };
+
   const toggleSelectAll = () => {
     if (selectedIds.size === filteredOrders.length) {
       setSelectedIds(new Set());
@@ -248,7 +307,7 @@ const OrdersPage = () => {
         <div className="flex items-center gap-3">
           <h1 className="text-3xl font-bold flex items-center gap-2">
             <DollarSign className="h-7 w-7 text-green-600" />
-            Vendas (Clientes)
+            Vendas
           </h1>
           <Button variant="ghost" size="icon" onClick={() => refetch()} className={cn("h-8 w-8", isRefetching && "animate-spin")}>
             <RefreshCw className="h-4 w-4" />
@@ -256,6 +315,26 @@ const OrdersPage = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-3 bg-white p-3 rounded-lg border shadow-sm">
+          {/* Filtros de Data */}
+          <div className="flex items-center gap-2 border-r pr-3 mr-1">
+            <div className="flex items-center gap-1">
+                <Calendar className="w-4 h-4 text-gray-400" />
+                <Input 
+                    type="date" 
+                    className="h-8 w-32 text-xs" 
+                    value={startDate} 
+                    onChange={(e) => setStartDate(e.target.value)} 
+                />
+            </div>
+            <span className="text-gray-400">-</span>
+            <Input 
+                type="date" 
+                className="h-8 w-32 text-xs" 
+                value={endDate} 
+                onChange={(e) => setEndDate(e.target.value)} 
+            />
+          </div>
+
           <Button 
             variant={readyToShipOnly ? "default" : "outline"} 
             size="sm" 
@@ -265,7 +344,17 @@ const OrdersPage = () => {
                 setSelectedIds(new Set()); 
             }}
           >
-            <Package className="w-4 h-4" /> Somente Prontos para Envio
+            <Package className="w-4 h-4" /> Prontos p/ Envio
+          </Button>
+
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="h-8 gap-2 text-green-700 border-green-200 hover:bg-green-50"
+            onClick={handleExportExcel}
+            disabled={selectedIds.size === 0}
+          >
+            <FileDown className="w-4 h-4" /> Excel ({selectedIds.size})
           </Button>
         </div>
       </div>
