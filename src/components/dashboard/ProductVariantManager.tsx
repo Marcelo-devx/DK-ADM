@@ -150,13 +150,15 @@ export const ProductVariantManager = ({
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("product_variants").delete().eq("id", id);
-      if (error) throw error;
+      // Usa a RPC segura para deletar mesmo com dependências
+      const { error } = await supabase.rpc("admin_delete_variant", { p_variant_id: id });
+      if (error) throw new Error(error.message);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["productVariants", productId] });
       showSuccess("Variação removida.");
     },
+    onError: (err: any) => showError(err.message),
   });
 
   const bulkUpdatePricesMutation = useMutation({
