@@ -315,38 +315,35 @@ const OrdersPage = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-3 bg-white p-2 rounded-xl border shadow-sm">
-          {/* Filtros de Data */}
-          <div className="flex items-center gap-3 border-r pr-4 mr-2">
-            <div className="flex items-center gap-2">
-                <div className="bg-gray-100 p-1.5 rounded-md">
-                  <Calendar className="w-4 h-4 text-gray-500" />
-                </div>
-                <div className="flex items-center gap-2">
-                  <Input 
-                      type="date" 
-                      className="h-9 w-[130px] text-xs bg-gray-50 border-gray-200" 
-                      value={startDate} 
-                      onChange={(e) => setStartDate(e.target.value)} 
-                  />
-                  <span className="text-gray-400 text-xs font-medium">até</span>
-                  <Input 
-                      type="date" 
-                      className="h-9 w-[130px] text-xs bg-gray-50 border-gray-200" 
-                      value={endDate} 
-                      onChange={(e) => setEndDate(e.target.value)} 
-                  />
-                </div>
+          
+          {/* Filtros de Data Unificados - Design Limpo */}
+          <div className="flex items-center bg-gray-50 border border-gray-200 rounded-lg p-1 mr-2 h-9">
+            <div className="flex items-center px-2 border-r border-gray-200">
+                <Calendar className="w-4 h-4 text-gray-400 mr-2" />
+                <input 
+                    type="date" 
+                    className="bg-transparent border-none text-xs text-gray-700 focus:outline-none w-28 font-medium font-sans"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                />
+            </div>
+            <div className="flex items-center px-2">
+                <span className="text-xs text-gray-400 mr-2">até</span>
+                <input 
+                    type="date" 
+                    className="bg-transparent border-none text-xs text-gray-700 focus:outline-none w-28 font-medium font-sans"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                />
             </div>
             {(startDate || endDate) && (
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="h-8 px-2 text-xs text-red-500 hover:bg-red-50 hover:text-red-600"
-                  onClick={() => { setStartDate(""); setEndDate(""); }}
-                  title="Limpar filtro de data"
+                <button 
+                    onClick={() => { setStartDate(""); setEndDate(""); }}
+                    className="ml-1 p-1 hover:bg-gray-200 rounded-full text-gray-400 hover:text-red-500 transition-colors"
+                    title="Limpar datas"
                 >
-                  <FilterX className="w-4 h-4" />
-                </Button>
+                    <X className="w-3 h-3" />
+                </button>
             )}
           </div>
 
