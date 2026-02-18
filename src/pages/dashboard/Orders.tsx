@@ -60,13 +60,13 @@ interface Order {
     last_name: string | null;
     phone: string | null;
   } | null;
-  order_items?: any[]; // Adicionado para exportação se necessário, mas fetchOrders precisa trazer se for usar detalhado
+  order_items: any[];
 }
 
 const fetchOrders = async (): Promise<Order[]> => {
   const { data: orders, error: ordersError } = await supabase
     .from("orders")
-    .select("*, order_items(name_at_purchase, quantity, price_at_purchase)") // Buscando itens para o export
+    .select("*, order_items(item_id, item_type, name_at_purchase, quantity, price_at_purchase)")
     .order("created_at", { ascending: false });
 
   if (ordersError) throw new Error(ordersError.message);
@@ -143,6 +143,7 @@ const OrdersPage = () => {
   
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [isProcessingBulk, setIsProcessingBulk] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   const { data: orders, isLoading, refetch, isRefetching } = useQuery<Order[]>({
     queryKey: ["ordersAdmin"],
@@ -236,39 +237,76 @@ const OrdersPage = () => {
     else showError("Nenhum pedido apto para validação foi processado.");
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (selectedIds.size === 0) {
       showError("Selecione pelo menos um pedido para exportar.");
       return;
     }
 
-    const ordersToExport = orders?.filter(o => selectedIds.has(o.id)) || [];
-    
-    const data = ordersToExport.map(order => {
-        const itemsList = order.order_items?.map((i: any) => `${i.quantity}x ${i.name_at_purchase}`).join(", ") || "";
-        
-        return {
-            "ID": order.id,
-            "Data": new Date(order.created_at).toLocaleDateString("pt-BR"),
-            "Hora": new Date(order.created_at).toLocaleTimeString("pt-BR"),
-            "Cliente": `${order.profiles?.first_name || ''} ${order.profiles?.last_name || ''}`.trim(),
-            "Telefone": order.profiles?.phone || "",
-            "Endereço": `${order.shipping_address?.street}, ${order.shipping_address?.number} - ${order.shipping_address?.neighborhood}`,
-            "Cidade": order.shipping_address?.city,
-            "Itens": itemsList,
-            "Total (R$)": order.total_price + (order.shipping_cost || 0),
-            "Status": order.status,
-            "Pagamento": order.payment_method || "Pix",
-            "Entrega": order.delivery_status
-        };
-    });
+    setIsExporting(true);
 
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Pedidos");
-    XLSX.writeFile(workbook, `Pedidos_Exportados_${new Date().toLocaleDateString("pt-BR").replace(/\//g, '-')}.xlsx`);
-    
-    showSuccess(`${ordersToExport.length} pedidos exportados!`);
+    try {
+      const ordersToExport = orders?.filter(o => selectedIds.has(o.id)) || [];
+      
+      // Coletar IDs dos produtos para buscar custo
+      const productIds = new Set<number>();
+      ordersToExport.forEach(order => {
+        order.order_items.forEach((item: any) => {
+          if (item.item_type === 'product' && item.item_id) {
+            productIds.add(item.item_id);
+          }
+        });
+      });
+
+      // Buscar custo dos produtos
+      let costsMap = new Map<number, number>();
+      if (productIds.size > 0) {
+        const { data: productsData } = await supabase
+          .from("products")
+          .select("id, cost_price")
+          .in("id", Array.from(productIds));
+        
+        productsData?.forEach((p: any) => {
+          costsMap.set(p.id, p.cost_price || 0);
+        });
+      }
+
+      const rows: any[] = [];
+
+      ordersToExport.forEach(order => {
+          order.order_items.forEach((item: any) => {
+              const unitCost = (item.item_type === 'product' && item.item_id) ? (costsMap.get(item.item_id) || 0) : 0;
+              const totalCost = unitCost * item.quantity;
+              const totalSale = item.price_at_purchase * item.quantity;
+              const profit = totalSale - totalCost;
+
+              rows.push({
+                  "Número do Pedido": order.id,
+                  "Cliente": `${order.profiles?.first_name || ''} ${order.profiles?.last_name || ''}`.trim(),
+                  "Data": new Date(order.created_at).toLocaleDateString("pt-BR"),
+                  "Produto": item.name_at_purchase,
+                  "Quantidade": item.quantity,
+                  "Custo Unitário": unitCost,
+                  "Valor Total Venda": totalSale,
+                  "Valor Total Custo": totalCost,
+                  "Lucro": profit,
+                  "Forma de Pagamento": order.payment_method || "Pix"
+              });
+          });
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(rows);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Vendas_Detalhadas");
+      XLSX.writeFile(workbook, `Vendas_Exportadas_${new Date().toLocaleDateString("pt-BR").replace(/\//g, '-')}.xlsx`);
+      
+      showSuccess(`${rows.length} itens exportados!`);
+    } catch (err) {
+      console.error(err);
+      showError("Erro ao gerar o arquivo Excel.");
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const toggleSelectAll = () => {
@@ -316,22 +354,21 @@ const OrdersPage = () => {
 
         <div className="flex flex-wrap items-center gap-3 bg-white p-2 rounded-xl border shadow-sm">
           
-          {/* Filtros de Data Unificados - Design Limpo */}
-          <div className="flex items-center bg-gray-50 border border-gray-200 rounded-lg p-1 mr-2 h-9">
-            <div className="flex items-center px-2 border-r border-gray-200">
+          <div className="flex items-center bg-gray-50 border border-gray-200 rounded-lg h-9 overflow-hidden">
+            <div className="flex items-center px-3 border-r border-gray-200">
                 <Calendar className="w-4 h-4 text-gray-400 mr-2" />
                 <input 
                     type="date" 
-                    className="bg-transparent border-none text-xs text-gray-700 focus:outline-none w-28 font-medium font-sans"
+                    className="bg-transparent border-none text-xs text-gray-700 focus:outline-none w-24 font-medium font-sans"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
                 />
             </div>
-            <div className="flex items-center px-2">
-                <span className="text-xs text-gray-400 mr-2">até</span>
+            <div className="flex items-center px-3 bg-white">
+                <span className="text-[10px] uppercase font-bold text-gray-400 mr-2">Até</span>
                 <input 
                     type="date" 
-                    className="bg-transparent border-none text-xs text-gray-700 focus:outline-none w-28 font-medium font-sans"
+                    className="bg-transparent border-none text-xs text-gray-700 focus:outline-none w-24 font-medium font-sans"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
                 />
@@ -339,7 +376,7 @@ const OrdersPage = () => {
             {(startDate || endDate) && (
                 <button 
                     onClick={() => { setStartDate(""); setEndDate(""); }}
-                    className="ml-1 p-1 hover:bg-gray-200 rounded-full text-gray-400 hover:text-red-500 transition-colors"
+                    className="h-full px-2 hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors border-l border-gray-200"
                     title="Limpar datas"
                 >
                     <X className="w-3 h-3" />
@@ -364,9 +401,10 @@ const OrdersPage = () => {
             size="sm" 
             className="h-9 gap-2 text-xs text-green-700 border-green-200 hover:bg-green-50"
             onClick={handleExportExcel}
-            disabled={selectedIds.size === 0}
+            disabled={selectedIds.size === 0 || isExporting}
           >
-            <FileDown className="w-4 h-4" /> Exportar ({selectedIds.size})
+            {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />} 
+            Exportar ({selectedIds.size})
           </Button>
         </div>
       </div>
