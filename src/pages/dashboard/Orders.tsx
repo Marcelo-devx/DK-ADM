@@ -49,6 +49,7 @@ interface Order {
   total_price: number;
   shipping_cost: number;
   coupon_discount: number;
+  donation_amount: number;
   status: string;
   delivery_status: string;
   user_id: string;
