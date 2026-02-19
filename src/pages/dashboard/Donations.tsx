@@ -9,52 +9,42 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Heart, DollarSign, Users, Calendar, HandHeart, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
-interface Donation {
+interface DonationOrder {
   id: number;
-  name_at_purchase: string;
-  price_at_purchase: number;
-  quantity: number;
+  donation_amount: number;
   created_at: string;
-  orders: {
-    id: number;
-    status: string;
-    user_id: string;
-    profiles: {
-      first_name: string | null;
-      last_name: string | null;
-      email: string | null;
-    } | null;
+  status: string;
+  user_id: string;
+  profiles: {
+    first_name: string | null;
+    last_name: string | null;
+    email: string | null;
   } | null;
 }
 
 const fetchDonations = async () => {
-  // Buscamos itens de pedido que contenham "Doação" no nome
-  // E garantimos que o pedido foi PAGO
+  // Buscamos pedidos onde a coluna donation_amount seja maior que zero
+  // E garantimos que o pedido foi PAGO ou FINALIZADO
   const { data, error } = await supabase
-    .from("order_items")
+    .from("orders")
     .select(`
       id,
-      name_at_purchase,
-      price_at_purchase,
-      quantity,
+      donation_amount,
       created_at,
-      orders!inner (
-        id,
-        status,
-        user_id,
-        profiles (
-          first_name,
-          last_name,
-          email
-        )
+      status,
+      user_id,
+      profiles (
+        first_name,
+        last_name,
+        email
       )
     `)
-    .ilike('name_at_purchase', '%Doação%')
-    .in('orders.status', ['Pago', 'Finalizada'])
+    .gt('donation_amount', 0)
+    .in('status', ['Pago', 'Finalizada'])
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return data as unknown as Donation[];
+  return data as unknown as DonationOrder[];
 };
 
 export default function DonationsPage() {
@@ -62,37 +52,37 @@ export default function DonationsPage() {
   const [endDate, setEndDate] = useState("");
 
   const { data: donations, isLoading } = useQuery({
-    queryKey: ["donations-dashboard"],
+    queryKey: ["donations-dashboard-v2"],
     queryFn: fetchDonations,
   });
 
   const filteredDonations = useMemo(() => {
     if (!donations) return [];
-    return donations.filter((item) => {
+    return donations.filter((order) => {
       if (startDate) {
-        const itemDate = new Date(item.created_at);
+        const itemDate = new Date(order.created_at);
         const start = new Date(startDate);
-        start.setHours(0, 0, 0, 0); // Início do dia
+        start.setHours(0, 0, 0, 0);
         if (itemDate < start) return false;
       }
       if (endDate) {
-        const itemDate = new Date(item.created_at);
+        const itemDate = new Date(order.created_at);
         const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999); // Final do dia
+        end.setHours(23, 59, 59, 999);
         if (itemDate > end) return false;
       }
       return true;
     });
   }, [donations, startDate, endDate]);
 
-  const stats = filteredDonations.reduce((acc, item) => {
-    const value = item.price_at_purchase * item.quantity;
+  const stats = filteredDonations.reduce((acc, order) => {
+    const value = Number(order.donation_amount || 0);
     acc.total += value;
     acc.count += 1;
     return acc;
   }, { total: 0, count: 0 });
 
-  const uniqueDonors = new Set(filteredDonations.map(d => d.orders?.user_id)).size;
+  const uniqueDonors = new Set(filteredDonations.map(d => d.user_id)).size;
   const averageDonation = stats.count > 0 ? stats.total / stats.count : 0;
 
   const formatCurrency = (val: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
@@ -124,7 +114,6 @@ export default function DonationsPage() {
             </p>
         </div>
 
-        {/* Filtro de Data */}
         <div className="flex items-center bg-white border border-gray-200 rounded-lg h-10 overflow-hidden shadow-sm">
             <div className="flex items-center px-3 border-r border-gray-200">
                 <Calendar className="w-4 h-4 text-gray-400 mr-2" />
@@ -156,7 +145,6 @@ export default function DonationsPage() {
         </div>
       </div>
 
-      {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="border-l-4 border-l-rose-500 shadow-sm bg-rose-50/10">
           <CardHeader className="pb-2">
@@ -195,11 +183,10 @@ export default function DonationsPage() {
         </Card>
       </div>
 
-      {/* Tabela de Doações */}
       <Card className="border-none shadow-md">
         <CardHeader className="bg-slate-50 border-b">
           <CardTitle className="text-lg">Histórico de Doações</CardTitle>
-          <CardDescription>Lista das doações mais recentes realizadas no checkout.</CardDescription>
+          <CardDescription>Lista das doações mais recentes baseadas na coluna oficial de doações dos pedidos.</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
@@ -208,31 +195,31 @@ export default function DonationsPage() {
                 <TableHead>Data</TableHead>
                 <TableHead>Doador</TableHead>
                 <TableHead>Pedido</TableHead>
-                <TableHead className="text-right">Valor</TableHead>
+                <TableHead className="text-right">Valor Doado</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredDonations && filteredDonations.length > 0 ? (
-                filteredDonations.map((item) => (
-                  <TableRow key={item.id} className="hover:bg-slate-50">
+                filteredDonations.map((order) => (
+                  <TableRow key={order.id} className="hover:bg-slate-50">
                     <TableCell>
                       <div className="flex items-center gap-2 text-sm text-slate-600">
                         <Calendar className="h-3 w-3" />
-                        {new Date(item.created_at).toLocaleDateString("pt-BR")}
-                        <span className="text-xs text-muted-foreground">{new Date(item.created_at).toLocaleTimeString("pt-BR", { hour: '2-digit', minute: '2-digit' })}</span>
+                        {new Date(order.created_at).toLocaleDateString("pt-BR")}
+                        <span className="text-xs text-muted-foreground">{new Date(order.created_at).toLocaleTimeString("pt-BR", { hour: '2-digit', minute: '2-digit' })}</span>
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="font-medium">
-                        {item.orders?.profiles?.first_name || 'Anônimo'} {item.orders?.profiles?.last_name || ''}
+                        {order.profiles?.first_name || 'Anônimo'} {order.profiles?.last_name || ''}
                       </div>
-                      <div className="text-xs text-muted-foreground">{item.orders?.profiles?.email}</div>
+                      <div className="text-xs text-muted-foreground">{order.profiles?.email}</div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="font-mono">#{item.orders?.id}</Badge>
+                      <Badge variant="outline" className="font-mono">#{order.id}</Badge>
                     </TableCell>
                     <TableCell className="text-right font-bold text-rose-600">
-                      {formatCurrency(item.price_at_purchase * item.quantity)}
+                      {formatCurrency(order.donation_amount)}
                     </TableCell>
                   </TableRow>
                 ))
