@@ -16,38 +16,44 @@ interface DonationOrder {
   created_at: string;
   status: string;
   user_id: string;
-  profiles: {
+  profiles?: {
     first_name: string | null;
     last_name: string | null;
   } | null;
 }
 
-const fetchDonations = async () => {
-  // Buscamos pedidos onde a coluna donation_amount seja maior que zero
-  // E o status seja Pago ou Finalizada.
-  const { data, error } = await supabase
+const fetchDonations = async (): Promise<DonationOrder[]> => {
+  // 1. Busca pedidos com doação > 0 e que foram pagos
+  const { data: orders, error } = await supabase
     .from("orders")
-    .select(`
-      id,
-      donation_amount,
-      created_at,
-      status,
-      user_id,
-      profiles (
-        first_name,
-        last_name
-      )
-    `)
+    .select("id, donation_amount, created_at, status, user_id")
     .gt('donation_amount', 0)
     .in('status', ['Pago', 'Finalizada'])
     .order('created_at', { ascending: false });
 
-  if (error) {
-      console.error("Erro na busca de doações:", error.message);
-      throw error;
-  }
+  if (error) throw error;
+  if (!orders || orders.length === 0) return [];
+
+  // 2. Coleta IDs únicos de usuários para buscar os perfis
+  const userIds = [...new Set(orders.map(o => o.user_id))];
   
-  return data as unknown as DonationOrder[];
+  const { data: profiles, error: profilesError } = await supabase
+    .from("profiles")
+    .select("id, first_name, last_name")
+    .in("id", userIds);
+
+  if (profilesError) {
+      console.warn("Erro ao buscar perfis dos doadores:", profilesError.message);
+      return orders as DonationOrder[];
+  }
+
+  const profilesMap = new Map(profiles.map(p => [p.id, p]));
+
+  // 3. Mescla os dados
+  return orders.map(order => ({
+    ...order,
+    profiles: profilesMap.get(order.user_id) || null,
+  })) as DonationOrder[];
 };
 
 export default function DonationsPage() {
@@ -55,37 +61,41 @@ export default function DonationsPage() {
   const [endDate, setEndDate] = useState("");
 
   const { data: donations, isLoading, refetch, isRefetching } = useQuery({
-    queryKey: ["donations-dashboard-v3"],
+    queryKey: ["donations-list-v4"],
     queryFn: fetchDonations,
   });
 
   const filteredDonations = useMemo(() => {
     if (!donations) return [];
     return donations.filter((order) => {
+      const orderDate = new Date(order.created_at);
+      
       if (startDate) {
-        const itemDate = new Date(order.created_at);
         const start = new Date(startDate);
         start.setHours(0, 0, 0, 0);
-        if (itemDate < start) return false;
+        if (orderDate < start) return false;
       }
+      
       if (endDate) {
-        const itemDate = new Date(order.created_at);
         const end = new Date(endDate);
         end.setHours(23, 59, 59, 999);
-        if (itemDate > end) return false;
+        if (orderDate > end) return false;
       }
+      
       return true;
     });
   }, [donations, startDate, endDate]);
 
-  const stats = filteredDonations.reduce((acc, order) => {
-    const value = Number(order.donation_amount || 0);
-    acc.total += value;
-    acc.count += 1;
-    return acc;
-  }, { total: 0, count: 0 });
+  const stats = useMemo(() => {
+      return filteredDonations.reduce((acc, order) => {
+        const value = Number(order.donation_amount || 0);
+        acc.total += value;
+        acc.count += 1;
+        return acc;
+      }, { total: 0, count: 0 });
+  }, [filteredDonations]);
 
-  const uniqueDonors = new Set(filteredDonations.map(d => d.user_id)).size;
+  const uniqueDonors = useMemo(() => new Set(filteredDonations.map(d => d.user_id)).size, [filteredDonations]);
   const averageDonation = stats.count > 0 ? stats.total / stats.count : 0;
 
   const formatCurrency = (val: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
@@ -113,7 +123,7 @@ export default function DonationsPage() {
                 Doações Recebidas
             </h1>
             <p className="text-muted-foreground">
-                Acompanhe o impacto e a solidariedade dos seus clientes.
+                Acompanhe a solidariedade dos seus clientes (baseado nos pagamentos confirmados).
             </p>
         </div>
 
@@ -167,7 +177,7 @@ export default function DonationsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-black text-rose-600">{formatCurrency(stats.total)}</div>
-            <p className="text-xs text-muted-foreground mt-1">Em {stats.count} doações confirmadas</p>
+            <p className="text-xs text-muted-foreground mt-1">Em {stats.count} doações no período</p>
           </CardContent>
         </Card>
 
@@ -179,7 +189,7 @@ export default function DonationsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-slate-800">{uniqueDonors}</div>
-            <p className="text-xs text-muted-foreground mt-1">Clientes engajados no período</p>
+            <p className="text-xs text-muted-foreground mt-1">Clientes engajados</p>
           </CardContent>
         </Card>
 
@@ -191,7 +201,7 @@ export default function DonationsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-slate-800">{formatCurrency(averageDonation)}</div>
-            <p className="text-xs text-muted-foreground mt-1">Ticket médio de solidariedade</p>
+            <p className="text-xs text-muted-foreground mt-1">Ticket médio solidário</p>
           </CardContent>
         </Card>
       </div>
@@ -199,7 +209,6 @@ export default function DonationsPage() {
       <Card className="border-none shadow-md">
         <CardHeader className="bg-slate-50 border-b">
           <CardTitle className="text-lg">Histórico de Doações</CardTitle>
-          <CardDescription>Lista das doações mais recentes baseadas na coluna oficial de doações dos pedidos.</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
@@ -212,7 +221,7 @@ export default function DonationsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredDonations && filteredDonations.length > 0 ? (
+              {filteredDonations.length > 0 ? (
                 filteredDonations.map((order) => (
                   <TableRow key={order.id} className="hover:bg-slate-50">
                     <TableCell>
@@ -223,12 +232,12 @@ export default function DonationsPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="font-medium">
-                        {order.profiles?.first_name || 'Anônimo'} {order.profiles?.last_name || ''}
+                      <div className="font-medium text-sm">
+                        {order.profiles ? `${order.profiles.first_name || ''} ${order.profiles.last_name || ''}`.trim() : 'Anônimo'}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="font-mono">#{order.id}</Badge>
+                      <Badge variant="outline" className="font-mono text-[10px]">#{order.id}</Badge>
                     </TableCell>
                     <TableCell className="text-right font-bold text-rose-600">
                       {formatCurrency(order.donation_amount)}
@@ -237,8 +246,8 @@ export default function DonationsPage() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-10 text-muted-foreground">
-                    Nenhuma doação encontrada para o período selecionado.
+                  <TableCell colSpan={4} className="text-center py-10 text-muted-foreground italic">
+                    Nenhuma doação encontrada para os critérios selecionados.
                   </TableCell>
                 </TableRow>
               )}
