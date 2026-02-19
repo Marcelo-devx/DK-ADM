@@ -1,11 +1,12 @@
 "use client";
 
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Heart, DollarSign, Users, Calendar, HandHeart } from "lucide-react";
+import { Heart, DollarSign, Users, Calendar, HandHeart, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 interface Donation {
@@ -57,20 +58,42 @@ const fetchDonations = async () => {
 };
 
 export default function DonationsPage() {
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
   const { data: donations, isLoading } = useQuery({
     queryKey: ["donations-dashboard"],
     queryFn: fetchDonations,
   });
 
-  const stats = donations?.reduce((acc, item) => {
+  const filteredDonations = useMemo(() => {
+    if (!donations) return [];
+    return donations.filter((item) => {
+      if (startDate) {
+        const itemDate = new Date(item.created_at);
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0); // Início do dia
+        if (itemDate < start) return false;
+      }
+      if (endDate) {
+        const itemDate = new Date(item.created_at);
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999); // Final do dia
+        if (itemDate > end) return false;
+      }
+      return true;
+    });
+  }, [donations, startDate, endDate]);
+
+  const stats = filteredDonations.reduce((acc, item) => {
     const value = item.price_at_purchase * item.quantity;
     acc.total += value;
     acc.count += 1;
     return acc;
   }, { total: 0, count: 0 });
 
-  const uniqueDonors = new Set(donations?.map(d => d.orders?.user_id)).size;
-  const averageDonation = stats && stats.count > 0 ? stats.total / stats.count : 0;
+  const uniqueDonors = new Set(filteredDonations.map(d => d.orders?.user_id)).size;
+  const averageDonation = stats.count > 0 ? stats.total / stats.count : 0;
 
   const formatCurrency = (val: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
 
@@ -90,14 +113,47 @@ export default function DonationsPage() {
 
   return (
     <div className="space-y-8 pb-20">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold flex items-center gap-2">
-          <Heart className="h-8 w-8 text-rose-500 fill-rose-500" />
-          Doações Recebidas
-        </h1>
-        <p className="text-muted-foreground">
-          Acompanhe o impacto e a solidariedade dos seus clientes.
-        </p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-col gap-2">
+            <h1 className="text-3xl font-bold flex items-center gap-2">
+            <Heart className="h-8 w-8 text-rose-500 fill-rose-500" />
+            Doações Recebidas
+            </h1>
+            <p className="text-muted-foreground">
+            Acompanhe o impacto e a solidariedade dos seus clientes.
+            </p>
+        </div>
+
+        {/* Filtro de Data */}
+        <div className="flex items-center bg-white border border-gray-200 rounded-lg h-10 overflow-hidden shadow-sm">
+            <div className="flex items-center px-3 border-r border-gray-200">
+                <Calendar className="w-4 h-4 text-gray-400 mr-2" />
+                <input 
+                    type="date" 
+                    className="bg-transparent border-none text-xs text-gray-700 focus:outline-none w-24 font-medium font-sans"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                />
+            </div>
+            <div className="flex items-center px-3 bg-white">
+                <span className="text-[10px] uppercase font-bold text-gray-400 mr-2">Até</span>
+                <input 
+                    type="date" 
+                    className="bg-transparent border-none text-xs text-gray-700 focus:outline-none w-24 font-medium font-sans"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                />
+            </div>
+            {(startDate || endDate) && (
+                <button 
+                    onClick={() => { setStartDate(""); setEndDate(""); }}
+                    className="h-full px-3 hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors border-l border-gray-200"
+                    title="Limpar datas"
+                >
+                    <X className="w-4 h-4" />
+                </button>
+            )}
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -109,8 +165,8 @@ export default function DonationsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-black text-rose-600">{formatCurrency(stats?.total || 0)}</div>
-            <p className="text-xs text-muted-foreground mt-1">Em {stats?.count} doações confirmadas</p>
+            <div className="text-3xl font-black text-rose-600">{formatCurrency(stats.total)}</div>
+            <p className="text-xs text-muted-foreground mt-1">Em {stats.count} doações confirmadas</p>
           </CardContent>
         </Card>
 
@@ -122,7 +178,7 @@ export default function DonationsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-slate-800">{uniqueDonors}</div>
-            <p className="text-xs text-muted-foreground mt-1">Clientes engajados</p>
+            <p className="text-xs text-muted-foreground mt-1">Clientes engajados no período</p>
           </CardContent>
         </Card>
 
@@ -152,13 +208,12 @@ export default function DonationsPage() {
                 <TableHead>Data</TableHead>
                 <TableHead>Doador</TableHead>
                 <TableHead>Pedido</TableHead>
-                <TableHead>Descrição</TableHead>
                 <TableHead className="text-right">Valor</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {donations && donations.length > 0 ? (
-                donations.map((item) => (
+              {filteredDonations && filteredDonations.length > 0 ? (
+                filteredDonations.map((item) => (
                   <TableRow key={item.id} className="hover:bg-slate-50">
                     <TableCell>
                       <div className="flex items-center gap-2 text-sm text-slate-600">
@@ -176,9 +231,6 @@ export default function DonationsPage() {
                     <TableCell>
                       <Badge variant="outline" className="font-mono">#{item.orders?.id}</Badge>
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {item.name_at_purchase}
-                    </TableCell>
                     <TableCell className="text-right font-bold text-rose-600">
                       {formatCurrency(item.price_at_purchase * item.quantity)}
                     </TableCell>
@@ -186,8 +238,8 @@ export default function DonationsPage() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-10 text-muted-foreground">
-                    Nenhuma doação registrada ainda.
+                  <TableCell colSpan={4} className="text-center py-10 text-muted-foreground">
+                    Nenhuma doação encontrada para o período selecionado.
                   </TableCell>
                 </TableRow>
               )}
