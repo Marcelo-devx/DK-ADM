@@ -6,8 +6,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Heart, DollarSign, Users, Calendar, HandHeart, X } from "lucide-react";
+import { Heart, DollarSign, Users, Calendar, HandHeart, X, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 interface DonationOrder {
   id: number;
@@ -18,13 +19,12 @@ interface DonationOrder {
   profiles: {
     first_name: string | null;
     last_name: string | null;
-    email: string | null;
   } | null;
 }
 
 const fetchDonations = async () => {
   // Buscamos pedidos onde a coluna donation_amount seja maior que zero
-  // E garantimos que o pedido foi PAGO ou FINALIZADO
+  // E o status seja Pago ou Finalizada.
   const { data, error } = await supabase
     .from("orders")
     .select(`
@@ -35,15 +35,18 @@ const fetchDonations = async () => {
       user_id,
       profiles (
         first_name,
-        last_name,
-        email
+        last_name
       )
     `)
     .gt('donation_amount', 0)
     .in('status', ['Pago', 'Finalizada'])
     .order('created_at', { ascending: false });
 
-  if (error) throw error;
+  if (error) {
+      console.error("Erro na busca de doações:", error.message);
+      throw error;
+  }
+  
   return data as unknown as DonationOrder[];
 };
 
@@ -51,8 +54,8 @@ export default function DonationsPage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  const { data: donations, isLoading } = useQuery({
-    queryKey: ["donations-dashboard-v2"],
+  const { data: donations, isLoading, refetch, isRefetching } = useQuery({
+    queryKey: ["donations-dashboard-v3"],
     queryFn: fetchDonations,
   });
 
@@ -106,42 +109,52 @@ export default function DonationsPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex flex-col gap-2">
             <h1 className="text-3xl font-bold flex items-center gap-2">
-            <Heart className="h-8 w-8 text-rose-500 fill-rose-500" />
-            Doações Recebidas
+                <Heart className="h-8 w-8 text-rose-500 fill-rose-500" />
+                Doações Recebidas
             </h1>
             <p className="text-muted-foreground">
-            Acompanhe o impacto e a solidariedade dos seus clientes.
+                Acompanhe o impacto e a solidariedade dos seus clientes.
             </p>
         </div>
 
-        <div className="flex items-center bg-white border border-gray-200 rounded-lg h-10 overflow-hidden shadow-sm">
-            <div className="flex items-center px-3 border-r border-gray-200">
-                <Calendar className="w-4 h-4 text-gray-400 mr-2" />
-                <input 
-                    type="date" 
-                    className="bg-transparent border-none text-xs text-gray-700 focus:outline-none w-24 font-medium font-sans"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                />
+        <div className="flex items-center gap-3">
+            <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={() => refetch()} 
+                className={isRefetching ? "animate-spin" : ""}
+            >
+                <RefreshCw className="h-4 w-4 text-muted-foreground" />
+            </Button>
+            <div className="flex items-center bg-white border border-gray-200 rounded-lg h-10 overflow-hidden shadow-sm">
+                <div className="flex items-center px-3 border-r border-gray-200">
+                    <Calendar className="w-4 h-4 text-gray-400 mr-2" />
+                    <input 
+                        type="date" 
+                        className="bg-transparent border-none text-xs text-gray-700 focus:outline-none w-24 font-medium font-sans"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                    />
+                </div>
+                <div className="flex items-center px-3 bg-white">
+                    <span className="text-[10px] uppercase font-bold text-gray-400 mr-2">Até</span>
+                    <input 
+                        type="date" 
+                        className="bg-transparent border-none text-xs text-gray-700 focus:outline-none w-24 font-medium font-sans"
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                    />
+                </div>
+                {(startDate || endDate) && (
+                    <button 
+                        onClick={() => { setStartDate(""); setEndDate(""); }}
+                        className="h-full px-3 hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors border-l border-gray-200"
+                        title="Limpar datas"
+                    >
+                        <X className="w-4 h-4" />
+                    </button>
+                )}
             </div>
-            <div className="flex items-center px-3 bg-white">
-                <span className="text-[10px] uppercase font-bold text-gray-400 mr-2">Até</span>
-                <input 
-                    type="date" 
-                    className="bg-transparent border-none text-xs text-gray-700 focus:outline-none w-24 font-medium font-sans"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                />
-            </div>
-            {(startDate || endDate) && (
-                <button 
-                    onClick={() => { setStartDate(""); setEndDate(""); }}
-                    className="h-full px-3 hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors border-l border-gray-200"
-                    title="Limpar datas"
-                >
-                    <X className="w-4 h-4" />
-                </button>
-            )}
         </div>
       </div>
 
@@ -213,7 +226,6 @@ export default function DonationsPage() {
                       <div className="font-medium">
                         {order.profiles?.first_name || 'Anônimo'} {order.profiles?.last_name || ''}
                       </div>
-                      <div className="text-xs text-muted-foreground">{order.profiles?.email}</div>
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="font-mono">#{order.id}</Badge>
