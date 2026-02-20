@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/dialog";
 import { CategoryForm } from "./category-form";
 import { PlusCircle, Layers, Copy, RefreshCw, Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { showSuccess, showError } from "@/utils/toast";
@@ -105,7 +105,6 @@ export const ProductForm = ({
 
   const queryClient = useQueryClient();
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
-  const [filteredSubCategories, setFilteredSubCategories] = useState<{ id: number; name: string; }[]>([]);
   const [variantsToClone, setVariantsToClone] = useState<any[]>([]);
   const [isCloning, setIsCloning] = useState(false);
 
@@ -134,14 +133,17 @@ export const ProductForm = ({
     }
   }, [initialData, form]);
 
-  useEffect(() => {
-    if (selectedCategoryName && categories.length > 0) {
-      const selectedCategory = categories.find(c => c.name === selectedCategoryName);
-      if (selectedCategory) {
-        const filtered = subCategories.filter(sc => sc.category_id === selectedCategory.id);
-        setFilteredSubCategories(filtered);
-      }
-    }
+  // Lógica de filtragem reativa e robusta para subcategorias
+  const filteredSubCategories = useMemo(() => {
+    if (!selectedCategoryName || !categories.length || !subCategories.length) return [];
+    
+    const selectedCategory = categories.find(
+      c => c.name.trim().toLowerCase() === selectedCategoryName.trim().toLowerCase()
+    );
+    
+    if (!selectedCategory) return [];
+    
+    return subCategories.filter(sc => Number(sc.category_id) === Number(selectedCategory.id));
   }, [selectedCategoryName, categories, subCategories]);
 
   const addCategoryMutation = useMutation({
@@ -166,20 +168,17 @@ export const ProductForm = ({
     const productToClone = existingProducts.find(p => String(p.id) === productIdStr);
     
     if (productToClone) {
-        // 1. Busca as variações completas do produto original
         const { data: fullVariants } = await supabase
             .from("product_variants")
             .select("*")
             .eq("product_id", productIdStr);
         
-        // 2. Armazena para enviar no submit
         if (fullVariants && fullVariants.length > 0) {
             setVariantsToClone(fullVariants);
         } else {
             setVariantsToClone([]);
         }
 
-        // 3. Preenche o formulário
         const { id, created_at, updated_at, variants: v, variant_prices, variant_costs, ...cloneData } = productToClone;
         
         form.reset({
@@ -310,9 +309,21 @@ export const ProductForm = ({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Sub-categoria</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value} disabled={!selectedCategoryName}>
-                    <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
-                    <SelectContent>{filteredSubCategories.map((sc) => (<SelectItem key={sc.id} value={sc.name}>{sc.name}</SelectItem>))}</SelectContent>
+                  <Select 
+                    onValueChange={field.onChange} 
+                    value={field.value} 
+                    disabled={!selectedCategoryName || filteredSubCategories.length === 0}
+                  >
+                    <FormControl>
+                        <SelectTrigger>
+                            <SelectValue placeholder={filteredSubCategories.length === 0 ? "Sem subcategorias" : "Selecione"} />
+                        </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                        {filteredSubCategories.map((sc) => (
+                            <SelectItem key={sc.id} value={sc.name}>{sc.name}</SelectItem>
+                        ))}
+                    </SelectContent>
                   </Select>
                   <FormMessage />
                 </FormItem>
