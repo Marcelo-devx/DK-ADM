@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Workflow, Copy, Eye, EyeOff, Key, Plus, Trash2, ChevronDown, ChevronRight, Zap, Loader2, ArrowUpRight, ArrowDownLeft, Play, UserCheck, Package, ShoppingCart, MessageSquare, MousePointerClick, RefreshCw } from "lucide-react";
+import { Workflow, Copy, Eye, EyeOff, Key, Plus, Trash2, ChevronDown, ChevronRight, Zap, Loader2, ArrowUpRight, ArrowDownLeft, Play, UserCheck, Package, ShoppingCart, MessageSquare, MousePointerClick, RefreshCw, Users, Search, List } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -57,7 +57,7 @@ const N8nIntegrationPage = () => {
   
   const baseUrl = "https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1";
 
-  // LISTA COMPLETA DE EVENTOS COM JSON DETALHADO
+  // --- GATILHOS (Sistema -> N8N) ---
   const webhookEvents = [
     { 
       id: "wh_order_created",
@@ -72,39 +72,10 @@ const N8nIntegrationPage = () => {
     "id": 1542,
     "status": "Pendente",
     "total_price": 189.90,
-    "shipping_cost": 15.00,
-    "coupon_discount": 10.00,
-    "payment_method": "Pix",
-    "created_at_br": "20/05/2024 10:30:00",
     "customer": {
-      "id": "uuid-do-cliente",
       "full_name": "João da Silva",
-      "email": "joao@email.com",
-      "phone": "11999998888",
-      "cpf": "123.456.789-00"
-    },
-    "shipping_address": {
-      "street": "Rua das Flores",
-      "number": "123",
-      "neighborhood": "Centro",
-      "city": "São Paulo",
-      "state": "SP",
-      "cep": "01000-000"
-    },
-    "items": [
-      {
-        "product_id": 101,
-        "name": "Essência Zomo - Menta",
-        "quantity": 2,
-        "price": 15.90
-      },
-      {
-        "product_id": 205,
-        "name": "Carvão de Coco 1kg",
-        "quantity": 1,
-        "price": 45.00
-      }
-    ]
+      "phone": "11999998888"
+    }
   }
 }`
     },
@@ -113,21 +84,13 @@ const N8nIntegrationPage = () => {
       event_key: "order_updated",
       name: "Pedido Atualizado", 
       icon: <RefreshCw className="w-4 h-4 text-blue-600" />,
-      desc: "Disparado quando o status do pedido muda (ex: Pago, Enviado).",
+      desc: "Disparado quando o status muda (ex: Pago, Enviado).",
       payload: `{
   "event": "order_updated",
-  "timestamp": "2024-05-20T14:45:00.000Z",
   "data": {
     "id": 1542,
     "status": "Pago",
-    "delivery_status": "Despachado",
-    "delivery_info": "Rastreio: BR123456789BR",
-    "updated_at": "2024-05-20T14:45:00.000Z",
-    "customer": {
-      "full_name": "João da Silva",
-      "phone": "11999998888",
-      "email": "joao@email.com"
-    }
+    "delivery_status": "Despachado"
   }
 }`
     },
@@ -136,79 +99,56 @@ const N8nIntegrationPage = () => {
       event_key: "customer_created",
       name: "Novo Cliente", 
       icon: <UserCheck className="w-4 h-4 text-cyan-600" />,
-      desc: "Enviado quando um novo cadastro é realizado na loja.",
-      payload: `{
-  "event": "customer_created",
-  "timestamp": "2024-05-21T09:00:00.000Z",
-  "data": {
-    "id": "uuid-do-novo-cliente",
-    "email": "novo.cliente@gmail.com",
-    "first_name": "Maria",
-    "last_name": "Souza",
-    "phone": "41988887777",
-    "origin": "site_signup"
-  }
-}`
+      desc: "Enviado quando um novo cadastro é realizado.",
+      payload: `{ "event": "customer_created", "data": { "email": "novo@cliente.com" } }`
     },
     { 
       id: "wh_product_updated",
       event_key: "product_updated",
       name: "Produto Alterado", 
       icon: <Package className="w-4 h-4 text-orange-600" />,
-      desc: "Útil para sincronizar estoque ou preços com sistemas externos.",
-      payload: `{
-  "event": "product_updated",
-  "timestamp": "2024-05-22T11:20:00.000Z",
-  "data": {
-    "id": 500,
-    "name": "Pod Descartável 1500 Puffs",
-    "sku": "POD-1500-MINT",
-    "stock_quantity": 4,
-    "price": 89.90,
-    "is_visible": true,
-    "previous_stock": 5
-  }
-}`
+      desc: "Útil para sincronizar estoque externo.",
+      payload: `{ "event": "product_updated", "data": { "sku": "ABC", "stock": 50 } }`
     },
     { 
       id: "wh_chat_sent",
       event_key: "chat_message_sent",
       name: "Mensagem de Chat", 
       icon: <MessageSquare className="w-4 h-4 text-violet-600" />,
-      desc: "Disparado quando o cliente envia mensagem via widget de chat.",
-      payload: `{
-  "event": "chat_message_sent",
-  "timestamp": "2024-05-22T16:10:00.000Z",
-  "data": {
-    "session_id": "sess_abc123",
-    "message": "Olá, gostaria de saber se tem sabor melancia?",
-    "customer": {
-      "name": "Visitante",
-      "email": null
-    },
-    "page_url": "https://sua-loja.com/produto/123"
-  }
-}`
-    },
-    { 
-      id: "wh_support_clicked",
-      event_key: "support_contact_clicked",
-      name: "Clique no Suporte", 
-      icon: <MousePointerClick className="w-4 h-4 text-pink-600" />,
-      desc: "Indica que o cliente clicou no botão flutuante de WhatsApp.",
-      payload: `{
-  "event": "support_contact_clicked",
-  "timestamp": "2024-05-22T18:00:00.000Z",
-  "data": {
-    "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6...)",
-    "page_title": "Carrinho de Compras",
-    "customer_id": "uuid-se-logado-ou-null"
-  }
-}`
+      desc: "Quando o cliente envia mensagem no widget.",
+      payload: `{ "event": "chat_message_sent", "data": { "msg": "Olá..." } }`
     }
   ];
 
-  const cryptoEndpoints = [
+  // --- AÇÕES API (N8N -> Sistema) ---
+  const apiActions = [
+    { 
+      id: "api_list_clients",
+      name: "Listar Clientes (CRM)",
+      method: "GET", 
+      path: "/n8n-list-clients", 
+      type: "api",
+      desc: "Retorna todos os clientes cadastrados para sincronização de CRM.",
+      body: `(Sem corpo - Requisição GET)`
+    },
+    { 
+      id: "api_list_products",
+      name: "Listar Catálogo",
+      method: "GET", 
+      path: "/n8n-list-products", 
+      type: "api",
+      desc: "Retorna todos os produtos e variações com estoque atual.",
+      body: `(Sem corpo - Requisição GET)`
+    },
+    { 
+      id: "api_get_order",
+      name: "Consultar Pedido",
+      method: "GET", 
+      path: "/get-order-details?id=1234", 
+      type: "api",
+      desc: "Busca dados completos de um pedido específico pelo ID.",
+      body: `(Sem corpo - Requisição GET)`
+    },
     { 
       id: "api_create_client",
       name: "Criar Cliente",
@@ -225,46 +165,25 @@ const N8nIntegrationPage = () => {
     },
     { 
       id: "api_receive_order",
-      name: "Receber Pedido (WhatsApp)",
+      name: "Criar Pedido (WhatsApp)",
       method: "POST", 
       path: "/n8n-receive-order", 
       type: "api",
-      desc: "Cria um pedido manualmente e retorna o QR Code do Pix (se configurado).",
+      desc: "Cria o pedido e gera PIX/Link.",
       body: `{
-  "customer": {
-    "email": "cliente@zap.com",
-    "name": "Cliente Via Zap",
-    "phone": "41999999999"
-  },
-  "shipping_address": {
-    "neighborhood": "Centro",
-    "city": "Curitiba",
-    "street": "Rua XV",
-    "number": "100"
-  },
-  "payment_method": "Pix",
-  "items": [
-    {
-      "name": "Essência",
-      "quantity": 2,
-      "sku": "ESS-001" 
-    }
-  ]
+  "customer": { "email": "..." },
+  "items": [{ "sku": "ABC", "quantity": 1 }],
+  "shipping_address": { "neighborhood": "Centro" }
 }`
     },
     { 
       id: "api_update_status",
-      name: "Atualizar Status Pedido",
+      name: "Atualizar Status",
       method: "POST", 
       path: "/update-order-status", 
       type: "api",
-      desc: "Atualiza o status de pagamento ou entrega de um pedido existente.",
-      body: `{
-  "order_id": 1234,
-  "status": "Pago",
-  "delivery_status": "Despachado",
-  "tracking_code": "BR123456789BR"
-}`
+      desc: "Muda status de pedido ou entrega.",
+      body: `{ "order_id": 123, "status": "Pago" }`
     }
   ];
 
@@ -362,10 +281,8 @@ const N8nIntegrationPage = () => {
     setTestTargetUrl("");
 
     if (item.type === 'api') {
-        // Usa o corpo definido no objeto para teste
         setTestBody(item.body);
     } else {
-        // Para webhooks, usa o payload de exemplo
         setTestBody(item.payload);
     }
     
@@ -377,8 +294,6 @@ const N8nIntegrationPage = () => {
 
     if (testItem.type === 'webhook') {
         if (!testTargetUrl) { showError("URL de destino obrigatória."); return; }
-        // Em um cenário real, aqui chamaríamos a function de teste passando o payload customizado
-        // Por simplificação, vamos usar a function existente que gera payload fake
         try {
             const { data, error } = await supabase.functions.invoke('test-webhook-endpoint', {
                 body: { 
@@ -395,11 +310,55 @@ const N8nIntegrationPage = () => {
     } else {
         // API CALL
         try {
-            const functionName = testItem.path.replace('/', '');
-            const { data, error } = await supabase.functions.invoke(functionName, {
-                body: JSON.parse(testBody),
-                headers: { 'Authorization': `Bearer ${token}` } // Simula uso do token
-            });
+            // Extrai o nome da função da URL (ex: /n8n-list-clients -> n8n-list-clients)
+            // Remove query params se houver
+            const pathParts = testItem.path.split('?');
+            const functionName = pathParts[0].replace('/', '');
+            const queryString = pathParts[1];
+
+            // Se for GET, não envia body, envia params na URL da function se suportado, 
+            // mas como nossas functions são simples, vamos simular a chamada direta.
+            // Para as functions GET que criamos (n8n-list-clients, etc), elas não esperam body.
+            
+            // Tratamento especial para get-order-details que precisa de ID
+            let url = functionName;
+            if (queryString) {
+                // A invocação via supabase client não suporta query params na URL da function diretamente
+                // precisamos passar no body ou headers se a function suportar, ou mudar a lógica.
+                // Nossas functions GET foram feitas para ler URL params?
+                // get-order-details lê: const orderId = url.searchParams.get('id');
+                // Então precisamos chamar a URL completa.
+                
+                // O supabase-js invoke chama o endpoint base. Para passar query params:
+                // Infelizmente o invoke() não anexa query params facilmente.
+                // Vamos simular passando no body para o teste, mas na vida real o N8N chama a URL completa.
+                
+                // Workaround para teste no painel: Se for GET, chamamos via fetch direto usando a URL pública e a chave anon/service
+                const fullUrl = `${baseUrl}${testItem.path}`;
+                const response = await fetch(fullUrl, {
+                    method: testItem.method,
+                    headers: {
+                        'Authorization': `Bearer ${token || settings?.value}`, // Usa o token N8N configurado
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                setTestResponse(data);
+                return;
+            }
+
+            // Para POSTs ou GETs sem params
+            const options: any = {
+                method: testItem.method,
+                headers: { 'Authorization': `Bearer ${token}` }
+            };
+            
+            if (testItem.method === 'POST') {
+                options.body = JSON.parse(testBody);
+            }
+
+            const { data, error } = await supabase.functions.invoke(functionName, options);
             if(error) throw error;
             setTestResponse(data);
         } catch (e: any) {
@@ -534,13 +493,13 @@ const N8nIntegrationPage = () => {
                     </Card>
 
                     <Card className="shadow-md mt-6">
-                        <CardHeader><CardTitle>API de Entrada (Ações)</CardTitle></CardHeader>
+                        <CardHeader><CardTitle>API de Entrada (Ações do N8N)</CardTitle></CardHeader>
                         <CardContent className="space-y-4">
-                            {cryptoEndpoints.map((api) => ( // Reusing variable name but contains API actions
+                            {apiActions.map((api) => (
                                 <Collapsible key={api.id} open={openEndpoints.includes(api.id)} onOpenChange={() => toggleEndpoint(api.id)} className="border rounded-lg overflow-hidden bg-white shadow-sm">
                                     <div className="flex items-center justify-between p-3 bg-emerald-50/50 hover:bg-emerald-50 cursor-pointer" onClick={() => toggleEndpoint(api.id)}>
                                         <div className="flex items-center gap-3 overflow-hidden">
-                                            <Badge className="bg-emerald-600 hover:bg-emerald-700 w-16 justify-center text-[10px]">{api.method}</Badge>
+                                            <Badge className={api.method === 'GET' ? "bg-blue-600 hover:bg-blue-700 w-16 justify-center text-[10px]" : "bg-emerald-600 hover:bg-emerald-700 w-16 justify-center text-[10px]"}>{api.method}</Badge>
                                             <span className="font-mono text-xs font-bold text-slate-700 truncate">{api.path}</span>
                                             <span className="text-xs text-muted-foreground ml-2 hidden sm:inline">- {api.name}</span>
                                         </div>
@@ -556,12 +515,18 @@ const N8nIntegrationPage = () => {
                                             <div className="flex items-center gap-2 bg-white border p-2 rounded"><span className="text-xs font-mono text-gray-600 select-all flex-1">{baseUrl}{api.path}</span><Button variant="ghost" size="sm" className="h-6" onClick={() => copyToClipboard(baseUrl + api.path)}><Copy className="w-3 h-3" /></Button></div>
                                             <p className="text-xs text-gray-500 font-medium mt-2">{api.desc}</p>
                                             
-                                            <div>
-                                                <Label className="text-xs mb-1 block font-bold text-gray-500">Corpo da Requisição (Body)</Label>
-                                                <div className="bg-slate-900 text-yellow-300 p-3 rounded-md font-mono text-xs overflow-x-auto border border-slate-700">
-                                                    <pre className="whitespace-pre-wrap">{api.body}</pre>
+                                            {api.method === 'POST' ? (
+                                                <div>
+                                                    <Label className="text-xs mb-1 block font-bold text-gray-500">Corpo da Requisição (Body)</Label>
+                                                    <div className="bg-slate-900 text-yellow-300 p-3 rounded-md font-mono text-xs overflow-x-auto border border-slate-700">
+                                                        <pre className="whitespace-pre-wrap">{api.body}</pre>
+                                                    </div>
                                                 </div>
-                                            </div>
+                                            ) : (
+                                                <div className="bg-blue-50 p-2 rounded text-xs text-blue-700 border border-blue-100 flex items-center gap-2">
+                                                    <RefreshCw className="w-4 h-4" /> Endpoint de leitura. Não requer corpo JSON. Apenas cabeçalho Authorization.
+                                                </div>
+                                            )}
                                         </div>
                                     </CollapsibleContent>
                                 </Collapsible>
@@ -584,7 +549,7 @@ const N8nIntegrationPage = () => {
                 <DialogDescription>
                     {testItem?.type === 'webhook' 
                         ? "Este é o JSON que será enviado para sua URL configurada." 
-                        : "Teste o endpoint enviando os dados abaixo para o sistema."}
+                        : testItem?.method === 'GET' ? "Teste a leitura de dados do endpoint." : "Teste o endpoint enviando os dados abaixo."}
                 </DialogDescription>
             </DialogHeader>
 
@@ -600,14 +565,16 @@ const N8nIntegrationPage = () => {
                     </div>
                 )}
                 
-                <div className="space-y-1">
-                    <Label>JSON Payload</Label>
-                    <Textarea 
-                        className="font-mono text-xs h-64 bg-slate-50 leading-relaxed"
-                        value={testBody}
-                        onChange={(e) => setTestBody(e.target.value)}
-                    />
-                </div>
+                {testItem?.method !== 'GET' && (
+                    <div className="space-y-1">
+                        <Label>JSON Payload</Label>
+                        <Textarea 
+                            className="font-mono text-xs h-64 bg-slate-50 leading-relaxed"
+                            value={testBody}
+                            onChange={(e) => setTestBody(e.target.value)}
+                        />
+                    </div>
+                )}
 
                 {testResponse && (
                     <div className="mt-4 pt-4 border-t animate-in fade-in slide-in-from-bottom-4">
