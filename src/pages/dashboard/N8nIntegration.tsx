@@ -3,11 +3,11 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Workflow, Copy, Eye, EyeOff, Save, Check, Key, Webhook, Plus, Trash2, Globe, ChevronDown, ChevronRight, Zap, Loader2, Pencil, X, ArrowUpRight, ArrowDownLeft, Network, Play, UserCheck, Package, ShoppingCart, MessageSquare, MousePointerClick, RefreshCw } from "lucide-react";
+import { Workflow, Copy, Eye, EyeOff, Key, Plus, Trash2, ChevronDown, ChevronRight, Zap, Loader2, ArrowUpRight, ArrowDownLeft, Play, UserCheck, Package, ShoppingCart, MessageSquare, MousePointerClick, RefreshCw } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -26,7 +26,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Switch } from "@/components/ui/switch";
 import {
   Collapsible,
   CollapsibleContent,
@@ -39,7 +38,6 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 
 const N8nIntegrationPage = () => {
@@ -51,13 +49,6 @@ const N8nIntegrationPage = () => {
   const [openEndpoints, setOpenEndpoints] = useState<string[]>([]);
   const [testingId, setTestingId] = useState<number | null>(null);
   
-  const [editingWebhookId, setEditingWebhookId] = useState<number | null>(null);
-  const [tempUrl, setTempUrl] = useState("");
-  
-  const [diagnosticUrl, setDiagnosticUrl] = useState("https://n8n-ws.dkcwb.cloud/webhook/testar-conexão");
-  
-  const [selectedDoc, setSelectedDoc] = useState<any>(null);
-
   const [isTestModalOpen, setIsTestModalOpen] = useState(false);
   const [testItem, setTestItem] = useState<any>(null);
   const [testBody, setTestBody] = useState("");
@@ -66,59 +57,158 @@ const N8nIntegrationPage = () => {
   
   const baseUrl = "https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1";
 
-  // LISTA COMPLETA DE EVENTOS (Baseada na imagem e sistema atual)
+  // LISTA COMPLETA DE EVENTOS COM JSON DETALHADO
   const webhookEvents = [
     { 
       id: "wh_order_created",
       event_key: "order_created",
       name: "Pedido Finalizado", 
       icon: <ShoppingCart className="w-4 h-4 text-green-600" />,
-      desc: "Disparado quando uma nova compra é concluída.",
-      payload: `{ "event": "order_created", "data": { "id": 123, "total": 150.00, "customer": "João..." } }`
+      desc: "Disparado imediatamente quando o cliente finaliza o checkout.",
+      payload: `{
+  "event": "order_created",
+  "timestamp": "2024-05-20T10:30:00.000Z",
+  "data": {
+    "id": 1542,
+    "status": "Pendente",
+    "total_price": 189.90,
+    "shipping_cost": 15.00,
+    "coupon_discount": 10.00,
+    "payment_method": "Pix",
+    "created_at_br": "20/05/2024 10:30:00",
+    "customer": {
+      "id": "uuid-do-cliente",
+      "full_name": "João da Silva",
+      "email": "joao@email.com",
+      "phone": "11999998888",
+      "cpf": "123.456.789-00"
+    },
+    "shipping_address": {
+      "street": "Rua das Flores",
+      "number": "123",
+      "neighborhood": "Centro",
+      "city": "São Paulo",
+      "state": "SP",
+      "cep": "01000-000"
+    },
+    "items": [
+      {
+        "product_id": 101,
+        "name": "Essência Zomo - Menta",
+        "quantity": 2,
+        "price": 15.90
+      },
+      {
+        "product_id": 205,
+        "name": "Carvão de Coco 1kg",
+        "quantity": 1,
+        "price": 45.00
+      }
+    ]
+  }
+}`
     },
     { 
       id: "wh_order_updated",
       event_key: "order_updated",
       name: "Pedido Atualizado", 
       icon: <RefreshCw className="w-4 h-4 text-blue-600" />,
-      desc: "Disparado quando o status de pagamento ou entrega muda.",
-      payload: `{ "event": "order_updated", "data": { "id": 123, "status": "Pago" } }`
+      desc: "Disparado quando o status do pedido muda (ex: Pago, Enviado).",
+      payload: `{
+  "event": "order_updated",
+  "timestamp": "2024-05-20T14:45:00.000Z",
+  "data": {
+    "id": 1542,
+    "status": "Pago",
+    "delivery_status": "Despachado",
+    "delivery_info": "Rastreio: BR123456789BR",
+    "updated_at": "2024-05-20T14:45:00.000Z",
+    "customer": {
+      "full_name": "João da Silva",
+      "phone": "11999998888",
+      "email": "joao@email.com"
+    }
+  }
+}`
     },
     { 
       id: "wh_customer_created",
       event_key: "customer_created",
       name: "Novo Cliente", 
       icon: <UserCheck className="w-4 h-4 text-cyan-600" />,
-      desc: "Enviado quando um novo cadastro é realizado.",
-      payload: `{ "event": "customer_created", "data": { "email": "novo@cliente.com" } }`
+      desc: "Enviado quando um novo cadastro é realizado na loja.",
+      payload: `{
+  "event": "customer_created",
+  "timestamp": "2024-05-21T09:00:00.000Z",
+  "data": {
+    "id": "uuid-do-novo-cliente",
+    "email": "novo.cliente@gmail.com",
+    "first_name": "Maria",
+    "last_name": "Souza",
+    "phone": "41988887777",
+    "origin": "site_signup"
+  }
+}`
     },
     { 
       id: "wh_product_updated",
       event_key: "product_updated",
       name: "Produto Alterado", 
       icon: <Package className="w-4 h-4 text-orange-600" />,
-      desc: "Útil para sincronizar estoque externo.",
-      payload: `{ "event": "product_updated", "data": { "sku": "ABC", "stock": 50 } }`
+      desc: "Útil para sincronizar estoque ou preços com sistemas externos.",
+      payload: `{
+  "event": "product_updated",
+  "timestamp": "2024-05-22T11:20:00.000Z",
+  "data": {
+    "id": 500,
+    "name": "Pod Descartável 1500 Puffs",
+    "sku": "POD-1500-MINT",
+    "stock_quantity": 4,
+    "price": 89.90,
+    "is_visible": true,
+    "previous_stock": 5
+  }
+}`
     },
     { 
       id: "wh_chat_sent",
       event_key: "chat_message_sent",
       name: "Mensagem de Chat", 
       icon: <MessageSquare className="w-4 h-4 text-violet-600" />,
-      desc: "Disparado quando o cliente envia mensagem via widget.",
-      payload: `{ "event": "chat_message_sent", "data": { "msg": "Olá..." } }`
+      desc: "Disparado quando o cliente envia mensagem via widget de chat.",
+      payload: `{
+  "event": "chat_message_sent",
+  "timestamp": "2024-05-22T16:10:00.000Z",
+  "data": {
+    "session_id": "sess_abc123",
+    "message": "Olá, gostaria de saber se tem sabor melancia?",
+    "customer": {
+      "name": "Visitante",
+      "email": null
+    },
+    "page_url": "https://sua-loja.com/produto/123"
+  }
+}`
     },
     { 
       id: "wh_support_clicked",
       event_key: "support_contact_clicked",
       name: "Clique no Suporte", 
       icon: <MousePointerClick className="w-4 h-4 text-pink-600" />,
-      desc: "Indica intenção de contato via WhatsApp.",
-      payload: `{ "event": "support_contact_clicked", "data": { "client": "..." } }`
+      desc: "Indica que o cliente clicou no botão flutuante de WhatsApp.",
+      payload: `{
+  "event": "support_contact_clicked",
+  "timestamp": "2024-05-22T18:00:00.000Z",
+  "data": {
+    "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6...)",
+    "page_title": "Carrinho de Compras",
+    "customer_id": "uuid-se-logado-ou-null"
+  }
+}`
     }
   ];
 
-  const apiActions = [
+  const cryptoEndpoints = [
     { 
       id: "api_create_client",
       name: "Criar Cliente",
@@ -126,25 +216,55 @@ const N8nIntegrationPage = () => {
       path: "/n8n-create-client", 
       type: "api",
       desc: "Cria ou recupera um cliente (Idempotente).",
-      body: `{ "email": "teste@exemplo.com", "name": "Teste" }`
+      body: `{
+  "email": "teste@exemplo.com",
+  "name": "Cliente Teste API",
+  "phone": "11999999999",
+  "password": "senha_segura_123" 
+}`
     },
     { 
       id: "api_receive_order",
-      name: "Receber Pedido",
+      name: "Receber Pedido (WhatsApp)",
       method: "POST", 
       path: "/n8n-receive-order", 
       type: "api",
-      desc: "Cria o pedido e CALCULA O FRETE pelo bairro.",
-      body: `{ "customer": { "email": "..." }, "items": [...], "shipping_address": { "neighborhood": "Centro" } }`
+      desc: "Cria um pedido manualmente e retorna o QR Code do Pix (se configurado).",
+      body: `{
+  "customer": {
+    "email": "cliente@zap.com",
+    "name": "Cliente Via Zap",
+    "phone": "41999999999"
+  },
+  "shipping_address": {
+    "neighborhood": "Centro",
+    "city": "Curitiba",
+    "street": "Rua XV",
+    "number": "100"
+  },
+  "payment_method": "Pix",
+  "items": [
+    {
+      "name": "Essência",
+      "quantity": 2,
+      "sku": "ESS-001" 
+    }
+  ]
+}`
     },
     { 
       id: "api_update_status",
-      name: "Atualizar Status",
+      name: "Atualizar Status Pedido",
       method: "POST", 
       path: "/update-order-status", 
       type: "api",
-      desc: "Muda status de pedido ou entrega.",
-      body: `{ "order_id": 123, "status": "Pago", "delivery_status": "Despachado" }`
+      desc: "Atualiza o status de pagamento ou entrega de um pedido existente.",
+      body: `{
+  "order_id": 1234,
+  "status": "Pago",
+  "delivery_status": "Despachado",
+  "tracking_code": "BR123456789BR"
+}`
     }
   ];
 
@@ -234,6 +354,58 @@ const N8nIntegrationPage = () => {
     const found = webhookEvents.find(e => e.event_key === event);
     if (found) return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">{found.name}</Badge>;
     return <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200">{event}</Badge>;
+  };
+
+  const handleOpenTestModal = (item: any) => {
+    setTestItem(item);
+    setTestResponse(null);
+    setTestTargetUrl("");
+
+    if (item.type === 'api') {
+        // Usa o corpo definido no objeto para teste
+        setTestBody(item.body);
+    } else {
+        // Para webhooks, usa o payload de exemplo
+        setTestBody(item.payload);
+    }
+    
+    setIsTestModalOpen(true);
+  };
+
+  const executeTest = async () => {
+    if (!testItem) return;
+
+    if (testItem.type === 'webhook') {
+        if (!testTargetUrl) { showError("URL de destino obrigatória."); return; }
+        // Em um cenário real, aqui chamaríamos a function de teste passando o payload customizado
+        // Por simplificação, vamos usar a function existente que gera payload fake
+        try {
+            const { data, error } = await supabase.functions.invoke('test-webhook-endpoint', {
+                body: { 
+                    url: testTargetUrl,
+                    event_type: testItem.event_key,
+                    method: 'POST'
+                }
+            });
+            if(error) throw error;
+            setTestResponse(data);
+        } catch (e: any) {
+            setTestResponse({ error: e.message });
+        }
+    } else {
+        // API CALL
+        try {
+            const functionName = testItem.path.replace('/', '');
+            const { data, error } = await supabase.functions.invoke(functionName, {
+                body: JSON.parse(testBody),
+                headers: { 'Authorization': `Bearer ${token}` } // Simula uso do token
+            });
+            if(error) throw error;
+            setTestResponse(data);
+        } catch (e: any) {
+            setTestResponse({ error: e.message });
+        }
+    }
   };
 
   return (
@@ -333,7 +505,7 @@ const N8nIntegrationPage = () => {
 
                 <TabsContent value="endpoints" className="mt-6">
                     <Card className="shadow-md">
-                        <CardHeader><CardTitle>Dicionário de Eventos</CardTitle></CardHeader>
+                        <CardHeader><CardTitle>Dicionário de Eventos (Gatilhos)</CardTitle></CardHeader>
                         <CardContent className="space-y-4">
                             {webhookEvents.map((evt) => (
                                 <Collapsible key={evt.id} open={openEndpoints.includes(evt.id)} onOpenChange={() => toggleEndpoint(evt.id)} className="border rounded-lg overflow-hidden bg-white shadow-sm">
@@ -343,12 +515,53 @@ const N8nIntegrationPage = () => {
                                             <span className="font-bold text-sm">{evt.name}</span>
                                             <code className="text-[10px] bg-slate-200 px-1 rounded font-mono text-slate-600">{evt.event_key}</code>
                                         </div>
-                                        {openEndpoints.includes(evt.id) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                        <div className="flex items-center gap-2">
+                                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); handleOpenTestModal(evt); }} title="Ver Payload">
+                                                <Eye className="w-4 h-4 text-slate-400" />
+                                            </Button>
+                                            {openEndpoints.includes(evt.id) ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
+                                        </div>
                                     </div>
                                     <CollapsibleContent>
                                         <div className="p-4 bg-slate-900 text-slate-50 font-mono text-[11px] border-t border-slate-700">
-                                            <div className="flex justify-between items-center mb-2"><span className="text-blue-400 font-bold uppercase text-[9px]">Exemplo de Payload:</span><Button variant="ghost" size="sm" className="h-6 text-[10px] text-gray-400" onClick={() => copyToClipboard(evt.payload)}>Copiar</Button></div>
-                                            <pre>{evt.payload}</pre>
+                                            <div className="flex justify-between items-center mb-2"><span className="text-blue-400 font-bold uppercase text-[9px]">Exemplo de JSON (Payload):</span><Button variant="ghost" size="sm" className="h-6 text-[10px] text-gray-400" onClick={() => copyToClipboard(evt.payload)}>Copiar</Button></div>
+                                            <pre className="whitespace-pre-wrap">{evt.payload}</pre>
+                                        </div>
+                                    </CollapsibleContent>
+                                </Collapsible>
+                            ))}
+                        </CardContent>
+                    </Card>
+
+                    <Card className="shadow-md mt-6">
+                        <CardHeader><CardTitle>API de Entrada (Ações)</CardTitle></CardHeader>
+                        <CardContent className="space-y-4">
+                            {cryptoEndpoints.map((api) => ( // Reusing variable name but contains API actions
+                                <Collapsible key={api.id} open={openEndpoints.includes(api.id)} onOpenChange={() => toggleEndpoint(api.id)} className="border rounded-lg overflow-hidden bg-white shadow-sm">
+                                    <div className="flex items-center justify-between p-3 bg-emerald-50/50 hover:bg-emerald-50 cursor-pointer" onClick={() => toggleEndpoint(api.id)}>
+                                        <div className="flex items-center gap-3 overflow-hidden">
+                                            <Badge className="bg-emerald-600 hover:bg-emerald-700 w-16 justify-center text-[10px]">{api.method}</Badge>
+                                            <span className="font-mono text-xs font-bold text-slate-700 truncate">{api.path}</span>
+                                            <span className="text-xs text-muted-foreground ml-2 hidden sm:inline">- {api.name}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); handleOpenTestModal(api); }} title="Testar API">
+                                                <Play className="w-4 h-4 text-emerald-600" />
+                                            </Button>
+                                            {openEndpoints.includes(api.id) ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
+                                        </div>
+                                    </div>
+                                    <CollapsibleContent>
+                                        <div className="p-4 bg-slate-50 border-t space-y-4">
+                                            <div className="flex items-center gap-2 bg-white border p-2 rounded"><span className="text-xs font-mono text-gray-600 select-all flex-1">{baseUrl}{api.path}</span><Button variant="ghost" size="sm" className="h-6" onClick={() => copyToClipboard(baseUrl + api.path)}><Copy className="w-3 h-3" /></Button></div>
+                                            <p className="text-xs text-gray-500 font-medium mt-2">{api.desc}</p>
+                                            
+                                            <div>
+                                                <Label className="text-xs mb-1 block font-bold text-gray-500">Corpo da Requisição (Body)</Label>
+                                                <div className="bg-slate-900 text-yellow-300 p-3 rounded-md font-mono text-xs overflow-x-auto border border-slate-700">
+                                                    <pre className="whitespace-pre-wrap">{api.body}</pre>
+                                                </div>
+                                            </div>
                                         </div>
                                     </CollapsibleContent>
                                 </Collapsible>
@@ -359,6 +572,69 @@ const N8nIntegrationPage = () => {
             </Tabs>
         </div>
       </div>
+
+      {/* MODAL DE TESTE */}
+      <Dialog open={isTestModalOpen} onOpenChange={(open) => { setIsTestModalOpen(open); if(!open) setTestResponse(null); }}>
+        <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
+            <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                    <Zap className="w-5 h-5 text-orange-500" />
+                    Simulador: {testItem?.name}
+                </DialogTitle>
+                <DialogDescription>
+                    {testItem?.type === 'webhook' 
+                        ? "Este é o JSON que será enviado para sua URL configurada." 
+                        : "Teste o endpoint enviando os dados abaixo para o sistema."}
+                </DialogDescription>
+            </DialogHeader>
+
+            <div className="flex-1 overflow-y-auto py-4 space-y-4">
+                {testItem?.type === 'webhook' && (
+                    <div className="space-y-1">
+                        <Label>URL de Destino (Opcional para teste)</Label>
+                        <Input 
+                            placeholder="https://seu-n8n.com/webhook/teste" 
+                            value={testTargetUrl} 
+                            onChange={(e) => setTestTargetUrl(e.target.value)} 
+                        />
+                    </div>
+                )}
+                
+                <div className="space-y-1">
+                    <Label>JSON Payload</Label>
+                    <Textarea 
+                        className="font-mono text-xs h-64 bg-slate-50 leading-relaxed"
+                        value={testBody}
+                        onChange={(e) => setTestBody(e.target.value)}
+                    />
+                </div>
+
+                {testResponse && (
+                    <div className="mt-4 pt-4 border-t animate-in fade-in slide-in-from-bottom-4">
+                        <div className="flex items-center justify-between mb-2">
+                            <Label className={!testResponse.error ? "text-green-700 font-bold" : "text-red-700 font-bold"}>
+                                Resposta
+                            </Label>
+                        </div>
+                        <div className="bg-slate-900 text-green-400 p-4 rounded-lg font-mono text-xs overflow-x-auto shadow-inner max-h-60 border border-slate-700">
+                            <pre>{JSON.stringify(testResponse, null, 2)}</pre>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setIsTestModalOpen(false)}>Fechar</Button>
+                <Button 
+                    onClick={executeTest} 
+                    className="bg-black hover:bg-gray-800 font-bold"
+                >
+                    <Play className="w-4 h-4 mr-2" />
+                    Executar Teste
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
