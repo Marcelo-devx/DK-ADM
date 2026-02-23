@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Workflow, Copy, Eye, EyeOff, Key, Plus, Trash2, ChevronDown, ChevronRight, Zap, Loader2, ArrowUpRight, ArrowDownLeft, Play, UserCheck, Package, ShoppingCart, MessageSquare, MousePointerClick, RefreshCw, Users, Search, List } from "lucide-react";
+import { Workflow, Copy, Eye, EyeOff, Key, Plus, Trash2, ChevronDown, ChevronRight, Zap, Loader2, ArrowUpRight, ArrowDownLeft, Play, UserCheck, Package, ShoppingCart, MessageSquare, MousePointerClick, RefreshCw, Users, Search, List, Activity, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -79,20 +79,14 @@ const N8nIntegrationPage = () => {
   }
 }`
     },
+    // ... outros eventos mantidos ...
     { 
       id: "wh_order_updated",
       event_key: "order_updated",
       name: "Pedido Atualizado", 
       icon: <RefreshCw className="w-4 h-4 text-blue-600" />,
       desc: "Disparado quando o status muda (ex: Pago, Enviado).",
-      payload: `{
-  "event": "order_updated",
-  "data": {
-    "id": 1542,
-    "status": "Pago",
-    "delivery_status": "Despachado"
-  }
-}`
+      payload: `{ "event": "order_updated", "data": { "id": 1542, "status": "Pago" } }`
     },
     { 
       id: "wh_customer_created",
@@ -204,6 +198,20 @@ const N8nIntegrationPage = () => {
     }
   });
 
+  const { data: logs, isLoading: isLoadingLogs, refetch: refetchLogs } = useQuery({
+    queryKey: ["webhookLogs"],
+    queryFn: async () => {
+        const { data, error } = await supabase
+            .from("integration_logs")
+            .select("*")
+            .order("created_at", { ascending: false })
+            .limit(50);
+        if (error) throw error;
+        return data;
+    },
+    refetchInterval: 10000 // Auto-refresh a cada 10s para ver logs novos
+  });
+
   useEffect(() => {
     if (settings?.value) {
       setToken(settings.value);
@@ -308,7 +316,6 @@ const N8nIntegrationPage = () => {
             setTestResponse({ error: e.message });
         }
     } else {
-        // API CALL
         try {
             const pathParts = testItem.path.split('?');
             const functionName = pathParts[0].replace('/', '');
@@ -382,8 +389,9 @@ const N8nIntegrationPage = () => {
 
         <div className="lg:col-span-2">
             <Tabs defaultValue="webhooks">
-                <TabsList className="grid w-full grid-cols-2 bg-slate-100 p-1">
-                    <TabsTrigger value="webhooks" className="font-bold">Meus Gatilhos (Webhooks)</TabsTrigger>
+                <TabsList className="grid w-full grid-cols-3 bg-slate-100 p-1">
+                    <TabsTrigger value="webhooks" className="font-bold">Gatilhos (Webhooks)</TabsTrigger>
+                    <TabsTrigger value="logs" className="font-bold">Histórico de Disparos</TabsTrigger>
                     <TabsTrigger value="endpoints" className="font-bold">Documentação API</TabsTrigger>
                 </TabsList>
 
@@ -433,6 +441,56 @@ const N8nIntegrationPage = () => {
                                                 </TableCell>
                                                 <TableCell>
                                                     <Button variant="ghost" size="icon" className="text-red-500 opacity-0 group-hover:opacity-100" onClick={() => deleteWebhookMutation.mutate(hook.id)}><Trash2 className="w-4 h-4" /></Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                <TabsContent value="logs" className="mt-6">
+                    <Card className="shadow-md">
+                        <CardHeader className="flex flex-row items-center justify-between">
+                            <CardTitle className="text-base flex items-center gap-2"><Activity className="w-4 h-4 text-blue-600" /> Registro de Atividades</CardTitle>
+                            <Button variant="outline" size="sm" onClick={() => refetchLogs()}><RefreshCw className="w-3 h-3 mr-2" /> Atualizar</Button>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="border rounded-lg overflow-hidden">
+                                <Table>
+                                    <TableHeader className="bg-gray-50">
+                                        <TableRow>
+                                            <TableHead>Data</TableHead>
+                                            <TableHead>Evento</TableHead>
+                                            <TableHead>Status</TableHead>
+                                            <TableHead>Código</TableHead>
+                                            <TableHead>Detalhe</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {isLoadingLogs ? (
+                                            <TableRow><TableCell colSpan={5} className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></TableCell></TableRow>
+                                        ) : logs?.length === 0 ? (
+                                            <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Nenhum registro recente.</TableCell></TableRow>
+                                        ) : logs?.map((log) => (
+                                            <TableRow key={log.id} className={log.status === 'error' ? "bg-red-50/50" : ""}>
+                                                <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                                                    {new Date(log.created_at).toLocaleString('pt-BR')}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {getEventBadge(log.event_type)}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {log.status === 'success' 
+                                                        ? <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-none"><CheckCircle2 className="w-3 h-3 mr-1" /> OK</Badge> 
+                                                        : <Badge variant="destructive" className="bg-red-100 text-red-700 hover:bg-red-100 border-none"><XCircle className="w-3 h-3 mr-1" /> Erro</Badge>
+                                                    }
+                                                </TableCell>
+                                                <TableCell className="font-mono text-xs">{log.response_code}</TableCell>
+                                                <TableCell className="text-xs text-gray-500 max-w-[300px] truncate" title={log.details}>
+                                                    {log.details || "-"}
                                                 </TableCell>
                                             </TableRow>
                                         ))}
