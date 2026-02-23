@@ -115,11 +115,18 @@ serve(async (req) => {
     }
 
     if (!response.ok) {
+        let errorMessage = `O servidor remoto retornou erro ${response.status}`;
+        
+        // Dica específica para usuários de N8N
+        if (response.status === 404 && (url.includes('/webhook/') || url.includes('n8n'))) {
+            errorMessage += ". DICA N8N: Se seu Workflow estiver 'Inativo', a URL de produção (/webhook/) retorna 404. Ative o Workflow ou use a URL de teste (/webhook-test/).";
+        }
+
         return new Response(
             JSON.stringify({ 
                 success: false, 
                 status: response.status, 
-                error: `O servidor remoto retornou erro ${response.status}`, 
+                error: errorMessage, 
                 remote_response: responseData 
             }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
