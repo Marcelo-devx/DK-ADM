@@ -62,7 +62,7 @@ const N8nIntegrationPage = () => {
     { 
       id: "wh_order_created",
       event_key: "order_created",
-      name: "Pedido Finalizado", 
+      name: "Pedido Criado (order_created)", 
       icon: <ShoppingCart className="w-4 h-4 text-green-600" />,
       desc: "Disparado imediatamente quando o cliente finaliza o checkout.",
       payload: `{
@@ -310,35 +310,17 @@ const N8nIntegrationPage = () => {
     } else {
         // API CALL
         try {
-            // Extrai o nome da função da URL (ex: /n8n-list-clients -> n8n-list-clients)
-            // Remove query params se houver
             const pathParts = testItem.path.split('?');
             const functionName = pathParts[0].replace('/', '');
             const queryString = pathParts[1];
 
-            // Se for GET, não envia body, envia params na URL da function se suportado, 
-            // mas como nossas functions são simples, vamos simular a chamada direta.
-            // Para as functions GET que criamos (n8n-list-clients, etc), elas não esperam body.
-            
-            // Tratamento especial para get-order-details que precisa de ID
             let url = functionName;
             if (queryString) {
-                // A invocação via supabase client não suporta query params na URL da function diretamente
-                // precisamos passar no body ou headers se a function suportar, ou mudar a lógica.
-                // Nossas functions GET foram feitas para ler URL params?
-                // get-order-details lê: const orderId = url.searchParams.get('id');
-                // Então precisamos chamar a URL completa.
-                
-                // O supabase-js invoke chama o endpoint base. Para passar query params:
-                // Infelizmente o invoke() não anexa query params facilmente.
-                // Vamos simular passando no body para o teste, mas na vida real o N8N chama a URL completa.
-                
-                // Workaround para teste no painel: Se for GET, chamamos via fetch direto usando a URL pública e a chave anon/service
                 const fullUrl = `${baseUrl}${testItem.path}`;
                 const response = await fetch(fullUrl, {
                     method: testItem.method,
                     headers: {
-                        'Authorization': `Bearer ${token || settings?.value}`, // Usa o token N8N configurado
+                        'Authorization': `Bearer ${token || settings?.value}`,
                         'Content-Type': 'application/json'
                     }
                 });
@@ -348,7 +330,6 @@ const N8nIntegrationPage = () => {
                 return;
             }
 
-            // Para POSTs ou GETs sem params
             const options: any = {
                 method: testItem.method,
                 headers: { 'Authorization': `Bearer ${token}` }
