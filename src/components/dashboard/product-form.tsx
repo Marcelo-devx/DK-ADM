@@ -26,8 +26,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { CategoryForm } from "./category-form";
-import { PlusCircle, Layers, Copy, RefreshCw, Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { PlusCircle, Layers, Copy, RefreshCw, Loader2, ListChecks } from "lucide-react";
+import { useEffect, useState, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { showSuccess, showError } from "@/utils/toast";
@@ -36,6 +36,8 @@ import { Switch } from "../ui/switch";
 import { ProductVariantManager } from "./ProductVariantManager";
 import { Separator } from "../ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "../ui/checkbox";
+import { Label } from "@/components/ui/label";
 
 const formSchema = z.object({
   id: z.number().optional(),
@@ -47,7 +49,6 @@ const formSchema = z.object({
   cost_price: z.coerce.number().min(0, "O preço de custo não pode ser negativo.").optional(),
   stock_quantity: z.coerce.number().int().min(0, "O estoque não pode ser negativo."),
   category: z.string().optional(),
-  sub_category: z.string().optional(),
   brand: z.string().optional(),
   image_url: z.string().url("URL da imagem inválida.").optional().or(z.literal('')),
   is_visible: z.boolean().default(true),
@@ -56,7 +57,7 @@ const formSchema = z.object({
 type ProductFormValues = z.infer<typeof formSchema>;
 
 interface ProductFormProps {
-  onSubmit: (values: ProductFormValues, variantsToClone?: any[]) => void;
+  onSubmit: (values: ProductFormValues, variantsToClone?: any[], subCategoryIds?: number[]) => void;
   isSubmitting: boolean;
   categories: { id: number; name: string }[];
   isLoadingCategories: boolean;
@@ -85,6 +86,12 @@ export const ProductForm = ({
   initialData,
   existingProducts = [],
 }: ProductFormProps) => {
+  const queryClient = useQueryClient();
+  const [selectedSubIds, setSelectedSubIds] = useState<number[]>([]);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [variantsToClone, setVariantsToClone] = useState<any[]>([]);
+  const [isCloning, setIsCloning] = useState(false);
+
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: initialData || {
@@ -96,37 +103,28 @@ export const ProductForm = ({
       cost_price: 0,
       stock_quantity: 0,
       category: "",
-      sub_category: "",
       brand: "",
       image_url: "",
       is_visible: true,
     },
   });
 
-  const queryClient = useQueryClient();
-  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
-  const [filteredSubCategories, setFilteredSubCategories] = useState<{ id: number; name: string; }[]>([]);
-  const [variantsToClone, setVariantsToClone] = useState<any[]>([]);
-  const [isCloning, setIsCloning] = useState(false);
-
   const selectedCategoryName = form.watch("category");
   const productId = initialData?.id;
 
-  const currentPrice = form.watch("price");
-  const currentPixPrice = form.watch("pix_price");
-  const currentCostPrice = form.watch("cost_price");
-
-  const { data: variants } = useQuery({
-    queryKey: ["productVariants", productId],
+  const { data: linkedSubs } = useQuery({
+    queryKey: ["linkedSubCategories", productId],
     queryFn: async () => {
       if (!productId) return [];
-      const { data } = await supabase.from("product_variants").select("id").eq("product_id", productId);
-      return data || [];
+      const { data } = await supabase.from("product_sub_categories").select("sub_category_id").eq("product_id", productId);
+      return data?.map(d => d.sub_category_id) || [];
     },
     enabled: !!productId,
   });
 
-  const hasVariants = variants && variants.length > 0;
+  useEffect(() => {
+    if (linkedSubs) setSelectedSubIds(linkedSubs);
+  }, [linkedSubs]);
 
   useEffect(() => {
     if (initialData) {
@@ -134,28 +132,18 @@ export const ProductForm = ({
     }
   }, [initialData, form]);
 
-  useEffect(() => {
-    if (selectedCategoryName && categories.length > 0) {
-      const selectedCategory = categories.find(c => c.name === selectedCategoryName);
-      if (selectedCategory) {
-        const filtered = subCategories.filter(sc => sc.category_id === selectedCategory.id);
-        setFilteredSubCategories(filtered);
-      }
-    }
+  const filteredSubCategories = useMemo(() => {
+    if (!selectedCategoryName || !categories.length || !subCategories.length) return [];
+    const cat = categories.find(c => c.name === selectedCategoryName);
+    if (!cat) return [];
+    return subCategories.filter(sc => sc.category_id === cat.id);
   }, [selectedCategoryName, categories, subCategories]);
 
-  const addCategoryMutation = useMutation({
-    mutationFn: async (newCategory: { name: string }) => {
-      const { error } = await supabase.from("categories").insert([newCategory]).select();
-      if (error) throw new Error(error.message);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["categories"] });
-      showSuccess("Categoria adicionada!");
-      setIsCategoryModalOpen(false);
-    },
-    onError: (error) => showError(error.message),
-  });
+  const handleSubToggle = (id: number) => {
+    setSelectedSubIds(prev => 
+      prev.includes(id) ? prev.filter(sid => sid !== id) : [...prev, id]
+    );
+  };
 
   const handleRegenerateSku = () => {
     form.setValue("sku", generateRandomSku());
@@ -166,22 +154,10 @@ export const ProductForm = ({
     const productToClone = existingProducts.find(p => String(p.id) === productIdStr);
     
     if (productToClone) {
-        // 1. Busca as variações completas do produto original
-        const { data: fullVariants } = await supabase
-            .from("product_variants")
-            .select("*")
-            .eq("product_id", productIdStr);
-        
-        // 2. Armazena para enviar no submit
-        if (fullVariants && fullVariants.length > 0) {
-            setVariantsToClone(fullVariants);
-        } else {
-            setVariantsToClone([]);
-        }
+        const { data: fullVariants } = await supabase.from("product_variants").select("*").eq("product_id", productIdStr);
+        setVariantsToClone(fullVariants || []);
 
-        // 3. Preenche o formulário
         const { id, created_at, updated_at, variants: v, variant_prices, variant_costs, ...cloneData } = productToClone;
-        
         form.reset({
             ...cloneData,
             name: `${cloneData.name} (Cópia)`,
@@ -189,8 +165,7 @@ export const ProductForm = ({
             stock_quantity: 0, 
             is_visible: cloneData.is_visible ?? true,
         });
-        
-        showSuccess(`Dados de "${productToClone.name}" copiados! ${fullVariants?.length || 0} variações incluídas.`);
+        showSuccess("Dados copiados!");
     }
     setIsCloning(false);
   };
@@ -198,248 +173,79 @@ export const ProductForm = ({
   return (
     <div className="space-y-6">
       {!initialData && existingProducts.length > 0 && (
-        <div className="bg-primary/5 p-4 rounded-xl border border-primary/10 flex flex-col sm:flex-row items-center gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
+        <div className="bg-primary/5 p-4 rounded-xl border border-primary/10 flex flex-col sm:flex-row items-center gap-4">
             <div className="flex items-center gap-3">
                 <div className="bg-primary/10 p-2 rounded-lg text-primary">
                     {isCloning ? <Loader2 className="h-5 w-5 animate-spin" /> : <Copy className="h-5 w-5" />}
                 </div>
-                <div>
-                    <p className="text-sm font-bold text-primary">Clonar Produto Existente</p>
-                    <p className="text-[10px] text-muted-foreground uppercase font-medium">Os dados e variações serão copiados para um novo registro</p>
-                </div>
+                <div><p className="text-sm font-bold text-primary">Clonar Produto</p></div>
             </div>
             <div className="flex-1 w-full">
                 <Select onValueChange={handleCloneProduct} disabled={isCloning}>
-                    <SelectTrigger className="bg-white">
-                        <SelectValue placeholder="Selecione um produto para copiar..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {existingProducts.map(p => (
-                            <SelectItem key={p.id} value={String(p.id)}>
-                                {p.name} {p.brand ? `(${p.brand})` : ''}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
+                    <SelectTrigger className="bg-white"><SelectValue placeholder="Selecione um produto para copiar..." /></SelectTrigger>
+                    <SelectContent>{existingProducts.map(p => (<SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>))}</SelectContent>
                 </Select>
             </div>
         </div>
       )}
 
-      {variantsToClone.length > 0 && !initialData && (
-          <div className="bg-blue-50 border border-blue-100 p-3 rounded-lg flex items-center gap-2 text-sm text-blue-700">
-              <Layers className="h-4 w-4" />
-              <span>Este produto será criado com <strong>{variantsToClone.length} variações</strong> copiadas do original (com estoque zerado).</span>
-          </div>
-      )}
-
       <Form {...form}>
-        <form onSubmit={form.handleSubmit((values) => onSubmit(values, variantsToClone))} className="space-y-6">
+        <form onSubmit={form.handleSubmit((v) => onSubmit(v, variantsToClone, selectedSubIds))} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                  <FormItem>
-                  <FormLabel>Nome Principal</FormLabel>
-                  <FormControl><Input placeholder="Ex: Juice Zomo" {...field} /></FormControl>
-                  <FormMessage />
-                  </FormItem>
-              )}
-              />
-              <FormField
-                control={form.control}
-                name="sku"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>SKU (Código do Produto)</FormLabel>
-                    <div className="flex gap-2">
-                      <FormControl>
-                        <Input placeholder="Gerado Automático" {...field} />
-                      </FormControl>
-                      <Button type="button" variant="outline" size="icon" onClick={handleRegenerateSku} title="Gerar novo código">
-                        <RefreshCw className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <FormField control={form.control} name="name" render={({ field }) => (<FormItem><FormLabel>Nome Principal</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
+              <FormField control={form.control} name="sku" render={({ field }) => (<FormItem><FormLabel>SKU</FormLabel><div className="flex gap-2"><FormControl><Input {...field} /></FormControl><Button type="button" variant="outline" size="icon" onClick={handleRegenerateSku}><RefreshCw className="h-4 w-4" /></Button></div><FormMessage /></FormItem>)} />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField
-              control={form.control}
-              name="brand"
-              render={({ field }) => (
-                  <FormItem>
-                  <FormLabel>Marca</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingBrands}>
-                      <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
-                      <SelectContent>
-                      {brands.map((brand) => (<SelectItem key={brand.id} value={brand.name}>{brand.name}</SelectItem>))}
-                      </SelectContent>
-                  </Select>
-                  <FormMessage />
-                  </FormItem>
-              )}
-              />
-              
-              <FormField
-                control={form.control}
-                name="category"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Categoria</FormLabel>
-                    <div className="flex items-center gap-2">
-                      <Select onValueChange={(value) => { field.onChange(value); form.setValue("sub_category", ""); }} value={field.value} disabled={isLoadingCategories}>
-                        <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
-                        <SelectContent>{categories.map((c) => (<SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>))}</SelectContent>
-                      </Select>
-                      <Button type="button" variant="outline" size="icon" onClick={() => setIsCategoryModalOpen(true)}><PlusCircle className="h-4 w-4" /></Button>
-                    </div>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <FormField control={form.control} name="brand" render={({ field }) => (<FormItem><FormLabel>Marca</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl><SelectContent>{brands.map((b) => (<SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>))}</SelectContent></Select></FormItem>)} />
+              <FormField control={form.control} name="category" render={({ field }) => (<FormItem><FormLabel>Categoria Principal</FormLabel><div className="flex items-center gap-2"><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl><SelectContent>{categories.map((c) => (<SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>))}</SelectContent></Select><Button type="button" variant="outline" size="icon" onClick={() => setIsCategoryModalOpen(true)}><PlusCircle className="h-4 w-4" /></Button></div></FormItem>)} />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormField
-              control={form.control}
-              name="sub_category"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Sub-categoria</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value} disabled={!selectedCategoryName}>
-                    <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
-                    <SelectContent>{filteredSubCategories.map((sc) => (<SelectItem key={sc.id} value={sc.name}>{sc.name}</SelectItem>))}</SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-
-          <FormField
-            control={form.control}
-            name="description"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Descrição Curta</FormLabel>
-                <FormControl><Textarea placeholder="Detalhes gerais..." {...field} /></FormControl>
-                <FormMessage />
-              </FormItem>
+          {/* SUB-CATEGORIAS (MÚLTIPLAS) */}
+          <div className="space-y-3 bg-slate-50 p-4 rounded-xl border">
+            <Label className="flex items-center gap-2 text-primary font-bold">
+                <ListChecks className="w-4 h-4" /> Sub-categorias vinculadas
+            </Label>
+            {!selectedCategoryName ? (
+                <p className="text-xs text-muted-foreground italic">Selecione uma categoria principal primeiro.</p>
+            ) : filteredSubCategories.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Nenhuma subcategoria cadastrada para {selectedCategoryName}.</p>
+            ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {filteredSubCategories.map(sc => (
+                        <div key={sc.id} className="flex items-center space-x-2 bg-white p-2 rounded border shadow-sm hover:border-primary transition-colors cursor-pointer" onClick={() => handleSubToggle(sc.id)}>
+                            <Checkbox id={`sub-${sc.id}`} checked={selectedSubIds.includes(sc.id)} onCheckedChange={() => handleSubToggle(sc.id)} />
+                            <label htmlFor={`sub-${sc.id}`} className="text-xs font-medium cursor-pointer">{sc.name}</label>
+                        </div>
+                    ))}
+                </div>
             )}
-          />
-
-          <Separator />
-
-          <div className="bg-gray-50 p-4 rounded-lg space-y-4">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-bold uppercase text-gray-500">Valores Padrão / Base</p>
-                {(hasVariants || variantsToClone.length > 0) && (
-                    <Badge variant="secondary" className="text-[10px]">Usado como padrão para novas variações</Badge>
-                )}
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <FormField
-                      control={form.control}
-                      name="price"
-                      render={({ field }) => (
-                      <FormItem><FormLabel>Venda</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>
-                      )}
-                  />
-                  <FormField
-                      control={form.control}
-                      name="pix_price"
-                      render={({ field }) => (
-                      <FormItem><FormLabel>Preço Pix</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>
-                      )}
-                  />
-                  <FormField
-                      control={form.control}
-                      name="cost_price"
-                      render={({ field }) => (
-                      <FormItem><FormLabel>Custo</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>
-                      )}
-                  />
-                  <FormField
-                      control={form.control}
-                      name="stock_quantity"
-                      render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Estoque</FormLabel>
-                        <FormControl>
-                            <Input 
-                                type="number" 
-                                {...field} 
-                                disabled={hasVariants} 
-                                className={hasVariants ? "bg-gray-100 opacity-50" : ""}
-                            />
-                        </FormControl>
-                        {hasVariants && <span className="text-[10px] text-muted-foreground">Gerenciado por variação</span>}
-                      </FormItem>
-                      )}
-                  />
-              </div>
           </div>
 
-          <div className="border-t pt-6">
-              <h4 className="text-sm font-bold flex items-center gap-2 mb-4 text-primary"><Layers className="w-4 h-4" /> Configurações de Variações</h4>
-              
-              {!initialData ? (
-                  <div className="p-4 bg-gray-50 border rounded-lg text-center text-sm text-muted-foreground">
-                      {variantsToClone.length > 0 
-                        ? "As variações do produto original serão copiadas ao salvar." 
-                        : "Salve o produto primeiro para gerenciar variações manualmente."}
-                  </div>
-              ) : (
-                  <ProductVariantManager 
-                    productId={productId} 
-                    basePrice={currentPrice}
-                    basePixPrice={currentPixPrice || 0}
-                    baseCostPrice={currentCostPrice || 0}
-                  />
-              )}
+          <FormField control={form.control} name="description" render={({ field }) => (<FormItem><FormLabel>Descrição</FormLabel><FormControl><Textarea {...field} /></FormControl></FormItem>)} />
+
+          <div className="bg-gray-50 p-4 rounded-lg grid grid-cols-2 md:grid-cols-4 gap-4">
+              <FormField control={form.control} name="price" render={({ field }) => (<FormItem><FormLabel>Venda</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>)} />
+              <FormField control={form.control} name="pix_price" render={({ field }) => (<FormItem><FormLabel>Pix</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>)} />
+              <FormField control={form.control} name="cost_price" render={({ field }) => (<FormItem><FormLabel>Custo</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>)} />
+              <FormField control={form.control} name="stock_quantity" render={({ field }) => (<FormItem><FormLabel>Estoque</FormLabel><FormControl><Input type="number" {...field} /></FormControl></FormItem>)} />
           </div>
 
-          <FormField
-            control={form.control}
-            name="image_url"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Imagem Principal</FormLabel>
-                <ImageUploader onUploadSuccess={(url) => field.onChange(url)} initialUrl={field.value} />
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {productId && (
+              <ProductVariantManager productId={productId} basePrice={form.watch("price")} basePixPrice={form.watch("pix_price") || 0} baseCostPrice={form.watch("cost_price") || 0} />
+          )}
 
-          <FormField
-            control={form.control}
-            name="is_visible"
-            render={({ field }) => (
-              <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm bg-white">
-                <FormLabel>Produto Visível no Site</FormLabel>
-                <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
-              </FormItem>
-            )}
-          />
+          <FormField control={form.control} name="image_url" render={({ field }) => (<FormItem><FormLabel>Imagem Principal</FormLabel><ImageUploader onUploadSuccess={(url) => field.onChange(url)} initialUrl={field.value} /></FormItem>)} />
+          <FormField control={form.control} name="is_visible" render={({ field }) => (<FormItem className="flex items-center justify-between rounded-lg border p-3 bg-white"><FormLabel>Produto Visível</FormLabel><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl></FormItem>)} />
 
           <Button type="submit" disabled={isSubmitting} className="w-full h-12 text-lg font-bold">
-            {isSubmitting ? "Salvando..." : (initialData ? "Atualizar Cadastro" : "Criar Produto")}
+            {isSubmitting ? "Processando..." : (initialData ? "Atualizar" : "Criar")}
           </Button>
         </form>
       </Form>
 
       <Dialog open={isCategoryModalOpen} onOpenChange={setIsCategoryModalOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Nova Categoria</DialogTitle></DialogHeader>
-          <CategoryForm 
-            onSubmit={(v) => addCategoryMutation.mutate({ name: v.name })} 
-            isSubmitting={addCategoryMutation.isPending} 
-          />
-        </DialogContent>
+        <DialogContent><DialogHeader><DialogTitle>Nova Categoria</DialogTitle></DialogHeader><CategoryForm onSubmit={(v) => {}} isSubmitting={false} /></DialogContent>
       </Dialog>
     </div>
   );
