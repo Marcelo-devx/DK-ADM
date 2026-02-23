@@ -10,7 +10,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Truck, CreditCard, QrCode, Ticket, User, Phone, MapPin, Fingerprint, Package, Heart } from "lucide-react";
+import { Truck, CreditCard, QrCode, Ticket, User, Phone, MapPin, Fingerprint, Package } from "lucide-react";
 
 interface Order {
   id: number;
@@ -18,7 +18,6 @@ interface Order {
   total_price: number;
   shipping_cost: number;
   coupon_discount: number;
-  donation_amount: number;
   status: string;
   user_id: string;
   delivery_info?: string | null;
@@ -64,9 +63,10 @@ const fetchOrderItems = async (orderId: number): Promise<OrderItem[]> => {
 const fetchCustomerProfile = async (userId: string) => {
   const { data, error } = await supabase
     .from("profiles")
-    .select("first_name, last_name, phone, cpf_cnpj")
+    .select("first_name, last_name, phone, cpf_cnpj, email")
     .eq("id", userId)
     .single();
+  // Se der erro (ex: perfil deletado), retornamos null sem quebrar a UI
   if (error) return null;
   return data;
 };
@@ -78,16 +78,13 @@ export const OrderDetailModal = ({ order, isOpen, onClose }: OrderDetailModalPro
     enabled: isOpen,
   });
 
-  const { data: customer } = useQuery({
+  const { data: customer, isLoading: isLoadingCustomer } = useQuery({
     queryKey: ["orderCustomer", order.user_id],
     queryFn: () => fetchCustomerProfile(order.user_id),
     enabled: isOpen && !!order.user_id,
   });
 
   const subtotal = items?.reduce((acc, item) => acc + item.price_at_purchase * item.quantity, 0) || 0;
-
-  // O total que o cliente realmente pagou (incluindo frete e doação)
-  const finalPaidTotal = order.total_price + (order.shipping_cost || 0) + (order.donation_amount || 0);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -122,26 +119,35 @@ export const OrderDetailModal = ({ order, isOpen, onClose }: OrderDetailModalPro
             </div>
           )}
 
+          {/* DADOS DO CLIENTE E ENDEREÇO */}
           <div className="grid md:grid-cols-2 gap-4">
             <div className="border rounded-lg p-4 bg-gray-50/50 space-y-3">
                 <h4 className="text-sm font-bold flex items-center gap-2 text-gray-700">
                     <User className="h-4 w-4" /> Dados do Cliente
                 </h4>
-                <div className="text-sm space-y-2">
-                    <div className="font-medium text-base">
-                        {customer?.first_name || order.profiles?.first_name} {customer?.last_name || order.profiles?.last_name}
+                {isLoadingCustomer ? (
+                    <div className="space-y-2">
+                        <Skeleton className="h-4 w-3/4" />
+                        <Skeleton className="h-4 w-1/2" />
                     </div>
-                    {customer?.cpf_cnpj && (
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                            <Fingerprint className="h-3 w-3" /> 
-                            <span className="font-mono text-xs">{customer.cpf_cnpj}</span>
+                ) : (
+                    <div className="text-sm space-y-2">
+                        <div className="font-medium text-base">
+                            {customer?.first_name || order.profiles?.first_name} {customer?.last_name || order.profiles?.last_name}
                         </div>
-                    )}
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                        <Phone className="h-3 w-3" /> 
-                        <span>{customer?.phone || "Não informado"}</span>
+                        {customer?.cpf_cnpj && (
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                                <Fingerprint className="h-3 w-3" /> 
+                                <span className="font-mono text-xs">{customer.cpf_cnpj}</span>
+                            </div>
+                        )}
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                            <Phone className="h-3 w-3" /> 
+                            <span>{customer?.phone || "Não informado"}</span>
+                        </div>
+                        {/* Exibir email se disponível (dependendo se sua estrutura permite acesso ao email aqui) */}
                     </div>
-                </div>
+                )}
             </div>
 
             <div className="border rounded-lg p-4 bg-gray-50/50 space-y-3">
@@ -210,14 +216,6 @@ export const OrderDetailModal = ({ order, isOpen, onClose }: OrderDetailModalPro
                     <span>{new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(order.shipping_cost)}</span>
                 </div>
                 
-                {/* LINHA DA DOAÇÃO ADICIONADA AQUI */}
-                {order.donation_amount > 0 && (
-                    <div className="flex justify-between text-rose-600 text-sm font-bold animate-in fade-in slide-in-from-left-2">
-                        <span className="flex items-center gap-1"><Heart className="w-3 h-3 fill-rose-600" /> Doação Solidária:</span>
-                        <span>{new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(order.donation_amount)}</span>
-                    </div>
-                )}
-
                 {order.coupon_discount > 0 && (
                     <div className="flex justify-between text-green-600 text-sm font-medium">
                         <span className="flex items-center gap-1"><Ticket className="w-3 h-3" /> Desconto:</span>
@@ -230,7 +228,7 @@ export const OrderDetailModal = ({ order, isOpen, onClose }: OrderDetailModalPro
                 <div className="flex justify-between items-center">
                     <span className="font-bold text-base">Total Pago:</span>
                     <span className="text-xl font-black text-primary">
-                        {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(finalPaidTotal)}
+                        {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(order.total_price)}
                     </span>
                 </div>
             </div>

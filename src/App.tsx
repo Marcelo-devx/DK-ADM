@@ -49,7 +49,6 @@ import LoyaltyManagementPage from "./pages/dashboard/LoyaltyManagement";
 import UserCouponsHistoryPage from "./pages/dashboard/UserCouponsHistory";
 import ShippingRatesPage from "./pages/dashboard/ShippingRates";
 import CryptoPage from "./pages/dashboard/Crypto";
-import DonationsPage from "./pages/dashboard/Donations";
 
 const queryClient = new QueryClient();
 
@@ -88,7 +87,6 @@ const AppContent = () => {
           <Route path="print-labels" element={<PrintLabelsPage />} />
           <Route path="shipping-rates" element={<ShippingRatesPage />} />
           <Route path="prices" element={<PriceManagementPage />} />
-          <Route path="donations" element={<DonationsPage />} />
           <Route path="supplier-orders" element={<SupplierOrdersPage />} />
           <Route path="products" element={<ProductsPage />} />
           <Route path="clients" element={<ClientsPage />} />
