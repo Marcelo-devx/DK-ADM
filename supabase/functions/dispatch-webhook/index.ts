@@ -78,11 +78,11 @@ serve(async (req) => {
         // C. Buscar Cliente (Profile)
         const { data: profile } = await supabaseAdmin
             .from('profiles')
-            .select('first_name, last_name, phone, cpf_cnpj') // Email removido pois não existe na tabela
+            .select('first_name, last_name, phone, cpf_cnpj') 
             .eq('id', order.user_id)
             .maybeSingle();
 
-        // D. Buscar Email do Auth (Fonte da verdade para email)
+        // D. Buscar Email do Auth
         let userEmail = "";
         if (order.user_id) {
             const { data: userData } = await supabaseAdmin.auth.admin.getUserById(order.user_id);
@@ -99,6 +99,14 @@ serve(async (req) => {
         if (order.user_coupons && order.user_coupons.length > 0 && order.user_coupons[0].coupons) {
             couponName = order.user_coupons[0].coupons.name;
         }
+
+        const shippingCost = Number(order.shipping_cost || 0);
+        const donationAmount = Number(order.donation_amount || 0);
+        const couponDiscount = Number(order.coupon_discount || 0);
+
+        // CÁLCULO DO TOTAL CORRETO: (Produtos + Frete + Doação) - Desconto
+        // O banco pode estar salvando 'total_price' apenas como 'produtos - desconto', então recalculamos para garantir consistência no webhook.
+        const calculatedTotal = subtotalCalc + shippingCost + donationAmount - couponDiscount;
 
         // Tratamento do Endereço (JSONB no banco)
         const addr = order.shipping_address || {};
@@ -121,13 +129,13 @@ serve(async (req) => {
         // --- 5. MONTAGEM DO PAYLOAD NO SCHEMA ESTRITO ---
         finalData = {
             id: order.id,
-            total_price: Number(order.total_price),
-            subtotal: subtotalCalc,
-            shipping_cost: Number(order.shipping_cost),
-            coupon_discount: Number(order.coupon_discount || 0),
+            total_price: Number(calculatedTotal.toFixed(2)), // Valor recalculado correto
+            subtotal: Number(subtotalCalc.toFixed(2)),
+            shipping_cost: shippingCost,
+            coupon_discount: couponDiscount,
             coupon_name: couponName,
-            original_subtotal: subtotalCalc,
-            donation_amount: Number(order.donation_amount || 0), // CAMPO ADICIONADO
+            original_subtotal: Number(subtotalCalc.toFixed(2)),
+            donation_amount: donationAmount,
             status: order.status,
             payment_method: order.payment_method,
             created_at: order.created_at,
@@ -140,7 +148,6 @@ serve(async (req) => {
                 street: addr.street || "",
                 neighborhood: addr.neighborhood || "",
                 complement: addr.complement || "",
-                // Preenche dados pessoais no endereço se faltarem
                 phone: addr.phone || phone, 
                 first_name: addr.first_name || firstName,
                 last_name: addr.last_name || lastName
@@ -153,7 +160,7 @@ serve(async (req) => {
             }))
         };
     } else {
-        // Fallback para outros eventos não mapeados (mantém payload original)
+        // Fallback para outros eventos não mapeados
         finalData = payload;
     }
 
