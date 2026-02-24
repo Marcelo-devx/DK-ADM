@@ -16,14 +16,12 @@ serve(async (req) => {
 
     if (!url) throw new Error("URL é obrigatória");
 
-    // 1. Limpeza de URL (Espaços invisíveis quebram o N8N)
     const rawUrl = url.trim();
     
-    // Verificação de Localhost (Erro comum)
     if (rawUrl.includes('localhost') || rawUrl.includes('127.0.0.1')) {
         return new Response(JSON.stringify({ 
             success: false, 
-            error: "Erro de Rede: O Supabase (Nuvem) não consegue acessar 'localhost'. Use o Tunnel (ngrok) ou a URL de Produção do N8N." 
+            error: "Erro: Supabase na nuvem não acessa 'localhost'. Use a URL pública do N8N." 
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
     }
 
@@ -31,14 +29,11 @@ serve(async (req) => {
     let payload = {};
     const timestamp = new Date().toISOString();
 
-    console.log(`[Diagnostic] Testando ${method} em: ${encodedUrl}`);
-
     const fetchOptions: any = {
         method: method,
         headers: { 'Content-Type': 'application/json' },
     };
 
-    // Monta payload
     if (method === 'POST') {
         if (custom_payload) {
             payload = custom_payload;
@@ -59,51 +54,50 @@ serve(async (req) => {
         fetchOptions.body = JSON.stringify(payload);
     }
 
-    // 2. Tentativa Principal
     const response = await fetch(encodedUrl, fetchOptions);
 
-    // 3. Diagnóstico Inteligente em caso de Falha (404/405)
-    if (!response.ok && (response.status === 404 || response.status === 405) && method === 'POST') {
-        console.log("POST falhou. Tentando GET para diagnóstico...");
-        try {
-            // Tenta um GET simples para ver se a URL existe mas o método está errado
-            const getResponse = await fetch(encodedUrl, { method: 'GET' });
-            
-            if (getResponse.ok) {
-                return new Response(JSON.stringify({ 
-                    success: false, 
-                    status: response.status,
-                    error: `ERRO DE MÉTODO: Seu N8N aceitou uma conexão GET, mas rejeitou o POST. Altere o "HTTP Method" no nó do Webhook para "POST".` 
-                }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
-            }
-        } catch (e) { /* Ignora erro no fallback */ }
-    }
-
-    const responseText = await response.text();
-    let responseData;
-    try { responseData = JSON.parse(responseText); } catch { responseData = responseText; }
-
+    // DIAGNÓSTICO INTELIGENTE
     if (!response.ok) {
-        let errorMessage = `O servidor remoto retornou erro ${response.status}`;
-        
-        // Dicas específicas baseadas na URL
+        let errorMessage = `Erro ${response.status}`;
+        let hint = "";
+
         if (response.status === 404) {
-            if (rawUrl.includes('/webhook-test/')) {
-                errorMessage += ". DICA: URLs de teste do N8N expiram. Clique em 'Execute Node' no N8N novamente antes de testar aqui.";
-            } else if (rawUrl.includes('/webhook/')) {
-                errorMessage += ". DICA: Workflow INATIVO. Ative a chave 'Active' no topo direito do N8N para usar URLs de produção.";
+            if (rawUrl.includes('/webhook/')) {
+                // Tenta GET para ver se o endpoint existe mas rejeitou POST
+                try {
+                    const check = await fetch(encodedUrl, { method: 'GET' });
+                    if (check.ok) {
+                        hint = "O N8N rejeitou o POST. Mude o 'HTTP Method' no nó do N8N para 'POST'.";
+                    } else {
+                        hint = "WORKFLOW INATIVO. Ative a chave 'Active' (verde) no topo direito do N8N.";
+                    }
+                } catch (e) {
+                    hint = "Verifique se a URL está correta e se o Workflow está ATIVO (Active: Verde).";
+                }
+            } else if (rawUrl.includes('/webhook-test/')) {
+                hint = "URL de teste expirada. Clique em 'Execute Node' no N8N novamente.";
             }
         }
+
+        const fullError = hint ? `${errorMessage}: ${hint}` : errorMessage;
 
         return new Response(
             JSON.stringify({ 
                 success: false, 
                 status: response.status, 
-                error: errorMessage, 
-                remote_response: responseData 
+                error: fullError
             }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
         );
+    }
+
+    // Sucesso
+    let responseData;
+    try { 
+        const text = await response.text();
+        responseData = text ? JSON.parse(text) : { message: "Sem corpo de resposta" }; 
+    } catch { 
+        responseData = { message: "Resposta recebida (não JSON)" }; 
     }
 
     return new Response(
