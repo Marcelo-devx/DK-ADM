@@ -23,23 +23,28 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    // --- LÓGICA ANTI-DUPLICIDADE (DEBOUNCE) ---
-    // Verifica se já existe um log para este mesmo evento e ID nos últimos 20 segundos
+    // --- LÓGICA ANTI-DUPLICIDADE (DEBOUNCE REFORÇADO) ---
+    // Verifica se já existe um log para este mesmo evento e ID nos últimos 30 segundos
     if (event_type === 'order_created' && payload.order_id) {
         const orderIdStr = String(payload.order_id);
-        const twentySecondsAgo = new Date(Date.now() - 20000).toISOString();
+        const thirtySecondsAgo = new Date(Date.now() - 30000).toISOString();
 
+        // Busca logs recentes desse tipo de evento
         const { data: recentLogs } = await supabaseAdmin
             .from('integration_logs')
-            .select('id')
+            .select('id, payload')
             .eq('event_type', event_type)
-            // Filtra logs onde o JSON payload contém o mesmo order_id
-            .filter('payload->>order_id', 'eq', orderIdStr) 
-            .gt('created_at', twentySecondsAgo)
-            .limit(1);
+            .gt('created_at', thirtySecondsAgo)
+            .limit(5); // Pega os últimos 5 para garantir
         
-        if (recentLogs && recentLogs.length > 0) {
-            console.log(`[Webhook] Disparo duplicado ignorado para o Pedido #${orderIdStr}`);
+        // Verifica manualmente no payload JSON se o ID bate
+        const duplicate = recentLogs?.find((log: any) => {
+             const logOrderId = log.payload?.order_id || log.payload?.data?.id;
+             return String(logOrderId) === orderIdStr;
+        });
+
+        if (duplicate) {
+            console.log(`[Webhook] Debounce: Pedido #${orderIdStr} já processado recentemente (Log ID: ${duplicate.id}).`);
             return new Response(JSON.stringify({ 
                 success: true, 
                 skipped: true, 
@@ -56,12 +61,16 @@ serve(async (req) => {
 
     // 1. Correção de Timezone (UTC -> São Paulo)
     if (payload.created_at) {
-        const dateObj = new Date(payload.created_at);
-        enrichedPayload.created_at_br = dateObj.toLocaleString('pt-BR', {
-            timeZone: 'America/Sao_Paulo',
-            day: '2-digit', month: '2-digit', year: 'numeric',
-            hour: '2-digit', minute: '2-digit', second: '2-digit'
-        });
+        try {
+            const dateObj = new Date(payload.created_at);
+            enrichedPayload.created_at_br = dateObj.toLocaleString('pt-BR', {
+                timeZone: 'America/Sao_Paulo',
+                day: '2-digit', month: '2-digit', year: 'numeric',
+                hour: '2-digit', minute: '2-digit', second: '2-digit'
+            });
+        } catch (e) {
+            console.error("Erro data:", e);
+        }
     }
 
     // 2. Correção do Valor Total e Frete
@@ -112,15 +121,18 @@ serve(async (req) => {
         return new Response(JSON.stringify({ message: "No webhooks configured" }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
     }
 
-    const promises = webhooks.map(async (hook) => {
+    // Remove URLs duplicadas em memória (Segurança extra)
+    const uniqueTargets = [...new Set(webhooks.map(w => w.target_url))];
+
+    const promises = uniqueTargets.map(async (url) => {
         let responseCode = 0;
         let responseBody = "";
         let status = "error";
 
         try {
-            console.log(`Disparando ${event_type} para ${hook.target_url}`);
+            console.log(`Disparando ${event_type} para ${url}`);
             
-            const response = await fetch(hook.target_url, {
+            const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
@@ -140,25 +152,24 @@ serve(async (req) => {
             }
 
         } catch (err) {
-            console.error(`Falha de rede para ${hook.target_url}:`, err);
+            console.error(`Falha de rede para ${url}:`, err);
             responseBody = err.message;
             responseCode = 500;
         }
 
         // GRAVAR LOG NO BANCO
-        // Importante: Grava com o ID do pedido no payload para a trava funcionar na próxima vez
         await supabaseAdmin.from('integration_logs').insert({
             event_type: event_type,
             status: status,
             response_code: responseCode,
             payload: enrichedPayload, 
-            details: `Destino: ${hook.target_url} | Resposta: ${responseBody.substring(0, 500)}`
+            details: `Destino: ${url} | Resposta: ${responseBody.substring(0, 500)}`
         });
     });
 
     await Promise.allSettled(promises);
 
-    return new Response(JSON.stringify({ success: true, dispatched: webhooks.length }), {
+    return new Response(JSON.stringify({ success: true, dispatched: uniqueTargets.length }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
     });
