@@ -23,21 +23,28 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    // --- LÓGICA ANTI-DUPLICIDADE (DEBOUNCE) ---
-    if (event_type === 'order_created' && payload.order_id) {
-        const orderIdStr = String(payload.order_id);
-        const tenSecondsAgo = new Date(Date.now() - 10000).toISOString();
+    // --- 1. ID DO PEDIDO ---
+    // O trigger envia 'id' dentro do payload (que é o NEW record) ou 'order_id' dependendo da versão do trigger.
+    // Vamos garantir que pegamos o ID correto.
+    const orderId = payload.id || payload.order_id;
 
+    if (!orderId && event_type === 'order_created') {
+        return new Response("Missing order ID", { status: 400 });
+    }
+
+    // --- 2. ANTI-DUPLICIDADE (DEBOUNCE) ---
+    if (event_type === 'order_created') {
+        const tenSecondsAgo = new Date(Date.now() - 10000).toISOString();
         const { data: recentLogs } = await supabaseAdmin
             .from('integration_logs')
-            .select('id, payload')
+            .select('payload')
             .eq('event_type', event_type)
             .gt('created_at', tenSecondsAgo)
-            .limit(5); 
+            .limit(10);
         
         const duplicate = recentLogs?.find((log: any) => {
-             const logOrderId = log.payload?.order_id || log.payload?.data?.id;
-             return String(logOrderId) === orderIdStr;
+             const logId = log.payload?.data?.id;
+             return String(logId) === String(orderId);
         });
 
         if (duplicate) {
@@ -45,28 +52,99 @@ serve(async (req) => {
         }
     }
 
-    // --- ENRIQUECIMENTO DE DADOS ---
-    let enrichedPayload = { ...payload };
-    if (payload.created_at) {
-        try {
-            const dateObj = new Date(payload.created_at);
-            enrichedPayload.created_at_br = dateObj.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-        } catch (e) {}
-    }
-    if (event_type === 'order_created' && payload.user_id) {
-        const { data: profile } = await supabaseAdmin.from('profiles').select('first_name, last_name, phone, email, cpf_cnpj').eq('id', payload.user_id).maybeSingle();
-        if (profile) {
-            enrichedPayload.customer = {
-                id: payload.user_id,
-                full_name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
-                phone: profile.phone || '',
-                email: profile.email || '',
-                cpf: profile.cpf_cnpj || ''
-            };
+    // --- 3. COLETAR DADOS COMPLETOS (ENRICHMENT) ---
+    let finalData = {};
+
+    if (event_type === 'order_created') {
+        // A. Buscar Pedido + Endereço + Cupom
+        const { data: order, error: orderError } = await supabaseAdmin
+            .from('orders')
+            .select(`
+                *,
+                user_coupons (
+                    coupon_id,
+                    coupons ( name )
+                )
+            `)
+            .eq('id', orderId)
+            .single();
+        
+        if (orderError || !order) throw new Error(`Order ${orderId} not found`);
+
+        // B. Buscar Itens
+        const { data: items } = await supabaseAdmin
+            .from('order_items')
+            .select('name_at_purchase, quantity, price_at_purchase')
+            .eq('order_id', orderId);
+
+        // C. Buscar Cliente
+        const { data: profile } = await supabaseAdmin
+            .from('profiles')
+            .select('first_name, last_name, phone, email, cpf_cnpj')
+            .eq('id', order.user_id)
+            .single();
+        
+        // --- 4. CÁLCULOS ---
+        const orderItems = items || [];
+        // Subtotal = Soma (Qtd * Preço Unitário)
+        const subtotalCalc = orderItems.reduce((acc: number, item: any) => acc + (item.quantity * item.price_at_purchase), 0);
+        
+        // Nome do Cupom
+        let couponName = null;
+        if (order.user_coupons && order.user_coupons.length > 0 && order.user_coupons[0].coupons) {
+            couponName = order.user_coupons[0].coupons.name;
         }
+
+        // Tratamento do Endereço (JSONB no banco)
+        const addr = order.shipping_address || {};
+        
+        // Formatar cliente
+        const customerData = {
+            id: order.user_id,
+            full_name: `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim(),
+            phone: profile?.phone || '',
+            email: profile?.email || '', // O email pode vir do profile se tiver sido salvo lá, ou precisaríamos pegar do auth.users. Assumindo profile.
+            cpf: profile?.cpf_cnpj || ''
+        };
+
+        // --- 5. MONTAGEM DO PAYLOAD NO SCHEMA ESTRITO ---
+        finalData = {
+            id: order.id,
+            total_price: Number(order.total_price),
+            subtotal: subtotalCalc,
+            shipping_cost: Number(order.shipping_cost),
+            coupon_discount: Number(order.coupon_discount || 0),
+            coupon_name: couponName,
+            original_subtotal: subtotalCalc, // Geralmente igual ao subtotal se não houver descontos no nível do item
+            status: order.status,
+            payment_method: order.payment_method,
+            created_at: order.created_at,
+            benefits_used: order.benefits_used || null,
+            shipping_address: {
+                cep: addr.cep || "",
+                city: addr.city || "",
+                phone: customerData.phone, // Telefone geralmente vai no contato, mas schema pede aqui também
+                state: addr.state || "",
+                number: addr.number || "",
+                street: addr.street || "",
+                last_name: profile?.last_name || "",
+                complement: addr.complement || "",
+                first_name: profile?.first_name || "",
+                neighborhood: addr.neighborhood || ""
+            },
+            customer: customerData,
+            items: orderItems.map((item: any) => ({
+                name: item.name_at_purchase,
+                quantity: item.quantity,
+                price: Number(item.price_at_purchase)
+            }))
+        };
+    } else {
+        // Fallback para outros eventos não mapeados (mantém payload original)
+        finalData = payload;
     }
 
-    // Buscar webhooks ativos
+    // --- 6. ENVIO PARA WEBHOOKS ---
     const { data: webhooks } = await supabaseAdmin
         .from('webhook_configs')
         .select('id, target_url')
@@ -74,69 +152,43 @@ serve(async (req) => {
         .eq('trigger_event', event_type);
 
     if (!webhooks || webhooks.length === 0) {
-        return new Response(JSON.stringify({ message: "No active webhooks configured" }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+        return new Response(JSON.stringify({ message: "No active webhooks" }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
     }
 
-    const uniqueTargets = [...new Set(webhooks.map(w => w.target_url))];
+    const uniqueTargets = [...new Set(webhooks.map((w: any) => w.target_url))];
+    const finalPayload = {
+        event: event_type,
+        timestamp: new Date().toISOString(),
+        data: finalData
+    };
 
-    const promises = uniqueTargets.map(async (rawUrl) => {
+    const promises = uniqueTargets.map(async (rawUrl: string) => {
         let responseCode = 0;
         let responseBody = "";
         let status = "error";
-        
-        // Limpeza rigorosa da URL
-        const url = rawUrl.trim().replace(/([^:]\/)\/+/g, "$1"); // Remove barras duplas extras, exceto no protocolo
+        const url = rawUrl.trim().replace(/([^:]\/)\/+/g, "$1");
 
         try {
             console.log(`Disparando ${event_type} para '${url}'`);
-            
             const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    event: event_type, 
-                    data: enrichedPayload, 
-                    timestamp: new Date().toISOString() 
-                })
+                body: JSON.stringify(finalPayload)
             });
-            
             responseCode = response.status;
             try { responseBody = await response.text(); } catch (e) { responseBody = "(Sem corpo)"; }
-
-            if (response.ok) {
-                status = "success";
-            } else if (response.status === 404 || response.status === 405) {
-                // Diagnóstico melhorado
-                try {
-                    const checkGet = await fetch(url, { method: 'GET' });
-                    if (checkGet.ok) {
-                        responseBody = `ERRO MÉTODO: N8N rejeitou POST mas aceitou GET. Mude o nó do N8N para "POST".`;
-                    } else {
-                        if (url.includes('/webhook-test/')) {
-                            responseBody = `URL TESTE EXPIRADA: Clique em "Execute Node" no N8N novamente.`;
-                        } else {
-                            // AQUI ESTÁ A MUDANÇA PRINCIPAL NA MENSAGEM
-                            responseBody = `ERRO 404 (Não Encontrado): Workflow INATIVO ou Caminho da URL incorreto. Verifique se o final da URL no painel é IGUAL ao path no N8N.`;
-                        }
-                    }
-                } catch (e) {
-                    responseBody = `Erro N8N (${response.status}): ${responseBody.substring(0, 100)}`;
-                }
-            } else if (response.status >= 500) {
-                responseBody = `Erro Servidor N8N (${response.status}): O seu N8N está fora do ar ou com erro interno.`;
-            }
-
-        } catch (err) {
+            if (response.ok) status = "success";
+        } catch (err: any) {
             responseBody = `Erro de Rede: ${err.message}`;
             responseCode = 500;
         }
 
-        // Log detalhado
+        // Log
         await supabaseAdmin.from('integration_logs').insert({
             event_type: event_type,
             status: status,
             response_code: responseCode,
-            payload: enrichedPayload, 
+            payload: finalPayload, 
             details: `Destino: ${url} | ${responseBody.substring(0, 500)}`
         });
     });
@@ -145,7 +197,7 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({ success: true, dispatched: uniqueTargets.length }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
 
-  } catch (error) {
+  } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 })
