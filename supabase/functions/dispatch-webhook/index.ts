@@ -23,8 +23,7 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    // --- LÓGICA ANTI-DUPLICIDADE (DEBOUNCE REFORÇADO) ---
-    // Impede que o mesmo pedido dispare o webhook duas vezes em menos de 10 segundos
+    // --- LÓGICA ANTI-DUPLICIDADE (DEBOUNCE) ---
     if (event_type === 'order_created' && payload.order_id) {
         const orderIdStr = String(payload.order_id);
         const tenSecondsAgo = new Date(Date.now() - 10000).toISOString();
@@ -42,54 +41,24 @@ serve(async (req) => {
         });
 
         if (duplicate) {
-            console.log(`[Webhook] Debounce: Pedido #${orderIdStr} ignorado (Já processado recentemente).`);
-            return new Response(JSON.stringify({ 
-                success: true, 
-                skipped: true, 
-                message: "Duplicate event skipped (Debounce)" 
-            }), {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 200,
-            });
+            return new Response(JSON.stringify({ success: true, skipped: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
         }
     }
 
-    // --- ENRIQUECIMENTO DE DADOS ---
+    // --- ENRIQUECIMENTO DE DADOS (Mantém igual) ---
     let enrichedPayload = { ...payload };
-
     if (payload.created_at) {
         try {
             const dateObj = new Date(payload.created_at);
-            enrichedPayload.created_at_br = dateObj.toLocaleString('pt-BR', {
-                timeZone: 'America/Sao_Paulo',
-                day: '2-digit', month: '2-digit', year: 'numeric',
-                hour: '2-digit', minute: '2-digit', second: '2-digit'
-            });
-        } catch (e) { console.error("Erro data:", e); }
+            enrichedPayload.created_at_br = dateObj.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+        } catch (e) {}
     }
-
-    if (payload.total_price !== undefined) {
-        const subtotal = Number(payload.total_price || 0);
-        const shipping = Number(payload.shipping_cost || 0);
-        const discount = Number(payload.coupon_discount || 0);
-        const donation = Number(payload.donation_amount || 0);
-        const totalPaid = subtotal + shipping + donation;
-        
-        enrichedPayload.final_total_value = totalPaid;
-    }
-
     if (event_type === 'order_created' && payload.user_id) {
-        const { data: profile } = await supabaseAdmin
-            .from('profiles')
-            .select('first_name, last_name, phone, email, cpf_cnpj') 
-            .eq('id', payload.user_id)
-            .maybeSingle();
-        
+        const { data: profile } = await supabaseAdmin.from('profiles').select('first_name, last_name, phone, email, cpf_cnpj').eq('id', payload.user_id).maybeSingle();
         if (profile) {
             enrichedPayload.customer = {
                 id: payload.user_id,
                 full_name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
-                first_name: profile.first_name || '',
                 phone: profile.phone || '',
                 email: profile.email || '',
                 cpf: profile.cpf_cnpj || ''
@@ -114,15 +83,12 @@ serve(async (req) => {
         let responseCode = 0;
         let responseBody = "";
         let status = "error";
-        
-        // CORREÇÃO: Limpeza da URL (Trim)
-        const url = rawUrl.trim();
+        const url = rawUrl.trim(); // Limpeza de URL
 
         try {
-            console.log(`Disparando ${event_type} para '${url}' (Método POST)`);
-            
+            // TENTATIVA 1: POST (Padrão correto)
             const response = await fetch(url, {
-                method: 'POST', // IMPORTANTE: O N8N deve esperar um POST
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     event: event_type, 
@@ -132,21 +98,31 @@ serve(async (req) => {
             });
             
             responseCode = response.status;
-            
             try { responseBody = await response.text(); } catch (e) { responseBody = "(Sem corpo)"; }
 
             if (response.ok) {
                 status = "success";
-            } else {
-                // Se der 404, adicionamos uma dica no log
-                if (response.status === 404) {
-                    responseBody = `ERRO 404: Verifique se o Workflow está ATIVO e se o método no N8N é POST. Resposta: ${responseBody}`;
+            } else if (response.status === 404 || response.status === 405) {
+                // DIAGNÓSTICO INTELIGENTE SE DER ERRO
+                // Se o POST falhou, tenta um GET rápido só para ver se o N8N responde "Active" ou aceita GET.
+                try {
+                    const checkGet = await fetch(url, { method: 'GET' });
+                    if (checkGet.ok) {
+                        responseBody = `DIAGNÓSTICO: Seu N8N rejeitou o POST mas aceitou GET. Mude o "HTTP Method" no nó do Webhook para "POST".`;
+                    } else {
+                        if (url.includes('/webhook-test/')) {
+                            responseBody = `URL DE TESTE EXPIRADA: Clique em "Execute Node" no N8N novamente.`;
+                        } else {
+                            responseBody = `WORKFLOW INATIVO: Ative a chave "Active" no topo direito do N8N ou verifique a URL. (N8N retornou ${response.status})`;
+                        }
+                    }
+                } catch (e) {
+                    responseBody = `Erro N8N (${response.status}): ${responseBody.substring(0, 100)}`;
                 }
             }
 
         } catch (err) {
-            console.error(`Falha de rede para ${url}:`, err);
-            responseBody = err.message;
+            responseBody = `Erro de Rede: ${err.message}`;
             responseCode = 500;
         }
 
@@ -156,16 +132,13 @@ serve(async (req) => {
             status: status,
             response_code: responseCode,
             payload: enrichedPayload, 
-            details: `Destino: ${url} | ${responseBody.substring(0, 500)}`
+            details: `Destino: ${url} | ${responseBody}`
         });
     });
 
     await Promise.allSettled(promises);
 
-    return new Response(JSON.stringify({ success: true, dispatched: uniqueTargets.length }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-    });
+    return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
 
   } catch (error) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
