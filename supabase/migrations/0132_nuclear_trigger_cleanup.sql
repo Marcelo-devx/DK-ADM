@@ -1,31 +1,53 @@
--- SOLUÇÃO NUCLEAR PARA DUPLICIDADE DE GATILHOS
+-- LIMPEZA NUCLEAR DE GATILHOS
 
--- 1. Remove TODOS os triggers da tabela 'orders' dinamicamente
-DO $$ 
-DECLARE 
-    trg record;
-BEGIN 
-    FOR trg IN 
+DO $$
+DECLARE
+    trigName RECORD;
+BEGIN
+    -- Busca TODOS os gatilhos na tabela orders que tenham nomes relacionados a webhook ou order
+    FOR trigName IN 
         SELECT trigger_name 
         FROM information_schema.triggers 
         WHERE event_object_table = 'orders' 
-        AND event_object_schema = 'public'
-    LOOP 
-        EXECUTE 'DROP TRIGGER IF EXISTS ' || quote_ident(trg.trigger_name) || ' ON public.orders CASCADE';
-    END LOOP; 
+        AND (trigger_name ILIKE '%webhook%' OR trigger_name ILIKE '%order%')
+    LOOP
+        EXECUTE 'DROP TRIGGER IF EXISTS ' || quote_ident(trigName.trigger_name) || ' ON public.orders';
+    END LOOP;
 END $$;
 
--- 2. Limpa configurações de webhook duplicadas (deixa apenas a mais recente para cada evento)
-DELETE FROM webhook_configs a USING (
-    SELECT max(id) as id, trigger_event
-    FROM webhook_configs 
-    GROUP BY trigger_event HAVING COUNT(*) > 1
-) b
-WHERE a.trigger_event = b.trigger_event 
-AND a.id <> b.id;
+-- Agora criamos o ÚNICO e DEFINITIVO gatilho
+CREATE OR REPLACE FUNCTION public.trigger_order_created_webhook_v4()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path = 'public', 'extensions', 'net'
+AS $function$
+BEGIN
+  PERFORM net.http_post(
+    url := 'https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1/dispatch-webhook',
+    body := jsonb_build_object(
+        'event_type', 'order_created',
+        'payload', jsonb_build_object(
+            'order_id', NEW.id,
+            'user_id', NEW.user_id,
+            'total_price', NEW.total_price,
+            'shipping_cost', NEW.shipping_cost,
+            'coupon_discount', NEW.coupon_discount,
+            'donation_amount', NEW.donation_amount,
+            'status', NEW.status,
+            'created_at', NEW.created_at
+        )
+    ),
+    headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'Authorization', 'Bearer ' || current_setting('request.header.authorization', true)
+    )
+  );
+  RETURN NEW;
+END;
+$function$;
 
--- 3. Recria o ÚNICO gatilho oficial (Apenas INSERT)
-CREATE TRIGGER tr_official_order_webhook_v2
+CREATE TRIGGER zzz_order_webhook_official
 AFTER INSERT ON public.orders
 FOR EACH ROW
-EXECUTE FUNCTION public.trigger_order_created_webhook();
+EXECUTE FUNCTION public.trigger_order_created_webhook_v4();
