@@ -16,23 +16,31 @@ serve(async (req) => {
 
     if (!url) throw new Error("URL é obrigatória");
 
-    // Codifica a URL para lidar com acentos (ex: testar-conexão)
-    const encodedUrl = encodeURI(url);
+    // 1. Limpeza de URL (Espaços invisíveis quebram o N8N)
+    const rawUrl = url.trim();
+    
+    // Verificação de Localhost (Erro comum)
+    if (rawUrl.includes('localhost') || rawUrl.includes('127.0.0.1')) {
+        return new Response(JSON.stringify({ 
+            success: false, 
+            error: "Erro de Rede: O Supabase (Nuvem) não consegue acessar 'localhost'. Use o Tunnel (ngrok) ou a URL de Produção do N8N." 
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+    }
 
+    const encodedUrl = encodeURI(rawUrl);
     let payload = {};
     const timestamp = new Date().toISOString();
 
-    console.log(`Disparando teste (${method}) para: ${encodedUrl}`);
+    console.log(`[Diagnostic] Testando ${method} em: ${encodedUrl}`);
 
     const fetchOptions: any = {
         method: method,
         headers: { 'Content-Type': 'application/json' },
     };
 
-    // Apenas adiciona corpo se for POST
+    // Monta payload fake para o teste
     if (method === 'POST') {
-        // Gera dados falsos baseados no tipo de evento
-        if (event_type === 'order_created' || event_type === 'payment_confirmed') {
+        if (event_type === 'order_created') {
             payload = {
                 event: event_type,
                 timestamp: timestamp,
@@ -40,86 +48,49 @@ serve(async (req) => {
                     id: 12345,
                     total_price: 150.00,
                     status: "Pendente",
-                    payment_method: "pix",
-                    created_at: timestamp,
-                    customer: {
-                        id: "user-uuid-teste",
-                        full_name: "Cliente Teste da Silva",
-                        phone: "11999999999",
-                        email: "teste@exemplo.com",
-                        cpf: "000.000.000-00"
-                    },
-                    items: [
-                        { name: "Produto Teste A", quantity: 1, price: 50.00 },
-                        { name: "Produto Teste B", quantity: 2, price: 50.00 }
-                    ],
-                    shipping_address: {
-                        street: "Rua Exemplo",
-                        number: "100",
-                        neighborhood: "Centro",
-                        city: "São Paulo",
-                        state: "SP",
-                        cep: "01000-000"
-                    }
+                    customer: { name: "Cliente Teste", email: "teste@exemplo.com", phone: "11999999999" }
                 }
-            };
-        } else if (event_type && event_type.startsWith('product_')) {
-            payload = {
-                event: event_type,
-                timestamp: timestamp,
-                data: {
-                    id: 999,
-                    name: "Produto de Teste N8N",
-                    sku: "TEST-SKU-001",
-                    price: 99.90,
-                    stock_quantity: 50,
-                    is_visible: true,
-                    category: "Testes"
-                }
-            };
-        } else if (event_type === 'retention_campaign') {
-            payload = {
-                event: 'retention_campaign',
-                campaign_size: 1,
-                recipients: [
-                    {
-                        client_id: "user-uuid-teste",
-                        name: "Cliente Teste",
-                        phone: "11999999999",
-                        email: "teste@exemplo.com",
-                        message_content: "Oi Cliente Teste! Esta é uma mensagem de teste enviada pelo painel."
-                    }
-                ]
             };
         } else {
-            // Genérico
-            payload = {
-                event: event_type || 'ping',
-                timestamp: timestamp,
-                message: "Este é um evento de teste genérico.",
-                test_data: true
-            };
+            payload = { event: event_type || 'ping', timestamp: timestamp, message: "Evento de teste" };
         }
-        
         fetchOptions.body = JSON.stringify(payload);
     }
 
+    // 2. Tentativa Principal
     const response = await fetch(encodedUrl, fetchOptions);
+
+    // 3. Diagnóstico Inteligente em caso de Falha (404/405)
+    if (!response.ok && (response.status === 404 || response.status === 405) && method === 'POST') {
+        console.log("POST falhou. Tentando GET para diagnóstico...");
+        try {
+            // Tenta um GET simples para ver se a URL existe mas o método está errado
+            const getResponse = await fetch(encodedUrl, { method: 'GET' });
+            
+            if (getResponse.ok) {
+                return new Response(JSON.stringify({ 
+                    success: false, 
+                    status: response.status,
+                    error: `ERRO DE MÉTODO: Seu N8N aceitou uma conexão GET, mas rejeitou o POST. Altere o "HTTP Method" no nó do Webhook para "POST".` 
+                }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+            }
+        } catch (e) { /* Ignora erro no fallback */ }
+    }
 
     const responseText = await response.text();
     let responseData;
-    try {
-        responseData = JSON.parse(responseText);
-    } catch {
-        responseData = responseText;
-    }
+    try { responseData = JSON.parse(responseText); } catch { responseData = responseText; }
 
     if (!response.ok) {
         let errorMessage = `O servidor remoto retornou erro ${response.status}`;
         
-        // Dica específica para usuários de N8N
-        if (response.status === 404 && (url.includes('/webhook/') || url.includes('n8n'))) {
-            errorMessage += ". DICA N8N: Se seu Workflow estiver 'Inativo', a URL de produção (/webhook/) retorna 404. Ative o Workflow ou use a URL de teste (/webhook-test/).";
+        // Dicas específicas baseadas na URL
+        if (response.status === 404) {
+            if (rawUrl.includes('/webhook-test/')) {
+                errorMessage += ". DICA: URLs de teste do N8N expiram. Clique em 'Execute Node' no N8N novamente antes de testar aqui.";
+            } else if (rawUrl.includes('/webhook/')) {
+                errorMessage += ". DICA: Workflow INATIVO. Ative a chave 'Active' no topo direito do N8N para usar URLs de produção.";
+            }
         }
 
         return new Response(
