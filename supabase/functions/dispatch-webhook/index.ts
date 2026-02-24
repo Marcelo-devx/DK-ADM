@@ -24,8 +24,6 @@ serve(async (req) => {
     );
 
     // --- 1. ID DO PEDIDO ---
-    // O trigger envia 'id' dentro do payload (que é o NEW record) ou 'order_id' dependendo da versão do trigger.
-    // Vamos garantir que pegamos o ID correto.
     const orderId = payload.id || payload.order_id;
 
     if (!orderId && event_type === 'order_created') {
@@ -77,12 +75,19 @@ serve(async (req) => {
             .select('name_at_purchase, quantity, price_at_purchase')
             .eq('order_id', orderId);
 
-        // C. Buscar Cliente
+        // C. Buscar Cliente (Profile)
         const { data: profile } = await supabaseAdmin
             .from('profiles')
-            .select('first_name, last_name, phone, email, cpf_cnpj')
+            .select('first_name, last_name, phone, cpf_cnpj') // Email removido pois não existe na tabela
             .eq('id', order.user_id)
-            .single();
+            .maybeSingle();
+
+        // D. Buscar Email do Auth (Fonte da verdade para email)
+        let userEmail = "";
+        if (order.user_id) {
+            const { data: userData } = await supabaseAdmin.auth.admin.getUserById(order.user_id);
+            userEmail = userData?.user?.email || "";
+        }
         
         // --- 4. CÁLCULOS ---
         const orderItems = items || [];
@@ -98,13 +103,19 @@ serve(async (req) => {
         // Tratamento do Endereço (JSONB no banco)
         const addr = order.shipping_address || {};
         
-        // Formatar cliente
+        // Formatar dados do cliente
+        const firstName = profile?.first_name || "";
+        const lastName = profile?.last_name || "";
+        const fullName = `${firstName} ${lastName}`.trim();
+        const phone = profile?.phone || "";
+        const cpf = profile?.cpf_cnpj || "";
+
         const customerData = {
             id: order.user_id,
-            full_name: `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim(),
-            phone: profile?.phone || '',
-            email: profile?.email || '', // O email pode vir do profile se tiver sido salvo lá, ou precisaríamos pegar do auth.users. Assumindo profile.
-            cpf: profile?.cpf_cnpj || ''
+            full_name: fullName,
+            phone: phone,
+            email: userEmail,
+            cpf: cpf
         };
 
         // --- 5. MONTAGEM DO PAYLOAD NO SCHEMA ESTRITO ---
@@ -115,7 +126,8 @@ serve(async (req) => {
             shipping_cost: Number(order.shipping_cost),
             coupon_discount: Number(order.coupon_discount || 0),
             coupon_name: couponName,
-            original_subtotal: subtotalCalc, // Geralmente igual ao subtotal se não houver descontos no nível do item
+            original_subtotal: subtotalCalc,
+            donation_amount: Number(order.donation_amount || 0), // CAMPO ADICIONADO
             status: order.status,
             payment_method: order.payment_method,
             created_at: order.created_at,
@@ -123,14 +135,15 @@ serve(async (req) => {
             shipping_address: {
                 cep: addr.cep || "",
                 city: addr.city || "",
-                phone: customerData.phone, // Telefone geralmente vai no contato, mas schema pede aqui também
                 state: addr.state || "",
                 number: addr.number || "",
                 street: addr.street || "",
-                last_name: profile?.last_name || "",
+                neighborhood: addr.neighborhood || "",
                 complement: addr.complement || "",
-                first_name: profile?.first_name || "",
-                neighborhood: addr.neighborhood || ""
+                // Preenche dados pessoais no endereço se faltarem
+                phone: addr.phone || phone, 
+                first_name: addr.first_name || firstName,
+                last_name: addr.last_name || lastName
             },
             customer: customerData,
             items: orderItems.map((item: any) => ({
