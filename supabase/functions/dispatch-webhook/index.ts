@@ -41,11 +41,11 @@ serve(async (req) => {
         });
 
         if (duplicate) {
-            return new Response(JSON.stringify({ success: true, skipped: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+            return new Response(JSON.stringify({ success: true, skipped: true, message: "Duplicate skipped" }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
         }
     }
 
-    // --- ENRIQUECIMENTO DE DADOS (Mantém igual) ---
+    // --- ENRIQUECIMENTO DE DADOS ---
     let enrichedPayload = { ...payload };
     if (payload.created_at) {
         try {
@@ -83,10 +83,13 @@ serve(async (req) => {
         let responseCode = 0;
         let responseBody = "";
         let status = "error";
-        const url = rawUrl.trim(); // Limpeza de URL
+        
+        // Limpeza rigorosa da URL
+        const url = rawUrl.trim().replace(/([^:]\/)\/+/g, "$1"); // Remove barras duplas extras, exceto no protocolo
 
         try {
-            // TENTATIVA 1: POST (Padrão correto)
+            console.log(`Disparando ${event_type} para '${url}'`);
+            
             const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -103,22 +106,24 @@ serve(async (req) => {
             if (response.ok) {
                 status = "success";
             } else if (response.status === 404 || response.status === 405) {
-                // DIAGNÓSTICO INTELIGENTE SE DER ERRO
-                // Se o POST falhou, tenta um GET rápido só para ver se o N8N responde "Active" ou aceita GET.
+                // Diagnóstico melhorado
                 try {
                     const checkGet = await fetch(url, { method: 'GET' });
                     if (checkGet.ok) {
-                        responseBody = `DIAGNÓSTICO: Seu N8N rejeitou o POST mas aceitou GET. Mude o "HTTP Method" no nó do Webhook para "POST".`;
+                        responseBody = `ERRO MÉTODO: N8N rejeitou POST mas aceitou GET. Mude o nó do N8N para "POST".`;
                     } else {
                         if (url.includes('/webhook-test/')) {
-                            responseBody = `URL DE TESTE EXPIRADA: Clique em "Execute Node" no N8N novamente.`;
+                            responseBody = `URL TESTE EXPIRADA: Clique em "Execute Node" no N8N novamente.`;
                         } else {
-                            responseBody = `WORKFLOW INATIVO: Ative a chave "Active" no topo direito do N8N ou verifique a URL. (N8N retornou ${response.status})`;
+                            // AQUI ESTÁ A MUDANÇA PRINCIPAL NA MENSAGEM
+                            responseBody = `ERRO 404 (Não Encontrado): Workflow INATIVO ou Caminho da URL incorreto. Verifique se o final da URL no painel é IGUAL ao path no N8N.`;
                         }
                     }
                 } catch (e) {
                     responseBody = `Erro N8N (${response.status}): ${responseBody.substring(0, 100)}`;
                 }
+            } else if (response.status >= 500) {
+                responseBody = `Erro Servidor N8N (${response.status}): O seu N8N está fora do ar ou com erro interno.`;
             }
 
         } catch (err) {
@@ -132,13 +137,13 @@ serve(async (req) => {
             status: status,
             response_code: responseCode,
             payload: enrichedPayload, 
-            details: `Destino: ${url} | ${responseBody}`
+            details: `Destino: ${url} | ${responseBody.substring(0, 500)}`
         });
     });
 
     await Promise.allSettled(promises);
 
-    return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+    return new Response(JSON.stringify({ success: true, dispatched: uniqueTargets.length }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
 
   } catch (error) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
