@@ -24,27 +24,25 @@ serve(async (req) => {
     );
 
     // --- LÓGICA ANTI-DUPLICIDADE (DEBOUNCE REFORÇADO) ---
-    // Verifica se já existe um log para este mesmo evento e ID nos últimos 30 segundos
     if (event_type === 'order_created' && payload.order_id) {
         const orderIdStr = String(payload.order_id);
         const thirtySecondsAgo = new Date(Date.now() - 30000).toISOString();
 
-        // Busca logs recentes desse tipo de evento
+        // Busca logs recentes
         const { data: recentLogs } = await supabaseAdmin
             .from('integration_logs')
             .select('id, payload')
             .eq('event_type', event_type)
             .gt('created_at', thirtySecondsAgo)
-            .limit(5); // Pega os últimos 5 para garantir
+            .limit(5); 
         
-        // Verifica manualmente no payload JSON se o ID bate
         const duplicate = recentLogs?.find((log: any) => {
              const logOrderId = log.payload?.order_id || log.payload?.data?.id;
              return String(logOrderId) === orderIdStr;
         });
 
         if (duplicate) {
-            console.log(`[Webhook] Debounce: Pedido #${orderIdStr} já processado recentemente (Log ID: ${duplicate.id}).`);
+            console.log(`[Webhook] Debounce: Pedido #${orderIdStr} já processado (Log ID: ${duplicate.id}).`);
             return new Response(JSON.stringify({ 
                 success: true, 
                 skipped: true, 
@@ -59,7 +57,7 @@ serve(async (req) => {
     // --- ENRIQUECIMENTO DE DADOS ---
     let enrichedPayload = { ...payload };
 
-    // 1. Correção de Timezone (UTC -> São Paulo)
+    // 1. Correção de Timezone
     if (payload.created_at) {
         try {
             const dateObj = new Date(payload.created_at);
@@ -68,24 +66,27 @@ serve(async (req) => {
                 day: '2-digit', month: '2-digit', year: 'numeric',
                 hour: '2-digit', minute: '2-digit', second: '2-digit'
             });
-        } catch (e) {
-            console.error("Erro data:", e);
-        }
+        } catch (e) { console.error("Erro data:", e); }
     }
 
-    // 2. Correção do Valor Total e Frete
+    // 2. Correção Financeira (Incluindo Doação)
     if (payload.total_price !== undefined) {
         const subtotal = Number(payload.total_price || 0);
         const shipping = Number(payload.shipping_cost || 0);
         const discount = Number(payload.coupon_discount || 0);
+        const donation = Number(payload.donation_amount || 0);
         
-        enrichedPayload.final_total_value = subtotal + shipping;
+        // O total real pago pelo cliente inclui frete e doação
+        const totalPaid = subtotal + shipping + donation;
+        
+        enrichedPayload.final_total_value = totalPaid;
         
         enrichedPayload.financial_breakdown = {
-            products_subtotal: subtotal + discount, 
+            products_subtotal: subtotal + discount, // Valor dos produtos sem desconto
             discount_applied: discount,
             shipping_cost: shipping,
-            total_paid: subtotal + shipping
+            donation_amount: donation,
+            total_paid: totalPaid
         };
     }
 
@@ -109,7 +110,7 @@ serve(async (req) => {
         }
     }
 
-    // Buscar webhooks ativos para este evento
+    // Buscar webhooks ativos
     const { data: webhooks } = await supabaseAdmin
         .from('webhook_configs')
         .select('id, target_url')
@@ -117,11 +118,9 @@ serve(async (req) => {
         .eq('trigger_event', event_type);
 
     if (!webhooks || webhooks.length === 0) {
-        console.log(`[Webhook] Nenhum gatilho ativo para: ${event_type}`);
-        return new Response(JSON.stringify({ message: "No webhooks configured" }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+        return new Response(JSON.stringify({ message: "No active webhooks configured" }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
     }
 
-    // Remove URLs duplicadas em memória (Segurança extra)
     const uniqueTargets = [...new Set(webhooks.map(w => w.target_url))];
 
     const promises = uniqueTargets.map(async (url) => {
@@ -145,11 +144,7 @@ serve(async (req) => {
             responseCode = response.status;
             status = response.ok ? "success" : "error";
             
-            try {
-                responseBody = await response.text();
-            } catch (e) {
-                responseBody = "(Sem resposta de corpo)";
-            }
+            try { responseBody = await response.text(); } catch (e) { responseBody = "(Sem corpo)"; }
 
         } catch (err) {
             console.error(`Falha de rede para ${url}:`, err);
@@ -157,13 +152,13 @@ serve(async (req) => {
             responseCode = 500;
         }
 
-        // GRAVAR LOG NO BANCO
+        // Log detalhado
         await supabaseAdmin.from('integration_logs').insert({
             event_type: event_type,
             status: status,
             response_code: responseCode,
             payload: enrichedPayload, 
-            details: `Destino: ${url} | Resposta: ${responseBody.substring(0, 500)}`
+            details: `Destino: ${url} | Resposta N8N: ${responseBody.substring(0, 500)}`
         });
     });
 
@@ -175,7 +170,6 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('[Webhook] Erro fatal:', error);
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 })
