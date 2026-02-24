@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { url, event_type, method = 'POST' } = await req.json();
+    const { url, event_type, method = 'POST', custom_payload } = await req.json();
 
     if (!url) throw new Error("URL é obrigatória");
 
@@ -38,9 +38,11 @@ serve(async (req) => {
         headers: { 'Content-Type': 'application/json' },
     };
 
-    // Monta payload fake para o teste
+    // Monta payload
     if (method === 'POST') {
-        if (event_type === 'order_created') {
+        if (custom_payload) {
+            payload = custom_payload;
+        } else if (event_type === 'order_created') {
             payload = {
                 event: event_type,
                 timestamp: timestamp,

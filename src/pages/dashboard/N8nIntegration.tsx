@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Workflow, Copy, Eye, EyeOff, Key, Plus, Trash2, ChevronDown, ChevronRight, Zap, Loader2, ArrowUpRight, ArrowDownLeft, Play, UserCheck, Package, ShoppingCart, MessageSquare, MousePointerClick, RefreshCw, Users, Search, List, Activity, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
+import { Workflow, Copy, Eye, EyeOff, Key, Plus, Trash2, ChevronDown, ChevronRight, Zap, Loader2, ArrowUpRight, ArrowDownLeft, Play, UserCheck, Package, ShoppingCart, MessageSquare, MousePointerClick, RefreshCw, Users, Search, List, Activity, CheckCircle2, XCircle, AlertTriangle, Phone } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -74,12 +74,12 @@ const N8nIntegrationPage = () => {
     "total_price": 189.90,
     "customer": {
       "full_name": "João da Silva",
-      "phone": "11999998888"
+      "phone": "11999998888",
+      "email": "cliente@exemplo.com"
     }
   }
 }`
     },
-    // ... outros eventos mantidos ...
     { 
       id: "wh_order_updated",
       event_key: "order_updated",
@@ -95,6 +95,21 @@ const N8nIntegrationPage = () => {
       icon: <UserCheck className="w-4 h-4 text-cyan-600" />,
       desc: "Enviado quando um novo cadastro é realizado.",
       payload: `{ "event": "customer_created", "data": { "email": "novo@cliente.com" } }`
+    },
+    { 
+      id: "wh_support_clicked",
+      event_key: "support_contact_clicked",
+      name: "Clique no Suporte (WhatsApp)", 
+      icon: <Phone className="w-4 h-4 text-green-500" />,
+      desc: "Quando o cliente clica no botão flutuante de ajuda.",
+      payload: `{ 
+  "event": "support_contact_clicked", 
+  "timestamp": "2024-05-20T10:35:00.000Z",
+  "data": { 
+    "page": "/produto/pod-zomo", 
+    "user_agent": "Mobile Safari" 
+  } 
+}`
     },
     { 
       id: "wh_product_updated",
@@ -260,8 +275,19 @@ const N8nIntegrationPage = () => {
   const testWebhookMutation = useMutation({
     mutationFn: async ({ id, url, event }: { id: number, url: string, event: string }) => {
         setTestingId(id);
+        
+        // Encontra o payload padrão correto para o evento
+        const eventDef = webhookEvents.find(e => e.event_key === event);
+        const payloadToSend = eventDef ? eventDef.payload : `{ "event": "${event}", "test": true }`;
+
         const { data, error } = await supabase.functions.invoke("test-webhook-endpoint", {
-            body: { url, event_type: event, method: 'POST' }
+            body: { 
+              url, 
+              event_type: event, 
+              method: 'POST',
+              // Passamos o payload customizado se existir na definição
+              custom_payload: eventDef ? JSON.parse(eventDef.payload) : undefined
+            }
         });
         if (error) throw error;
         return data;
@@ -307,7 +333,8 @@ const N8nIntegrationPage = () => {
                 body: { 
                     url: testTargetUrl,
                     event_type: testItem.event_key,
-                    method: 'POST'
+                    method: 'POST',
+                    custom_payload: JSON.parse(testBody)
                 }
             });
             if(error) throw error;
