@@ -24,16 +24,16 @@ serve(async (req) => {
     );
 
     // --- LÓGICA ANTI-DUPLICIDADE (DEBOUNCE REFORÇADO) ---
+    // Impede que o mesmo pedido dispare o webhook duas vezes em menos de 10 segundos
     if (event_type === 'order_created' && payload.order_id) {
         const orderIdStr = String(payload.order_id);
-        const thirtySecondsAgo = new Date(Date.now() - 30000).toISOString();
+        const tenSecondsAgo = new Date(Date.now() - 10000).toISOString();
 
-        // Busca logs recentes
         const { data: recentLogs } = await supabaseAdmin
             .from('integration_logs')
             .select('id, payload')
             .eq('event_type', event_type)
-            .gt('created_at', thirtySecondsAgo)
+            .gt('created_at', tenSecondsAgo)
             .limit(5); 
         
         const duplicate = recentLogs?.find((log: any) => {
@@ -42,7 +42,7 @@ serve(async (req) => {
         });
 
         if (duplicate) {
-            console.log(`[Webhook] Debounce: Pedido #${orderIdStr} já processado (Log ID: ${duplicate.id}).`);
+            console.log(`[Webhook] Debounce: Pedido #${orderIdStr} ignorado (Já processado recentemente).`);
             return new Response(JSON.stringify({ 
                 success: true, 
                 skipped: true, 
@@ -57,7 +57,6 @@ serve(async (req) => {
     // --- ENRIQUECIMENTO DE DADOS ---
     let enrichedPayload = { ...payload };
 
-    // 1. Correção de Timezone
     if (payload.created_at) {
         try {
             const dateObj = new Date(payload.created_at);
@@ -69,28 +68,16 @@ serve(async (req) => {
         } catch (e) { console.error("Erro data:", e); }
     }
 
-    // 2. Correção Financeira (Incluindo Doação)
     if (payload.total_price !== undefined) {
         const subtotal = Number(payload.total_price || 0);
         const shipping = Number(payload.shipping_cost || 0);
         const discount = Number(payload.coupon_discount || 0);
         const donation = Number(payload.donation_amount || 0);
-        
-        // O total real pago pelo cliente inclui frete e doação
         const totalPaid = subtotal + shipping + donation;
         
         enrichedPayload.final_total_value = totalPaid;
-        
-        enrichedPayload.financial_breakdown = {
-            products_subtotal: subtotal + discount, // Valor dos produtos sem desconto
-            discount_applied: discount,
-            shipping_cost: shipping,
-            donation_amount: donation,
-            total_paid: totalPaid
-        };
     }
 
-    // 3. Dados do Cliente
     if (event_type === 'order_created' && payload.user_id) {
         const { data: profile } = await supabaseAdmin
             .from('profiles')
@@ -123,16 +110,19 @@ serve(async (req) => {
 
     const uniqueTargets = [...new Set(webhooks.map(w => w.target_url))];
 
-    const promises = uniqueTargets.map(async (url) => {
+    const promises = uniqueTargets.map(async (rawUrl) => {
         let responseCode = 0;
         let responseBody = "";
         let status = "error";
+        
+        // CORREÇÃO: Limpeza da URL (Trim)
+        const url = rawUrl.trim();
 
         try {
-            console.log(`Disparando ${event_type} para ${url}`);
+            console.log(`Disparando ${event_type} para '${url}' (Método POST)`);
             
             const response = await fetch(url, {
-                method: 'POST',
+                method: 'POST', // IMPORTANTE: O N8N deve esperar um POST
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     event: event_type, 
@@ -142,9 +132,17 @@ serve(async (req) => {
             });
             
             responseCode = response.status;
-            status = response.ok ? "success" : "error";
             
             try { responseBody = await response.text(); } catch (e) { responseBody = "(Sem corpo)"; }
+
+            if (response.ok) {
+                status = "success";
+            } else {
+                // Se der 404, adicionamos uma dica no log
+                if (response.status === 404) {
+                    responseBody = `ERRO 404: Verifique se o Workflow está ATIVO e se o método no N8N é POST. Resposta: ${responseBody}`;
+                }
+            }
 
         } catch (err) {
             console.error(`Falha de rede para ${url}:`, err);
@@ -158,7 +156,7 @@ serve(async (req) => {
             status: status,
             response_code: responseCode,
             payload: enrichedPayload, 
-            details: `Destino: ${url} | Resposta N8N: ${responseBody.substring(0, 500)}`
+            details: `Destino: ${url} | ${responseBody.substring(0, 500)}`
         });
     });
 
