@@ -23,6 +23,34 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
+    // --- LÓGICA ANTI-DUPLICIDADE (DEBOUNCE) ---
+    // Verifica se já existe um log para este mesmo evento e ID nos últimos 20 segundos
+    if (event_type === 'order_created' && payload.order_id) {
+        const orderIdStr = String(payload.order_id);
+        const twentySecondsAgo = new Date(Date.now() - 20000).toISOString();
+
+        const { data: recentLogs } = await supabaseAdmin
+            .from('integration_logs')
+            .select('id')
+            .eq('event_type', event_type)
+            // Filtra logs onde o JSON payload contém o mesmo order_id
+            .filter('payload->>order_id', 'eq', orderIdStr) 
+            .gt('created_at', twentySecondsAgo)
+            .limit(1);
+        
+        if (recentLogs && recentLogs.length > 0) {
+            console.log(`[Webhook] Disparo duplicado ignorado para o Pedido #${orderIdStr}`);
+            return new Response(JSON.stringify({ 
+                success: true, 
+                skipped: true, 
+                message: "Duplicate event skipped (Debounce)" 
+            }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: 200,
+            });
+        }
+    }
+
     // --- ENRIQUECIMENTO DE DADOS ---
     let enrichedPayload = { ...payload };
 
@@ -118,11 +146,12 @@ serve(async (req) => {
         }
 
         // GRAVAR LOG NO BANCO
+        // Importante: Grava com o ID do pedido no payload para a trava funcionar na próxima vez
         await supabaseAdmin.from('integration_logs').insert({
             event_type: event_type,
             status: status,
             response_code: responseCode,
-            payload: enrichedPayload,
+            payload: enrichedPayload, 
             details: `Destino: ${hook.target_url} | Resposta: ${responseBody.substring(0, 500)}`
         });
     });
