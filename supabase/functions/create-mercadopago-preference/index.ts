@@ -38,23 +38,30 @@ serve(async (req) => {
 
     if (orderError || !order) throw new Error("Pedido não encontrado.");
 
-    // 2. Buscar Configurações
-    const { data: settings } = await supabaseAdmin
+    // 2. Buscar Configurações e Determinar Modo (Teste vs Produção)
+    const { data: settingsData } = await supabaseAdmin
         .from('app_settings')
         .select('key, value')
-        .in('key', ['mercadopago_access_token', 'site_url']);
+        .in('key', ['mercadopago_access_token', 'mercadopago_test_access_token', 'payment_mode', 'site_url']);
     
-    const token = settings?.find(s => s.key === 'mercadopago_access_token')?.value;
-    const siteUrl = settings?.find(s => s.key === 'site_url')?.value || 'http://localhost:8080';
+    const settings = {};
+    settingsData?.forEach(s => settings[s.key] = s.value);
 
-    if (!token) throw new Error("Token do Mercado Pago não configurado.");
+    // Lógica de Seleção de Token
+    const mode = settings['payment_mode'] === 'production' ? 'production' : 'test';
+    const token = mode === 'production' 
+        ? settings['mercadopago_access_token'] 
+        : settings['mercadopago_test_access_token'];
+
+    const siteUrl = settings['site_url'] || 'http://localhost:8080';
+
+    if (!token) throw new Error(`Token do Mercado Pago (${mode}) não configurado.`);
 
     // Calcula total final
     const totalAmount = 
         Number(order.total_price) + 
         (Number(order.shipping_cost) || 0) + 
         (Number(order.donation_amount) || 0);
-        // Nota: total_price no banco já deve considerar o desconto, mas se não, ajuste aqui.
 
     const payerEmail = order.profiles?.email || "cliente@email.com";
     const payerName = order.profiles?.first_name || "Cliente";
@@ -89,7 +96,7 @@ serve(async (req) => {
         payment_methods: {
             excluded_payment_types: [
                 { id: "ticket" }, // Exclui Boletos
-                { id: "bank_transfer" }, // Exclui Pix (conforme solicitado, pois o Pix é manual)
+                { id: "bank_transfer" }, // Exclui Pix (conforme solicitado)
                 { id: "digital_currency" }
             ],
             installments: 12 // Permite parcelamento
@@ -123,8 +130,9 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ 
-        init_point: mpData.init_point, // Link para produção
-        sandbox_init_point: mpData.sandbox_init_point, // Link para testes
+        // Retorna o link correto baseado no modo
+        init_point: mode === 'production' ? mpData.init_point : mpData.sandbox_init_point,
+        mode: mode,
         id: mpData.id
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }

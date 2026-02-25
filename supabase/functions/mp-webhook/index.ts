@@ -38,17 +38,23 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    // 2. Busca Token
-    const { data: setting } = await supabaseAdmin
+    // 2. Busca Token e Modo
+    const { data: settingsData } = await supabaseAdmin
         .from('app_settings')
-        .select('value')
-        .eq('key', 'mercadopago_access_token')
-        .single();
+        .select('key, value')
+        .in('key', ['mercadopago_access_token', 'mercadopago_test_access_token', 'payment_mode']);
     
-    const mpToken = setting?.value;
+    const settings = {};
+    settingsData?.forEach(s => settings[s.key] = s.value);
+
+    // Lógica de Seleção de Token
+    const mode = settings['payment_mode'] === 'production' ? 'production' : 'test';
+    const mpToken = mode === 'production' 
+        ? settings['mercadopago_access_token'] 
+        : settings['mercadopago_test_access_token'];
 
     if (!mpToken) {
-        return new Response(JSON.stringify({ error: "Configuração ausente" }), { status: 500, headers: corsHeaders });
+        return new Response(JSON.stringify({ error: `Configuração de ${mode} ausente` }), { status: 500, headers: corsHeaders });
     }
 
     // 3. Consulta MP
@@ -57,13 +63,15 @@ serve(async (req) => {
     });
 
     if (!mpResponse.ok) {
-        throw new Error(`Erro ao consultar MP: ${mpResponse.status}`);
+        // Se falhar na consulta, pode ser que recebemos um webhook de prod mas estamos em test (ou vice-versa).
+        console.error(`Erro ao consultar MP (${mode}): ${mpResponse.status}`);
+        throw new Error(`Erro ao consultar pagamento.`);
     }
 
     const paymentData = await mpResponse.json();
     const status = paymentData.status; 
     const externalReference = paymentData.external_reference;
-    const paymentTypeId = paymentData.payment_type_id; // credit_card, debit_card, account_money, etc.
+    const paymentTypeId = paymentData.payment_type_id; 
 
     console.log(`[MP Webhook] PayID: ${paymentId}, Status: ${status}, Type: ${paymentTypeId}, Order: ${externalReference}`);
 
@@ -92,7 +100,7 @@ serve(async (req) => {
         }
     }
 
-    return new Response(JSON.stringify({ success: true }), {
+    return new Response(JSON.stringify({ success: true, mode: mode }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
