@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Key, Save, Trash2, Plus, Lock, Eye, EyeOff, Loader2, Search, CheckCircle2, AlertCircle, Zap, ShieldCheck, Beaker, Info } from "lucide-react";
+import { Key, Save, Trash2, Plus, Lock, Eye, EyeOff, Loader2, Search, CheckCircle2, AlertCircle, Zap, ShieldCheck, Beaker, Info, CreditCard, Copy } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -148,6 +148,11 @@ const SecretsPage = () => {
     setShowValues((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    showSuccess("Copiado!");
+  };
+
   const getStatusBadge = (key: string, value: string | null) => {
     if (!value) return <Badge variant="outline" className="text-gray-400">Pendente</Badge>;
 
@@ -215,6 +220,53 @@ const SecretsPage = () => {
             </Card>
         </div>
       </div>
+
+      {currentMode === 'test' && (
+        <div className="bg-blue-50/50 border border-blue-100 rounded-lg p-4 animate-in fade-in slide-in-from-top-2">
+            <h3 className="text-sm font-bold text-blue-800 flex items-center gap-2 mb-3">
+                <CreditCard className="w-4 h-4" /> Dados para Teste (Mercado Pago)
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white p-3 rounded border shadow-sm">
+                    <p className="text-[10px] font-bold text-gray-500 uppercase mb-1">Cartão (Aprovar)</p>
+                    <div className="flex items-center justify-between">
+                        <code className="text-sm font-mono font-bold text-blue-600">4060 4060 4060 4060</code>
+                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard('4060406040604060')}><Copy className="w-3 h-3" /></Button>
+                    </div>
+                    <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+                        <span>Nome: APRO</span>
+                        <span>CVV: 123</span>
+                    </div>
+                </div>
+                <div className="bg-white p-3 rounded border shadow-sm">
+                    <p className="text-[10px] font-bold text-gray-500 uppercase mb-1">Cartão (Reprovar)</p>
+                    <div className="flex items-center justify-between">
+                        <code className="text-sm font-mono font-bold text-red-600">5123 4567 8901 2346</code>
+                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard('5123456789012346')}><Copy className="w-3 h-3" /></Button>
+                    </div>
+                    <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+                        <span>Nome: CONT</span>
+                        <span>CVV: 123</span>
+                    </div>
+                </div>
+                <div className="bg-white p-3 rounded border shadow-sm">
+                    <p className="text-[10px] font-bold text-gray-500 uppercase mb-1">Cartão (Pendente)</p>
+                    <div className="flex items-center justify-between">
+                        <code className="text-sm font-mono font-bold text-orange-600">5123 4567 8901 2346</code>
+                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard('5123456789012346')}><Copy className="w-3 h-3" /></Button>
+                    </div>
+                    <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+                        <span>Nome: PEND</span>
+                        <span>CVV: 123</span>
+                    </div>
+                </div>
+                <div className="flex items-center justify-center p-3 text-xs text-blue-600 italic">
+                    <Info className="w-4 h-4 mr-2" />
+                    Use qualquer data futura para a validade.
+                </div>
+            </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-white p-4 rounded-xl border border-dashed flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => setIsAddModalOpen(true)}>
