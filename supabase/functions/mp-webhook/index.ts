@@ -17,16 +17,13 @@ serve(async (req) => {
     const topic = url.searchParams.get('topic') || url.searchParams.get('type');
     const id = url.searchParams.get('id') || url.searchParams.get('data.id');
 
-    // Se for notificação de teste ou tipo irrelevante, ignora com sucesso (200)
+    // Se não for notificação de pagamento, ignora
     if (topic !== 'payment' && topic !== 'test') {
         return new Response(JSON.stringify({ message: "Topic ignored" }), { status: 200, headers: corsHeaders });
     }
 
-    // Parse do corpo se necessário (alguns eventos vêm no body)
     let bodyData = {};
-    try {
-        bodyData = await req.json();
-    } catch (e) {}
+    try { bodyData = await req.json(); } catch (e) {}
 
     const paymentId = id || bodyData?.data?.id;
 
@@ -34,35 +31,29 @@ serve(async (req) => {
         return new Response(JSON.stringify({ message: "No payment ID found" }), { status: 200, headers: corsHeaders });
     }
 
-    // 1. Inicializa Admin do Supabase
+    // 1. Inicializa Admin
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
       { auth: { persistSession: false } }
     );
 
-    // 2. Busca o Token de Acesso do Mercado Pago no Banco
+    // 2. Busca Token
     const { data: setting } = await supabaseAdmin
         .from('app_settings')
-        .select('value, key')
-        .in('key', ['mercadopago_access_token', 'payment_mode']);
+        .select('value')
+        .eq('key', 'mercadopago_access_token')
+        .single();
     
-    // Define qual token usar (Produção ou Teste) com base no payment_mode
-    const mode = setting?.find(s => s.key === 'payment_mode')?.value || 'test';
-    // Nota: Em um cenário real complexo, você usaria o token correspondente. 
-    // Aqui assumimos que se o webhook chegou, usamos o token principal configurado.
-    const mpToken = setting?.find(s => s.key === 'mercadopago_access_token')?.value;
+    const mpToken = setting?.value;
 
     if (!mpToken) {
-        console.error("Token do Mercado Pago não configurado.");
         return new Response(JSON.stringify({ error: "Configuração ausente" }), { status: 500, headers: corsHeaders });
     }
 
-    // 3. Consulta o Status Real na API do Mercado Pago (Segurança)
+    // 3. Consulta MP
     const mpResponse = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
-        headers: {
-            'Authorization': `Bearer ${mpToken}`
-        }
+        headers: { 'Authorization': `Bearer ${mpToken}` }
     });
 
     if (!mpResponse.ok) {
@@ -70,32 +61,34 @@ serve(async (req) => {
     }
 
     const paymentData = await mpResponse.json();
-    const status = paymentData.status; // approved, pending, rejected
-    const externalReference = paymentData.external_reference; // Deve conter o ID do pedido (ex: "order-123")
+    const status = paymentData.status; 
+    const externalReference = paymentData.external_reference;
+    const paymentTypeId = paymentData.payment_type_id; // credit_card, debit_card, account_money, etc.
 
-    // 4. Log para Debug (Opcional)
-    console.log(`[MP Webhook] Pagamento ${paymentId}: ${status}. Ref: ${externalReference}`);
+    console.log(`[MP Webhook] PayID: ${paymentId}, Status: ${status}, Type: ${paymentTypeId}, Order: ${externalReference}`);
 
     if (status === 'approved' && externalReference) {
-        // Extrai o ID do pedido (pode vir como "123" ou "order-123")
         const orderId = externalReference.replace(/\D/g, ""); 
 
         if (orderId) {
-            // 5. Atualiza o Pedido
+            // Mapeia o nome correto para o banco
+            let methodLabel = 'Mercado Pago';
+            if (paymentTypeId === 'credit_card') methodLabel = 'Cartão de Crédito';
+            else if (paymentTypeId === 'debit_card') methodLabel = 'Cartão de Débito';
+            else if (paymentTypeId === 'bank_transfer') methodLabel = 'Pix (MP)';
+            else if (paymentTypeId === 'account_money') methodLabel = 'Saldo Mercado Pago';
+
+            // 4. Atualiza Pedido
             const { error: updateError } = await supabaseAdmin
                 .from('orders')
                 .update({ 
                     status: 'Pago', 
-                    payment_method: 'Pix (Mercado Pago)',
-                    delivery_status: 'Pendente' // Garante que volta para pendente de envio
+                    payment_method: methodLabel,
+                    delivery_status: 'Pendente' 
                 })
                 .eq('id', orderId);
 
-            if (updateError) {
-                console.error("Erro ao atualizar pedido:", updateError);
-                throw updateError;
-            }
-            console.log(`Pedido #${orderId} atualizado para PAGO.`);
+            if (updateError) throw updateError;
         }
     }
 
@@ -106,7 +99,6 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('Erro no Webhook MP:', error);
-    // Retorna 200 mesmo com erro interno para o MP não ficar reenviando infinitamente se for erro de lógica nossa
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200, 
