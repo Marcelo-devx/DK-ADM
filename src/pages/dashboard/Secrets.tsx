@@ -226,12 +226,23 @@ const SecretsPage = () => {
             <h3 className="text-sm font-bold text-blue-800 flex items-center gap-2 mb-3">
                 <CreditCard className="w-4 h-4" /> Dados para Teste (Mercado Pago)
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div className="bg-white p-3 rounded border shadow-sm">
-                    <p className="text-[10px] font-bold text-gray-500 uppercase mb-1">Cartão (Aprovar)</p>
+                    <p className="text-[10px] font-bold text-gray-500 uppercase mb-1">Cartão (Aprovar - Visa)</p>
                     <div className="flex items-center justify-between">
-                        <code className="text-sm font-mono font-bold text-blue-600">4060 4060 4060 4060</code>
+                        <code className="text-sm font-mono font-bold text-blue-600">4060...4060</code>
                         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard('4060406040604060')}><Copy className="w-3 h-3" /></Button>
+                    </div>
+                    <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+                        <span>Nome: APRO</span>
+                        <span>CVV: 123</span>
+                    </div>
+                </div>
+                <div className="bg-white p-3 rounded border shadow-sm">
+                    <p className="text-[10px] font-bold text-gray-500 uppercase mb-1">Cartão (Aprovar - Master)</p>
+                    <div className="flex items-center justify-between">
+                        <code className="text-sm font-mono font-bold text-blue-600">5555...4444</code>
+                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard('5555555555554444')}><Copy className="w-3 h-3" /></Button>
                     </div>
                     <div className="flex justify-between text-[10px] text-gray-400 mt-1">
                         <span>Nome: APRO</span>
@@ -241,28 +252,13 @@ const SecretsPage = () => {
                 <div className="bg-white p-3 rounded border shadow-sm">
                     <p className="text-[10px] font-bold text-gray-500 uppercase mb-1">Cartão (Reprovar)</p>
                     <div className="flex items-center justify-between">
-                        <code className="text-sm font-mono font-bold text-red-600">5123 4567 8901 2346</code>
+                        <code className="text-sm font-mono font-bold text-red-600">5123...2346</code>
                         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard('5123456789012346')}><Copy className="w-3 h-3" /></Button>
                     </div>
                     <div className="flex justify-between text-[10px] text-gray-400 mt-1">
                         <span>Nome: CONT</span>
                         <span>CVV: 123</span>
                     </div>
-                </div>
-                <div className="bg-white p-3 rounded border shadow-sm">
-                    <p className="text-[10px] font-bold text-gray-500 uppercase mb-1">Cartão (Pendente)</p>
-                    <div className="flex items-center justify-between">
-                        <code className="text-sm font-mono font-bold text-orange-600">5123 4567 8901 2346</code>
-                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard('5123456789012346')}><Copy className="w-3 h-3" /></Button>
-                    </div>
-                    <div className="flex justify-between text-[10px] text-gray-400 mt-1">
-                        <span>Nome: PEND</span>
-                        <span>CVV: 123</span>
-                    </div>
-                </div>
-                <div className="flex items-center justify-center p-3 text-xs text-blue-600 italic">
-                    <Info className="w-4 h-4 mr-2" />
-                    Use qualquer data futura para a validade.
                 </div>
             </div>
         </div>
