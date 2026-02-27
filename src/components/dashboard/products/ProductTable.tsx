@@ -40,24 +40,25 @@ export const ProductTable = ({
     const values = isCost ? (costsArray.filter(v => v !== null) as number[]) : (pricesArray.filter(v => v !== null) as number[]);
     const baseValue = isCost ? (product.cost_price ?? 0) : (product.price ?? 0);
     
-    if (values.length === 0) return formatCurrency(baseValue);
-    
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    
-    return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button onClick={() => onViewVariants({ id: product.id, name: product.name })} className="flex items-center gap-1 hover:bg-primary/5 p-1 rounded-md transition-colors cursor-help group">
-                <Star className="h-3 w-3 fill-yellow-400 text-yellow-400 group-hover:scale-110" />
-                <span className="font-bold text-xs">{min === max ? formatCurrency(min) : `${formatCurrency(min)} - ${formatCurrency(max)}`}</span>
-            </button>
-          </TooltipTrigger>
-          <TooltipContent><p>Clique para ver as {values.length} variações</p></TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
+    const hasVariants = values.length > 0;
+
+    if (hasVariants) {
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button onClick={() => onViewVariants({ id: product.id, name: product.name })} className="flex items-center gap-1 hover:bg-primary/5 p-1 rounded-md transition-colors cursor-help group">
+                  <Star className="h-3 w-3 fill-yellow-400 text-yellow-400 group-hover:scale-110" />
+                  <span className="font-bold text-xs">{formatCurrency(baseValue)}</span>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent><p>Preço da variação mais cara. Clique para ver todas.</p></TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    } else {
+      return formatCurrency(baseValue);
+    }
   };
 
   return (
