@@ -55,6 +55,10 @@ const getKeyDescription = (key: string): string => {
     label_logo_url: "Logotipo otimizado (preto e branco) para as etiquetas de transporte.",
     n8n_webhook_url: "Endpoint para automações de marketing e relatórios externos.",
     auth_redirect_url: "URL para onde o usuário será enviado após redefinir a senha (ex: https://seusite.com/login).",
+    n8n_integration_token: "Token secreto para autorizar o N8N a acessar a API da sua loja.",
+    payment_mode: "Define se os pagamentos usarão chaves de 'test' ou 'production'.",
+    default_sedex_price: "Valor de frete padrão caso o bairro do cliente não seja encontrado.",
+    site_url: "URL base do seu site (ex: https://sualoja.com) para gerar links de retorno."
   };
   return descriptions[key] || "Configuração personalizada do sistema.";
 };
