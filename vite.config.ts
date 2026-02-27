@@ -7,6 +7,7 @@ export default defineConfig(() => ({
   server: {
     host: "::",
     port: 8080,
+    strictPort: true, // Garante que o Vite use esta porta e não mude
     hmr: {
       protocol: 'wss',
       clientPort: 443,
