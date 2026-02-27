@@ -13,6 +13,26 @@ serve(async (req) => {
   }
 
   try {
+    // Admin check
+    const supabaseClient = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+        { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
+    )
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) throw new Error("Usuário não autenticado.");
+
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      { auth: { persistSession: false } }
+    );
+
+    const { data: profile } = await supabaseAdmin.from('profiles').select('role').eq('id', user.id).single();
+    if (profile?.role !== 'adm') {
+        return new Response(JSON.stringify({ error: 'Acesso negado. Apenas administradores.' }), { status: 403, headers: corsHeaders });
+    }
+
     const { email, token, type } = await req.json();
     if (!email || !token) {
       throw new Error("O e-mail e o token são obrigatórios.");
@@ -40,12 +60,6 @@ serve(async (req) => {
     }
 
     // 2. Se forem válidas, salvar no banco de dados
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      { auth: { persistSession: false } }
-    );
-
     const emailKey = type === 'production' ? 'pagseguro_email' : 'pagseguro_test_email';
     const tokenKey = type === 'production' ? 'pagseguro_token' : 'pagseguro_test_token';
 

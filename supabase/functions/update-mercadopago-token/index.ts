@@ -13,7 +13,31 @@ serve(async (req) => {
   }
 
   try {
+    console.log("[update-mercadopago-token] Function invoked.");
+
+    // Admin check
+    const supabaseClient = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+        { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
+    )
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) throw new Error("Usuário não autenticado.");
+
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      { auth: { persistSession: false } }
+    );
+
+    const { data: profile } = await supabaseAdmin.from('profiles').select('role').eq('id', user.id).single();
+    if (profile?.role !== 'adm') {
+        return new Response(JSON.stringify({ error: 'Acesso negado. Apenas administradores.' }), { status: 403, headers: corsHeaders });
+    }
+
     const { token, type } = await req.json();
+    console.log(`[update-mercadopago-token] Received type: ${type}, token: ${token ? 'present' : 'missing'}`);
+
     if (!token) {
       throw new Error("O Access Token é obrigatório.");
     }
@@ -22,34 +46,36 @@ serve(async (req) => {
     }
 
     // 1. Verificar se o token é válido
+    console.log("[update-mercadopago-token] Validating token with Mercado Pago API...");
     const mpResponse = await fetch('https://api.mercadopago.com/users/me', {
       headers: {
         'Authorization': `Bearer ${token}`,
       },
     });
+    console.log(`[update-mercadopago-token] Mercado Pago API response status: ${mpResponse.status}`);
 
     if (!mpResponse.ok) {
+      const errorBody = await mpResponse.text();
+      console.error(`[update-mercadopago-token] Invalid token. MP Response: ${errorBody}`);
       throw new Error("O Access Token fornecido é inválido ou expirou.");
     }
+    console.log("[update-mercadopago-token] Token is valid.");
 
     // 2. Se for válido, salvar no banco de dados
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      { auth: { persistSession: false } }
-    );
-
     const settingKey = type === 'production' 
       ? 'mercadopago_access_token' 
       : 'mercadopago_test_access_token';
+    console.log(`[update-mercadopago-token] Upserting to app_settings with key: ${settingKey}`);
 
     const { error: upsertError } = await supabaseAdmin
       .from('app_settings')
       .upsert({ key: settingKey, value: token }, { onConflict: 'key' });
 
     if (upsertError) {
+      console.error("[update-mercadopago-token] Supabase upsert error:", upsertError);
       throw upsertError;
     }
+    console.log("[update-mercadopago-token] Upsert successful.");
 
     return new Response(
       JSON.stringify({ message: "Conexão com Mercado Pago estabelecida com sucesso!" }),
@@ -59,7 +85,7 @@ serve(async (req) => {
       }
     )
   } catch (error) {
-    console.error('Erro ao atualizar token do Mercado Pago:', error);
+    console.error('[update-mercadopago-token] CATCH BLOCK ERROR:', error);
     return new Response(
       JSON.stringify({ error: 'Falha ao salvar o token.', details: error.message }),
       {
