@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { useSession } from "@/components/SessionContextProvider";
 import { useEffect } from "react";
-import { Box, LayoutDashboard } from "lucide-react";
+import { Box } from "lucide-react";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -54,67 +54,9 @@ export default function LoginPage() {
             <div className="bg-white p-2 lg:p-0 rounded-xl">
                 <Auth
                     supabaseClient={supabase}
-                    appearance={{
-                        theme: ThemeSupa,
-                        variables: {
-                            default: {
-                                colors: {
-                                    brand: '#2563eb', // blue-600
-                                    brandAccent: '#1d4ed8', // blue-700
-                                    inputBackground: 'white',
-                                    inputText: '#1e293b',
-                                    inputPlaceholder: '#94a3b8',
-                                    inputBorder: '#e2e8f0',
-                                    inputBorderFocus: '#2563eb',
-                                    inputBorderHover: '#cbd5e1',
-                                },
-                                borderWidths: {
-                                    buttonBorderWidth: '0px',
-                                    inputBorderWidth: '1px',
-                                },
-                                radii: {
-                                    borderRadiusButton: '0.5rem',
-                                    buttonBorderRadius: '0.5rem',
-                                    inputBorderRadius: '0.5rem',
-                                },
-                                fonts: {
-                                    bodyFontFamily: `ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif`,
-                                    buttonFontFamily: `ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif`,
-                                }
-                            },
-                        },
-                        className: {
-                            container: 'space-y-4',
-                            button: 'font-bold h-11 shadow-sm',
-                            input: 'font-medium h-11',
-                            label: 'font-semibold text-sm text-slate-700 mb-1 block',
-                            anchor: 'text-blue-600 hover:text-blue-700 font-medium text-sm'
-                        }
-                    }}
+                    appearance={{ theme: ThemeSupa }}
                     theme="light"
                     providers={[]}
-                    localization={{
-                        variables: {
-                            sign_in: {
-                                email_label: "Endereço de e-mail",
-                                password_label: "Sua senha",
-                                email_input_placeholder: "exemplo@tabacaria.com",
-                                password_input_placeholder: "••••••••",
-                                button_label: "Acessar Painel",
-                                loading_button_label: "Entrando...",
-                                link_text: "Já tem uma conta? Entre",
-                            },
-                            forgotten_password: {
-                                link_text: "Esqueceu a senha?",
-                                email_label: "E-mail para recuperação",
-                                password_label: "Sua senha",
-                                email_input_placeholder: "Seu e-mail cadastrado",
-                                button_label: "Enviar instruções",
-                                loading_button_label: "Enviando...",
-                                confirmation_text: "Verifique seu e-mail para o link de recuperação",
-                            },
-                        },
-                    }}
                 />
             </div>
             
