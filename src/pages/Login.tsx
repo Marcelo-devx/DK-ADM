@@ -12,9 +12,10 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (session) {
-      navigate("/");
+      // Usando um recarregamento completo da página para garantir que a sessão seja reavaliada.
+      window.location.href = "/";
     }
-  }, [session, navigate]);
+  }, [session]);
 
   return (
     <div className="flex min-h-screen bg-gray-50">
