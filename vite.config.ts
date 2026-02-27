@@ -7,6 +7,10 @@ export default defineConfig(() => ({
   server: {
     host: "::",
     port: 8080,
+    hmr: {
+      protocol: 'wss',
+      clientPort: 443,
+    }
   },
   plugins: [dyadComponentTagger(), react()],
   resolve: {
