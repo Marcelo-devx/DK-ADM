@@ -537,6 +537,26 @@ const N8nIntegrationPage = () => {
     onError: (err: any) => showError(err.message),
   });
 
+  // Allow importing built-in endpoints into api_configs
+  const importBuiltinMutation = useMutation({
+    mutationFn: async (builtin: any) => {
+      const payload = {
+        name: builtin.name,
+        method: builtin.method,
+        path: builtin.path,
+        description: builtin.desc || builtin.description || "",
+        is_active: true
+      };
+      const { error } = await supabase.from("api_configs").insert(payload);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["apiConfigs"] });
+      showSuccess("Endpoint importado para as configurações!");
+    },
+    onError: (err: any) => showError(err.message),
+  });
+
   return (
     <div className="space-y-6 pb-20">
       <div className="flex flex-col gap-2">
@@ -691,59 +711,117 @@ const N8nIntegrationPage = () => {
                                       <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" />
                                     </TableCell>
                                   </TableRow>
-                                ) : apis?.length === 0 ? (
-                                  <TableRow>
-                                    <TableCell colSpan={5} className="text-center py-10 text-muted-foreground">
-                                      Nenhuma API configurada. Clique em "Nova API" para adicionar.
-                                    </TableCell>
-                                  </TableRow>
-                                ) : apis?.map((api) => (
-                                  <TableRow key={api.id} className="group">
-                                    <TableCell className="font-bold">{api.name}</TableCell>
-                                    <TableCell>
-                                      <Badge className={api.method === 'GET' ? "bg-blue-600 hover:bg-blue-700" : "bg-emerald-600 hover:bg-emerald-700"}>
-                                        {api.method}
-                                      </Badge>
-                                    </TableCell>
-                                    <TableCell className="font-mono text-xs text-gray-500">{api.path}</TableCell>
-                                    <TableCell>
-                                      {api.is_active ? (
-                                        <Badge className="bg-green-100 text-green-700 border-none">
-                                          <CheckCircle2 className="w-3 h-3 mr-1" />
-                                          Ativo
-                                        </Badge>
-                                      ) : (
-                                        <Badge variant="destructive" className="bg-gray-100 text-gray-700 border-none">
-                                          Inativo
-                                        </Badge>
-                                      )}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                      <div className="flex items-center justify-end gap-2">
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          onClick={() => openApiModal(api)}
-                                          className="text-blue-600 hover:bg-blue-50"
-                                        >
-                                          <Edit className="w-4 h-4" />
-                                        </Button>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          onClick={() => {
-                                            if (confirm("Tem certeza que deseja excluir esta API?")) {
-                                              deleteApiMutation.mutate(api.id);
-                                            }
-                                          }}
-                                          className="text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100"
-                                        >
-                                          <Trash2 className="w-4 h-4" />
-                                        </Button>
-                                      </div>
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
+                                ) : (
+                                  <>
+                                    {/*
+                                      Combine DB APIs with built-in apiActions.
+                                      For built-ins, show a "Built-in" label and an Import button if not already in DB.
+                                    */}
+                                    {(() => {
+                                      const dbApis = apis || [];
+                                      // use the existing apiActions (declared above) as built-ins
+                                      const builtinList = apiActions || [];
+
+                                      // Filter builtins that are not already in DB (by path + method)
+                                      const builtinsToShow = builtinList.filter((b) => {
+                                        return !dbApis.some((d) => d.path === b.path && (d.method || 'GET') === b.method);
+                                      });
+
+                                      return (
+                                        <>
+                                          {dbApis.length === 0 && builtinsToShow.length === 0 && (
+                                            <TableRow>
+                                              <TableCell colSpan={5} className="text-center py-10 text-muted-foreground">
+                                                Nenhuma API configurada. Clique em "Nova API" para adicionar.
+                                              </TableCell>
+                                            </TableRow>
+                                          )}
+
+                                          {/* Render DB entries first */}
+                                          {dbApis.map((apiRow: any) => (
+                                            <TableRow key={apiRow.id} className="group">
+                                              <TableCell className="font-bold">{apiRow.name}</TableCell>
+                                              <TableCell>
+                                                <Badge className={apiRow.method === 'GET' ? "bg-blue-600 hover:bg-blue-700" : "bg-emerald-600 hover:bg-emerald-700"}>
+                                                  {apiRow.method}
+                                                </Badge>
+                                              </TableCell>
+                                              <TableCell className="font-mono text-xs text-gray-500">{apiRow.path}</TableCell>
+                                              <TableCell>
+                                                {apiRow.is_active ? (
+                                                  <Badge className="bg-green-100 text-green-700 border-none">
+                                                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                                                    Ativo
+                                                  </Badge>
+                                                ) : (
+                                                  <Badge variant="destructive" className="bg-gray-100 text-gray-700 border-none">
+                                                    Inativo
+                                                  </Badge>
+                                                )}
+                                              </TableCell>
+                                              <TableCell className="text-right">
+                                                <div className="flex items-center justify-end gap-2">
+                                                  <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    onClick={() => openApiModal(apiRow)}
+                                                    className="text-blue-600 hover:bg-blue-50"
+                                                  >
+                                                    <Edit className="w-4 h-4" />
+                                                  </Button>
+                                                  <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    onClick={() => {
+                                                      if (confirm("Tem certeza que deseja excluir esta API?")) {
+                                                        deleteApiMutation.mutate(apiRow.id);
+                                                      }
+                                                    }}
+                                                    className="text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100"
+                                                  >
+                                                    <Trash2 className="w-4 h-4" />
+                                                  </Button>
+                                                </div>
+                                              </TableCell>
+                                            </TableRow>
+                                          ))}
+
+                                          {/* Render built-in endpoints that can be imported */}
+                                          {builtinsToShow.map((b: any) => (
+                                            <TableRow key={b.id || b.path} className="group bg-amber-50/40">
+                                              <TableCell className="font-bold">{b.name} <small className="ml-2 text-[11px] text-muted-foreground">(built-in)</small></TableCell>
+                                              <TableCell>
+                                                <Badge className={b.method === 'GET' ? "bg-blue-600 hover:bg-blue-700" : "bg-emerald-600 hover:bg-emerald-700"}>
+                                                  {b.method}
+                                                </Badge>
+                                              </TableCell>
+                                              <TableCell className="font-mono text-xs text-gray-700">{b.path}</TableCell>
+                                              <TableCell>
+                                                <Badge className="bg-slate-100 text-slate-700 border-none">Built-in</Badge>
+                                              </TableCell>
+                                              <TableCell className="text-right">
+                                                <div className="flex items-center justify-end gap-2">
+                                                  <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    onClick={() => importBuiltinMutation.mutate(b)}
+                                                    disabled={importBuiltinMutation.isPending}
+                                                    title="Importar para configurações"
+                                                  >
+                                                    {importBuiltinMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4 text-green-600" />}
+                                                  </Button>
+                                                  <Button variant="ghost" size="icon" onClick={() => { setApiForm({ name: b.name, method: b.method, path: b.path, description: b.desc || b.description || '' }); setIsApiModalOpen(true); }}>
+                                                    <Edit className="w-4 h-4 text-slate-500" />
+                                                  </Button>
+                                                </div>
+                                              </TableCell>
+                                            </TableRow>
+                                          ))}
+                                        </>
+                                      );
+                                    })()}
+                                  </>
+                                )}
                               </TableBody>
                             </Table>
                           </div>
