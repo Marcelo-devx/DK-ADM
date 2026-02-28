@@ -56,6 +56,9 @@ const N8nIntegrationPage = () => {
   const [testTargetUrl, setTestTargetUrl] = useState("");
   const [testResponse, setTestResponse] = useState<any>(null);
   const [isOpenApiViewerOpen, setIsOpenApiViewerOpen] = useState(false);
+  const [isApiModalOpen, setIsApiModalOpen] = useState(false);
+  const [editingApi, setEditingApi] = useState<any>(null);
+  const [apiForm, setApiForm] = useState({ name: '', method: 'GET', path: '', description: '' });
 
   // NEW: editing state
   const [editingWebhookId, setEditingWebhookId] = useState<number | null>(null);
@@ -231,6 +234,16 @@ const N8nIntegrationPage = () => {
         return data;
     },
     refetchInterval: 10000 // Auto-refresh a cada 10s para ver logs novos
+  });
+
+  const { data: apis, isLoading: isLoadingApis, refetch: refetchApis } = useQuery({
+    queryKey: ["apiConfigs"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("api_configs").select("*").order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    refetchInterval: 10000
   });
 
   useEffect(() => {
@@ -455,6 +468,75 @@ const N8nIntegrationPage = () => {
     }
   };
 
+  const openApiModal = (api?: any) => {
+    if (api) {
+      setEditingApi(api);
+      setApiForm({
+        name: api.name,
+        method: api.method,
+        path: api.path,
+        description: api.description || ''
+      });
+    } else {
+      setEditingApi(null);
+      setApiForm({ name: '', method: 'GET', path: '', description: '' });
+    }
+    setIsApiModalOpen(true);
+  };
+
+  const handleApiFormSubmit = () => {
+    if (!apiForm.name || !apiForm.path) {
+      showError("Nome e caminho são obrigatórios");
+      return;
+    }
+    if (editingApi) {
+      updateApiMutation.mutate(editingApi.id);
+    } else {
+      addApiMutation.mutate();
+    }
+  };
+
+  const addApiMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("api_configs").insert(apiForm);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["apiConfigs"] });
+      showSuccess("API adicionada!");
+      setIsApiModalOpen(false);
+      setApiForm({ name: '', method: 'GET', path: '', description: '' });
+    },
+    onError: (err: any) => showError(err.message),
+  });
+
+  const updateApiMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const { error } = await supabase.from("api_configs").update(apiForm).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["apiConfigs"] });
+      showSuccess("API atualizada!");
+      setIsApiModalOpen(false);
+      setEditingApi(null);
+      setApiForm({ name: '', method: 'GET', path: '', description: '' });
+    },
+    onError: (err: any) => showError(err.message),
+  });
+
+  const deleteApiMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const { error } = await supabase.from("api_configs").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["apiConfigs"] });
+      showSuccess("API removida!");
+    },
+    onError: (err: any) => showError(err.message),
+  });
+
   return (
     <div className="space-y-6 pb-20">
       <div className="flex flex-col gap-2">
@@ -489,11 +571,11 @@ const N8nIntegrationPage = () => {
 
         <div className="lg:col-span-2">
             <Tabs defaultValue="webhooks">
-                <TabsList className="grid w-full grid-cols-3 bg-slate-100 p-1">
-                    <TabsTrigger value="webhooks" className="font-bold">Gatilhos (Webhooks)</TabsTrigger>
-                    <TabsTrigger value="logs" className="font-bold">Histórico de Disparos</TabsTrigger>
-                    <TabsTrigger value="endpoints" className="font-bold">Documentação API</TabsTrigger>
-                    <TabsTrigger value="docs" className="font-bold">Docs / Swagger</TabsTrigger>
+                <TabsList className="grid w-full grid-cols-4 bg-slate-100 p-1">
+                    <TabsTrigger value="webhooks" className="font-bold">Gatilhos</TabsTrigger>
+                    <TabsTrigger value="apis" className="font-bold">APIs</TabsTrigger>
+                    <TabsTrigger value="logs" className="font-bold">Histórico</TabsTrigger>
+                    <TabsTrigger value="docs" className="font-bold">Docs</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="webhooks" className="space-y-6 mt-6">
@@ -574,6 +656,97 @@ const N8nIntegrationPage = () => {
                                     </TableBody>
                                 </Table>
                             </div>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                <TabsContent value="apis" className="mt-6">
+                    <Card className="shadow-md">
+                        <CardHeader className="flex flex-row items-center justify-between">
+                          <CardTitle className="text-base flex items-center gap-2">
+                            <Package className="w-4 h-4 text-blue-600" />
+                            APIs Configuradas
+                          </CardTitle>
+                          <Button onClick={() => openApiModal()} className="font-bold">
+                            <Plus className="w-4 h-4 mr-2" />
+                            Nova API
+                          </Button>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="border rounded-xl overflow-hidden mt-6 shadow-sm">
+                            <Table>
+                              <TableHeader className="bg-gray-50">
+                                <TableRow>
+                                  <TableHead>Nome</TableHead>
+                                  <TableHead>Método</TableHead>
+                                  <TableHead>Caminho</TableHead>
+                                  <TableHead>Status</TableHead>
+                                  <TableHead className="text-right">Ações</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {isLoadingApis ? (
+                                  <TableRow>
+                                    <TableCell colSpan={5} className="text-center py-10">
+                                      <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" />
+                                    </TableCell>
+                                  </TableRow>
+                                ) : apis?.length === 0 ? (
+                                  <TableRow>
+                                    <TableCell colSpan={5} className="text-center py-10 text-muted-foreground">
+                                      Nenhuma API configurada. Clique em "Nova API" para adicionar.
+                                    </TableCell>
+                                  </TableRow>
+                                ) : apis?.map((api) => (
+                                  <TableRow key={api.id} className="group">
+                                    <TableCell className="font-bold">{api.name}</TableCell>
+                                    <TableCell>
+                                      <Badge className={api.method === 'GET' ? "bg-blue-600 hover:bg-blue-700" : "bg-emerald-600 hover:bg-emerald-700"}>
+                                        {api.method}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell className="font-mono text-xs text-gray-500">{api.path}</TableCell>
+                                    <TableCell>
+                                      {api.is_active ? (
+                                        <Badge className="bg-green-100 text-green-700 border-none">
+                                          <CheckCircle2 className="w-3 h-3 mr-1" />
+                                          Ativo
+                                        </Badge>
+                                      ) : (
+                                        <Badge variant="destructive" className="bg-gray-100 text-gray-700 border-none">
+                                          Inativo
+                                        </Badge>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      <div className="flex items-center justify-end gap-2">
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          onClick={() => openApiModal(api)}
+                                          className="text-blue-600 hover:bg-blue-50"
+                                        >
+                                          <Edit className="w-4 h-4" />
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          onClick={() => {
+                                            if (confirm("Tem certeza que deseja excluir esta API?")) {
+                                              deleteApiMutation.mutate(api.id);
+                                            }
+                                          }}
+                                          className="text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </Button>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
                         </CardContent>
                     </Card>
                 </TabsContent>
@@ -787,6 +960,73 @@ const N8nIntegrationPage = () => {
                     Executar Teste
                 </Button>
             </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* API CRUD MODAL */}
+      <Dialog open={isApiModalOpen} onOpenChange={setIsApiModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {editingApi ? 'Editar API' : 'Nova API'}
+            </DialogTitle>
+            <DialogDescription>
+              Configure um endpoint de API para integração.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Nome</Label>
+              <Input
+                placeholder="Ex: Consultar Pedido"
+                value={apiForm.name}
+                onChange={(e) => setApiForm({ ...apiForm, name: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Método</Label>
+              <Select value={apiForm.method} onValueChange={(value) => setApiForm({ ...apiForm, method: value })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="GET">GET</SelectItem>
+                  <SelectItem value="POST">POST</SelectItem>
+                  <SelectItem value="PUT">PUT</SelectItem>
+                  <SelectItem value="DELETE">DELETE</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Caminho (Path)</Label>
+              <Input
+                placeholder="Ex: /get-order-details"
+                value={apiForm.path}
+                onChange={(e) => setApiForm({ ...apiForm, path: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Descrição</Label>
+              <Textarea
+                placeholder="Descrição opcional do endpoint"
+                value={apiForm.description}
+                onChange={(e) => setApiForm({ ...apiForm, description: e.target.value })}
+                className="h-20"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsApiModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleApiFormSubmit}
+              disabled={addApiMutation.isPending || updateApiMutation.isPending}
+              className="font-bold"
+            >
+              {editingApi ? 'Atualizar' : 'Adicionar'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
