@@ -1,136 +1,114 @@
-"use client";
-
-import { Toaster } from "./components/ui/toaster";
-import { Toaster as Sonner } from "./components/ui/sonner";
-import { TooltipProvider } from "./components/ui/tooltip";
+import { Toaster } from "@/components/ui/toaster";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
-import Index from "./pages/Index";
-import NotFound from "./pages/NotFound";
-import LoginPage from "./pages/Login";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { SessionContextProvider } from "./components/SessionContextProvider";
+import Index from "./pages/Index";
+import Login from "./pages/Login";
+import ProductDetail from "./pages/ProductDetail";
+import MyOrders from "./pages/MyOrders";
+import MyProfile from "./pages/MyProfile";
+import ClubDK from "./pages/ClubDK";
+import NotFound from "./pages/NotFound";
 import DashboardLayout from "./components/dashboard/DashboardLayout";
-import DashboardPage from "./pages/dashboard/Dashboard";
-import ProductsPage from "./pages/dashboard/Products";
-import CategoriesPage from "./pages/dashboard/Categories";
-import SubCategoriesPage from "./pages/dashboard/SubCategories";
-import BrandsPage from "./pages/dashboard/Brands";
-import CloudinaryStatsPage from "./pages/dashboard/CloudinaryStats";
-import HeroSlidesPage from "./pages/dashboard/HeroSlides";
-import PromotionsPage from "./pages/dashboard/Promotions";
-import SettingsPage from "./pages/dashboard/Settings";
-import PopupsPage from "./pages/dashboard/Popups";
-import ClientsPage from "./pages/dashboard/Clients";
-import { FaviconManager } from "./components/FaviconManager";
-import { InformationalPopup } from "./components/InformationalPopup";
-import HomeContentPage from "./pages/dashboard/HomeContent";
-import MyOrdersPage from "./pages/MyOrders";
-import ReviewsPage from "./pages/dashboard/Reviews";
-import ProductDetailPage from "./pages/ProductDetail";
-import CouponsPage from "./pages/dashboard/Coupons";
-import IntegrationsPage from "./pages/dashboard/Integrations";
-import SalesPopupsPage from "./pages/dashboard/SalesPopups";
-import { SalesPopupDisplay } from "./components/SalesPopupDisplay";
-import FlavorsPage from "./pages/dashboard/Flavors";
-import OrdersPage from "./pages/dashboard/Orders";
-import SupplierOrdersPage from "./pages/dashboard/SupplierOrders";
-import PriceManagementPage from "./pages/dashboard/PriceManagement";
-import PrintLabelsPage from "./pages/dashboard/PrintLabels";
-import DeliveryRoutesPage from "./pages/dashboard/DeliveryRoutes";
-import SpokeExportPage from "./pages/dashboard/SpokeExport";
-import SecretsPage from "./pages/dashboard/Secrets";
-import ImportClientsPage from "./pages/dashboard/ImportClients";
-import N8nIntegrationPage from "./pages/dashboard/N8nIntegration";
-import AnalyticsPage from "./pages/dashboard/Analytics";
-import MetaflowInsightsPage from "./pages/dashboard/MetaflowInsights";
-import IncomingWebhooksPage from "./pages/dashboard/IncomingWebhooks";
-import ClubDKPage from "./pages/ClubDK";
-import LoyaltyManagementPage from "./pages/dashboard/LoyaltyManagement";
-import UserCouponsHistoryPage from "./pages/dashboard/UserCouponsHistory";
-import ShippingRatesPage from "./pages/dashboard/ShippingRates";
-import CryptoPage from "./pages/dashboard/Crypto";
-import DonationsPage from "./pages/dashboard/Donations";
+import Dashboard from "./pages/dashboard/Dashboard";
+import Products from "./pages/dashboard/Products";
+import Orders from "./pages/dashboard/Orders";
+import Clients from "./pages/dashboard/Clients";
+import Categories from "./pages/dashboard/Categories";
+import Brands from "./pages/dashboard/Brands";
+import SubCategories from "./pages/dashboard/SubCategories";
+import Flavors from "./pages/dashboard/Flavors";
+import HeroSlides from "./pages/dashboard/HeroSlides";
+import HomeContent from "./pages/dashboard/HomeContent";
+import Popups from "./pages/dashboard/Popups";
+import SalesPopups from "./pages/dashboard/SalesPopups";
+import Reviews from "./pages/dashboard/Reviews";
+import Coupons from "./pages/dashboard/Coupons";
+import Promotions from "./pages/dashboard/Promotions";
+import SupplierOrders from "./pages/dashboard/SupplierOrders";
+import Settings from "./pages/dashboard/Settings";
+import Integrations from "./pages/dashboard/Integrations";
+import N8nIntegration from "./pages/dashboard/N8nIntegration";
+import IncomingWebhooks from "./pages/dashboard/IncomingWebhooks";
+import Secrets from "./pages/dashboard/Secrets";
+import CloudinaryStats from "./pages/dashboard/CloudinaryStats";
+import Analytics from "./pages/dashboard/Analytics";
+import MetaflowInsights from "./pages/dashboard/MetaflowInsights";
+import PriceManagement from "./pages/dashboard/PriceManagement";
+import ImportClients from "./pages/dashboard/ImportClients";
+import ShippingRates from "./pages/dashboard/ShippingRates";
+import PrintLabels from "./pages/dashboard/PrintLabels";
+import Donations from "./pages/dashboard/Donations";
+import Crypto from "./pages/dashboard/Crypto";
+import LoyaltyManagement from "./pages/dashboard/LoyaltyManagement";
+import UserCouponsHistory from "./pages/dashboard/UserCouponsHistory";
+import DeliveryRoutes from "./pages/dashboard/DeliveryRoutes";
+import SpokeExport from "./pages/dashboard/SpokeExport";
+import SpokeWebhookDocs from "./pages/SpokeWebhookDocs";
 
 const queryClient = new QueryClient();
 
-const AppContent = () => {
-  const location = useLocation();
-  const isDashboardOrAuthRoute = 
-    location.pathname === '/login' || 
-    location.pathname.startsWith('/dashboard');
-
-  return (
-    <>
-      <InformationalPopup />
-      <Routes>
-        <Route path="/" element={<Index />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/meus-pedidos" element={<MyOrdersPage />} />
-        <Route path="/produto/:id" element={<ProductDetailPage />} />
-        
-        {/* Rota do Cliente (Visual Bonito) */}
-        <Route path="/club-dk" element={<ClubDKPage />} />
-        
-        <Route path="/dashboard" element={<DashboardLayout />}>
-          <Route index element={<DashboardPage />} />
-          <Route path="analytics" element={<AnalyticsPage />} />
-          <Route path="metaflow" element={<MetaflowInsightsPage />} />
-          <Route path="orders" element={<OrdersPage />} />
-          
-          {/* Rota de Gestão (Admin) */}
-          <Route path="club-dk" element={<LoyaltyManagementPage />} />
-          <Route path="user-coupons" element={<UserCouponsHistoryPage />} />
-          
-          <Route path="n8n" element={<N8nIntegrationPage />} />
-          <Route path="incoming-webhooks" element={<IncomingWebhooksPage />} />
-          <Route path="delivery-routes" element={<DeliveryRoutesPage />} />
-          <Route path="spoke-export" element={<SpokeExportPage />} />
-          <Route path="print-labels" element={<PrintLabelsPage />} />
-          <Route path="shipping-rates" element={<ShippingRatesPage />} />
-          <Route path="prices" element={<PriceManagementPage />} />
-          <Route path="donations" element={<DonationsPage />} />
-          <Route path="supplier-orders" element={<SupplierOrdersPage />} />
-          <Route path="products" element={<ProductsPage />} />
-          <Route path="clients" element={<ClientsPage />} />
-          <Route path="import-clients" element={<ImportClientsPage />} />
-          <Route path="categories" element={<CategoriesPage />} />
-          <Route path="sub-categories" element={<SubCategoriesPage />} />
-          <Route path="brands" element={<BrandsPage />} />
-          <Route path="flavors" element={<FlavorsPage />} />
-          <Route path="promotions" element={<PromotionsPage />} />
-          <Route path="coupons" element={<CouponsPage />} />
-          <Route path="hero-slides" element={<HeroSlidesPage />} />
-          <Route path="home-content" element={<HomeContentPage />} />
-          <Route path="popups" element={<PopupsPage />} />
-          <Route path="sales-popups" element={<SalesPopupsPage />} />
-          <Route path="reviews" element={<ReviewsPage />} />
-          <Route path="cloudinary-stats" element={<CloudinaryStatsPage />} />
-          <Route path="integrations" element={<IntegrationsPage />} />
-          <Route path="secrets" element={<SecretsPage />} />
-          <Route path="settings" element={<SettingsPage />} />
-          <Route path="crypto" element={<CryptoPage />} />
-        </Route>
-
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-      {!isDashboardOrAuthRoute && <SalesPopupDisplay />}
-    </>
-  );
-};
-
 const App = () => (
-  <SessionContextProvider>
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <FaviconManager />
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <AppContent />
-        </BrowserRouter>
-      </TooltipProvider>
-    </QueryClientProvider>
-  </SessionContextProvider>
+  <QueryClientProvider client={queryClient}>
+    <TooltipProvider>
+      <Toaster />
+      <Sonner />
+      <BrowserRouter>
+        <SessionContextProvider>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/product/:id" element={<ProductDetail />} />
+            <Route path="/my-orders" element={<MyOrders />} />
+            <Route path="/my-profile" element={<MyProfile />} />
+            <Route path="/club-dk" element={<ClubDK />} />
+            <Route path="/spoke-webhook-docs" element={<SpokeWebhookDocs />} />
+            
+            <Route path="/dashboard" element={<DashboardLayout />}>
+              <Route index element={<Dashboard />} />
+              <Route path="products" element={<Products />} />
+              <Route path="orders" element={<Orders />} />
+              <Route path="clients" element={<Clients />} />
+              <Route path="categories" element={<Categories />} />
+              <Route path="brands" element={<Brands />} />
+              <Route path="sub-categories" element={<SubCategories />} />
+              <Route path="flavors" element={<Flavors />} />
+              <Route path="hero-slides" element={<HeroSlides />} />
+              <Route path="home-content" element={<HomeContent />} />
+              <Route path="popups" element={<Popups />} />
+              <Route path="sales-popups" element={<SalesPopups />} />
+              <Route path="reviews" element={<Reviews />} />
+              <Route path="coupons" element={<Coupons />} />
+              <Route path="promotions" element={<Promotions />} />
+              <Route path="supplier-orders" element={<SupplierOrders />} />
+              <Route path="settings" element={<Settings />} />
+              <Route path="integrations" element={<Integrations />} />
+              <Route path="n8n-integration" element={<N8nIntegration />} />
+              <Route path="incoming-webhooks" element={<IncomingWebhooks />} />
+              <Route path="secrets" element={<Secrets />} />
+              <Route path="cloudinary-stats" element={<CloudinaryStats />} />
+              <Route path="analytics" element={<Analytics />} />
+              <Route path="metaflow-insights" element={<MetaflowInsights />} />
+              <Route path="price-management" element={<PriceManagement />} />
+              <Route path="import-clients" element={<ImportClients />} />
+              <Route path="shipping-rates" element={<ShippingRates />} />
+              <Route path="print-labels" element={<PrintLabels />} />
+              <Route path="donations" element={<Donations />} />
+              <Route path="crypto" element={<Crypto />} />
+              <Route path="loyalty-management" element={<LoyaltyManagement />} />
+              <Route path="user-coupons-history" element={<UserCouponsHistory />} />
+              <Route path="delivery-routes" element={<DeliveryRoutes />} />
+              <Route path="spoke-export" element={<SpokeExport />} />
+            </Route>
+            
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </SessionContextProvider>
+      </BrowserRouter>
+    </TooltipProvider>
+  </QueryClientProvider>
 );
 
 export default App;
