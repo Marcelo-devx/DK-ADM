@@ -88,6 +88,10 @@ const Sidebar = () => {
           <Coins className="w-4 h-4 mr-3 text-yellow-600" />
           Gestão de Preços
         </NavLink>
+        <NavLink to="/dashboard/supplier-orders" className={navLinkClass}>
+          <Truck className="w-4 h-4 mr-3 text-orange-600" />
+          Pedidos (Fornecedor)
+        </NavLink>
         <NavLink to="/dashboard/categories" className={navLinkClass}>
           <LayoutGrid className="w-4 h-4 mr-3 text-rose-400" />
           Categorias
@@ -107,9 +111,9 @@ const Sidebar = () => {
           <DollarSign className="w-4 h-4 mr-3 text-green-600" />
           Pedidos (Clientes)
         </NavLink>
-        <NavLink to="/dashboard/donations" className={navLinkClass}>
-          <Heart className="w-4 h-4 mr-3 text-rose-500" />
-          Doações
+        <NavLink to="/dashboard/delivery-routes" className={navLinkClass}>
+          <MapIcon className="w-4 h-4 mr-3 text-indigo-500" />
+          Rotas de Entrega
         </NavLink>
         <NavLink to="/dashboard/crypto" className={navLinkClass}>
           <Bitcoin className="w-4 h-4 mr-3 text-orange-500" />
@@ -122,10 +126,6 @@ const Sidebar = () => {
           <Bike className="w-4 h-4 mr-3 text-indigo-600" />
           Fretes e Taxas
         </NavLink>
-        <NavLink to="/dashboard/delivery-routes" className={navLinkClass}>
-          <MapIcon className="w-4 h-4 mr-3 text-indigo-500" />
-          Rotas de Entrega
-        </NavLink>
         <NavLink to="/dashboard/spoke-export" className={navLinkClass}>
           <FileOutput className="w-4 h-4 mr-3 text-indigo-400" />
           Exportar Rotas
@@ -133,10 +133,6 @@ const Sidebar = () => {
         <NavLink to="/dashboard/print-labels" className={navLinkClass}>
           <Printer className="w-4 h-4 mr-3 text-gray-600" />
           Imprimir Etiquetas
-        </NavLink>
-        <NavLink to="/dashboard/supplier-orders" className={navLinkClass}>
-          <Truck className="w-4 h-4 mr-3 text-orange-600" />
-          Pedidos (Fornecedor)
         </NavLink>
 
         {/* INTELIGÊNCIA */}
@@ -182,6 +178,10 @@ const Sidebar = () => {
         <NavLink to="/dashboard/sales-popups" className={navLinkClass}>
           <ShoppingCart className="w-4 h-4 mr-3 text-emerald-500" />
           Prova Social (Popups)
+        </NavLink>
+        <NavLink to="/dashboard/donations" className={navLinkClass}>
+          <Heart className="w-4 h-4 mr-3 text-rose-500" />
+          Doações
         </NavLink>
 
         {/* CONTEÚDO DO SITE */}
