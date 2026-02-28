@@ -5,13 +5,9 @@ import path from "path";
 
 export default defineConfig(() => ({
   server: {
-    host: "::",
-    port: 8080,
-    strictPort: true, // Garante que o Vite use esta porta e não mude
-    hmr: {
-      protocol: 'wss',
-      clientPort: 443,
-    }
+    // Permite que o Vite exponha o servidor no ambiente e use a mesma origem da pré-visualização
+    host: true,
+    // Sem port/strictPort e sem HMR customizado para evitar conflitos de WebSocket
   },
   plugins: [dyadComponentTagger(), react()],
   resolve: {
