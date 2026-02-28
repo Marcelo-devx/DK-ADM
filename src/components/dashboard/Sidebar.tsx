@@ -78,6 +78,21 @@ const Sidebar = () => {
           Analytics
         </NavLink>
 
+        {/* VENDAS & FINANCEIRO */}
+        <p className={sectionTitleClass}>Vendas & Financeiro</p>
+        <NavLink to="/dashboard/orders" className={navLinkClass}>
+          <DollarSign className="w-4 h-4 mr-3 text-green-600" />
+          Pedidos (Clientes)
+        </NavLink>
+        <NavLink to="/delivery-routes" className={navLinkClass}>
+          <MapIcon className="w-4 h-4 mr-3 text-indigo-500" />
+          Rotas de Entrega
+        </NavLink>
+        <NavLink to="/dashboard/crypto" className={navLinkClass}>
+          <Bitcoin className="w-4 h-4 mr-3 text-orange-500" />
+          Cripto
+        </NavLink>
+
         {/* CATÁLOGO */}
         <p className={sectionTitleClass}>Catálogo</p>
         <NavLink to="/dashboard/products" className={navLinkClass}>
@@ -103,21 +118,6 @@ const Sidebar = () => {
         <NavLink to="/dashboard/brands" className={navLinkClass}>
           <Tags className="w-4 h-4 mr-3 text-rose-400" />
           Marcas
-        </NavLink>
-
-        {/* VENDAS & FINANCEIRO */}
-        <p className={sectionTitleClass}>Vendas & Financeiro</p>
-        <NavLink to="/dashboard/orders" className={navLinkClass}>
-          <DollarSign className="w-4 h-4 mr-3 text-green-600" />
-          Pedidos (Clientes)
-        </NavLink>
-        <NavLink to="/dashboard/delivery-routes" className={navLinkClass}>
-          <MapIcon className="w-4 h-4 mr-3 text-indigo-500" />
-          Rotas de Entrega
-        </NavLink>
-        <NavLink to="/dashboard/crypto" className={navLinkClass}>
-          <Bitcoin className="w-4 h-4 mr-3 text-orange-500" />
-          Cripto
         </NavLink>
 
         {/* LOGÍSTICA */}
