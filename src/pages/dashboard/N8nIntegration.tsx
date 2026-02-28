@@ -35,10 +35,11 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { openapi } from "@/data/openapi";
 
 const N8nIntegrationPage = () => {
   const queryClient = useQueryClient();
@@ -54,6 +55,7 @@ const N8nIntegrationPage = () => {
   const [testBody, setTestBody] = useState("");
   const [testTargetUrl, setTestTargetUrl] = useState("");
   const [testResponse, setTestResponse] = useState<any>(null);
+  const [isOpenApiViewerOpen, setIsOpenApiViewerOpen] = useState(false);
 
   // NEW: editing state
   const [editingWebhookId, setEditingWebhookId] = useState<number | null>(null);
@@ -491,6 +493,7 @@ const N8nIntegrationPage = () => {
                     <TabsTrigger value="webhooks" className="font-bold">Gatilhos (Webhooks)</TabsTrigger>
                     <TabsTrigger value="logs" className="font-bold">Histórico de Disparos</TabsTrigger>
                     <TabsTrigger value="endpoints" className="font-bold">Documentação API</TabsTrigger>
+                    <TabsTrigger value="docs" className="font-bold">Docs / Swagger</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="webhooks" className="space-y-6 mt-6">
@@ -697,6 +700,27 @@ const N8nIntegrationPage = () => {
                         </CardContent>
                     </Card>
                 </TabsContent>
+
+                <TabsContent value="docs" className="mt-6">
+                    <Card className="shadow-md">
+                        <CardHeader>
+                            <CardTitle>Docs e Swagger</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-4">
+                                <p className="text-sm text-muted-foreground">Especificação OpenAPI (Swagger) para integrar seu N8N ao sistema. Você pode baixar o arquivo ou visualizar o JSON abaixo.</p>
+                                <div className="flex gap-2">
+                                    <Button onClick={() => { navigator.clipboard.writeText(JSON.stringify(openapi)); showSuccess('OpenAPI copiado para clipboard'); }}>Copiar JSON</Button>
+                                    <Button variant="outline" onClick={() => { const blob = new Blob([JSON.stringify(openapi, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'openapi-n8n.json'; a.click(); URL.revokeObjectURL(url); }}>Baixar OpenAPI</Button>
+                                    <Button variant="ghost" onClick={() => setIsOpenApiViewerOpen(true)}>Visualizar</Button>
+                                </div>
+                                <div className="bg-slate-50 p-4 rounded text-sm border">
+                                    <pre className="whitespace-pre-wrap text-xs font-mono">{JSON.stringify(openapi, null, 2)}</pre>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
             </Tabs>
         </div>
       </div>
@@ -763,6 +787,22 @@ const N8nIntegrationPage = () => {
                     Executar Teste
                 </Button>
             </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* OPENAPI VIEWER */}
+      <Dialog open={isOpenApiViewerOpen} onOpenChange={(open) => setIsOpenApiViewerOpen(open)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>OpenAPI / Swagger - N8N Integration</DialogTitle>
+            <DialogDescription>Especificação OpenAPI para download e visualização.</DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto p-4 bg-white">
+            <pre className="text-xs font-mono">{JSON.stringify(openapi, null, 2)}</pre>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsOpenApiViewerOpen(false)}>Fechar</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
