@@ -84,7 +84,7 @@ const Sidebar = () => {
           <DollarSign className="w-4 h-4 mr-3 text-green-600" />
           Pedidos (Clientes)
         </NavLink>
-        <NavLink to="/delivery-routes" className={navLinkClass}>
+        <NavLink to="/dashboard/delivery-routes" className={navLinkClass}>
           <MapIcon className="w-4 h-4 mr-3 text-indigo-500" />
           Rotas de Entrega
         </NavLink>
@@ -171,18 +171,6 @@ const Sidebar = () => {
           <Ticket className="w-4 h-4 mr-3 text-pink-500" />
           Cupons
         </NavLink>
-        <NavLink to="/dashboard/reviews" className={navLinkClass}>
-          <Star className="w-4 h-4 mr-3 text-yellow-500" />
-          Avaliações
-        </NavLink>
-        <NavLink to="/dashboard/sales-popups" className={navLinkClass}>
-          <ShoppingCart className="w-4 h-4 mr-3 text-emerald-500" />
-          Prova Social (Popups)
-        </NavLink>
-        <NavLink to="/dashboard/donations" className={navLinkClass}>
-          <Heart className="w-4 h-4 mr-3 text-rose-500" />
-          Doações
-        </NavLink>
 
         {/* CONTEÚDO DO SITE */}
         <p className={sectionTitleClass}>Conteúdo do Site</p>
@@ -197,6 +185,14 @@ const Sidebar = () => {
         <NavLink to="/dashboard/popups" className={navLinkClass}>
           <MessageSquare className="w-4 h-4 mr-3 text-violet-500" />
           Avisos Informativos
+        </NavLink>
+        <NavLink to="/dashboard/sales-popups" className={navLinkClass}>
+          <ShoppingCart className="w-4 h-4 mr-3 text-emerald-500" />
+          Prova Social (Popups)
+        </NavLink>
+        <NavLink to="/dashboard/reviews" className={navLinkClass}>
+          <Star className="w-4 h-4 mr-3 text-yellow-500" />
+          Avaliações
         </NavLink>
 
         {/* SISTEMA */}
