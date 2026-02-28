@@ -1,12 +1,42 @@
 "use client";
 
 import { NavLink, useNavigate } from "react-router-dom";
-import { 
-  Package, Home, LayoutGrid, Cloud, Image, Tags, Settings, Percent, 
-  MessageSquare, Users, ListTree, GalleryHorizontal, Star, Ticket, Plug, 
-  ShoppingCart, DollarSign, Truck, Coins, Printer, Map as MapIcon, 
-  Lock, FileOutput, FileUp, Workflow, BarChart3, Box, LogOut, Brain, Sparkles,
-  Lightbulb, Webhook, Crown, TicketCheck, Bike, Bitcoin, Heart
+import {
+  Home,
+  BarChart3,
+  Lightbulb,
+  DollarSign,
+  Coins,
+  Heart,
+  Bitcoin,
+  Bike,
+  Map as MapIcon,
+  FileOutput,
+  Printer,
+  Truck,
+  Package,
+  LayoutGrid,
+  ListTree,
+  Tags,
+  Users,
+  FileUp,
+  Crown,
+  TicketCheck,
+  Percent,
+  Ticket,
+  Star,
+  ShoppingCart,
+  Image,
+  GalleryHorizontal,
+  MessageSquare,
+  Webhook,
+  Plug,
+  Workflow,
+  Cloud,
+  Lock,
+  Settings,
+  LogOut,
+  Box
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -35,9 +65,8 @@ const Sidebar = () => {
           Tabacaria
         </h1>
       </div>
-      
+
       <nav className="flex-1 overflow-y-auto px-3 pb-6 space-y-1 custom-scrollbar">
-        
         {/* VISÃO GERAL */}
         <p className={sectionTitleClass}>Visão Geral</p>
         <NavLink to="/dashboard" end className={navLinkClass}>
@@ -48,21 +77,21 @@ const Sidebar = () => {
           <BarChart3 className="w-4 h-4 mr-3 text-purple-600" />
           Analytics
         </NavLink>
-        
-        {/* INTELIGÊNCIA DE DADOS */}
+
+        {/* INTELIGÊNCIA */}
         <p className={sectionTitleClass}>Inteligência</p>
-        <NavLink to="/dashboard/metaflow" className={navLinkClass}>
+        <NavLink to="/dashboard/metaflow-insights" className={navLinkClass}>
           <Lightbulb className="w-4 h-4 mr-3 text-amber-500" />
           Insights de Negócio
         </NavLink>
 
         {/* VENDAS & FINANCEIRO */}
-        <p className={sectionTitleClass}>Vendas</p>
+        <p className={sectionTitleClass}>Vendas & Financeiro</p>
         <NavLink to="/dashboard/orders" className={navLinkClass}>
           <DollarSign className="w-4 h-4 mr-3 text-green-600" />
           Pedidos (Clientes)
         </NavLink>
-        <NavLink to="/dashboard/prices" className={navLinkClass}>
+        <NavLink to="/dashboard/price-management" className={navLinkClass}>
           <Coins className="w-4 h-4 mr-3 text-yellow-600" />
           Gestão de Preços
         </NavLink>
@@ -134,7 +163,7 @@ const Sidebar = () => {
           <Crown className="w-4 h-4 mr-3 text-yellow-500" />
           Club DK (Fidelidade)
         </NavLink>
-        <NavLink to="/dashboard/user-coupons" className={navLinkClass}>
+        <NavLink to="/dashboard/user-coupons-history" className={navLinkClass}>
           <TicketCheck className="w-4 h-4 mr-3 text-emerald-600" />
           Histórico de Cupons
         </NavLink>
@@ -155,7 +184,7 @@ const Sidebar = () => {
           Prova Social (Popups)
         </NavLink>
 
-        {/* CUSTOMIZAÇÃO */}
+        {/* CONTEÚDO DO SITE */}
         <p className={sectionTitleClass}>Conteúdo do Site</p>
         <NavLink to="/dashboard/hero-slides" className={navLinkClass}>
           <Image className="w-4 h-4 mr-3 text-violet-500" />
@@ -180,7 +209,7 @@ const Sidebar = () => {
           <Plug className="w-4 h-4 mr-3 text-slate-600" />
           Integrações
         </NavLink>
-        <NavLink to="/dashboard/n8n" className={navLinkClass}>
+        <NavLink to="/dashboard/n8n-integration" className={navLinkClass}>
           <Workflow className="w-4 h-4 mr-3 text-orange-500" />
           Automação (N8N)
         </NavLink>
