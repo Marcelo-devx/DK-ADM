@@ -55,19 +55,31 @@ serve(async (req) => {
 
     if (['order_created', 'order_paid', 'order_shipped', 'order_delivered'].includes(event_type)) {
         // A. Buscar Pedido + Endereço + Cupom
+        // NOTE: avoid PostgREST nested relationship selects which fail if DB FKs aren't configured in the schema cache.
+        // Fetch the base order first, then fetch related data separately.
         const { data: order, error: orderError } = await supabaseAdmin
             .from('orders')
-            .select(`
-                *,
-                user_coupons (
-                    coupon_id,
-                    coupons ( name )
-                )
-            `)
+            .select('*')
             .eq('id', orderId)
             .single();
         
         if (orderError || !order) throw new Error(`Order ${orderId} not found`);
+
+        // Try to fetch any coupon relation separately (defensive: schema may not expose a direct FK relation)
+        let couponName = null;
+        try {
+            const { data: ucData, error: ucError } = await supabaseAdmin
+                .from('user_coupons')
+                .select('coupon_id, coupons ( name )')
+                .eq('user_id', order.user_id)
+                .limit(1);
+
+            if (!ucError && ucData && ucData.length > 0 && ucData[0].coupons) {
+                couponName = ucData[0].coupons.name;
+            }
+        } catch (e) {
+            console.warn('[dispatch-webhook] could not fetch user_coupons relation', e?.message || e);
+        }
 
         // B. Buscar Itens
         const { data: items } = await supabaseAdmin
@@ -82,21 +94,30 @@ serve(async (req) => {
             .eq('id', order.user_id)
             .maybeSingle();
 
-        // D. Buscar Email do Auth
+        // D. Buscar Email do Auth (defensive)
         let userEmail = "";
         if (order.user_id) {
-            const { data: userData } = await supabaseAdmin.auth.admin.getUserById(order.user_id);
-            userEmail = userData?.user?.email || "";
+            try {
+                const { data: userData } = await supabaseAdmin.auth.admin.getUserById(order.user_id);
+                userEmail = userData?.user?.email || "";
+            } catch (e) {
+                console.warn('[dispatch-webhook] auth.getUserById failed', e?.message || e);
+            }
         }
         
         // --- 4. CÁLCULOS ---
         const orderItems = items || [];
         const subtotalCalc = orderItems.reduce((acc: number, item: any) => acc + (item.quantity * item.price_at_purchase), 0);
         
-        // Nome do Cupom
-        let couponName = null;
-        if (order.user_coupons && order.user_coupons.length > 0 && order.user_coupons[0].coupons) {
-            couponName = order.user_coupons[0].coupons.name;
+        // If couponName wasn't populated above, try reading from order (backwards-compat)
+        if (!couponName) {
+            try {
+                if (order.user_coupons && order.user_coupons.length > 0 && order.user_coupons[0].coupons) {
+                    couponName = order.user_coupons[0].coupons.name;
+                }
+            } catch (e) {
+                // ignore
+            }
         }
 
         const shippingCost = Number(order.shipping_cost || 0);
