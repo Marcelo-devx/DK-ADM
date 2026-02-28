@@ -1,40 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Lightbulb,
-  Package,
-  Target,
-  UserMinus,
-  Plus,
-  ArrowRight,
-  Sparkles,
-  Crown,
-  Wallet,
-  Zap,
-  RefreshCw,
-  AlertTriangle,
-  TrendingUp,
-  TrendingDown,
-  Clock,
-  BarChart4,
-  AlertOctagon,
-  Hourglass,
-  Brain,
-  Calculator,
-  Database,
-  Binary,
-  Rocket,
-  Search,
-  Link2,
-  Webhook,
-  Activity,
-  Copy,
+import { 
+  Lightbulb, Package, Target, UserMinus, Plus, ArrowRight, 
+  Sparkles, Crown, Wallet, Zap, RefreshCw, AlertTriangle,
+  TrendingUp, TrendingDown, Clock, BarChart4, AlertOctagon,
+  Hourglass, Brain, Calculator, History, LineChart,
+  Database, Binary, Cpu, Rocket, Search, Coins
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -46,148 +23,34 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 const MetaflowInsightsPage = () => {
   const navigate = useNavigate();
   const [isRetentionModalOpen, setIsRetentionModalOpen] = useState(false);
-
+  
   const { data: insights, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["actionable-insights-final"],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke("actionable-insights");
-      if (error) throw error;
-      return data;
+        const { data, error } = await supabase.functions.invoke("actionable-insights");
+        if (error) throw error;
+        return data;
     },
-    refetchInterval: 300000,
+    refetchInterval: 300000 
   });
 
-  const { data: webhookConfigs = [] } = useQuery({
-    queryKey: ["bi-webhook-configs"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("webhook_configs")
-        .select("trigger_event, target_url, is_active")
-        .in("trigger_event", ["order_paid", "order_shipped", "order_delivered", "retention_campaign"]);
-
-      // Não derruba a página se a tabela ainda não existir/estiver bloqueada.
-      if (error) return [];
-      return data || [];
-    },
-    refetchInterval: 300000,
-  });
-
-  const { data: integrationLogs = [] } = useQuery({
-    queryKey: ["bi-integration-logs"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("integration_logs")
-        .select("event_type, status, response_code, created_at, details")
-        .order("created_at", { ascending: false })
-        .limit(8);
-
-      if (error) return [];
-      return data || [];
-    },
-    refetchInterval: 300000,
-  });
-
-  const formatCurrency = (val: number) =>
-    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
+  const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
   const handleCreateKit = (productA: string, idA: number, productB: string, idB: number) => {
-    navigate("/dashboard/promotions", {
-      state: {
+    navigate("/dashboard/promotions", { 
+      state: { 
         suggestedName: `Kit ${productA} + ${productB}`,
         suggestedDescription: `Combo especial contendo ${productA} e ${productB}. Economize levando os dois!`,
-        suggestedProductIds: [idA, idB],
-      },
+        suggestedProductIds: [idA, idB]
+      } 
     });
   };
 
-  const handleRecoverClient = (_clientName?: string) => {
-    setIsRetentionModalOpen(true);
+  const handleRecoverClient = (clientName: string) => {
+     setIsRetentionModalOpen(true);
   };
 
-  const expectedAutomations = useMemo(
-    () =>
-      [
-        {
-          event: "order_paid",
-          label: "Pedido pago",
-          hint: "Dispara quando o pedido muda para Pago",
-        },
-        {
-          event: "order_shipped",
-          label: "Pedido enviado",
-          hint: "Dispara quando o pedido muda para Enviado",
-        },
-        {
-          event: "order_delivered",
-          label: "Pedido entregue",
-          hint: "Dispara quando o pedido muda para Entregue/Finalizada",
-        },
-        {
-          event: "retention_campaign",
-          label: "Campanha retenção",
-          hint: "Dispara ao enviar mensagens para clientes inativos",
-        },
-      ] as const,
-    []
-  );
-
-  const automationStatus = useMemo(() => {
-    const map = new Map<string, { activeCount: number; targets: string[] }>();
-    expectedAutomations.forEach((a) => map.set(a.event, { activeCount: 0, targets: [] }));
-
-    (webhookConfigs as any[]).forEach((w) => {
-      if (!map.has(w.trigger_event)) return;
-      const entry = map.get(w.trigger_event)!;
-      if (w.is_active) entry.activeCount += 1;
-      if (w.target_url) entry.targets.push(w.target_url);
-    });
-
-    return map;
-  }, [webhookConfigs, expectedAutomations]);
-
-  const executiveSummary = useMemo(() => {
-    const inventoryItems = (insights?.inventory || []) as any[];
-    const outOfStockCount = inventoryItems.filter((i) => Number(i.current_stock) === 0).length;
-    const lowStockCount = inventoryItems.filter((i) => Number(i.current_stock) > 0).length;
-    const churnCount = (insights?.churn || []).length;
-    const kitOppCount = (insights?.associations || []).length;
-
-    return { outOfStockCount, lowStockCount, churnCount, kitOppCount };
-  }, [insights]);
-
-  const handleCopySummary = async () => {
-    const lines: string[] = [];
-    lines.push("Inteligência de Negócio — Resumo rápido");
-    lines.push(`• Esgotados: ${executiveSummary.outOfStockCount}`);
-    lines.push(`• Baixo estoque: ${executiveSummary.lowStockCount}`);
-    lines.push(`• Clientes sumidos: ${executiveSummary.churnCount}`);
-    lines.push(`• Oportunidades de kits: ${executiveSummary.kitOppCount}`);
-    lines.push("");
-    lines.push("Automação (webhooks ativos):");
-
-    expectedAutomations.forEach((a) => {
-      const st = automationStatus.get(a.event);
-      lines.push(`• ${a.label}: ${st?.activeCount ? "ATIVO" : "INATIVO"}`);
-    });
-
-    try {
-      await navigator.clipboard.writeText(lines.join("\n"));
-    } catch {
-      // silêncio: clipboard pode falhar em alguns contextos
-    }
-  };
-
-  if (isLoading)
-    return (
-      <div className="p-8 space-y-4">
-        <Skeleton className="h-20 w-full" />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Skeleton className="h-96" />
-          <Skeleton className="h-96" />
-          <Skeleton className="h-96" />
-        </div>
-      </div>
-    );
+  if (isLoading) return <div className="p-8 space-y-4"><Skeleton className="h-20 w-full" /><div className="grid grid-cols-1 md:grid-cols-3 gap-6"><Skeleton className="h-96" /><Skeleton className="h-96" /><Skeleton className="h-96" /></div></div>;
 
   // Separação dos itens de inventário
   const inventoryItems = insights?.inventory || [];
@@ -253,87 +116,22 @@ const MetaflowInsightsPage = () => {
           <h1 className="text-3xl font-black text-gray-900 tracking-tight flex items-center gap-3">
             <Sparkles className="w-8 h-8 text-blue-600" /> Inteligência de Negócio
           </h1>
-          <p className="text-muted-foreground mt-1 font-medium">
-            Recomendações geradas a partir do comportamento de vendas.
-          </p>
+          <p className="text-muted-foreground mt-1 font-medium">Recomendações geradas a partir do comportamento de vendas.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => refetch()}
-            disabled={isRefetching}
-            className="text-muted-foreground hover:text-primary"
-          >
-            <RefreshCw className={cn("w-4 h-4 mr-2", isRefetching && "animate-spin")} />
-            Atualizar
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleCopySummary}
-            className="font-bold"
-            title="Copia um resumo rápido para colar no WhatsApp/Notion"
-          >
-            <Copy className="w-4 h-4 mr-2" />
-            Copiar resumo
-          </Button>
-          <Badge className="bg-blue-600 text-white font-bold px-3 py-1">IA ATIVA</Badge>
-          <Badge variant="outline" className="text-gray-500 font-bold px-3 py-1">
-            v3.1
-          </Badge>
+            <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => refetch()} 
+                disabled={isRefetching}
+                className="text-muted-foreground hover:text-primary"
+            >
+                <RefreshCw className={cn("w-4 h-4 mr-2", isRefetching && "animate-spin")} />
+                Atualizar
+            </Button>
+            <Badge className="bg-blue-600 text-white font-bold px-3 py-1">IA ATIVA</Badge>
+            <Badge variant="outline" className="text-gray-500 font-bold px-3 py-1">v3.1</Badge>
         </div>
-      </div>
-
-      {/* NOVO: RESUMO EXECUTIVO (sem alterar o que já existe) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="border-none shadow-sm bg-white">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-black uppercase text-muted-foreground">Esgotados</p>
-              <p className="text-2xl font-black text-red-600">{executiveSummary.outOfStockCount}</p>
-            </div>
-            <div className="h-10 w-10 rounded-2xl bg-red-50 border border-red-100 flex items-center justify-center">
-              <AlertOctagon className="w-5 h-5 text-red-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-none shadow-sm bg-white">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-black uppercase text-muted-foreground">Baixo estoque</p>
-              <p className="text-2xl font-black text-orange-600">{executiveSummary.lowStockCount}</p>
-            </div>
-            <div className="h-10 w-10 rounded-2xl bg-orange-50 border border-orange-100 flex items-center justify-center">
-              <Hourglass className="w-5 h-5 text-orange-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-none shadow-sm bg-white">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-black uppercase text-muted-foreground">Clientes sumidos</p>
-              <p className="text-2xl font-black text-rose-600">{executiveSummary.churnCount}</p>
-            </div>
-            <div className="h-10 w-10 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center">
-              <UserMinus className="w-5 h-5 text-rose-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-none shadow-sm bg-white">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-black uppercase text-muted-foreground">Kits sugeridos</p>
-              <p className="text-2xl font-black text-blue-600">{executiveSummary.kitOppCount}</p>
-            </div>
-            <div className="h-10 w-10 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center">
-              <Target className="w-5 h-5 text-blue-600" />
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -656,132 +454,6 @@ const MetaflowInsightsPage = () => {
                 desc="Você toma a ação correta e gera mais lucro." 
             />
         </div>
-      </div>
-
-      {/* NOVO: SAÚDE DA AUTOMAÇÃO (N8N/Webhooks) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
-        <Card className="border-none shadow-md bg-white">
-          <CardHeader className="border-b bg-gray-50/50">
-            <CardTitle className="text-sm font-black uppercase text-gray-600 flex items-center gap-2">
-              <Webhook className="w-4 h-4 text-pink-600" /> Automações (Webhooks)
-            </CardTitle>
-            <CardDescription>
-              Checagem rápida do que está ativo para disparar eventos para o N8N.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-6 space-y-3">
-            {expectedAutomations.map((a) => {
-              const st = automationStatus.get(a.event);
-              const isActive = (st?.activeCount || 0) > 0;
-              const firstTarget = st?.targets?.[0];
-
-              return (
-                <div
-                  key={a.event}
-                  className={cn(
-                    "flex items-center justify-between gap-4 p-3 rounded-xl border",
-                    isActive ? "border-green-100 bg-green-50/30" : "border-gray-100 bg-gray-50/50"
-                  )}
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-black text-gray-800 truncate">{a.label}</p>
-                    <p className="text-[11px] text-muted-foreground truncate">{a.hint}</p>
-                    {firstTarget ? (
-                      <p className="text-[11px] text-blue-700 font-bold truncate flex items-center gap-1 mt-1">
-                        <Link2 className="w-3 h-3" />
-                        {firstTarget}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge
-                      variant={isActive ? "outline" : "secondary"}
-                      className={cn(
-                        "text-[10px] font-black",
-                        isActive
-                          ? "text-green-700 border-green-200 bg-green-50"
-                          : "text-gray-600 bg-gray-100"
-                      )}
-                    >
-                      {isActive ? "ATIVO" : "INATIVO"}
-                    </Badge>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 font-black text-[11px]"
-                      onClick={() => navigate("/dashboard/incoming-webhooks")}
-                    >
-                      Gerenciar
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
-
-            <div className="pt-2">
-              <Button
-                variant="outline"
-                className="w-full font-black"
-                onClick={() => navigate("/dashboard/n8n-integration")}
-              >
-                <Zap className="w-4 h-4 mr-2" />
-                Abrir Automação (N8N)
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-none shadow-md bg-white">
-          <CardHeader className="border-b bg-gray-50/50">
-            <CardTitle className="text-sm font-black uppercase text-gray-600 flex items-center gap-2">
-              <Activity className="w-4 h-4 text-slate-700" /> Últimas execuções
-            </CardTitle>
-            <CardDescription>
-              Log recente de disparos/retornos (bom para diagnosticar se "está indo").
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-6">
-            {integrationLogs.length > 0 ? (
-              <div className="space-y-3">
-                {(integrationLogs as any[]).map((l, idx) => (
-                  <div key={idx} className="flex items-center justify-between gap-3 p-3 rounded-xl border bg-white">
-                    <div className="min-w-0">
-                      <p className="text-sm font-black text-gray-800 truncate">{l.event_type}</p>
-                      <p className="text-[11px] text-muted-foreground truncate">
-                        {new Date(l.created_at).toLocaleString("pt-BR")}
-                      </p>
-                      {l.details ? (
-                        <p className="text-[11px] text-gray-500 truncate">{l.details}</p>
-                      ) : null}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "text-[10px] font-black",
-                          l.status === "success"
-                            ? "text-green-700 border-green-200 bg-green-50"
-                            : "text-red-700 border-red-200 bg-red-50"
-                        )}
-                      >
-                        {String(l.status || "-").toUpperCase()}
-                      </Badge>
-                      <Badge variant="secondary" className="text-[10px] font-black">
-                        {l.response_code ?? "-"}
-                      </Badge>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="h-[220px] flex flex-col items-center justify-center text-center text-muted-foreground">
-                <Activity className="w-10 h-10 text-gray-300 mb-2" />
-                <p className="text-sm font-bold">Sem logs ainda.</p>
-                <p className="text-xs">Quando um webhook disparar, ele aparece aqui.</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
       </div>
 
       <RetentionCampaignModal isOpen={isRetentionModalOpen} onClose={() => setIsRetentionModalOpen(false)} />
