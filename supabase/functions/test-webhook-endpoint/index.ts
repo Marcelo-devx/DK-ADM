@@ -81,11 +81,21 @@ serve(async (req) => {
 
         const fullError = hint ? `${errorMessage}: ${hint}` : errorMessage;
 
+        // Try to capture the remote response body (if any) to aid debugging (e.g. stacktrace or error message).
+        let remoteText = null;
+        try {
+            const txt = await response.text();
+            remoteText = txt ? txt : null;
+        } catch (e) {
+            remoteText = null;
+        }
+
         return new Response(
             JSON.stringify({ 
                 success: false, 
                 status: response.status, 
-                error: fullError
+                error: fullError,
+                remote_response_text: remoteText
             }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
         );
