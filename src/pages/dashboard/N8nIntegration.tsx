@@ -292,29 +292,60 @@ const N8nIntegrationPage = () => {
   });
 
   const testWebhookMutation = useMutation({
-    mutationFn: async ({ id, url, event }: { id: number, url: string, event: string }) => {
-        setTestingId(id);
-        
-        // Encontra o payload padrão correto para o evento
-        const eventDef = webhookEvents.find(e => e.event_key === event);
-        const payloadToSend = eventDef ? eventDef.payload : `{ "event": "${event}", "test": true }`;
+    mutationFn: async ({ id, url, event }: { id: number; url: string; event: string }) => {
+      setTestingId(id);
 
-        const { data, error } = await supabase.functions.invoke("test-webhook-endpoint", {
-            body: { 
-              url, 
-              event_type: event, 
-              method: 'POST',
-              // Passamos o payload customizado se existir na definição
-              custom_payload: eventDef ? JSON.parse(eventDef.payload) : undefined
-            }
-        });
-        if (error) throw error;
-        return data;
+      const eventDef = webhookEvents.find((e) => e.event_key === event);
+
+      const { data, error } = await supabase.functions.invoke("test-webhook-endpoint", {
+        body: {
+          url,
+          event_type: event,
+          method: "POST",
+          custom_payload: eventDef ? JSON.parse(eventDef.payload) : undefined,
+        },
+      });
+      if (error) throw error;
+
+      return { result: data, eventDef, url, event };
     },
-    onSuccess: (data) => {
-        if (data.success) showSuccess(`Sucesso! N8N recebeu.`);
-        else showError(`Falha: ${data.error}`);
-        setTestingId(null);
+    onSuccess: ({ result, eventDef, url, event }) => {
+      if (result?.success) {
+        showSuccess("Sucesso! N8N recebeu.");
+        return;
+      }
+
+      // Mostra a mensagem no toast e abre o modal com a resposta completa
+      showError(`Falha: ${result?.error || "Erro ao testar"}. Abrindo detalhes...`);
+      console.error("[N8nIntegration] Webhook test failed", {
+        event,
+        url,
+        result,
+      });
+
+      const fallbackPayload = JSON.stringify(
+        { event, timestamp: new Date().toISOString(), test: true },
+        null,
+        2
+      );
+
+      setTestItem({
+        type: "webhook",
+        name: `Teste de Webhook (${event})`,
+        event_key: event,
+        payload: eventDef?.payload || fallbackPayload,
+      });
+      setTestBody(eventDef?.payload || fallbackPayload);
+      setTestTargetUrl(url || "");
+      setTestResponse(result);
+      setIsTestModalOpen(true);
+    },
+    onError: (err: any) => {
+      console.error("[N8nIntegration] Webhook test error", err);
+      showError(err?.message || "Erro ao testar webhook");
+    },
+    onSettled: () => {
+      setTestingId(null);
     },
   });
 
