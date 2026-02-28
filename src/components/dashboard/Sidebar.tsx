@@ -78,11 +78,23 @@ const Sidebar = () => {
           Analytics
         </NavLink>
 
-        {/* INTELIGÊNCIA */}
-        <p className={sectionTitleClass}>Inteligência</p>
-        <NavLink to="/dashboard/metaflow-insights" className={navLinkClass}>
-          <Lightbulb className="w-4 h-4 mr-3 text-amber-500" />
-          Insights de Negócio
+        {/* CATÁLOGO */}
+        <p className={sectionTitleClass}>Catálogo</p>
+        <NavLink to="/dashboard/products" className={navLinkClass}>
+          <Package className="w-4 h-4 mr-3 text-rose-500" />
+          Produtos
+        </NavLink>
+        <NavLink to="/dashboard/categories" className={navLinkClass}>
+          <LayoutGrid className="w-4 h-4 mr-3 text-rose-400" />
+          Categorias
+        </NavLink>
+        <NavLink to="/dashboard/sub-categories" className={navLinkClass}>
+          <ListTree className="w-4 h-4 mr-3 text-rose-400" />
+          Sub-categorias
+        </NavLink>
+        <NavLink to="/dashboard/brands" className={navLinkClass}>
+          <Tags className="w-4 h-4 mr-3 text-rose-400" />
+          Marcas
         </NavLink>
 
         {/* VENDAS & FINANCEIRO */}
@@ -127,23 +139,11 @@ const Sidebar = () => {
           Pedidos (Fornecedor)
         </NavLink>
 
-        {/* CATÁLOGO */}
-        <p className={sectionTitleClass}>Catálogo</p>
-        <NavLink to="/dashboard/products" className={navLinkClass}>
-          <Package className="w-4 h-4 mr-3 text-rose-500" />
-          Produtos
-        </NavLink>
-        <NavLink to="/dashboard/categories" className={navLinkClass}>
-          <LayoutGrid className="w-4 h-4 mr-3 text-rose-400" />
-          Categorias
-        </NavLink>
-        <NavLink to="/dashboard/sub-categories" className={navLinkClass}>
-          <ListTree className="w-4 h-4 mr-3 text-rose-400" />
-          Sub-categorias
-        </NavLink>
-        <NavLink to="/dashboard/brands" className={navLinkClass}>
-          <Tags className="w-4 h-4 mr-3 text-rose-400" />
-          Marcas
+        {/* INTELIGÊNCIA */}
+        <p className={sectionTitleClass}>Inteligência</p>
+        <NavLink to="/dashboard/metaflow-insights" className={navLinkClass}>
+          <Lightbulb className="w-4 h-4 mr-3 text-amber-500" />
+          Insights de Negócio
         </NavLink>
 
         {/* CLIENTES */}
