@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Workflow, Copy, Eye, EyeOff, Key, Plus, Trash2, ChevronDown, ChevronRight, Zap, Loader2, ArrowUpRight, ArrowDownLeft, Play, UserCheck, Package, ShoppingCart, MessageSquare, MousePointerClick, RefreshCw, Users, Search, List, Activity, CheckCircle2, XCircle, AlertTriangle, Phone } from "lucide-react";
+import { Workflow, Copy, Eye, EyeOff, Key, Plus, Trash2, ChevronDown, ChevronRight, Zap, Loader2, ArrowUpRight, ArrowDownLeft, Play, UserCheck, Package, ShoppingCart, MessageSquare, MousePointerClick, RefreshCw, Users, Search, List, Activity, CheckCircle2, XCircle, AlertTriangle, Phone, Edit, Check, X } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -54,6 +54,10 @@ const N8nIntegrationPage = () => {
   const [testBody, setTestBody] = useState("");
   const [testTargetUrl, setTestTargetUrl] = useState("");
   const [testResponse, setTestResponse] = useState<any>(null);
+
+  // NEW: editing state
+  const [editingWebhookId, setEditingWebhookId] = useState<number | null>(null);
+  const [editingUrl, setEditingUrl] = useState<string>("");
   
   const baseUrl = "https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1";
 
@@ -272,6 +276,21 @@ const N8nIntegrationPage = () => {
     },
   });
 
+  // NEW: update webhook URL mutation
+  const updateWebhookMutation = useMutation({
+    mutationFn: async ({ id, url }: { id: number, url: string }) => {
+      const { error } = await supabase.from("webhook_configs").update({ target_url: url }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["webhookConfigs"] });
+      showSuccess("URL atualizada!");
+      setEditingWebhookId(null);
+      setEditingUrl("");
+    },
+    onError: (err: any) => showError(err.message),
+  });
+
   const testWebhookMutation = useMutation({
     mutationFn: async ({ id, url, event }: { id: number, url: string, event: string }) => {
         setTestingId(id);
@@ -321,6 +340,25 @@ const N8nIntegrationPage = () => {
     }
     
     setIsTestModalOpen(true);
+  };
+
+  // NEW: start edit mode
+  const startEdit = (hook: any) => {
+    setEditingWebhookId(hook.id);
+    setEditingUrl(hook.target_url ?? "");
+  };
+
+  const cancelEdit = () => {
+    setEditingWebhookId(null);
+    setEditingUrl("");
+  };
+
+  const saveEdit = (id: number) => {
+    if (!editingUrl) {
+      showError("A URL não pode ficar vazia.");
+      return;
+    }
+    updateWebhookMutation.mutate({ id, url: editingUrl });
   };
 
   const executeTest = async () => {
@@ -460,14 +498,40 @@ const N8nIntegrationPage = () => {
                                         ) : webhooks?.map((hook) => (
                                             <TableRow key={hook.id} className="group">
                                                 <TableCell className="font-bold">{getEventBadge(hook.trigger_event)}</TableCell>
-                                                <TableCell className="font-mono text-[11px] text-gray-500 max-w-[200px] truncate" title={hook.target_url}>{hook.target_url}</TableCell>
+
+                                                {/* UPDATED: URL cell now supports inline edit */}
+                                                <TableCell className="font-mono text-[11px] text-gray-500 max-w-[200px] truncate" title={hook.target_url}>
+                                                  {editingWebhookId === hook.id ? (
+                                                    <div className="flex items-center gap-2">
+                                                      <Input value={editingUrl} onChange={(e) => setEditingUrl(e.target.value)} className="font-mono text-sm" />
+                                                      <Button size="sm" variant="ghost" onClick={() => saveEdit(hook.id)} disabled={updateWebhookMutation.isPending} title="Salvar">
+                                                        {updateWebhookMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4 text-green-600" />}
+                                                      </Button>
+                                                      <Button size="sm" variant="ghost" onClick={cancelEdit} title="Cancelar">
+                                                        <X className="w-4 h-4 text-red-500" />
+                                                      </Button>
+                                                    </div>
+                                                  ) : (
+                                                    <div className="flex items-center justify-between gap-2">
+                                                      <span className="truncate">{hook.target_url}</span>
+                                                      <div className="hidden group-hover:flex items-center gap-1">
+                                                        <Button variant="ghost" size="icon" onClick={() => startEdit(hook)} title="Editar URL">
+                                                          <Edit className="w-4 h-4 text-slate-500" />
+                                                        </Button>
+                                                      </div>
+                                                    </div>
+                                                  )}
+                                                </TableCell>
+
                                                 <TableCell className="text-center">
                                                     <Button variant="secondary" size="icon" className="h-8 w-8" onClick={() => testWebhookMutation.mutate({ id: hook.id, url: hook.target_url, event: hook.trigger_event })} disabled={testingId === hook.id}>
                                                         {testingId === hook.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3 text-orange-500" />}
                                                     </Button>
                                                 </TableCell>
                                                 <TableCell>
-                                                    <Button variant="ghost" size="icon" className="text-red-500 opacity-0 group-hover:opacity-100" onClick={() => deleteWebhookMutation.mutate(hook.id)}><Trash2 className="w-4 h-4" /></Button>
+                                                    <div className="flex items-center gap-2">
+                                                      <Button variant="ghost" size="icon" className="text-red-500 opacity-0 group-hover:opacity-100" onClick={() => deleteWebhookMutation.mutate(hook.id)}><Trash2 className="w-4 h-4" /></Button>
+                                                    </div>
                                                 </TableCell>
                                             </TableRow>
                                         ))}
