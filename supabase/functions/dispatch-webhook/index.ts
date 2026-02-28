@@ -26,7 +26,7 @@ serve(async (req) => {
     // --- 1. ID DO PEDIDO ---
     const orderId = payload.id || payload.order_id;
 
-    if (!orderId && event_type === 'order_created') {
+    if (!orderId && ['order_created', 'order_paid', 'order_shipped', 'order_delivered'].includes(event_type)) {
         return new Response("Missing order ID", { status: 400 });
     }
 
@@ -53,7 +53,7 @@ serve(async (req) => {
     // --- 3. COLETAR DADOS COMPLETOS (ENRICHMENT) ---
     let finalData = {};
 
-    if (event_type === 'order_created') {
+    if (['order_created', 'order_paid', 'order_shipped', 'order_delivered'].includes(event_type)) {
         // A. Buscar Pedido + Endereço + Cupom
         const { data: order, error: orderError } = await supabaseAdmin
             .from('orders')
@@ -91,7 +91,6 @@ serve(async (req) => {
         
         // --- 4. CÁLCULOS ---
         const orderItems = items || [];
-        // Subtotal = Soma (Qtd * Preço Unitário)
         const subtotalCalc = orderItems.reduce((acc: number, item: any) => acc + (item.quantity * item.price_at_purchase), 0);
         
         // Nome do Cupom
@@ -104,8 +103,6 @@ serve(async (req) => {
         const donationAmount = Number(order.donation_amount || 0);
         const couponDiscount = Number(order.coupon_discount || 0);
 
-        // CÁLCULO DO TOTAL CORRETO: (Produtos + Frete + Doação) - Desconto
-        // O banco pode estar salvando 'total_price' apenas como 'produtos - desconto', então recalculamos para garantir consistência no webhook.
         const calculatedTotal = subtotalCalc + shippingCost + donationAmount - couponDiscount;
 
         // Tratamento do Endereço (JSONB no banco)
@@ -129,7 +126,7 @@ serve(async (req) => {
         // --- 5. MONTAGEM DO PAYLOAD NO SCHEMA ESTRITO ---
         finalData = {
             id: order.id,
-            total_price: Number(calculatedTotal.toFixed(2)), // Valor recalculado correto
+            total_price: Number(calculatedTotal.toFixed(2)),
             subtotal: Number(subtotalCalc.toFixed(2)),
             shipping_cost: shippingCost,
             coupon_discount: couponDiscount,
@@ -140,6 +137,8 @@ serve(async (req) => {
             payment_method: order.payment_method,
             created_at: order.created_at,
             benefits_used: order.benefits_used || null,
+            delivery_info: order.delivery_info || null,
+            delivery_status: order.delivery_status || null,
             shipping_address: {
                 cep: addr.cep || "",
                 city: addr.city || "",
@@ -159,6 +158,15 @@ serve(async (req) => {
                 price: Number(item.price_at_purchase)
             }))
         };
+
+        // Adicionar informações específicas de mudança de status
+        if (event_type !== 'order_created') {
+            finalData.status_change = {
+                old_status: payload.old_status || null,
+                new_status: payload.new_status || order.status,
+                changed_at: payload.updated_at || new Date().toISOString()
+            };
+        }
     } else {
         // Fallback para outros eventos não mapeados
         finalData = payload;
@@ -172,6 +180,7 @@ serve(async (req) => {
         .eq('trigger_event', event_type);
 
     if (!webhooks || webhooks.length === 0) {
+        console.log(`[dispatch-webhook] No active webhooks for event: ${event_type}`);
         return new Response(JSON.stringify({ message: "No active webhooks" }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
     }
 
@@ -182,6 +191,8 @@ serve(async (req) => {
         data: finalData
     };
 
+    console.log(`[dispatch-webhook] Dispatching ${event_type} to ${uniqueTargets.length} target(s)`);
+
     const promises = uniqueTargets.map(async (rawUrl: string) => {
         let responseCode = 0;
         let responseBody = "";
@@ -189,17 +200,17 @@ serve(async (req) => {
         const url = rawUrl.trim().replace(/([^:]\/)\/+/g, "$1");
 
         try {
-            console.log(`Disparando ${event_type} para '${url}'`);
+            console.log(`[dispatch-webhook] Sending ${event_type} to '${url}'`);
             const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(finalPayload)
             });
             responseCode = response.status;
-            try { responseBody = await response.text(); } catch (e) { responseBody = "(Sem corpo)"; }
+            try { responseBody = await response.text(); } catch (e) { responseBody = "(No body)"; }
             if (response.ok) status = "success";
         } catch (err: any) {
-            responseBody = `Erro de Rede: ${err.message}`;
+            responseBody = `Network Error: ${err.message}`;
             responseCode = 500;
         }
 
@@ -209,7 +220,7 @@ serve(async (req) => {
             status: status,
             response_code: responseCode,
             payload: finalPayload, 
-            details: `Destino: ${url} | ${responseBody.substring(0, 500)}`
+            details: `Target: ${url} | ${responseBody.substring(0, 500)}`
         });
     });
 
@@ -218,6 +229,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({ success: true, dispatched: uniqueTargets.length }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
 
   } catch (error: any) {
+    console.error('[dispatch-webhook] ERROR:', error);
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 })
