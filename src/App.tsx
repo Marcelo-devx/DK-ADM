@@ -46,7 +46,6 @@ import LoyaltyManagement from "./pages/dashboard/LoyaltyManagement";
 import UserCouponsHistory from "./pages/dashboard/UserCouponsHistory";
 import DeliveryRoutes from "./pages/dashboard/DeliveryRoutes";
 import SpokeExport from "./pages/dashboard/SpokeExport";
-import SpokeWebhookDocs from "./pages/SpokeWebhookDocs";
 
 const queryClient = new QueryClient();
 
@@ -64,7 +63,6 @@ const App = () => (
             <Route path="/my-orders" element={<MyOrders />} />
             <Route path="/my-profile" element={<MyProfile />} />
             <Route path="/club-dk" element={<ClubDK />} />
-            <Route path="/spoke-webhook-docs" element={<SpokeWebhookDocs />} />
             
             <Route path="/dashboard" element={<DashboardLayout />}>
               <Route index element={<Dashboard />} />
