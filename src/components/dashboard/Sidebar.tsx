@@ -84,6 +84,10 @@ const Sidebar = () => {
           <Package className="w-4 h-4 mr-3 text-rose-500" />
           Produtos
         </NavLink>
+        <NavLink to="/dashboard/price-management" className={navLinkClass}>
+          <Coins className="w-4 h-4 mr-3 text-yellow-600" />
+          Gestão de Preços
+        </NavLink>
         <NavLink to="/dashboard/categories" className={navLinkClass}>
           <LayoutGrid className="w-4 h-4 mr-3 text-rose-400" />
           Categorias
@@ -102,10 +106,6 @@ const Sidebar = () => {
         <NavLink to="/dashboard/orders" className={navLinkClass}>
           <DollarSign className="w-4 h-4 mr-3 text-green-600" />
           Pedidos (Clientes)
-        </NavLink>
-        <NavLink to="/dashboard/price-management" className={navLinkClass}>
-          <Coins className="w-4 h-4 mr-3 text-yellow-600" />
-          Gestão de Preços
         </NavLink>
         <NavLink to="/dashboard/donations" className={navLinkClass}>
           <Heart className="w-4 h-4 mr-3 text-rose-500" />
