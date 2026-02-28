@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { url, event_type, method = 'POST', custom_payload } = await req.json();
+    const { url, event_type, method = 'POST', custom_payload, auth_token } = await req.json();
 
     if (!url) throw new Error("URL é obrigatória");
 
@@ -33,6 +33,11 @@ serve(async (req) => {
         method: method,
         headers: { 'Content-Type': 'application/json' },
     };
+
+    // If an auth token was provided (from the dashboard), include it in the request
+    if (auth_token) {
+        fetchOptions.headers['Authorization'] = `Bearer ${auth_token}`;
+    }
 
     if (method === 'POST') {
         if (custom_payload) {
@@ -90,11 +95,21 @@ serve(async (req) => {
             remoteText = null;
         }
 
+        // If the remote response looks like N8N's known message about missing webhook node, add a helpful hint
+        let n8nHint = null;
+        try {
+            if (remoteText && remoteText.includes('No Respond to Webhook node found')) {
+                n8nHint = "O N8N respondeu que não há um nó que responde ao webhook no workflow. Verifique se o Workflow está ativo e se o nó Webhook/Respond to Webhook está presente e configurado corretamente (copie a URL direto do nó Webhook).";
+            }
+        } catch (e) {
+            // ignore
+        }
+
         return new Response(
             JSON.stringify({ 
                 success: false, 
                 status: response.status, 
-                error: fullError,
+                error: n8nHint ? `${fullError}: ${n8nHint}` : fullError,
                 remote_response_text: remoteText
             }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }

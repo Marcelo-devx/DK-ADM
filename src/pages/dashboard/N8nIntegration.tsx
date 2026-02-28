@@ -303,6 +303,7 @@ const N8nIntegrationPage = () => {
           event_type: event,
           method: "POST",
           custom_payload: eventDef ? JSON.parse(eventDef.payload) : undefined,
+          auth_token: token || settings?.value // include saved token (if any) so endpoints that require Bearer auth receive it
         },
       });
       if (error) throw error;
@@ -403,7 +404,8 @@ const N8nIntegrationPage = () => {
                     url: testTargetUrl,
                     event_type: testItem.event_key,
                     method: 'POST',
-                    custom_payload: JSON.parse(testBody)
+                    custom_payload: JSON.parse(testBody),
+                    auth_token: token || settings?.value
                 }
             });
             if(error) throw error;
