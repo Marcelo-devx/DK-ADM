@@ -37,10 +37,21 @@ export const ProductTable = ({
     if (!product) return "-";
     const costsArray = Array.isArray(product.variant_costs) ? product.variant_costs : [];
     const pricesArray = Array.isArray(product.variant_prices) ? product.variant_prices : [];
-    const values = isCost ? (costsArray.filter(v => v !== null) as number[]) : (pricesArray.filter(v => v !== null) as number[]);
-    const baseValue = isCost ? (product.cost_price ?? 0) : (product.price ?? 0);
+    const costValues = costsArray.filter(v => v !== null) as number[];
+    const priceValues = pricesArray.filter(v => v !== null) as number[];
     
-    const hasVariants = values.length > 0;
+    // Para custo: se tem variações, mostra o maior custo; senão, mostra o custo base
+    const displayCostValue = costValues.length > 0 
+      ? Math.max(...costValues) 
+      : (product.cost_price ?? 0);
+    
+    // Para venda: se tem variações, mostra o maior preço; senão, mostra o preço base
+    const displaySaleValue = priceValues.length > 0 
+      ? Math.max(...priceValues) 
+      : (product.price ?? 0);
+    
+    const baseValue = isCost ? displayCostValue : displaySaleValue;
+    const hasVariants = isCost ? (costValues.length > 0) : (priceValues.length > 0);
 
     if (hasVariants) {
       return (
@@ -52,7 +63,7 @@ export const ProductTable = ({
                   <span className="font-bold text-xs">{formatCurrency(baseValue)}</span>
               </button>
             </TooltipTrigger>
-            <TooltipContent><p>Preço da variação mais cara. Clique para ver todas.</p></TooltipContent>
+            <TooltipContent><p>{isCost ? "Custo da variação mais cara" : "Preço da variação mais cara"}. Clique para ver todas.</p></TooltipContent>
           </Tooltip>
         </TooltipProvider>
       );
@@ -72,7 +83,7 @@ export const ProductTable = ({
             <TableHead>Nome</TableHead>
             <TableHead>Categoria</TableHead>
             <TableHead>Custo</TableHead>
-            <TableHead>Venda</TableHead>
+            <TableHead>Venda (Cartão de Crédito)</TableHead>
             <TableHead className="text-green-600">Pix</TableHead>
             <TableHead>Estoque Disponível</TableHead>
             <TableHead className="text-right">Ações</TableHead>
