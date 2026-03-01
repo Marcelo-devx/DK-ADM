@@ -512,8 +512,7 @@ const OrdersPage = () => {
                     <TableRow><TableCell colSpan={9}><Skeleton className="h-10 w-full" /></TableCell></TableRow>
                 ) : filteredOrders.map((order) => {
                     const isPaid = order.status === "Finalizada" || order.status === "Pago";
-                    const isPixPayment = order.payment_method?.toLowerCase().includes('pix');
-                    const needsManualValidation = order.status === 'Pago' && (order.delivery_status === 'Aguardando Validação' || (isPixPayment && order.delivery_status === 'Pendente'));
+                    const needsManualValidation = order.status === 'Pago' && order.delivery_status === 'Aguardando Validação';
                     const isInRoute = order.delivery_status === "Despachado";
                     const isSelected = selectedIds.has(order.id);
                     const isNextRoute = checkIsNextRoute(order.created_at);
