@@ -51,13 +51,21 @@ serve(async (req) => {
         throw new Error(`Usuário com email ${email} não encontrado.`);
     }
 
-    // 5. Update password
-    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+    // 5. Update password with conditional logic
+    if (user.id === targetUser.id) {
+      // Admin is changing their OWN password. Use the standard user update method.
+      const { error: updateSelfError } = await supabaseClient.auth.updateUser({
+        password: new_password
+      });
+      if (updateSelfError) throw updateSelfError;
+    } else {
+      // Admin is changing ANOTHER user's password. Use the admin method.
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
         targetUser.id,
         { password: new_password }
-    );
-
-    if (updateError) throw updateError;
+      );
+      if (updateError) throw updateError;
+    }
 
     return new Response(
       JSON.stringify({ message: `Senha do usuário ${email} atualizada com sucesso.` }),
