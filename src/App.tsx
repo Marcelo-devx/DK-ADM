@@ -10,7 +10,6 @@ import ProductDetail from "./pages/ProductDetail";
 import MyOrders from "./pages/MyOrders";
 import MyProfile from "./pages/MyProfile";
 import ClubDK from "./pages/ClubDK";
-import CheckoutPage from "./pages/Checkout";
 import NotFound from "./pages/NotFound";
 import DashboardLayout from "./components/dashboard/DashboardLayout";
 import Dashboard from "./pages/dashboard/Dashboard";
@@ -64,7 +63,6 @@ const App = () => (
             <Route path="/my-orders" element={<MyOrders />} />
             <Route path="/my-profile" element={<MyProfile />} />
             <Route path="/club-dk" element={<ClubDK />} />
-            <Route path="/checkout" element={<CheckoutPage />} />
             
             <Route path="/dashboard" element={<DashboardLayout />}>
               <Route index element={<Dashboard />} />

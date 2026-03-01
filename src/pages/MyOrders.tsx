@@ -90,12 +90,7 @@ const MyOrdersPage = () => {
 
   return (
     <div className="container mx-auto p-4 md:p-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Meus Pedidos</h1>
-        <Button asChild>
-            <Link to="/checkout">Fazer um Novo Pedido (Teste)</Link>
-        </Button>
-      </div>
+      <h1 className="text-3xl font-bold mb-6">Meus Pedidos</h1>
       <div className="space-y-6">
         {data?.orders.length === 0 ? (
           <p>Você ainda não fez nenhum pedido.</p>
