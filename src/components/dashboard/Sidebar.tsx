@@ -36,7 +36,8 @@ import {
   Lock,
   Settings,
   LogOut,
-  Box
+  Box,
+  KeyRound
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -220,6 +221,10 @@ const Sidebar = () => {
         <NavLink to="/dashboard/settings" className={navLinkClass}>
           <Settings className="w-4 h-4 mr-3 text-slate-500" />
           Configurações
+        </NavLink>
+        <NavLink to="/dashboard/temp-password-tool" className={navLinkClass}>
+          <KeyRound className="w-4 h-4 mr-3 text-orange-500" />
+          Alterar Senha (Temp)
         </NavLink>
       </nav>
 
