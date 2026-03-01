@@ -217,9 +217,9 @@ serve(async (req) => {
         user_id: userId,
         total_price: totalOrderPrice, 
         shipping_cost: shippingCost,
-        status: 'Pendente',
+        status: 'Pago',
         payment_method: payment_method || 'Pix',
-        delivery_status: 'Pendente',
+        delivery_status: 'Aguardando Validação',
         shipping_address: shipping_address || { 
             street: "Whatsapp Order", 
             number: "S/N", 
