@@ -603,15 +603,19 @@ const OrdersPage = () => {
                         </TableCell>
                         <TableCell className="font-bold">{formatCurrency(finalTotal)}</TableCell>
                         <TableCell>
-                            <Badge variant="secondary" className={cn("text-[10px] w-fit", isPaid && "bg-green-100 text-green-800")}>
-                                {order.status}
-                            </Badge>
+                          {needsManualValidation ? (
+                              <Badge variant="destructive" className="bg-orange-500 hover:bg-orange-600 gap-1">
+                                  <ShieldCheck className="w-3 h-3" /> Aguardando Validação
+                              </Badge>
+                          ) : (
+                              <Badge variant="secondary" className={cn("text-[10px] w-fit", isPaid && "bg-green-100 text-green-800")}>
+                                  {order.status}
+                              </Badge>
+                          )}
                         </TableCell>
                         <TableCell>
                             {needsManualValidation ? (
-                                <Badge variant="destructive" className="bg-orange-500 hover:bg-orange-600 gap-1">
-                                    <ShieldCheck className="w-3 h-3" /> Aguardando Validação
-                                </Badge>
+                                <Badge variant="outline" className="text-gray-400 border-gray-200">Bloqueado</Badge>
                             ) : (
                                 <Badge variant="secondary" className={cn(
                                     "w-fit",
