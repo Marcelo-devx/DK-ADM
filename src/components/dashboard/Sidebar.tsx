@@ -222,10 +222,6 @@ const Sidebar = () => {
           <Settings className="w-4 h-4 mr-3 text-slate-500" />
           Configurações
         </NavLink>
-        <NavLink to="/dashboard/password-tool" className={navLinkClass}>
-          <KeyRound className="w-4 h-4 mr-3 text-orange-500" />
-          Alterar Senha
-        </NavLink>
       </nav>
 
       {/* FOOTER COM LOGOUT */}
