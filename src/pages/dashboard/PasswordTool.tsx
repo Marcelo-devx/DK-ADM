@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { KeyRound, Loader2 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 
-const TempPasswordToolPage = () => {
+const PasswordToolPage = () => {
   const [email, setEmail] = useState("coo@spaceshipnft.com");
   const [newPassword, setNewPassword] = useState("102030@");
 
@@ -88,4 +88,4 @@ const TempPasswordToolPage = () => {
   );
 };
 
-export default TempPasswordToolPage;
+export default PasswordToolPage;

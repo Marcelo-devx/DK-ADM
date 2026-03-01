@@ -46,7 +46,7 @@ import LoyaltyManagement from "./pages/dashboard/LoyaltyManagement";
 import UserCouponsHistory from "./pages/dashboard/UserCouponsHistory";
 import DeliveryRoutes from "./pages/dashboard/DeliveryRoutes";
 import SpokeExport from "./pages/dashboard/SpokeExport";
-import TempPasswordToolPage from "./pages/dashboard/TempPasswordTool";
+import PasswordToolPage from "./pages/dashboard/PasswordTool";
 
 const queryClient = new QueryClient();
 
@@ -100,7 +100,7 @@ const App = () => (
               <Route path="user-coupons-history" element={<UserCouponsHistory />} />
               <Route path="delivery-routes" element={<DeliveryRoutes />} />
               <Route path="spoke-export" element={<SpokeExport />} />
-              <Route path="temp-password-tool" element={<TempPasswordToolPage />} />
+              <Route path="password-tool" element={<PasswordToolPage />} />
             </Route>
             
             <Route path="*" element={<NotFound />} />
