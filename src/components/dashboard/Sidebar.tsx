@@ -52,11 +52,14 @@ const Sidebar = () => {
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     cn(
-      "flex items-center px-3 py-2 text-slate-600 rounded-lg transition-colors duration-200 text-sm font-medium hover:bg-slate-200/60 hover:text-slate-900",
+      "flex items-center px-3 py-2 text-slate-600 rounded-lg transition-colors duration-200 text-sm font-medium hover:bg-slate-200/60 hover:text-slate-900 group",
       isActive && "bg-primary/10 text-primary font-semibold"
     );
 
   const sectionTitleClass = "px-3 mt-6 mb-2 text-xs font-black text-gray-400 uppercase tracking-wider";
+  
+  const iconClass = (color: string, isActive: boolean) => 
+    cn("w-4 h-4 mr-3 transition-colors", isActive ? "text-primary" : color);
 
   return (
     <aside className="w-64 h-screen bg-gray-50/80 border-r border-gray-200 flex flex-col">
@@ -71,156 +74,124 @@ const Sidebar = () => {
         {/* VISÃO GERAL */}
         <p className={sectionTitleClass}>Visão Geral</p>
         <NavLink to="/dashboard" end className={navLinkClass}>
-          <Home className="w-4 h-4 mr-3" />
-          Dashboard
+          {({ isActive }) => (<><Home className={iconClass("text-slate-500", isActive)} />Dashboard</>)}
         </NavLink>
         <NavLink to="/dashboard/analytics" className={navLinkClass}>
-          <BarChart3 className="w-4 h-4 mr-3" />
-          Analytics
+          {({ isActive }) => (<><BarChart3 className={iconClass("text-slate-500", isActive)} />Analytics</>)}
         </NavLink>
 
         {/* VENDAS & FINANCEIRO */}
         <p className={sectionTitleClass}>Vendas & Financeiro</p>
         <NavLink to="/dashboard/orders" className={navLinkClass}>
-          <DollarSign className="w-4 h-4 mr-3" />
-          Pedidos (Clientes)
+          {({ isActive }) => (<><DollarSign className={iconClass("text-green-600", isActive)} />Pedidos (Clientes)</>)}
         </NavLink>
         <NavLink to="/dashboard/spoke-export" className={navLinkClass}>
-          <FileOutput className="w-4 h-4 mr-3" />
-          Exportar Rotas
+          {({ isActive }) => (<><FileOutput className={iconClass("text-green-600", isActive)} />Exportar Rotas</>)}
         </NavLink>
         <NavLink to="/dashboard/delivery-routes" className={navLinkClass}>
-          <MapIcon className="w-4 h-4 mr-3" />
-          Rotas de Entrega
+          {({ isActive }) => (<><MapIcon className={iconClass("text-green-600", isActive)} />Rotas de Entrega</>)}
         </NavLink>
         <NavLink to="/dashboard/supplier-orders" className={navLinkClass}>
-          <Truck className="w-4 h-4 mr-3" />
-          Pedidos (Fornecedor)
+          {({ isActive }) => (<><Truck className={iconClass("text-green-600", isActive)} />Pedidos (Fornecedor)</>)}
         </NavLink>
         <NavLink to="/dashboard/crypto" className={navLinkClass}>
-          <Bitcoin className="w-4 h-4 mr-3" />
-          Cripto
+          {({ isActive }) => (<><Bitcoin className={iconClass("text-green-600", isActive)} />Cripto</>)}
         </NavLink>
 
         {/* CATÁLOGO */}
         <p className={sectionTitleClass}>Catálogo</p>
         <NavLink to="/dashboard/products" className={navLinkClass}>
-          <Package className="w-4 h-4 mr-3" />
-          Produtos
+          {({ isActive }) => (<><Package className={iconClass("text-blue-600", isActive)} />Produtos</>)}
         </NavLink>
         <NavLink to="/dashboard/price-management" className={navLinkClass}>
-          <Coins className="w-4 h-4 mr-3" />
-          Gestão de Preços
+          {({ isActive }) => (<><Coins className={iconClass("text-blue-600", isActive)} />Gestão de Preços</>)}
         </NavLink>
         <NavLink to="/dashboard/categories" className={navLinkClass}>
-          <LayoutGrid className="w-4 h-4 mr-3" />
-          Categorias
+          {({ isActive }) => (<><LayoutGrid className={iconClass("text-blue-600", isActive)} />Categorias</>)}
         </NavLink>
         <NavLink to="/dashboard/sub-categories" className={navLinkClass}>
-          <ListTree className="w-4 h-4 mr-3" />
-          Sub-categorias
+          {({ isActive }) => (<><ListTree className={iconClass("text-blue-600", isActive)} />Sub-categorias</>)}
         </NavLink>
         <NavLink to="/dashboard/brands" className={navLinkClass}>
-          <Tags className="w-4 h-4 mr-3" />
-          Marcas
+          {({ isActive }) => (<><Tags className={iconClass("text-blue-600", isActive)} />Marcas</>)}
         </NavLink>
 
         {/* LOGÍSTICA */}
         <p className={sectionTitleClass}>Logística</p>
         <NavLink to="/dashboard/shipping-rates" className={navLinkClass}>
-          <Bike className="w-4 h-4 mr-3" />
-          Fretes e Taxas
+          {({ isActive }) => (<><Bike className={iconClass("text-indigo-600", isActive)} />Fretes e Taxas</>)}
         </NavLink>
         <NavLink to="/dashboard/print-labels" className={navLinkClass}>
-          <Printer className="w-4 h-4 mr-3" />
-          Imprimir Etiquetas
+          {({ isActive }) => (<><Printer className={iconClass("text-indigo-600", isActive)} />Imprimir Etiquetas</>)}
         </NavLink>
 
         {/* INTELIGÊNCIA */}
         <p className={sectionTitleClass}>Inteligência</p>
         <NavLink to="/dashboard/metaflow-insights" className={navLinkClass}>
-          <Lightbulb className="w-4 h-4 mr-3" />
-          Insights de Negócio
+          {({ isActive }) => (<><Lightbulb className={iconClass("text-purple-600", isActive)} />Insights de Negócio</>)}
         </NavLink>
 
         {/* CLIENTES */}
         <p className={sectionTitleClass}>Clientes</p>
         <NavLink to="/dashboard/clients" className={navLinkClass}>
-          <Users className="w-4 h-4 mr-3" />
-          Base de Clientes
+          {({ isActive }) => (<><Users className={iconClass("text-cyan-600", isActive)} />Base de Clientes</>)}
         </NavLink>
         <NavLink to="/dashboard/import-clients" className={navLinkClass}>
-          <FileUp className="w-4 h-4 mr-3" />
-          Importar Clientes
+          {({ isActive }) => (<><FileUp className={iconClass("text-cyan-600", isActive)} />Importar Clientes</>)}
         </NavLink>
 
         {/* MARKETING */}
         <p className={sectionTitleClass}>Marketing</p>
         <NavLink to="/dashboard/club-dk" className={navLinkClass}>
-          <Crown className="w-4 h-4 mr-3" />
-          Club DK (Fidelidade)
+          {({ isActive }) => (<><Crown className={iconClass("text-pink-600", isActive)} />Club DK (Fidelidade)</>)}
         </NavLink>
         <NavLink to="/dashboard/user-coupons-history" className={navLinkClass}>
-          <TicketCheck className="w-4 h-4 mr-3" />
-          Histórico de Cupons
+          {({ isActive }) => (<><TicketCheck className={iconClass("text-pink-600", isActive)} />Histórico de Cupons</>)}
         </NavLink>
         <NavLink to="/dashboard/promotions" className={navLinkClass}>
-          <Percent className="w-4 h-4 mr-3" />
-          Kits & Promoções
+          {({ isActive }) => (<><Percent className={iconClass("text-pink-600", isActive)} />Kits & Promoções</>)}
         </NavLink>
         <NavLink to="/dashboard/coupons" className={navLinkClass}>
-          <Ticket className="w-4 h-4 mr-3" />
-          Cupons
+          {({ isActive }) => (<><Ticket className={iconClass("text-pink-600", isActive)} />Cupons</>)}
         </NavLink>
 
         {/* CONTEÚDO DO SITE */}
         <p className={sectionTitleClass}>Conteúdo do Site</p>
         <NavLink to="/dashboard/hero-slides" className={navLinkClass}>
-          <Image className="w-4 h-4 mr-3" />
-          Banners (Slides)
+          {({ isActive }) => (<><Image className={iconClass("text-amber-600", isActive)} />Banners (Slides)</>)}
         </NavLink>
         <NavLink to="/dashboard/home-content" className={navLinkClass}>
-          <GalleryHorizontal className="w-4 h-4 mr-3" />
-          Conteúdo da Home
+          {({ isActive }) => (<><GalleryHorizontal className={iconClass("text-amber-600", isActive)} />Conteúdo da Home</>)}
         </NavLink>
         <NavLink to="/dashboard/popups" className={navLinkClass}>
-          <MessageSquare className="w-4 h-4 mr-3" />
-          Avisos Informativos
+          {({ isActive }) => (<><MessageSquare className={iconClass("text-amber-600", isActive)} />Avisos Informativos</>)}
         </NavLink>
         <NavLink to="/dashboard/sales-popups" className={navLinkClass}>
-          <ShoppingCart className="w-4 h-4 mr-3" />
-          Prova Social (Popups)
+          {({ isActive }) => (<><ShoppingCart className={iconClass("text-amber-600", isActive)} />Prova Social (Popups)</>)}
         </NavLink>
         <NavLink to="/dashboard/reviews" className={navLinkClass}>
-          <Star className="w-4 h-4 mr-3" />
-          Avaliações
+          {({ isActive }) => (<><Star className={iconClass("text-amber-600", isActive)} />Avaliações</>)}
         </NavLink>
 
         {/* SISTEMA */}
         <p className={sectionTitleClass}>Sistema</p>
         <NavLink to="/dashboard/incoming-webhooks" className={navLinkClass}>
-          <Webhook className="w-4 h-4 mr-3" />
-          Webhooks (Entrada)
+          {({ isActive }) => (<><Webhook className={iconClass("text-slate-500", isActive)} />Webhooks (Entrada)</>)}
         </NavLink>
         <NavLink to="/dashboard/integrations" className={navLinkClass}>
-          <Plug className="w-4 h-4 mr-3" />
-          Integrações
+          {({ isActive }) => (<><Plug className={iconClass("text-slate-500", isActive)} />Integrações</>)}
         </NavLink>
         <NavLink to="/dashboard/n8n-integration" className={navLinkClass}>
-          <Workflow className="w-4 h-4 mr-3" />
-          Automação (N8N)
+          {({ isActive }) => (<><Workflow className={iconClass("text-slate-500", isActive)} />Automação (N8N)</>)}
         </NavLink>
         <NavLink to="/dashboard/cloudinary-stats" className={navLinkClass}>
-          <Cloud className="w-4 h-4 mr-3" />
-          Cloudinary (Mídia)
+          {({ isActive }) => (<><Cloud className={iconClass("text-slate-500", isActive)} />Cloudinary (Mídia)</>)}
         </NavLink>
         <NavLink to="/dashboard/secrets" className={navLinkClass}>
-          <Lock className="w-4 h-4 mr-3" />
-          Segurança (Keys)
+          {({ isActive }) => (<><Lock className={iconClass("text-slate-500", isActive)} />Segurança (Keys)</>)}
         </NavLink>
         <NavLink to="/dashboard/settings" className={navLinkClass}>
-          <Settings className="w-4 h-4 mr-3" />
-          Configurações
+          {({ isActive }) => (<><Settings className={iconClass("text-slate-500", isActive)} />Configurações</>)}
         </NavLink>
       </nav>
 
