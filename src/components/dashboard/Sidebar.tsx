@@ -93,6 +93,10 @@ const Sidebar = () => {
           <MapIcon className="w-4 h-4 mr-3 text-indigo-500" />
           Rotas de Entrega
         </NavLink>
+        <NavLink to="/dashboard/supplier-orders" className={navLinkClass}>
+          <Truck className="w-4 h-4 mr-3 text-orange-600" />
+          Pedidos (Fornecedor)
+        </NavLink>
         <NavLink to="/dashboard/crypto" className={navLinkClass}>
           <Bitcoin className="w-4 h-4 mr-3 text-orange-500" />
           Cripto
@@ -107,10 +111,6 @@ const Sidebar = () => {
         <NavLink to="/dashboard/price-management" className={navLinkClass}>
           <Coins className="w-4 h-4 mr-3 text-yellow-600" />
           Gestão de Preços
-        </NavLink>
-        <NavLink to="/dashboard/supplier-orders" className={navLinkClass}>
-          <Truck className="w-4 h-4 mr-3 text-orange-600" />
-          Pedidos (Fornecedor)
         </NavLink>
         <NavLink to="/dashboard/categories" className={navLinkClass}>
           <LayoutGrid className="w-4 h-4 mr-3 text-rose-400" />
