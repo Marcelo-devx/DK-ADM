@@ -59,8 +59,15 @@ serve(async (req) => {
 
     // Monta objeto de atualização dinamicamente
     const updateData: any = {};
-    if (status) updateData.status = status;
-    if (delivery_status) updateData.delivery_status = delivery_status;
+    if (status) {
+      updateData.status = status;
+      // Se o status for 'Pago', força a validação manual.
+      if (status === 'Pago') {
+        updateData.delivery_status = 'Aguardando Validação';
+      }
+    } else if (delivery_status) {
+      updateData.delivery_status = delivery_status;
+    }
     
     // --- LÓGICA DE RASTREIO (TEMPORÁRIA) ---
     // TODO: Lembrar de refatorar quando a coluna tracking_code oficial for criada no banco.

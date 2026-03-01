@@ -21,7 +21,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send, History, FileDown, Calendar, FilterX } from "lucide-react";
+import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send, History, FileDown, Calendar, FilterX, ShieldCheck, ShieldX, CheckSquare } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { showSuccess, showError } from "@/utils/toast";
 import { OrderDetailModal } from "@/components/dashboard/OrderDetailModal";
@@ -146,6 +146,11 @@ const OrdersPage = () => {
   const [isProcessingBulk, setIsProcessingBulk] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
+  const [actionToConfirm, setActionToConfirm] = useState<{
+    action: 'resend_confirmation' | 'send_password_reset' | 'delete_orders' | 'mark_as_recurrent' | 'cancel_fraud';
+    client: any;
+  } | null>(null);
+
   const { data: orders, isLoading, refetch, isRefetching } = useQuery<Order[]>({
     queryKey: ["ordersAdmin"],
     queryFn: fetchOrders,
@@ -180,14 +185,33 @@ const OrdersPage = () => {
     }) || [];
   }, [orders, readyToShipOnly, startDate, endDate]);
 
-  const validatePaymentMutation = useMutation({
+  const validatePaymentAndSetPendingMutation = useMutation({
     mutationFn: async (orderId: number) => {
-        const { error } = await supabase.rpc('finalize_order_payment', { p_order_id: orderId });
-        if (error) throw error;
+      const { error } = await supabase
+        .from("orders")
+        .update({ delivery_status: "Pendente" })
+        .eq("id", orderId);
+      if (error) throw error;
     },
     onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
-        showSuccess("Pagamento confirmado!");
+      queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
+      showSuccess("Pagamento validado! Pedido pronto para envio.");
+    },
+    onError: (err: any) => showError(err.message),
+  });
+
+  const cancelOrderForFraudMutation = useMutation({
+    mutationFn: async (orderId: number) => {
+      const { error } = await supabase
+        .from("orders")
+        .update({ status: "Cancelado", delivery_info: "Cancelado por suspeita de fraude." })
+        .eq("id", orderId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
+      showSuccess("Pedido cancelado com sucesso.");
+      setActionToConfirm(null); // Close the dialog
     },
     onError: (err: any) => showError(err.message),
   });
@@ -218,15 +242,66 @@ const OrdersPage = () => {
     onError: (err: any) => showError(`Erro ao deletar: ${err.message}`),
   });
 
+  const userActionMutation = useMutation({
+    mutationFn: async ({ action, targetUserId }: { action: string; targetUserId: string }) => {
+      let functionName = '';
+      let body: any = { targetUserId };
+
+      if (action === 'delete_orders') {
+        functionName = 'admin-delete-orders';
+      } else if (action === 'mark_as_recurrent') {
+        functionName = 'admin-mark-as-recurrent';
+      } else {
+        functionName = 'admin-user-actions';
+        body.action = action;
+        body.redirectTo = 'https://dk-l-andpage.vercel.app/login'; 
+      }
+
+      const { data, error } = await supabase.functions.invoke(functionName, {
+        body,
+      });
+      
+      if (error) {
+        if (error.context && typeof error.context.json === 'function') {
+            const errorJson = await error.context.json();
+            if (errorJson.details) throw new Error(errorJson.details);
+        }
+        throw new Error(error.message);
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      showSuccess(data.message);
+      setActionToConfirm(null);
+    },
+    onError: (error: Error) => {
+      showError(`Erro: ${error.message}`);
+    },
+  });
+
+  const handleConfirmAction = () => {
+    if (actionToConfirm) {
+      if (actionToConfirm.action === 'cancel_fraud') {
+        cancelOrderForFraudMutation.mutate(actionToConfirm.client.id);
+      } else {
+        userActionMutation.mutate({
+          action: actionToConfirm.action,
+          targetUserId: actionToConfirm.client.id,
+        });
+      }
+    }
+  };
+
   const handleBulkValidate = async () => {
     setIsProcessingBulk(true);
     let successCount = 0;
     
     for (const id of Array.from(selectedIds)) {
         const order = orders?.find(o => o.id === id);
-        if (order && order.payment_method?.toLowerCase().includes('pix') && order.status !== "Finalizada" && order.status !== "Pago") {
+        if (order && order.status === 'Pago' && order.delivery_status === 'Aguardando Validação') {
             try {
-                await validatePaymentMutation.mutateAsync(id);
+                await validatePaymentAndSetPendingMutation.mutateAsync(id);
                 successCount++;
             } catch (e) {}
         }
@@ -437,8 +512,7 @@ const OrdersPage = () => {
                     <TableRow><TableCell colSpan={9}><Skeleton className="h-10 w-full" /></TableCell></TableRow>
                 ) : filteredOrders.map((order) => {
                     const isPaid = order.status === "Finalizada" || order.status === "Pago";
-                    const isPix = order.payment_method?.toLowerCase().includes('pix');
-                    const needsValidation = isPix && !isPaid;
+                    const needsManualValidation = order.status === 'Pago' && order.delivery_status === 'Aguardando Validação';
                     const isInRoute = order.delivery_status === "Despachado";
                     const isSelected = selectedIds.has(order.id);
                     const isNextRoute = checkIsNextRoute(order.created_at);
@@ -452,7 +526,7 @@ const OrdersPage = () => {
                     return (
                     <TableRow key={order.id} className={cn(
                         isSelected ? "bg-primary/5 border-l-4 border-l-primary" : 
-                        needsValidation ? "bg-orange-50/40" : 
+                        needsManualValidation ? "bg-orange-50/40" : 
                         (isNextRoute && order.delivery_status === 'Pendente') ? "bg-yellow-50/60 border-l-4 border-l-yellow-400" : ""
                     )}>
                         <TableCell className="text-center">
@@ -534,13 +608,19 @@ const OrdersPage = () => {
                             </Badge>
                         </TableCell>
                         <TableCell>
-                            <Badge variant="secondary" className={cn(
-                                "w-fit",
-                                order.delivery_status === 'Entregue' && "bg-green-100 text-green-800",
-                                order.delivery_status === 'Despachado' && "bg-blue-100 text-blue-800 animate-pulse"
-                            )}>
-                                {order.delivery_status}
-                            </Badge>
+                            {needsManualValidation ? (
+                                <Badge variant="destructive" className="bg-orange-500 hover:bg-orange-600 gap-1">
+                                    <ShieldCheck className="w-3 h-3" /> Aguardando Validação
+                                </Badge>
+                            ) : (
+                                <Badge variant="secondary" className={cn(
+                                    "w-fit",
+                                    order.delivery_status === 'Entregue' && "bg-green-100 text-green-800",
+                                    order.delivery_status === 'Despachado' && "bg-blue-100 text-blue-800 animate-pulse"
+                                )}>
+                                    {order.delivery_status}
+                                </Badge>
+                            )}
                         </TableCell>
                         <TableCell>
                             <Badge variant="outline" className={cn("gap-1 pr-3 w-fit", paymentDetails.style)}>
@@ -549,79 +629,92 @@ const OrdersPage = () => {
                             </Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                            {needsValidation && (
-                                <TooltipProvider>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <Button 
-                                                size="sm" 
-                                                className="bg-green-600 hover:bg-green-700 font-bold h-8 px-3 text-xs shadow-sm"
-                                                onClick={() => validatePaymentMutation.mutate(order.id)}
-                                                disabled={validatePaymentMutation.isPending}
-                                            >
-                                                {validatePaymentMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <CheckCircle2 className="w-3 h-3 mr-1" />}
-                                                Validar
-                                            </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>Confirmar recebimento do Pix</TooltipContent>
-                                    </Tooltip>
-                                </TooltipProvider>
-                            )}
-
-                            {isInRoute && (
-                                <TooltipProvider>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <Button 
-                                                size="sm" 
-                                                variant="outline"
-                                                className="text-green-600 border-green-200 bg-green-50 hover:bg-green-100 font-bold h-8 px-3 text-xs"
-                                                onClick={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: 'Entregue', info: 'Confirmado pelo painel' })}
-                                                disabled={updateDeliveryStatusMutation.isPending}
-                                            >
-                                                <CheckCircle2 className="w-3 h-3 mr-1" /> Entregue
-                                            </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>Marcar pedido como entregue</TooltipContent>
-                                    </Tooltip>
-                                </TooltipProvider>
-                            )}
-                            
-                            <Button variant="ghost" size="icon" onClick={() => { setSelectedOrder(order); setIsDetailModalOpen(true); }}><Eye className="h-4 w-4 text-primary" /></Button>
-                            
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                    <DropdownMenuLabel>Ações do Pedido</DropdownMenuLabel>
-                                    {phone && (
-                                        <DropdownMenuItem asChild>
-                                            <a href={getWhatsAppLink(phone, `Olá ${name}, falando sobre o pedido #${order.id}...`)} target="_blank" rel="noreferrer" className="cursor-pointer text-green-600 font-medium">
-                                                <MessageCircle className="w-4 h-4 mr-2" /> Abrir WhatsApp
-                                            </a>
-                                        </DropdownMenuItem>
+                        <div className="flex justify-end gap-1">
+                            {needsManualValidation ? (
+                                <>
+                                    <TooltipProvider>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button 
+                                                    size="icon" 
+                                                    className="bg-green-600 hover:bg-green-700 h-8 w-8"
+                                                    onClick={() => validatePaymentAndSetPendingMutation.mutate(order.id)}
+                                                    disabled={validatePaymentAndSetPendingMutation.isPending && validatePaymentAndSetPendingMutation.variables === order.id}
+                                                >
+                                                    {validatePaymentAndSetPendingMutation.isPending && validatePaymentAndSetPendingMutation.variables === order.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckSquare className="w-4 h-4" />}
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent><p>Validar Comprovante e Liberar para Envio</p></TooltipContent>
+                                        </Tooltip>
+                                    </TooltipProvider>
+                                    <TooltipProvider>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button 
+                                                    size="icon" 
+                                                    variant="destructive" 
+                                                    className="h-8 w-8"
+                                                    onClick={() => setActionToConfirm({ action: 'cancel_fraud', client: order })}
+                                                >
+                                                    <ShieldX className="w-4 h-4" />
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent><p>Cancelar Pedido (Suspeita de Fraude)</p></TooltipContent>
+                                        </Tooltip>
+                                    </TooltipProvider>
+                                </>
+                            ) : (
+                                <>
+                                    {isInRoute && (
+                                        <TooltipProvider>
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <Button 
+                                                        size="sm" 
+                                                        variant="outline"
+                                                        className="text-green-600 border-green-200 bg-green-50 hover:bg-green-100 font-bold h-8 px-3 text-xs"
+                                                        onClick={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: 'Entregue', info: 'Confirmado pelo painel' })}
+                                                        disabled={updateDeliveryStatusMutation.isPending}
+                                                    >
+                                                        <CheckCircle2 className="w-3 h-3 mr-1" /> Entregue
+                                                    </Button>
+                                                </TooltipTrigger>
+                                                <TooltipContent>Marcar pedido como entregue</TooltipContent>
+                                            </Tooltip>
+                                        </TooltipProvider>
                                     )}
-                                    {needsValidation && (
-                                        <DropdownMenuItem onSelect={() => validatePaymentMutation.mutate(order.id)} className="text-green-600 font-bold">
-                                            <CheckCircle2 className="w-4 h-4 mr-2" /> Validar Pagamento
-                                        </DropdownMenuItem>
-                                    )}
-                                    <DropdownMenuItem onSelect={() => { setSelectedOrder(order); setIsLabelModalOpen(true); }} disabled={!isPaid}>
-                                        <Printer className="w-4 h-4 mr-2" /> Imprimir Etiqueta
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: 'Despachado', info: 'Despachado manualmente' })} disabled={!isPaid || isInRoute || order.delivery_status === 'Entregue'}>
-                                        <Truck className="w-4 h-4 mr-2" /> Marcar como Despachado
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: 'Entregue', info: 'Entregue manualmente' })} disabled={order.delivery_status === 'Entregue'}>
-                                        <CheckCircle2 className="w-4 h-4 mr-2" /> Marcar como Entregue
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem onSelect={() => { setSelectedOrder(order); setIsDeleteAlertOpen(true); }} className="text-red-600">
-                                        <Trash2 className="w-4 h-4 mr-2" /> Excluir Pedido
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
+                                    
+                                    <Button variant="ghost" size="icon" onClick={() => { setSelectedOrder(order); setIsDetailModalOpen(true); }}><Eye className="h-4 w-4 text-primary" /></Button>
+                                    
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                            <DropdownMenuLabel>Ações do Pedido</DropdownMenuLabel>
+                                            {phone && (
+                                                <DropdownMenuItem asChild>
+                                                    <a href={getWhatsAppLink(phone, `Olá ${name}, falando sobre o pedido #${order.id}...`)} target="_blank" rel="noreferrer" className="cursor-pointer text-green-600 font-medium">
+                                                        <MessageCircle className="w-4 h-4 mr-2" /> Abrir WhatsApp
+                                                    </a>
+                                                </DropdownMenuItem>
+                                            )}
+                                            <DropdownMenuItem onSelect={() => { setSelectedOrder(order); setIsLabelModalOpen(true); }} disabled={!isPaid}>
+                                                <Printer className="w-4 h-4 mr-2" /> Imprimir Etiqueta
+                                            </DropdownMenuItem>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: 'Despachado', info: 'Despachado manualmente' })} disabled={!isPaid || isInRoute || order.delivery_status === 'Entregue'}>
+                                                <Truck className="w-4 h-4 mr-2" /> Marcar como Despachado
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: 'Entregue', info: 'Entregue manualmente' })} disabled={order.delivery_status === 'Entregue'}>
+                                                <CheckCircle2 className="w-4 h-4 mr-2" /> Marcar como Entregue
+                                            </DropdownMenuItem>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem onSelect={() => { setSelectedOrder(order); setIsDeleteAlertOpen(true); }} className="text-red-600">
+                                                <Trash2 className="w-4 h-4 mr-2" /> Excluir Pedido
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </>
+                            )}
                         </div>
                         </TableCell>
                     </TableRow>
@@ -678,15 +771,31 @@ const OrdersPage = () => {
         onClose={() => setIsClientHistoryOpen(false)} 
       />
 
-      <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
+      <AlertDialog open={!!actionToConfirm} onOpenChange={() => setActionToConfirm(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir Venda?</AlertDialogTitle>
-            <AlertDialogDescription>Esta ação é irreversível e removerá o histórico deste pedido.</AlertDialogDescription>
+            <AlertDialogTitle>Confirmar Ação</AlertDialogTitle>
+            <AlertDialogDescription>
+              {actionToConfirm?.action === 'resend_confirmation'
+                ? `Você tem certeza que deseja reenviar o e-mail de confirmação para ${actionToConfirm?.client.email}?`
+                : actionToConfirm?.action === 'send_password_reset'
+                ? `Você tem certeza que deseja enviar um link de redefinição de senha para ${actionToConfirm?.client.email}?`
+                : actionToConfirm?.action === 'mark_as_recurrent'
+                ? `Você tem certeza que deseja marcar o cliente ${actionToConfirm?.client.email} como recorrente? Isso removerá a restrição de PIX e permitirá outros métodos de pagamento.`
+                : actionToConfirm?.action === 'cancel_fraud'
+                ? `Tem certeza que deseja cancelar o pedido #${actionToConfirm?.client.id} por suspeita de fraude? O status será alterado para 'Cancelado'.`
+                : `ATENÇÃO: Você está prestes a DELETAR PERMANENTEMENTE TODOS OS PEDIDOS do cliente ${actionToConfirm?.client.email}. Isso redefinirá o status de compra dele para 'Primeira Compra'. Esta ação é irreversível.`}
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => selectedOrder && deleteOrderMutation.mutate(selectedOrder.id)} className="bg-red-600">Excluir</AlertDialogAction>
+            <AlertDialogAction
+              onClick={handleConfirmAction}
+              disabled={userActionMutation.isPending || cancelOrderForFraudMutation.isPending}
+              className={actionToConfirm?.action === 'cancel_fraud' || actionToConfirm?.action === 'delete_orders' ? "bg-red-600" : ""}
+            >
+              {userActionMutation.isPending || cancelOrderForFraudMutation.isPending ? "Executando..." : "Sim, Continuar"}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

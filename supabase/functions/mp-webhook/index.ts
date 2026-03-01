@@ -86,13 +86,18 @@ serve(async (req) => {
             else if (paymentTypeId === 'bank_transfer') methodLabel = 'Pix (MP)';
             else if (paymentTypeId === 'account_money') methodLabel = 'Saldo Mercado Pago';
 
+            // NOVA LÓGICA DE STATUS DE ENTREGA
+            const deliveryStatusUpdate = (paymentTypeId === 'credit_card' || paymentTypeId === 'debit_card')
+                ? 'Pendente' // Confiança automática para cartões
+                : 'Aguardando Validação'; // Validação manual para Pix e outros
+
             // 4. Atualiza Pedido
             const { error: updateError } = await supabaseAdmin
                 .from('orders')
                 .update({ 
                     status: 'Pago', 
                     payment_method: methodLabel,
-                    delivery_status: 'Pendente' 
+                    delivery_status: deliveryStatusUpdate // Usa o novo status dinâmico
                 })
                 .eq('id', orderId);
 
