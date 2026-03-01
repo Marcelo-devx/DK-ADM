@@ -84,6 +84,10 @@ const Sidebar = () => {
           <DollarSign className="w-4 h-4 mr-3 text-green-600" />
           Pedidos (Clientes)
         </NavLink>
+        <NavLink to="/dashboard/spoke-export" className={navLinkClass}>
+          <FileOutput className="w-4 h-4 mr-3 text-indigo-400" />
+          Exportar Rotas
+        </NavLink>
         <NavLink to="/dashboard/delivery-routes" className={navLinkClass}>
           <MapIcon className="w-4 h-4 mr-3 text-indigo-500" />
           Rotas de Entrega
@@ -125,10 +129,6 @@ const Sidebar = () => {
         <NavLink to="/dashboard/shipping-rates" className={navLinkClass}>
           <Bike className="w-4 h-4 mr-3 text-indigo-600" />
           Fretes e Taxas
-        </NavLink>
-        <NavLink to="/dashboard/spoke-export" className={navLinkClass}>
-          <FileOutput className="w-4 h-4 mr-3 text-indigo-400" />
-          Exportar Rotas
         </NavLink>
         <NavLink to="/dashboard/print-labels" className={navLinkClass}>
           <Printer className="w-4 h-4 mr-3 text-gray-600" />
