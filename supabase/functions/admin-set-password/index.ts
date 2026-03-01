@@ -44,16 +44,16 @@ serve(async (req) => {
       throw new Error("Email e nova senha são obrigatórios.");
     }
 
-    // 4. Find user by email using a reliable RPC call
-    const { data: userId, error: rpcError } = await supabaseAdmin.rpc('get_user_id_by_email', { user_email: email });
+    // 4. Find user by email using the dedicated admin function
+    const { data: { user: targetUser }, error: getUserError } = await supabaseAdmin.auth.admin.getUserByEmail(email);
 
-    if (rpcError || !userId) {
+    if (getUserError || !targetUser) {
         throw new Error(`Usuário com email ${email} não encontrado.`);
     }
 
     // 5. Update password
     const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-        userId,
+        targetUser.id,
         { password: new_password }
     );
 
