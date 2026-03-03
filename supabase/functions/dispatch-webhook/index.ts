@@ -13,6 +13,29 @@ serve(async (req) => {
   }
 
   try {
+    // --- 0. AUTHENTICATION CHECK ---
+    const authHeader = req.headers.get('Authorization');
+    const token = authHeader?.replace('Bearer ', '');
+    
+    let currentUser = null;
+    let isServiceRole = false;
+
+    if (token === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')) {
+        isServiceRole = true;
+    } else if (token) {
+        const supabaseClient = createClient(
+            Deno.env.get('SUPABASE_URL') ?? '',
+            Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+            { global: { headers: { Authorization: authHeader } } }
+        );
+        const { data } = await supabaseClient.auth.getUser();
+        currentUser = data.user;
+    }
+
+    if (!isServiceRole && !currentUser) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     const { event_type, payload } = await req.json();
 
     if (!event_type) return new Response("Missing event_type", { status: 400 });
@@ -54,9 +77,7 @@ serve(async (req) => {
     let finalData = {};
 
     if (['order_created', 'order_paid', 'order_shipped', 'order_delivered'].includes(event_type)) {
-        // A. Buscar Pedido + Endereço + Cupom
-        // NOTE: avoid PostgREST nested relationship selects which fail if DB FKs aren't configured in the schema cache.
-        // Fetch the base order first, then fetch related data separately.
+        // A. Buscar Pedido
         const { data: order, error: orderError } = await supabaseAdmin
             .from('orders')
             .select('*')
@@ -65,7 +86,24 @@ serve(async (req) => {
         
         if (orderError || !order) throw new Error(`Order ${orderId} not found`);
 
-        // Try to fetch any coupon relation separately (defensive: schema may not expose a direct FK relation)
+        // --- SECURITY CHECK: OWNERSHIP OR ADMIN ---
+        if (!isServiceRole && currentUser) {
+            if (order.user_id !== currentUser.id) {
+                // If user doesn't own the order, check if they are an admin
+                const { data: profile } = await supabaseAdmin
+                    .from('profiles')
+                    .select('role')
+                    .eq('id', currentUser.id)
+                    .single();
+                
+                if (profile?.role !== 'adm') {
+                    console.error(`[dispatch-webhook] Forbidden access attempt by user ${currentUser.id} for order ${orderId}`);
+                    return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+                }
+            }
+        }
+
+        // Try to fetch any coupon relation separately
         let couponName = null;
         try {
             const { data: ucData, error: ucError } = await supabaseAdmin
@@ -94,7 +132,7 @@ serve(async (req) => {
             .eq('id', order.user_id)
             .maybeSingle();
 
-        // D. Buscar Email do Auth (defensive)
+        // D. Buscar Email do Auth
         let userEmail = "";
         if (order.user_id) {
             try {
@@ -109,7 +147,6 @@ serve(async (req) => {
         const orderItems = items || [];
         const subtotalCalc = orderItems.reduce((acc: number, item: any) => acc + (item.quantity * item.price_at_purchase), 0);
         
-        // If couponName wasn't populated above, try reading from order (backwards-compat)
         if (!couponName) {
             try {
                 if (order.user_coupons && order.user_coupons.length > 0 && order.user_coupons[0].coupons) {
@@ -126,10 +163,8 @@ serve(async (req) => {
 
         const calculatedTotal = subtotalCalc + shippingCost + donationAmount - couponDiscount;
 
-        // Tratamento do Endereço (JSONB no banco)
         const addr = order.shipping_address || {};
         
-        // Formatar dados do cliente
         const firstName = profile?.first_name || "";
         const lastName = profile?.last_name || "";
         const fullName = `${firstName} ${lastName}`.trim();
@@ -144,7 +179,7 @@ serve(async (req) => {
             cpf: cpf
         };
 
-        // --- 5. MONTAGEM DO PAYLOAD NO SCHEMA ESTRITO ---
+        // --- 5. MONTAGEM DO PAYLOAD ---
         finalData = {
             id: order.id,
             total_price: Number(calculatedTotal.toFixed(2)),
@@ -180,7 +215,6 @@ serve(async (req) => {
             }))
         };
 
-        // Adicionar informações específicas de mudança de status
         if (event_type !== 'order_created') {
             finalData.status_change = {
                 old_status: payload.old_status || null,
@@ -189,7 +223,7 @@ serve(async (req) => {
             };
         }
     } else {
-        // Fallback para outros eventos não mapeados
+        // Fallback
         finalData = payload;
     }
 
@@ -235,7 +269,6 @@ serve(async (req) => {
             responseCode = 500;
         }
 
-        // Log
         await supabaseAdmin.from('integration_logs').insert({
             event_type: event_type,
             status: status,
