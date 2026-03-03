@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,6 +13,36 @@ serve(async (req) => {
   }
 
   try {
+    // 1. Auth Check (Security Fix)
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Missing Authorization header' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } }
+    )
+
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser()
+    if (userError || !user) {
+      return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // 2. Admin Role Check
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      { auth: { persistSession: false } }
+    );
+
+    const { data: profile } = await supabaseAdmin.from('profiles').select('role').eq('id', user.id).single();
+    if (profile?.role !== 'adm') {
+        return new Response(JSON.stringify({ error: 'Forbidden: Admins only' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // 3. Process Request
     const { url, event_type, method = 'POST', custom_payload, auth_token } = await req.json();
 
     if (!url) throw new Error("URL é obrigatória");
@@ -86,7 +117,6 @@ serve(async (req) => {
 
         const fullError = hint ? `${errorMessage}: ${hint}` : errorMessage;
 
-        // Try to capture the remote response body (if any) to aid debugging (e.g. stacktrace or error message).
         let remoteText = null;
         try {
             const txt = await response.text();
@@ -95,7 +125,6 @@ serve(async (req) => {
             remoteText = null;
         }
 
-        // If the remote response looks like N8N's known message about missing webhook node, add a helpful hint
         let n8nHint = null;
         try {
             if (remoteText && remoteText.includes('No Respond to Webhook node found')) {
