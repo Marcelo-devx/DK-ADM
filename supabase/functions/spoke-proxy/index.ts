@@ -20,13 +20,39 @@ serve(async (req) => {
   }
 
   try {
-    const { action, method = 'GET', body, params } = await req.json();
+    // 1. Check for Authorization header
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Missing Authorization header' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
 
+    // 2. Validate User
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } }
+    )
+
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser()
+    if (userError || !user) {
+      return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // 3. Initialize Admin Client
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
       { auth: { persistSession: false } }
     );
+
+    // 4. Check Admin Role
+    const { data: profile } = await supabaseAdmin.from('profiles').select('role').eq('id', user.id).single();
+    if (profile?.role !== 'adm') {
+        return new Response(JSON.stringify({ error: 'Forbidden: Admins only' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // 5. Parse Body (only after auth check)
+    const { action, method = 'GET', body, params } = await req.json();
 
     const { data: settings } = await supabaseAdmin
       .from('app_settings')
