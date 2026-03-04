@@ -132,7 +132,7 @@ const SpokeExportPage = () => {
     return val.replace(/\D/g, "");
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (selectedIds.size === 0) {
       showError("Selecione pelo menos um pedido para exportar.");
       return;
@@ -183,7 +183,31 @@ const SpokeExportPage = () => {
       // Download
       XLSX.writeFile(workbook, fileName);
       showSuccess(`${selectedOrders.length} pedidos exportados com sucesso!`);
-      
+
+      // --- NOVO: Atualiza status de entrega dos pedidos exportados para "Pedido separado" ---
+      try {
+        const ids = selectedOrders.map(o => o.id);
+        if (ids.length > 0) {
+          const { error: updateError } = await supabase
+            .from('orders')
+            .update({ delivery_status: 'Pedido separado' })
+            .in('id', ids);
+
+          if (updateError) {
+            console.error('Erro ao atualizar status de entrega:', updateError);
+            showError('Exportado, mas falha ao atualizar status dos pedidos.');
+          } else {
+            showSuccess('Status de entrega atualizado para "Pedido separado".');
+            // limpa seleção e atualiza lista
+            setSelectedIds(new Set());
+            refetch();
+          }
+        }
+      } catch (err) {
+        console.error('Erro na atualização de status após export:', err);
+        showError('Exportado, mas ocorreu um erro ao validar os pedidos.');
+      }
+
     } catch (err) {
       console.error(err);
       showError("Erro ao gerar a planilha.");
