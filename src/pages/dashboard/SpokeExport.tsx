@@ -20,6 +20,7 @@ import * as XLSX from 'xlsx';
 import { showSuccess, showError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
 interface Order {
   id: number;
@@ -106,6 +107,7 @@ const fetchOrdersToExport = async (): Promise<Order[]> => {
 const SpokeExportPage = () => {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [isExporting, setIsExporting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const { data: orders, isLoading, refetch, isRefetching } = useQuery<Order[]>({
     queryKey: ["ordersToExport"],
@@ -214,6 +216,12 @@ const SpokeExportPage = () => {
     } finally {
       setIsExporting(false);
     }
+  };
+
+  const handleConfirmExport = () => {
+    // Fecha o diálogo e inicia a exportação
+    setConfirmOpen(false);
+    void handleExport();
   };
 
   return (
@@ -344,7 +352,7 @@ const SpokeExportPage = () => {
 
                     <Button 
                         className="w-full h-12 text-lg font-bold bg-blue-600 hover:bg-blue-700 shadow-lg"
-                        onClick={handleExport}
+                        onClick={() => setConfirmOpen(true)}
                         disabled={selectedIds.size === 0 || isExporting}
                     >
                         {isExporting ? (
@@ -360,6 +368,21 @@ const SpokeExportPage = () => {
             </Card>
         </div>
       </div>
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar exportação</DialogTitle>
+            <DialogDescription>
+              Ao confirmar, os pedidos selecionados serão removidos da lista e a planilha será enviada para download. Deseja continuar?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>Não</Button>
+            <Button onClick={handleConfirmExport} disabled={isExporting} className="ml-2">Sim, Exportar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
