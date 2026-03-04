@@ -13,6 +13,32 @@ serve(async (req) => {
   }
 
   try {
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      { auth: { persistSession: false } }
+    );
+
+    // --- SECURITY CHECK: SHARED SECRET ---
+    const secret = req.headers.get('X-Webhook-Secret');
+    const { data: secretSetting } = await supabaseAdmin
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'logistics_webhook_secret')
+        .single();
+
+    const expectedSecret = secretSetting?.value;
+
+    // Only enforce if a secret is configured in the database
+    if (expectedSecret && secret !== expectedSecret) {
+        console.warn("[spoke-webhook] Unauthorized webhook attempt: Invalid secret.");
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { 
+            status: 401, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        });
+    }
+    // --- END SECURITY CHECK ---
+
     const payload = await req.json();
     console.log("Evento Spoke recebido:", payload.event_type);
 
@@ -27,12 +53,6 @@ serve(async (req) => {
     }
 
     const orderId = externalId.replace('ORDER-', '');
-
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      { auth: { persistSession: false } }
-    );
 
     // Mapeamento de Eventos Spoke -> Status da Loja
     let deliveryStatus = 'Pendente';

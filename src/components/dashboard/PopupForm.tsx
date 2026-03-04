@@ -17,6 +17,7 @@ import { Eye, Smartphone, Monitor, Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
+import DOMPurify from 'dompurify';
 
 const formSchema = z.object({
   id: z.number().optional(),
@@ -197,7 +198,7 @@ export const PopupForm = ({
               
               <div 
                 className="text-gray-400 text-base leading-relaxed w-full ql-editor-preview custom-scrollbar-preview max-h-[300px] overflow-y-auto pr-2"
-                dangerouslySetInnerHTML={{ __html: watchedValues.content || "Digite o conteúdo ao lado..." }}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(watchedValues.content || "Digite o conteúdo ao lado...") }}
               />
               
               <div className="w-full pt-4">

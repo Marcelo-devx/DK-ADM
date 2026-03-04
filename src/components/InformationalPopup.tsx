@@ -12,6 +12,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { Info } from "lucide-react";
 import { useUser } from "@/hooks/useUser";
+import DOMPurify from 'dompurify';
 
 const fetchActivePopups = async () => {
   const { data, error } = await supabase
@@ -103,7 +104,7 @@ export const InformationalPopup = () => {
             <AlertDialogDescription className="text-gray-400 text-base leading-relaxed w-full mt-4" asChild>
               <div 
                 className="formatted-content max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar"
-                dangerouslySetInnerHTML={{ __html: currentPopup.content }} 
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(currentPopup.content) }} 
               />
             </AlertDialogDescription>
           </AlertDialogHeader>
