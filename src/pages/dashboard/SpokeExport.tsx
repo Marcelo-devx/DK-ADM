@@ -374,12 +374,12 @@ const SpokeExportPage = () => {
           <DialogHeader>
             <DialogTitle>Confirmar exportação</DialogTitle>
             <DialogDescription>
-              Ao confirmar, os pedidos selecionados serão removidos da lista e a planilha será enviada para download. Deseja continuar?
+              Ao confirmar, os pedidos selecionados serão removidos da lista, a planilha será enviada para download e o status de entrega dos pedidos será atualizado para "Pedido separado". Deseja continuar?
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmOpen(false)}>Não</Button>
-            <Button onClick={handleConfirmExport} disabled={isExporting} className="ml-2">Sim, Exportar</Button>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>Não, cancelar</Button>
+            <Button onClick={handleConfirmExport} disabled={isExporting} className="ml-2">Sim, Exportar e Marcar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
