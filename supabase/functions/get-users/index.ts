@@ -39,36 +39,17 @@ serve(async (req) => {
         return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const url = new URL(req.url);
-    const page = parseInt(url.searchParams.get('page') || '1', 10);
-    const perPage = parseInt(url.searchParams.get('perPage') || '50', 10);
-
-    const { data: listUsersData, error: usersError } = await supabaseAdmin.auth.admin.listUsers({
-      page: page,
-      perPage: perPage,
-    });
+    const { data: { users }, error: usersError } = await supabaseAdmin.auth.admin.listUsers();
     if (usersError) throw usersError;
-
-    const { users, total } = listUsersData;
-    const userIds = users.map(u => u.id);
-
-    if (userIds.length === 0) {
-        return new Response(JSON.stringify({ clients: [], total: 0 }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: 200,
-        });
-    }
 
     const { data: profiles, error: profilesError } = await supabaseAdmin
       .from('profiles')
-      .select('id, first_name, last_name, role, force_pix_on_next_purchase, updated_at, created_at')
-      .in('id', userIds);
+      .select('id, first_name, last_name, role, force_pix_on_next_purchase, updated_at, created_at');
     if (profilesError) throw profilesError;
 
     const { data: allOrders, error: allOrdersError } = await supabaseAdmin
         .from('orders')
-        .select('user_id, status')
-        .in('user_id', userIds);
+        .select('user_id, status');
     if (allOrdersError) throw allOrdersError;
 
     const orderCountMap = new Map();
@@ -99,7 +80,7 @@ serve(async (req) => {
       };
     });
 
-    return new Response(JSON.stringify({ clients, total }), {
+    return new Response(JSON.stringify(clients), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     })

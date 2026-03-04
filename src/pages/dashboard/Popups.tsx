@@ -11,7 +11,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import DOMPurify from 'dompurify';
 
 const PopupsPage = () => {
   const queryClient = useQueryClient();
@@ -148,7 +147,7 @@ const PopupsPage = () => {
                   <CardContent className="text-sm text-gray-600 py-4">
                       <div 
                         className="line-clamp-4 italic bg-gray-50 p-3 rounded-lg border border-gray-100 overflow-hidden max-h-[100px]"
-                        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(popup.content) }}
+                        dangerouslySetInnerHTML={{ __html: popup.content }}
                       />
                   </CardContent>
                   <CardFooter className="flex justify-between pt-3 border-t bg-gray-50/30">

@@ -1,8 +1,6 @@
-"use client";
-
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "../../integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Table,
   TableBody,
@@ -11,18 +9,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Button } from "../../components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, Mail, KeyRound, RotateCcw, CheckCircle, Lock, Unlock, UserPlus, Eye, CalendarDays } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { showSuccess, showError } from "@/utils/toast";
+import { Badge } from "@/components/ui/badge";
+import { MoreHorizontal, Mail, KeyRound, RotateCcw, CheckCircle, Lock, Unlock, UserPlus, Eye, CalendarDays } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,11 +32,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { showSuccess, showError } from "@/utils/toast";
 import { CreateClientForm } from "@/components/dashboard/CreateClientForm";
 import { ClientDetailsModal } from "@/components/dashboard/ClientDetailsModal";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { Pagination, PaginationContent, PaginationItem, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 
 interface Client {
   id: string;
@@ -59,8 +56,8 @@ interface Client {
   completed_order_count: number;
 }
 
-const fetchClients = async (page: number, perPage: number): Promise<{ clients: Client[], total: number }> => {
-  const { data, error } = await supabase.functions.invoke(`get-users?page=${page}&perPage=${perPage}`);
+const fetchClients = async (): Promise<Client[]> => {
+  const { data, error } = await supabase.functions.invoke("get-users");
   if (error) {    
     throw new Error(`Falha ao buscar clientes: ${error.message}`);
   }
@@ -72,6 +69,7 @@ const ClientsPage = () => {
   const [showOnlyFlagged, setShowOnlyFlagged] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   
+  // Estado para o modal de detalhes
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
 
@@ -80,18 +78,10 @@ const ClientsPage = () => {
     client: Client;
   } | null>(null);
 
-  const [page, setPage] = useState(1);
-  const [perPage] = useState(20);
-
-  const { data, isLoading, error } = useQuery<{ clients: Client[], total: number }>({
-    queryKey: ["clients", page, perPage],
-    queryFn: () => fetchClients(page, perPage),
-    keepPreviousData: true,
+  const { data: clients, isLoading, error } = useQuery<Client[]>({
+    queryKey: ["clients"],
+    queryFn: fetchClients,
   });
-
-  const clients = data?.clients || [];
-  const totalClients = data?.total || 0;
-  const pageCount = Math.ceil(totalClients / perPage);
 
   const createClientMutation = useMutation({
     mutationFn: async (values: any) => {
@@ -364,22 +354,7 @@ const ClientsPage = () => {
         </Table>
       </div>
 
-      <div className="flex items-center justify-between mt-4">
-        <p className="text-sm text-muted-foreground">
-            Página {page} de {pageCount}. Total de {totalClients} clientes.
-        </p>
-        <Pagination>
-            <PaginationContent>
-            <PaginationItem>
-                <PaginationPrevious href="#" onClick={(e) => { e.preventDefault(); setPage(p => Math.max(1, p - 1)); }} className={page <= 1 ? "pointer-events-none opacity-50" : ""} />
-            </PaginationItem>
-            <PaginationItem>
-                <PaginationNext href="#" onClick={(e) => { e.preventDefault(); setPage(p => Math.min(pageCount, p + 1)); }} className={page >= pageCount ? "pointer-events-none opacity-50" : ""} />
-            </PaginationItem>
-            </PaginationContent>
-        </Pagination>
-      </div>
-
+      {/* Confirmação de Ações e Novo Cadastro */}
       <AlertDialog open={!!actionToConfirm} onOpenChange={() => setActionToConfirm(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -406,6 +381,7 @@ const ClientsPage = () => {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Modal de Detalhes do Cliente */}
       <ClientDetailsModal 
         client={selectedClient} 
         isOpen={isDetailsModalOpen} 
