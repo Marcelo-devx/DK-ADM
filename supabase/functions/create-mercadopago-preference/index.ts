@@ -13,6 +13,23 @@ serve(async (req) => {
   }
 
   try {
+    // 1. Auth Validation
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Missing Authorization header' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } }
+    )
+
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser()
+    if (userError || !user) {
+      return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
     const { orderId } = await req.json();
 
     if (!orderId) throw new Error("Order ID is required");
@@ -23,10 +40,11 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    // 1. Buscar Dados do Pedido e Cliente
+    // 2. Fetch Order Details (including user_id for security check)
     const { data: order, error: orderError } = await supabaseAdmin
         .from('orders')
         .select(`
+            user_id,
             total_price, 
             shipping_cost, 
             donation_amount,
@@ -38,7 +56,20 @@ serve(async (req) => {
 
     if (orderError || !order) throw new Error("Pedido não encontrado.");
 
-    // 2. Buscar Configurações e Determinar Modo (Teste vs Produção)
+    // 3. Security Check: Ownership or Admin
+    if (order.user_id !== user.id) {
+        const { data: profile } = await supabaseAdmin
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .single();
+        
+        if (profile?.role !== 'adm') {
+            return new Response(JSON.stringify({ error: 'Forbidden: Acesso negado a este pedido.' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+    }
+
+    // 4. Fetch Settings and Determine Mode (Test vs Production)
     const { data: settingsData } = await supabaseAdmin
         .from('app_settings')
         .select('key, value')
@@ -67,7 +98,7 @@ serve(async (req) => {
     const payerName = order.profiles?.first_name || "Cliente";
     const payerSurname = order.profiles?.last_name || "";
 
-    // 3. Criar Preferência
+    // 5. Create Preference
     const preferenceBody = {
         items: [
             {
