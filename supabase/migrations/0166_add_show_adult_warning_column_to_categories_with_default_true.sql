@@ -1,0 +1,1 @@
+ALTER TABLE public.categories ADD COLUMN IF NOT EXISTS show_adult_warning boolean NOT NULL DEFAULT true;

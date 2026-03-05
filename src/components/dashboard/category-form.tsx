@@ -19,6 +19,7 @@ const formSchema = z.object({
   name: z.string().min(2, "O nome da categoria é obrigatório."),
   image_url: z.string().url("URL da imagem inválida.").optional().or(z.literal('')),
   is_visible: z.boolean().default(true),
+  show_adult_warning: z.boolean().default(true),
 });
 
 type CategoryFormValues = z.infer<typeof formSchema>;
@@ -36,6 +37,7 @@ export const CategoryForm = ({ onSubmit, isSubmitting, initialData }: CategoryFo
       name: "",
       image_url: "",
       is_visible: true,
+      show_adult_warning: true,
     },
   });
 
@@ -92,6 +94,26 @@ export const CategoryForm = ({ onSubmit, isSubmitting, initialData }: CategoryFo
             </FormItem>
           )}
         />
+
+        <FormField
+          control={form.control}
+          name="show_adult_warning"
+          render={({ field }) => (
+            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+              <div className="space-y-0.5">
+                <FormLabel>Mostrar aviso +18 nos produtos</FormLabel>
+                <p className="text-xs text-muted-foreground">Ativa a etiqueta/fita "+18" para todos os produtos desta categoria.</p>
+              </div>
+              <FormControl>
+                <Switch
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                />
+              </FormControl>
+            </FormItem>
+          )}
+        />
+
         <Button type="submit" disabled={isSubmitting}>
           {isSubmitting ? "Salvando..." : (initialData?.name ? "Salvar Alterações" : "Salvar Categoria")}
         </Button>

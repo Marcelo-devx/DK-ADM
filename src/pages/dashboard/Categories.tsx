@@ -49,6 +49,7 @@ type Category = {
   created_at: string;
   image_url: string | null;
   is_visible: boolean;
+  show_adult_warning: boolean;
 };
 
 const fetchCategories = async () => {
@@ -138,6 +139,13 @@ const CategoriesPage = () => {
     });
   };
 
+  const handleAdultWarningChange = (category: Category, newStatus: boolean) => {
+    updateMutation.mutate({
+      categoryId: category.id,
+      values: { show_adult_warning: newStatus },
+    });
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -176,13 +184,14 @@ const CategoriesPage = () => {
               <TableHead>Nome</TableHead>
               <TableHead>Data de Criação</TableHead>
               <TableHead>Visibilidade</TableHead>
+              <TableHead>Aviso +18</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center">
+                <TableCell colSpan={6} className="text-center">
                   Carregando categorias...
                 </TableCell>
               </TableRow>
@@ -214,6 +223,20 @@ const CategoriesPage = () => {
                       </Badge>
                     </div>
                   </TableCell>
+
+                  <TableCell>
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        checked={category.show_adult_warning}
+                        onCheckedChange={(newStatus) => handleAdultWarningChange(category, newStatus)}
+                        disabled={updateMutation.isPending}
+                      />
+                      <Badge variant={category.show_adult_warning ? "default" : "outline"}>
+                        {category.show_adult_warning ? "Ativo" : "Inativo"}
+                      </Badge>
+                    </div>
+                  </TableCell>
+
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -249,7 +272,7 @@ const CategoriesPage = () => {
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={5} className="text-center">
+                <TableCell colSpan={6} className="text-center">
                   Nenhuma categoria encontrada.
                 </TableCell>
               </TableRow>
