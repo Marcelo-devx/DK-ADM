@@ -29,10 +29,10 @@ BEGIN
             -- Domingo: Não aplica regra (vai para próxima rota)
             CONTINUE;
         ELSIF order_day = 6 THEN
-            -- Sábado: Corte às 12:30
+            -- Sábado: Corte às 12:30 (BRT)
             cutoff_time := cutoff_time + INTERVAL '12 hours 30 minutes';
         ELSE
-            -- Segunda a Sexta: Corte às 14:00
+            -- Segunda a Sexta: Corte às 14:00 (BRT)
             cutoff_time := cutoff_time + INTERVAL '14 hours';
         END IF;
         
@@ -54,13 +54,18 @@ BEGIN
 END;
 $$;
 
--- Configurar o job para rodar todos os dias às 15:30
+-- Configurar o job para rodar todos os dias às 12:30 UTC (15:30 BRT)
 -- Se o job já existe, remover primeiro
-SELECT cron.unschedule('update-separated-orders-to-dispatched');
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'update-separated-orders-to-dispatched') THEN
+        PERFORM cron.unschedule('update-separated-orders-to-dispatched');
+    END IF;
+END $$;
 
--- Criar o job
+-- Criar o job (12:30 UTC = 15:30 BRT)
 SELECT cron.schedule(
     'update-separated-orders-to-dispatched',
-    '0 15:30 * * *',
+    '30 12 * * *',
     $$SELECT public.auto_update_orders_to_dispatched();$$
 );
