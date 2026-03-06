@@ -75,6 +75,25 @@ export const ProductDialogs = ({
     handleClose();
   };
 
+  const handleImportConfirm = async () => {
+    try {
+      const result = await bulkInsertMutation.mutateAsync(productsToConfirm);
+      setImportResult(result);
+      // Muda para o modal de resultado
+      const newParams = new URLSearchParams(searchParams);
+      newParams.set("mode", "import-result");
+      setSearchParams(newParams);
+    } catch (error: any) {
+      console.error("Erro na importação:", error);
+    }
+  };
+
+  const handleCloseImport = () => {
+    setProductsToConfirm([]);
+    setImportResult(null);
+    handleClose();
+  };
+
   return (
     <>
       <Dialog open={mode === 'create' || (mode === 'edit' && !!selectedProduct)} onOpenChange={(open) => !open && handleClose()}>
@@ -117,6 +136,22 @@ export const ProductDialogs = ({
       </AlertDialog>
 
       {selectedProduct && mode === 'variants' && (<ProductVariantViewer productId={selectedProduct.id} productName={selectedProduct.name} isOpen={true} onClose={handleClose} />)}
+
+      {/* Import Confirmation Modal */}
+      <ImportConfirmationModal
+        isOpen={mode === 'import-confirm'}
+        onClose={handleCloseImport}
+        productsToImport={productsToConfirm}
+        onConfirm={handleImportConfirm}
+        isSubmitting={bulkInsertMutation.isPending}
+      />
+
+      {/* Import Result Modal */}
+      <ImportResultModal
+        isOpen={mode === 'import-result'}
+        onClose={handleCloseImport}
+        result={importResult}
+      />
     </>
   );
 };
