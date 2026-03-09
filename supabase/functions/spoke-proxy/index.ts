@@ -73,7 +73,7 @@ serve(async (req) => {
 
     apiUrl = apiUrl.trim().replace(/\/$/, '');
     let finalUrl = `${apiUrl}/${action}`;
-    
+
     if (params) {
       const queryString = new URLSearchParams(params).toString();
       finalUrl += `?${queryString}`;
@@ -89,13 +89,19 @@ serve(async (req) => {
 
     while (attempt < maxAttempts) {
       try {
+        const headers: Record<string, string> = {
+            'Authorization': `Bearer ${apiToken.trim()}`,
+            'Accept': 'application/json'
+        };
+
+        // Só adiciona Content-Type se houver body
+        if (body) {
+            headers['Content-Type'] = 'application/json';
+        }
+
         response = await fetch(finalUrl, {
             method,
-            headers: {
-                'Authorization': `Bearer ${apiToken.trim()}`,
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
+            headers,
             body: body ? JSON.stringify(body) : undefined
         });
 
@@ -108,7 +114,7 @@ serve(async (req) => {
         }
 
         const responseText = await response.text();
-        
+
         try {
             data = JSON.parse(responseText);
         } catch (e) {
