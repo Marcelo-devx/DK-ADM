@@ -46,7 +46,11 @@ serve(async (req) => {
     );
 
     // 4. Check Admin Role
-    const { data: profile } = await supabaseAdmin.from('profiles').select('role').eq('id', user.id).single();
+    const { data: profile, error: profileErr } = await supabaseAdmin.from('profiles').select('role').eq('id', user.id).single();
+    if (profileErr) {
+      console.error("[spoke-proxy] error fetching profile:", profileErr);
+      return new Response(JSON.stringify({ error: 'Failed to validate profile' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
     if (profile?.role !== 'adm') {
         return new Response(JSON.stringify({ error: 'Forbidden: Admins only' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
@@ -67,13 +71,13 @@ serve(async (req) => {
     }
 
     if (!apiUrl || !apiUrl.includes("api.getcircuit.com/public/v0.2b")) {
-        // console.warn(`URL configurada (${apiUrl}) difere da oficial. Usando: ${OFFICIAL_API_URL}`);
+        // Use the official API URL if the configured value is missing/incorrect
         apiUrl = OFFICIAL_API_URL;
     }
 
     apiUrl = apiUrl.trim().replace(/\/$/, '');
     let finalUrl = `${apiUrl}/${action}`;
-    
+
     if (params) {
       const queryString = new URLSearchParams(params).toString();
       finalUrl += `?${queryString}`;
@@ -85,63 +89,80 @@ serve(async (req) => {
     let attempt = 0;
     const maxAttempts = 3;
     let response;
-    let data;
+    let responseText;
+    let parsedData;
 
     while (attempt < maxAttempts) {
       try {
-        response = await fetch(finalUrl, {
-            method,
-            headers: {
-                'Authorization': `Bearer ${apiToken.trim()}`,
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            body: body ? JSON.stringify(body) : undefined
-        });
+        const fetchOptions: any = {
+          method,
+          headers: {
+            'Authorization': `Bearer ${apiToken.trim()}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+        };
+
+        // Do not attach a body for GET/HEAD requests (some servers reject a body on GET)
+        if (body && !['GET', 'HEAD'].includes(String(method).toUpperCase())) {
+          fetchOptions.body = JSON.stringify(body);
+        }
+
+        response = await fetch(finalUrl, fetchOptions);
+
+        responseText = await response.text();
+
+        try {
+          parsedData = responseText ? JSON.parse(responseText) : null;
+        } catch (e) {
+          parsedData = { message: responseText };
+        }
 
         if (response.status === 429) {
-            attempt++;
-            const waitTime = Math.pow(2, attempt) * 1000 + Math.random() * 500; // 2s, 4s, 8s + jitter
-            console.warn(`[spoke-proxy] Rate limit hit (429). Retrying in ${waitTime}ms (Attempt ${attempt}/${maxAttempts})`);
-            await delay(waitTime);
-            continue;
+          attempt++;
+          const waitTime = Math.pow(2, attempt) * 1000 + Math.random() * 500; // 2s, 4s, 8s + jitter
+          console.warn(`[spoke-proxy] Rate limit hit (429). Retrying in ${waitTime}ms (Attempt ${attempt}/${maxAttempts})`);
+          await delay(waitTime);
+          continue;
         }
 
-        const responseText = await response.text();
-        
-        try {
-            data = JSON.parse(responseText);
-        } catch (e) {
-            data = { message: responseText || `Status ${response.status}` };
-        }
-
+        // If external API returned non-2xx, forward the exact status & body to the client
         if (!response.ok) {
-            console.error("[spoke-proxy] API Error:", data);
-            throw new Error(data.message || data.error || `Erro ${response.status} na API Spoke`);
+          console.error("[spoke-proxy] External API returned non-OK status", { status: response.status, url: finalUrl, body: parsedData });
+          // Return the external API body and status so frontend can inspect the real error
+          const forwarded = typeof parsedData === 'string' ? parsedData : JSON.stringify(parsedData || { message: `Status ${response.status}` });
+          return new Response(forwarded, {
+            status: response.status,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
         }
 
-        // Sucesso
+        // Sucesso: parsedData contém o body parseado (ou mensagem textual)
         break;
 
       } catch (err) {
-        // Se for erro de rede ou timeout, também pode tentar retry se quiser, 
-        // mas aqui estamos focando no 429 ou erros finais.
-        if (attempt === maxAttempts - 1 || (response && response.status !== 429)) {
-            throw err;
+        console.error("[spoke-proxy] fetch attempt error:", { attempt, err: err?.message || err });
+        attempt++;
+        if (attempt >= maxAttempts) {
+          throw err;
         }
+        const waitTime = Math.pow(2, attempt) * 500 + Math.random() * 300;
+        await delay(waitTime);
       }
     }
 
-    return new Response(JSON.stringify(data), {
+    // Se chegamos aqui, response foi ok e parsedData preenchido
+    return new Response(JSON.stringify(parsedData), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
     });
 
   } catch (error) {
+    console.error("[spoke-proxy] handler error:", error);
     return new Response(
-      JSON.stringify({ 
-          error: "Falha na Integração", 
-          details: error.message 
+      JSON.stringify({
+          error: "Falha na Integração",
+          details: error?.message || String(error)
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
     )
