@@ -35,6 +35,33 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+// Função auxiliar para extrair mensagem de erro
+const extractErrorMessage = (error: any): string => {
+    console.error("[DriversManagement] Erro completo:", error);
+    
+    let errorMsg = error.message || "Erro desconhecido";
+    
+    // Tentar extrair de diferentes formatos
+    if (error.context) {
+        try {
+            if (typeof error.context === 'string') {
+                const parsed = JSON.parse(error.context);
+                errorMsg = parsed.error || parsed.message || parsed.details || errorMsg;
+            } else if (typeof error.context === 'object') {
+                errorMsg = error.context.error || error.context.message || error.context.details || errorMsg;
+            }
+        } catch (e) {
+            console.error("[DriversManagement] Erro ao parsear contexto:", e);
+        }
+    }
+    
+    if (error.data) {
+        errorMsg = error.data.error || error.data.message || error.data.details || errorMsg;
+    }
+    
+    return errorMsg;
+};
+
 interface Driver {
   id: string;
   name: string;
@@ -75,7 +102,10 @@ const DriversManagementPage = () => {
                 }
               });
         
-        if (error) throw error;
+        if (error) {
+            console.error("[DriversManagement] Erro ao buscar motoristas:", error);
+            throw new Error(extractErrorMessage(error));
+        }
         
         const driversList = data?.drivers || (Array.isArray(data) ? data : []);
         allDrivers = [...allDrivers, ...driversList];
@@ -120,7 +150,7 @@ const DriversManagementPage = () => {
         }
       });
 
-      if (error) throw error;
+      if (error) throw new Error(extractErrorMessage(error));
     },
     onSuccess: () => {
       showSuccess("Motorista cadastrado com sucesso!");
@@ -159,7 +189,7 @@ const DriversManagementPage = () => {
         }
       });
 
-      if (error) throw error;
+      if (error) throw new Error(extractErrorMessage(error));
     },
     onSuccess: () => {
       showSuccess("Motorista atualizado com sucesso!");
@@ -186,7 +216,7 @@ const DriversManagementPage = () => {
         }
       });
 
-      if (error) throw error;
+      if (error) throw new Error(extractErrorMessage(error));
     },
     onSuccess: () => {
       showSuccess("Motorista excluído com sucesso!");

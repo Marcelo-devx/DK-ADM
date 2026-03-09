@@ -41,6 +41,33 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+// Função auxiliar para extrair mensagem de erro
+const extractErrorMessage = (error: any): string => {
+    console.error("[RoutePlans] Erro completo:", error);
+    
+    let errorMsg = error.message || "Erro desconhecido";
+    
+    // Tentar extrair de diferentes formatos
+    if (error.context) {
+        try {
+            if (typeof error.context === 'string') {
+                const parsed = JSON.parse(error.context);
+                errorMsg = parsed.error || parsed.message || parsed.details || errorMsg;
+            } else if (typeof error.context === 'object') {
+                errorMsg = error.context.error || error.context.message || error.context.details || errorMsg;
+            }
+        } catch (e) {
+            console.error("[RoutePlans] Erro ao parsear contexto:", e);
+        }
+    }
+    
+    if (error.data) {
+        errorMsg = error.data.error || error.data.message || error.data.details || errorMsg;
+    }
+    
+    return errorMsg;
+};
+
 interface Plan {
   id: string;
   title: string;
@@ -101,7 +128,10 @@ const RoutePlansPage = () => {
         body: { action: "plans", params }
       });
       
-      if (error) throw error;
+      if (error) {
+          console.error("[RoutePlans] Erro ao buscar planos:", error);
+          throw new Error(extractErrorMessage(error));
+      }
       
       const plansList = data?.plans || [];
       
@@ -168,7 +198,7 @@ const RoutePlansPage = () => {
         }
       });
 
-      if (planError) throw planError;
+      if (planError) throw new Error(extractErrorMessage(planError));
 
       const planId = planData.id;
       
@@ -207,7 +237,7 @@ const RoutePlansPage = () => {
         }
       });
 
-      if (importError) throw importError;
+      if (importError) throw new Error(extractErrorMessage(importError));
 
       return planId;
     },
@@ -238,7 +268,7 @@ const RoutePlansPage = () => {
         }
       });
 
-      if (error) throw error;
+      if (error) throw new Error(extractErrorMessage(error));
       showSuccess("Rota otimizada com sucesso!");
       refetchPlans();
     } catch (error: any) {
@@ -259,7 +289,7 @@ const RoutePlansPage = () => {
         }
       });
 
-      if (error) throw error;
+      if (error) throw new Error(extractErrorMessage(error));
       showSuccess("Plano distribuído para motoristas!");
       refetchPlans();
     } catch (error: any) {

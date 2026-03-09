@@ -52,6 +52,33 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
+// Função auxiliar para extrair mensagem de erro
+const extractErrorMessage = (error: any): string => {
+    console.error("[DeliveryRoutes] Erro completo:", error);
+    
+    let errorMsg = error.message || "Erro desconhecido";
+    
+    // Tentar extrair de diferentes formatos
+    if (error.context) {
+        try {
+            if (typeof error.context === 'string') {
+                const parsed = JSON.parse(error.context);
+                errorMsg = parsed.error || parsed.message || parsed.details || errorMsg;
+            } else if (typeof error.context === 'object') {
+                errorMsg = error.context.error || error.context.message || error.context.details || errorMsg;
+            }
+        } catch (e) {
+            console.error("[DeliveryRoutes] Erro ao parsear contexto:", e);
+        }
+    }
+    
+    if (error.data) {
+        errorMsg = error.data.error || error.data.message || error.data.details || errorMsg;
+    }
+    
+    return errorMsg;
+};
+
 // Função para verificar se o pedido caiu na próxima rota (Cópia da lógica de Orders.tsx)
 const checkIsNextRoute = (dateString: string | null | undefined) => {
   if (!dateString) return false;
@@ -111,7 +138,10 @@ const DeliveryRoutesPage = () => {
             }
           });
           
-          if (error) throw error;
+          if (error) {
+            console.error(`[DeliveryRoutes] Erro ao buscar ${action}:`, error);
+            throw new Error(extractErrorMessage(error));
+          }
           
           const items = data[listKey] || (Array.isArray(data) ? data : []);
           allItems = [...allItems, ...items];
@@ -307,7 +337,7 @@ const DeliveryRoutesPage = () => {
         }
       });
 
-      if (error) throw error;
+      if (error) throw new Error(extractErrorMessage(error));
       showSuccess("Parada adicionada com sucesso!");
       setAddStopDialogOpen(false);
       setNewStopData({ address: "", recipientName: "", recipientPhone: "" });
@@ -331,7 +361,7 @@ const DeliveryRoutesPage = () => {
         }
       });
 
-      if (error) throw error;
+      if (error) throw new Error(extractErrorMessage(error));
       showSuccess("Parada removida com sucesso!");
       refetch();
     } catch (error: any) {
@@ -350,7 +380,7 @@ const DeliveryRoutesPage = () => {
         }
       });
 
-      if (error) throw error;
+      if (error) throw new Error(extractErrorMessage(error));
       showSuccess("Rota reotimizada com sucesso!");
       refetch();
     } catch (error: any) {
@@ -371,7 +401,7 @@ const DeliveryRoutesPage = () => {
         }
       });
 
-      if (error) throw error;
+      if (error) throw new Error(extractErrorMessage(error));
       showSuccess("Rota redistribuída com sucesso!");
       refetch();
     } catch (error: any) {
