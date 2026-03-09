@@ -68,12 +68,12 @@ const DriversManagementPage = () => {
       let nextToken = null;
       
       do {
-        const { data, error } = await supabase.functions.invoke("spoke-proxy", {
-          body: { 
-            action: "drivers", 
-            params: { maxPageSize: 100, pageToken: nextToken || undefined } 
-          }
-        });
+              const { data, error } = await supabase.functions.invoke("spoke-proxy", {
+                body: {
+                  action: "drivers",
+                  params: { maxPageSize: 50, pageToken: nextToken || undefined }
+                }
+              });
         
         if (error) throw error;
         

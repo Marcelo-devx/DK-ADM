@@ -122,7 +122,7 @@ const DeliveryRoutesPage = () => {
       };
 
       // PASSO 0: Buscar Lista de Motoristas (Paginado)
-      const driversList = await fetchAllPages("drivers", { maxPageSize: 100 }, "drivers");
+            const driversList = await fetchAllPages("drivers", { maxPageSize: 50 }, "drivers");
       const driversMap = new Map();
       driversList.forEach((d: any) => {
         driversMap.set(d.id, d);

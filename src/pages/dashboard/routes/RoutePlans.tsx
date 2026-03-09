@@ -79,10 +79,10 @@ const RoutePlansPage = () => {
   const queryClient = useQueryClient();
 
   // Buscar planos existentes
-  const { data: plans, isLoading: plansLoading, refetch: refetchPlans } = useQuery({
-    queryKey: ["spokePlans", dateRange],
-    queryFn: async () => {
-      let params: any = { maxPageSize: 100 };
+    const { data: plans, isLoading: plansLoading, refetch: refetchPlans } = useQuery({
+      queryKey: ["spokePlans", dateRange],
+      queryFn: async () => {
+        let params: any = { maxPageSize: 50 };
       
       if (dateRange === "today") {
         const today = format(new Date(), "yyyy-MM-dd");
