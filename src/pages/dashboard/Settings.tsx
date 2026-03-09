@@ -57,7 +57,7 @@ const SettingsPage = () => {
         
         // Testa buscando os planos, como na doc "List Plans"
         const today = new Date().toISOString().split('T')[0];
-        const { data, error } = await supabase.functions.invoke("spoke-proxy", {
+        const { error } = await supabase.functions.invoke("spoke-proxy", {
             body: { 
               action: "plans", 
               params: { "filter.startsGte": today, "maxPageSize": 1 } 
@@ -65,36 +65,16 @@ const SettingsPage = () => {
         });
 
         if (error) {
-            console.error("[Settings] Erro no teste de conexão:", error);
-            
-            // Tentar extrair mensagem de erro de diferentes formatos
-            let errorMsg = error.message || "Erro desconhecido";
-            
-            // Se o erro tiver contexto com dados JSON
-            if (error.context) {
-                try {
-                    if (typeof error.context === 'string') {
-                        const parsed = JSON.parse(error.context);
-                        errorMsg = parsed.error || parsed.message || parsed.details || errorMsg;
-                    } else if (typeof error.context === 'object') {
-                        errorMsg = error.context.error || error.context.message || error.context.details || errorMsg;
-                    }
-                } catch (e) {
-                    console.error("[Settings] Erro ao parsear contexto:", e);
-                }
-            }
-            
-            // Se o erro tiver dados diretos
-            if (error.data) {
-                errorMsg = error.data.error || error.data.message || error.data.details || errorMsg;
-            }
-            
+            let errorMsg = error.message;
+            try {
+                const body = await error.context.json();
+                errorMsg = body.details || body.error || error.message;
+            } catch (e) {}
             throw new Error(errorMsg);
         }
 
         showSuccess("Conexão com Spoke/Circuit estabelecida com sucesso!");
     } catch (err: any) {
-        console.error("[Settings] Erro completo:", err);
         showError(`Falha no teste: ${err.message}`);
     } finally {
         setIsTesting(false);
@@ -145,7 +125,7 @@ const SettingsPage = () => {
                 <Label className="font-bold">API Key (Bearer Token)</Label>
                 <Input type="password" value={logisticsToken} onChange={(e) => setLogisticsToken(e.target.value)} />
                 <p className="text-[10px] text-muted-foreground">
-                  Gere em: Configurações > API no painel do Spoke/Circuit.
+                  Gere em: Configurações &gt; API no painel do Spoke/Circuit.
                 </p>
             </div>
             <div className="space-y-2 pt-4 border-t">

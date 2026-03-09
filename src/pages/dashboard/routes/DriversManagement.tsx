@@ -21,8 +21,7 @@ import {
   Trash2,
   CheckCircle2,
   XCircle,
-  Clock,
-  Search
+  Clock
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { showSuccess, showError } from "@/utils/toast";
@@ -34,33 +33,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-
-// Função auxiliar para extrair mensagem de erro
-const extractErrorMessage = (error: any): string => {
-    console.error("[DriversManagement] Erro completo:", error);
-    
-    let errorMsg = error.message || "Erro desconhecido";
-    
-    // Tentar extrair de diferentes formatos
-    if (error.context) {
-        try {
-            if (typeof error.context === 'string') {
-                const parsed = JSON.parse(error.context);
-                errorMsg = parsed.error || parsed.message || parsed.details || errorMsg;
-            } else if (typeof error.context === 'object') {
-                errorMsg = error.context.error || error.context.message || error.context.details || errorMsg;
-            }
-        } catch (e) {
-            console.error("[DriversManagement] Erro ao parsear contexto:", e);
-        }
-    }
-    
-    if (error.data) {
-        errorMsg = error.data.error || error.data.message || error.data.details || errorMsg;
-    }
-    
-    return errorMsg;
-};
 
 interface Driver {
   id: string;
@@ -83,50 +55,21 @@ const DriversManagementPage = () => {
     email: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
   const queryClient = useQueryClient();
 
   // Buscar motoristas
   const { data: drivers, isLoading, refetch } = useQuery({
     queryKey: ["spokeDrivers"],
     queryFn: async () => {
-      // Buscar todas as páginas de motoristas
-      let allDrivers: any[] = [];
-      let nextToken = null;
+      const { data, error } = await supabase.functions.invoke("spoke-proxy", {
+        body: { action: "drivers", params: { maxPageSize: 100 } }
+      });
       
-      do {
-              const { data, error } = await supabase.functions.invoke("spoke-proxy", {
-                body: {
-                  action: "drivers",
-                  params: { maxPageSize: 50, pageToken: nextToken || undefined }
-                }
-              });
-        
-        if (error) {
-            console.error("[DriversManagement] Erro ao buscar motoristas:", error);
-            throw new Error(extractErrorMessage(error));
-        }
-        
-        const driversList = data?.drivers || (Array.isArray(data) ? data : []);
-        allDrivers = [...allDrivers, ...driversList];
-        nextToken = data?.nextPageToken;
-      } while (nextToken);
-      
-      return allDrivers;
+      if (error) throw error;
+      return data?.drivers || [];
     },
     refetchInterval: 60000,
   });
-
-  // Filtrar motoristas por termo de busca
-  const filteredDrivers = drivers?.filter(driver => {
-    const searchLower = searchTerm.toLowerCase();
-    return (
-      driver.name?.toLowerCase().includes(searchLower) ||
-      driver.displayName?.toLowerCase().includes(searchLower) ||
-      driver.phone?.includes(searchLower) ||
-      driver.email?.toLowerCase().includes(searchLower)
-    );
-  }) || [];
 
   // Criar motorista
   const createDriverMutation = useMutation({
@@ -150,7 +93,7 @@ const DriversManagementPage = () => {
         }
       });
 
-      if (error) throw new Error(extractErrorMessage(error));
+      if (error) throw error;
     },
     onSuccess: () => {
       showSuccess("Motorista cadastrado com sucesso!");
@@ -189,7 +132,7 @@ const DriversManagementPage = () => {
         }
       });
 
-      if (error) throw new Error(extractErrorMessage(error));
+      if (error) throw error;
     },
     onSuccess: () => {
       showSuccess("Motorista atualizado com sucesso!");
@@ -216,7 +159,7 @@ const DriversManagementPage = () => {
         }
       });
 
-      if (error) throw new Error(extractErrorMessage(error));
+      if (error) throw error;
     },
     onSuccess: () => {
       showSuccess("Motorista excluído com sucesso!");
@@ -283,24 +226,6 @@ const DriversManagementPage = () => {
         </div>
       </div>
 
-      {/* Busca */}
-      <Card className="shadow-sm border-none bg-white">
-        <CardContent className="p-4">
-          <div className="flex items-center gap-2">
-            <Search className="w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar por nome, telefone ou email..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="max-w-md"
-            />
-            <div className="ml-auto text-sm text-muted-foreground">
-              {filteredDrivers.length} de {drivers?.length || 0} motoristas
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Lista de Motoristas */}
       <Card className="shadow-sm border-none overflow-hidden bg-white">
         <CardHeader className="bg-gray-50/50 border-b py-3 px-6">
@@ -308,7 +233,7 @@ const DriversManagementPage = () => {
             <div className="flex items-center gap-2 text-sm font-bold text-gray-600 uppercase">
               <User className="h-4 w-4" /> Motoristas Cadastrados
             </div>
-            <Badge variant="secondary">{filteredDrivers.length}</Badge>
+            <Badge variant="secondary">{drivers?.length || 0}</Badge>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -317,7 +242,7 @@ const DriversManagementPage = () => {
               <Loader2 className="h-10 w-10 animate-spin mx-auto text-primary opacity-50" />
               <p className="text-muted-foreground animate-pulse">Carregando motoristas...</p>
             </div>
-          ) : filteredDrivers.length > 0 ? (
+          ) : drivers && drivers.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -330,7 +255,7 @@ const DriversManagementPage = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredDrivers.map((driver: Driver) => (
+                {drivers.map((driver: Driver) => (
                   <TableRow key={driver.id}>
                     <TableCell className="font-medium">
                       <div className="flex flex-col">
@@ -391,12 +316,7 @@ const DriversManagementPage = () => {
           ) : (
             <div className="p-24 text-center">
               <User className="w-12 h-12 text-gray-200 mx-auto mb-4" />
-              <p className="text-muted-foreground font-medium italic">
-                {searchTerm ? "Nenhum motorista encontrado com este termo de busca." : "Nenhum motorista cadastrado."}
-              </p>
-              {!searchTerm && (
-                <p className="text-sm text-muted-foreground mt-2">Adicione um novo motorista para começar.</p>
-              )}
+              <p className="text-muted-foreground font-medium italic">Nenhum motorista cadastrado. Adicione um novo motorista para começar.</p>
             </div>
           )}
         </CardContent>

@@ -128,8 +128,7 @@ const RouteMap = ({ stops, center = [-25.4284, -49.2733], zoom = 12, className =
       coordinates.push(coord);
 
       // Determine icon based on status
-      // allow either standard Icon or DivIcon so TypeScript accepts both kinds
-      let icon: L.Icon | L.DivIcon = createDefaultIcon();
+      let icon = createDefaultIcon();
       if (stop.deliveryInfo?.succeeded) {
         icon = createSuccessIcon();
       } else if (stop.deliveryInfo?.attempted && !stop.deliveryInfo?.succeeded) {
