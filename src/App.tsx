@@ -60,8 +60,8 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<Login />} />
             <Route path="/product/:id" element={<ProductDetail />} />
-            <Route path="/my-orders" element={<MyOrders />} />
-            <Route path="/my-profile" element={<MyProfile />} />
+            <Route path="/meus-pedidos" element={<MyOrders />} />
+            <Route path="/meu-perfil" element={<MyProfile />} />
             <Route path="/club-dk" element={<ClubDK />} />
             
             <Route path="/dashboard" element={<DashboardLayout />}>
