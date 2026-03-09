@@ -28,9 +28,11 @@ import {
   Plus,
   Trash2,
   Zap,
-  Send
+  Send,
+  History,
+  Filter
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, subDays, startOfDay, endOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
@@ -48,6 +50,7 @@ import { showSuccess, showError } from "@/utils/toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // Função para verificar se o pedido caiu na próxima rota (Cópia da lógica de Orders.tsx)
 const checkIsNextRoute = (dateString: string | null | undefined) => {
@@ -77,6 +80,7 @@ const checkIsNextRoute = (dateString: string | null | undefined) => {
 
 const DeliveryRoutesPage = () => {
   const [date, setDate] = useState<Date | undefined>(new Date());
+  const [dateRange, setDateRange] = useState<"today" | "week" | "month" | "all">("today");
   const formattedDate = date ? format(date, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd");
   const [expandedRoutes, setExpandedRoutes] = useState<Record<string, boolean>>({});
   const [showMap, setShowMap] = useState(true);
@@ -92,7 +96,7 @@ const DeliveryRoutesPage = () => {
   const [isRedistributing, setIsRedistributing] = useState<string | null>(null);
 
   const { data: routes, isLoading, isError, error, refetch, isRefetching } = useQuery({
-    queryKey: ["spokeRoutesDeep", formattedDate],
+    queryKey: ["spokeRoutesDeep", formattedDate, dateRange],
     queryFn: async () => {
       // FUNÇÃO AUXILIAR PARA BUSCAR TODAS AS PÁGINAS (PAGINAÇÃO)
       const fetchAllPages = async (action: string, initialParams: any, listKey: string) => {
@@ -118,14 +122,28 @@ const DeliveryRoutesPage = () => {
       };
 
       // PASSO 0: Buscar Lista de Motoristas (Paginado)
-      const driversList = await fetchAllPages("drivers", { maxPageSize: 50 }, "drivers");
+      const driversList = await fetchAllPages("drivers", { maxPageSize: 100 }, "drivers");
       const driversMap = new Map();
       driversList.forEach((d: any) => {
         driversMap.set(d.id, d);
       });
 
-      // PASSO 1: Buscar os planos (Plans) do dia (Paginado)
-      const rawPlans = await fetchAllPages("plans", { "filter.startsGte": formattedDate, maxPageSize: 20 }, "plans");
+      // PASSO 1: Buscar os planos (Plans) com base no filtro de data
+      let params: any = { maxPageSize: 50 };
+      
+      if (dateRange === "today") {
+        params["filter.startsGte"] = formattedDate;
+        params["filter.startsLt"] = format(new Date(new Date(formattedDate).getTime() + 24 * 60 * 60 * 1000), "yyyy-MM-dd");
+      } else if (dateRange === "week") {
+        const weekAgo = format(subDays(new Date(), 7), "yyyy-MM-dd");
+        params["filter.startsGte"] = weekAgo;
+      } else if (dateRange === "month") {
+        const monthAgo = format(subDays(new Date(), 30), "yyyy-MM-dd");
+        params["filter.startsGte"] = monthAgo;
+      }
+      // "all" não aplica filtro de data
+
+      const rawPlans = await fetchAllPages("plans", params, "plans");
 
       // PASSO 2: Para cada plano, buscar as paradas (Stops) detalhadas (Paginado)
       const detailedPlans = await Promise.all(rawPlans.map(async (plan: any) => {
@@ -134,7 +152,7 @@ const DeliveryRoutesPage = () => {
             const stopsAction = `${planIdPath}/stops`;
 
             // Busca todas as paradas do plano lidando com a paginação interna
-            const stops = await fetchAllPages(stopsAction, { maxPageSize: 10 }, "stops");
+            const stops = await fetchAllPages(stopsAction, { maxPageSize: 20 }, "stops");
             
             // --- INÍCIO DA LÓGICA DE ENRIQUECIMENTO COM DADOS DO SUPABASE ---
             // Coletar External IDs (que devem corresponder aos IDs de pedido)
@@ -194,7 +212,10 @@ const DeliveryRoutesPage = () => {
                 stops_count: totalStops,
                 completed_stops_count: completedStops,
                 failed_stops_count: failedStops,
-                stops_list: stops
+                stops_list: stops,
+                created_at: plan.created_at,
+                starts_at: plan.startsAt,
+                ends_at: plan.endsAt
             };
 
         } catch (err) {
@@ -207,12 +228,18 @@ const DeliveryRoutesPage = () => {
                 stops_count: 0,
                 completed_stops_count: 0,
                 failed_stops_count: 0,
-                stops_list: []
+                stops_list: [],
+                created_at: plan.created_at
             };
         }
       }));
       
-      return detailedPlans;
+      // Ordenar por data de início (mais recente primeiro)
+      return detailedPlans.sort((a: any, b: any) => {
+        const dateA = new Date(a.starts_at || a.created_at);
+        const dateB = new Date(b.starts_at || b.created_at);
+        return dateB.getTime() - dateA.getTime();
+      });
     },
     retry: 1,
     refetchInterval: 60000, 
@@ -354,6 +381,15 @@ const DeliveryRoutesPage = () => {
     }
   };
 
+  const getDateRangeLabel = () => {
+    switch (dateRange) {
+      case "today": return "Hoje";
+      case "week": return "Últimos 7 dias";
+      case "month": return "Últimos 30 dias";
+      case "all": return "Todo o histórico";
+    }
+  };
+
   return (
     <div className="max-w-[1600px] mx-auto space-y-6 text-gray-800 pb-20">
       <div className="flex items-center justify-between">
@@ -382,16 +418,43 @@ const DeliveryRoutesPage = () => {
         <div className="lg:col-span-3">
           <Card className="shadow-sm border-none bg-white sticky top-6">
             <CardHeader className="pb-2">
-              <CardTitle className="text-lg font-bold">Data das Rotas</CardTitle>
+              <CardTitle className="text-lg font-bold">Filtros</CardTitle>
             </CardHeader>
-            <CardContent className="p-0">
-              <Calendar
-                mode="single"
-                selected={date}
-                onSelect={setDate}
-                locale={ptBR}
-                className="w-full"
-              />
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Período</Label>
+                <Select value={dateRange} onValueChange={(value: any) => setDateRange(value)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="today">Hoje</SelectItem>
+                    <SelectItem value="week">Últimos 7 dias</SelectItem>
+                    <SelectItem value="month">Últimos 30 dias</SelectItem>
+                    <SelectItem value="all">Todo o histórico</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {dateRange === "today" && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Data Específica</Label>
+                  <Calendar
+                    mode="single"
+                    selected={date}
+                    onSelect={setDate}
+                    locale={ptBR}
+                    className="w-full"
+                  />
+                </div>
+              )}
+
+              <div className="pt-4 border-t">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <History className="w-4 h-4" />
+                  <span>Mostrando: <strong>{getDateRangeLabel()}</strong></span>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -442,13 +505,14 @@ const DeliveryRoutesPage = () => {
                 ) : (
                     <div className="divide-y">
                         <div className="grid grid-cols-3 gap-8 p-6 bg-gray-50/30">
-                            <div><p className="text-xs text-muted-foreground font-bold uppercase">Planos Ativos</p><p className="text-3xl font-black">{stats.plans}</p></div>
+                            <div><p className="text-xs text-muted-foreground font-bold uppercase">Planos Encontrados</p><p className="text-3xl font-black">{stats.plans}</p></div>
                             <div><p className="text-xs text-muted-foreground font-bold uppercase">Entregas Totais</p><p className="text-3xl font-black">{stats.completed} <span className="text-sm font-normal text-muted-foreground">/ {stats.total_stops}</span></p></div>
-                            <div><p className="text-xs text-muted-foreground font-bold uppercase">Progresso Geral</p><p className="text-3xl font-black text-blue-600">{stats.efficiency}%</p></div>
+                            <div><p className="text-xs text-muted-foreground font-bold uppercase">Taxa de Entrega</p><p className="text-3xl font-black text-blue-600">{stats.efficiency}%</p></div>
                         </div>
                         {routes && routes.length > 0 ? routes.map((r: any) => {
                             const progress = r.stops_count > 0 ? (r.completed_stops_count / r.stops_count) * 100 : 0;
                             const isExpanded = expandedRoutes[r.id];
+                            const routeDate = r.starts_at || r.created_at;
 
                             return (
                                 <div key={r.id} className="transition-all border-l-4 border-transparent hover:border-blue-500 bg-white">
@@ -457,7 +521,10 @@ const DeliveryRoutesPage = () => {
                                         onClick={() => toggleRoute(r.id)}
                                     >
                                         <div className="flex items-center gap-4">
-                                            <div className="h-12 w-12 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-black text-xl flex-shrink-0">
+                                            <div className={cn(
+                                                "h-12 w-12 rounded-xl flex items-center justify-center font-black text-xl flex-shrink-0",
+                                                r.status === 'completed' ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
+                                            )}>
                                                 {r.name?.charAt(0).toUpperCase() || 'R'}
                                             </div>
                                             <div>
@@ -472,6 +539,7 @@ const DeliveryRoutesPage = () => {
                                                 <div className="flex items-center gap-3 text-[10px] text-muted-foreground uppercase font-bold mt-0.5">
                                                     <span className="flex items-center gap-1"><Package className="w-3 h-3" /> {r.stops_count} paradas totais</span>
                                                     <span className="flex items-center gap-1"><Users className="w-3 h-3" /> {r.driver.name}</span>
+                                                    <span className="flex items-center gap-1"><CalendarClock className="w-3 h-3" /> {routeDate ? format(new Date(routeDate), "dd/MM/yyyy", { locale: ptBR }) : "-"}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -636,7 +704,8 @@ const DeliveryRoutesPage = () => {
                         }) : (
                             <div className="p-24 text-center">
                                 <MapIcon className="w-12 h-12 text-gray-200 mx-auto mb-4" />
-                                <p className="text-muted-foreground font-medium italic">Nenhum plano de rota encontrado para esta data.</p>
+                                <p className="text-muted-foreground font-medium italic">Nenhum plano de rota encontrado para este período.</p>
+                                <p className="text-sm text-muted-foreground mt-2">Tente alterar o filtro de período para ver rotas históricas.</p>
                             </div>
                         )}
                     </div>

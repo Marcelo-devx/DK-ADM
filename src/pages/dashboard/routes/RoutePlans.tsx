@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   Map as MapIcon, 
   Plus, 
@@ -22,9 +23,11 @@ import {
   Loader2,
   Zap,
   Send,
-  Calendar
+  Calendar,
+  History,
+  Filter
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { showSuccess, showError } from "@/utils/toast";
@@ -45,6 +48,8 @@ interface Plan {
   drivers: any[];
   stops_count: number;
   created_at: string;
+  starts_at?: string;
+  ends_at?: string;
 }
 
 interface Order {
@@ -70,18 +75,42 @@ const RoutePlansPage = () => {
   const [isCreating, setIsCreating] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState<string | null>(null);
   const [isDistributing, setIsDistributing] = useState<string | null>(null);
+  const [dateRange, setDateRange] = useState<"today" | "week" | "month" | "all">("all");
   const queryClient = useQueryClient();
 
   // Buscar planos existentes
   const { data: plans, isLoading: plansLoading, refetch: refetchPlans } = useQuery({
-    queryKey: ["spokePlans"],
+    queryKey: ["spokePlans", dateRange],
     queryFn: async () => {
+      let params: any = { maxPageSize: 100 };
+      
+      if (dateRange === "today") {
+        const today = format(new Date(), "yyyy-MM-dd");
+        params["filter.startsGte"] = today;
+        params["filter.startsLt"] = format(new Date(new Date(today).getTime() + 24 * 60 * 60 * 1000), "yyyy-MM-dd");
+      } else if (dateRange === "week") {
+        const weekAgo = format(subDays(new Date(), 7), "yyyy-MM-dd");
+        params["filter.startsGte"] = weekAgo;
+      } else if (dateRange === "month") {
+        const monthAgo = format(subDays(new Date(), 30), "yyyy-MM-dd");
+        params["filter.startsGte"] = monthAgo;
+      }
+      // "all" não aplica filtro de data
+
       const { data, error } = await supabase.functions.invoke("spoke-proxy", {
-        body: { action: "plans", params: { maxPageSize: 50 } }
+        body: { action: "plans", params }
       });
       
       if (error) throw error;
-      return data?.plans || [];
+      
+      const plansList = data?.plans || [];
+      
+      // Ordenar por data de início (mais recente primeiro)
+      return plansList.sort((a: any, b: any) => {
+        const dateA = new Date(a.startsAt || a.created_at);
+        const dateB = new Date(b.startsAt || b.created_at);
+        return dateB.getTime() - dateA.getTime();
+      });
     },
     refetchInterval: 60000,
   });
@@ -268,6 +297,15 @@ const RoutePlansPage = () => {
     }
   };
 
+  const getDateRangeLabel = () => {
+    switch (dateRange) {
+      case "today": return "Hoje";
+      case "week": return "Últimos 7 dias";
+      case "month": return "Últimos 30 dias";
+      case "all": return "Todo o histórico";
+    }
+  };
+
   return (
     <div className="max-w-[1600px] mx-auto space-y-6 text-gray-800 pb-20">
       <div className="flex items-center justify-between">
@@ -287,11 +325,41 @@ const RoutePlansPage = () => {
         </div>
       </div>
 
+      {/* Filtros */}
+      <Card className="shadow-sm border-none bg-white">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-muted-foreground" />
+              <Label className="text-sm font-medium">Período:</Label>
+            </div>
+            <Select value={dateRange} onValueChange={(value: any) => setDateRange(value)}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="today">Hoje</SelectItem>
+                <SelectItem value="week">Últimos 7 dias</SelectItem>
+                <SelectItem value="month">Últimos 30 dias</SelectItem>
+                <SelectItem value="all">Todo o histórico</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground ml-auto">
+              <History className="w-4 h-4" />
+              <span>Mostrando: <strong>{getDateRangeLabel()}</strong></span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Lista de Planos */}
       <Card className="shadow-sm border-none overflow-hidden bg-white">
         <CardHeader className="bg-gray-50/50 border-b py-3 px-6">
-          <div className="flex items-center gap-2 text-sm font-bold text-gray-600 uppercase">
-            <MapIcon className="h-4 w-4" /> Planos de Rota
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-bold text-gray-600 uppercase">
+              <MapIcon className="h-4 w-4" /> Planos de Rota
+            </div>
+            <Badge variant="secondary">{plans?.length || 0}</Badge>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -308,7 +376,7 @@ const RoutePlansPage = () => {
                   <TableHead>Status</TableHead>
                   <TableHead>Paradas</TableHead>
                   <TableHead>Motoristas</TableHead>
-                  <TableHead>Criado em</TableHead>
+                  <TableHead>Data</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
@@ -329,7 +397,16 @@ const RoutePlansPage = () => {
                       )}
                     </TableCell>
                     <TableCell>
-                      {format(new Date(plan.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                      {plan.starts_at ? (
+                        <div className="flex flex-col">
+                          <span className="font-medium">{format(new Date(plan.starts_at), "dd/MM/yyyy", { locale: ptBR })}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {format(new Date(plan.starts_at), "HH:mm", { locale: ptBR })}
+                          </span>
+                        </div>
+                      ) : (
+                        format(new Date(plan.created_at), "dd/MM/yyyy", { locale: ptBR })
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
@@ -368,7 +445,8 @@ const RoutePlansPage = () => {
           ) : (
             <div className="p-24 text-center">
               <MapIcon className="w-12 h-12 text-gray-200 mx-auto mb-4" />
-              <p className="text-muted-foreground font-medium italic">Nenhum plano encontrado. Crie um novo plano para começar.</p>
+              <p className="text-muted-foreground font-medium italic">Nenhum plano encontrado para este período.</p>
+              <p className="text-sm text-muted-foreground mt-2">Tente alterar o filtro de período ou crie um novo plano.</p>
             </div>
           )}
         </CardContent>
