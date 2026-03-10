@@ -162,7 +162,7 @@ const OrdersPage = () => {
       // Filtro de "Prontos para Envio"
       if (readyToShipOnly) {
           const isPaid = order.status === "Finalizada" || order.status === "Pago";
-          const isPendingDelivery = order.delivery_status === "Pendente";
+          const isPendingDelivery = order.delivery_status === "Pendente" || order.delivery_status === "Aguardando Coleta";
           if (!(isPaid && isPendingDelivery)) return false;
       }
 

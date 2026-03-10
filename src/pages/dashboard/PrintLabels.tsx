@@ -87,7 +87,7 @@ export default function PrintLabelsPage() {
           profiles (first_name, last_name, phone, cpf_cnpj)
         `)
         .in("status", ["Finalizada", "Pago"])
-        .eq("delivery_status", "Pendente")
+        .in("delivery_status", ["Pendente", "Aguardando Coleta"])
         .order("created_at", { ascending: false });
 
       if (error) throw error;
