@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import * as XLSX from 'xlsx';
 import { mapRowKeys } from "@/utils/excel-utils";
+import { showSuccess, showError } from "@/utils/toast";
 import { useProductData } from "@/hooks/useProductData";
 import { ProductTable } from "@/components/dashboard/products/ProductTable";
 import { ProductToolbar } from "@/components/dashboard/products/ProductToolbar";
@@ -30,6 +31,7 @@ const ProductsPage = () => {
   // States for Import Flow (needs to pass data to modal)
   const [productsToConfirm, setProductsToConfirm] = useState<any[]>([]);
   const [importResult, setImportResult] = useState<any>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   // URL Action Handlers
   const openModal = (mode: string, id?: number) => {
@@ -95,17 +97,45 @@ const ProductsPage = () => {
     event.target.value = '';
   };
 
-  const handleExportXLSX = () => {
-    if (!products?.length) return;
-    const headers = ["SKU", "Nome", "Sabores", "Descrição", "Preço de Custo", "Preço de Venda", "Preço Pix", "Estoque", "Categoria", "Sub-categoria", "Marca", "Imagem", "Publicado (Sim/Não)"];
-    const data = products.map(p => [
-        p.sku || '', p.name, '', p.description || '', p.cost_price || 0, p.price, p.pix_price || 0,
-        p.stock_quantity, p.category || '', p.sub_category || '', p.brand || '', p.image_url || '', p.is_visible ? 'Sim' : 'Não'
-    ]);
-    const worksheet = XLSX.utils.aoa_to_sheet([headers, ...data]);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Produtos");
-    XLSX.writeFile(workbook, "produtos_tabacaria.xlsx");
+  const handleExportXLSX = async () => {
+    if (!products?.length) {
+        showError("Não há produtos para exportar");
+        return;
+    }
+
+    setIsExporting(true);
+    
+    try {
+        // Exporta todos os produtos (não apenas os filtrados)
+        const headers = ["SKU", "Nome", "Sabores", "Descrição", "Preço de Custo", "Preço de Venda", "Preço Pix", "Estoque", "Categoria", "Sub-categoria", "Marca", "Imagem", "Publicado (Sim/Não)"];
+        const data = products.map(p => [
+            p.sku || '', 
+            p.name, 
+            '', // Sabores - vazio por enquanto
+            p.description || '', 
+            p.cost_price || 0, 
+            p.price, 
+            p.pix_price || 0,
+            p.stock_quantity, 
+            p.category || '', 
+            p.sub_category || '', 
+            p.brand || '', 
+            p.image_url || '', 
+            p.is_visible ? 'Sim' : 'Não'
+        ]);
+        
+        const worksheet = XLSX.utils.aoa_to_sheet([headers, ...data]);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Produtos");
+        XLSX.writeFile(workbook, "produtos_tabacaria.xlsx");
+        
+        showSuccess(`Exportação concluída! ${products.length} produtos exportados.`);
+    } catch (error: any) {
+        console.error("Erro ao exportar:", error);
+        showError("Erro ao exportar: " + error.message);
+    } finally {
+        setIsExporting(false);
+    }
   };
 
   const handleDownloadTemplate = () => {
@@ -134,6 +164,7 @@ const ProductsPage = () => {
         onDownloadTemplate={handleDownloadTemplate}
         onActivateAll={handleActivateAll}
         isActivatingAll={activateAllMutation.isPending}
+        isExporting={isExporting}
       />
       
       {/* Hidden Input for Import */}

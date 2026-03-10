@@ -21,6 +21,7 @@ interface ProductToolbarProps {
   onDownloadTemplate: () => void;
   onActivateAll: () => void;
   isActivatingAll: boolean;
+  isExporting?: boolean;
 }
 
 export const ProductToolbar = ({
@@ -38,7 +39,8 @@ export const ProductToolbar = ({
   onExport,
   onDownloadTemplate,
   onActivateAll,
-  isActivatingAll
+  isActivatingAll,
+  isExporting = false
 }: ProductToolbarProps) => {
   return (
     <div className="flex flex-col gap-6 mb-8">
@@ -94,9 +96,14 @@ export const ProductToolbar = ({
 
                   <Tooltip>
                       <TooltipTrigger asChild>
-                          <Button variant="ghost" className="h-9 px-3 text-orange-600 hover:bg-orange-50 rounded-lg flex items-center gap-2 font-bold text-xs" onClick={onExport}>
-                              <FileDown className="h-4 w-4" />
-                              <span>Exportar</span>
+                          <Button 
+                            variant="ghost" 
+                            className="h-9 px-3 text-orange-600 hover:bg-orange-50 rounded-lg flex items-center gap-2 font-bold text-xs" 
+                            onClick={onExport}
+                            disabled={isExporting}
+                          >
+                              {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+                              <span>{isExporting ? 'Exportando...' : 'Exportar'}</span>
                           </Button>
                       </TooltipTrigger>
                       <TooltipContent><p>Exportar Catálogo</p></TooltipContent>
