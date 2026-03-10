@@ -6,7 +6,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FileSpreadsheet, FileDown, Download, Loader2, Trash2, Plus } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { FileSpreadsheet, FileDown, Download, Loader2, Trash2, Plus, Users } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -54,6 +56,12 @@ export default function PrintLabelsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [searchTerm, setSearchTerm] = useState("");
   const [isExporting, setIsExporting] = useState(false);
+
+  // State for dialog
+  const [isAddSenderDialogOpen, setIsAddSenderDialogOpen] = useState(false);
+
+  // State for tabs
+  const [activeTab, setActiveTab] = useState<"list" | "add">("list");
 
   // Configurações do Remetente (Estado Local - Carregado do Banco para fallback)
   const [senderInfo, setSenderInfo] = useState({
@@ -238,6 +246,7 @@ export default function PrintLabelsPage() {
     // limpar form mantendo id novo
     setNewSender({ id: crypto.randomUUID?.() || String(Date.now()), name: "", address: "", city: "", state: "", cep: "" });
     showSuccess("Remetente adicionado.");
+    setIsAddSenderDialogOpen(false);
   };
 
   const handleRemoveSender = (id: string) => {
@@ -410,49 +419,56 @@ export default function PrintLabelsPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Remetentes (cadastre vários)</CardTitle>
+              <CardTitle>Gerenciar Remetentes</CardTitle>
             </CardHeader>
-            <CardContent className="p-4 space-y-3">
-              <div className="text-sm text-muted-foreground">Cadastre múltiplos remetentes; ao exportar cada pedido receberá aleatoriamente um deles.</div>
+            <CardContent className="p-4">
+              <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "list" | "add")} className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="list" className="flex items-center gap-2">
+                    <Users className="w-4 h-4" />
+                    Listar
+                  </TabsTrigger>
+                  <TabsTrigger value="add" className="flex items-center gap-2">
+                    <Plus className="w-4 h-4" />
+                    Cadastrar
+                  </TabsTrigger>
+                </TabsList>
 
-              <div className="grid grid-cols-1 gap-2">
-                <Input className="h-10 rounded-md" placeholder="Nome remetente (opcional)" value={newSender.name || ""} onChange={(e) => setNewSender(s => ({ ...s, name: e.target.value }))} />
-                <Input className="h-10 rounded-md" placeholder="Endereço" value={newSender.address} onChange={(e) => setNewSender(s => ({ ...s, address: e.target.value }))} />
-                <Input className="h-10 rounded-md" placeholder="Cidade" value={newSender.city} onChange={(e) => setNewSender(s => ({ ...s, city: e.target.value }))} />
-                <Input className="h-10 rounded-md" placeholder="Estado" value={newSender.state} onChange={(e) => setNewSender(s => ({ ...s, state: e.target.value }))} />
-                <Input className="h-10 rounded-md" placeholder="CEP" value={newSender.cep} onChange={(e) => setNewSender(s => ({ ...s, cep: e.target.value }))} />
-                <div className="flex items-center gap-3 mt-1">
-                  <Button className="flex-1 bg-slate-900 hover:bg-slate-800 text-white h-11 rounded-md flex items-center justify-center" onClick={handleAddSender}>
+                <TabsContent value="list" className="mt-4">
+                  <div className="space-y-2">
+                    {senders.length === 0 ? (
+                      <div className="text-sm text-muted-foreground py-4 text-center">
+                        Nenhum remetente cadastrado — usaremos os dados padrões do sistema.
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                        {senders.map(s => (
+                          <div key={s.id} className="flex items-center justify-between border rounded-lg px-3 py-2">
+                            <div className="text-sm">
+                              <div className="font-medium">{s.name || "(sem nome)"}</div>
+                              <div className="text-xs text-muted-foreground">{s.address} — {s.city}{s.state ? ` / ${s.state}` : ""} {s.cep ? `• ${s.cep}` : ""}</div>
+                            </div>
+                            <div>
+                              <Button variant="ghost" onClick={() => handleRemoveSender(s.id)} title="Remover remetente">
+                                <Trash2 />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="add" className="mt-4">
+                  <Button 
+                    className="w-full bg-slate-900 hover:bg-slate-800 text-white h-11 rounded-md flex items-center justify-center" 
+                    onClick={() => setIsAddSenderDialogOpen(true)}
+                  >
                     <Plus className="mr-2" /> Adicionar Remetente
                   </Button>
-                  <Button variant="outline" className="h-11 rounded-md" onClick={() => { setNewSender({ id: crypto.randomUUID?.() || String(Date.now()), name: "", address: "", city: "", state: "", cep: "" }); }}>
-                    Limpar
-                  </Button>
-                </div>
-              </div>
-
-              <div className="mt-2">
-                <div className="text-sm font-medium mb-2">Remetentes cadastrados</div>
-                {senders.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">Nenhum remetente cadastrado — usaremos os dados padrões do sistema.</div>
-                ) : (
-                  <div className="space-y-2">
-                    {senders.map(s => (
-                      <div key={s.id} className="flex items-center justify-between border rounded-lg px-3 py-2">
-                        <div className="text-sm">
-                          <div className="font-medium">{s.name || "(sem nome)"}</div>
-                          <div className="text-xs text-muted-foreground">{s.address} — {s.city}{s.state ? ` / ${s.state}` : ""} {s.cep ? `• ${s.cep}` : ""}</div>
-                        </div>
-                        <div>
-                          <Button variant="ghost" onClick={() => handleRemoveSender(s.id)} title="Remover remetente">
-                            <Trash2 />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
         </div>
@@ -461,6 +477,58 @@ export default function PrintLabelsPage() {
         <div className="lg:col-span-3" />
 
       </div>
+
+      {/* Add Sender Dialog */}
+      <Dialog open={isAddSenderDialogOpen} onOpenChange={setIsAddSenderDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cadastrar Novo Remetente</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-4 py-4">
+            <Input 
+              placeholder="Nome remetente (opcional)" 
+              value={newSender.name || ""} 
+              onChange={(e) => setNewSender(s => ({ ...s, name: e.target.value }))} 
+              className="h-10 rounded-md"
+            />
+            <Input 
+              placeholder="Endereço" 
+              value={newSender.address} 
+              onChange={(e) => setNewSender(s => ({ ...s, address: e.target.value }))} 
+              className="h-10 rounded-md"
+            />
+            <Input 
+              placeholder="Cidade" 
+              value={newSender.city} 
+              onChange={(e) => setNewSender(s => ({ ...s, city: e.target.value }))} 
+              className="h-10 rounded-md"
+            />
+            <Input 
+              placeholder="Estado" 
+              value={newSender.state} 
+              onChange={(e) => setNewSender(s => ({ ...s, state: e.target.value }))} 
+              className="h-10 rounded-md"
+            />
+            <Input 
+              placeholder="CEP" 
+              value={newSender.cep} 
+              onChange={(e) => setNewSender(s => ({ ...s, cep: e.target.value }))} 
+              className="h-10 rounded-md"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAddSenderDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button 
+              className="bg-slate-900 hover:bg-slate-800 text-white"
+              onClick={handleAddSender}
+            >
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Table full width under the actions to give more space */}
       <Card>
