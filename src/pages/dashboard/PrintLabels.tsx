@@ -389,16 +389,22 @@ export default function PrintLabelsPage() {
         {/* Left column: actions + remetentes */}
         <div className="lg:col-span-1 space-y-4">
           <Card>
-            <CardContent className="p-4 space-y-4">
-              <Button variant="outline" className="w-full justify-start h-12" onClick={handleDownloadTemplate}>
-                <FileDown className="w-5 h-5 mr-3 text-gray-500" />
-                Baixar Planilha de Exemplo
-              </Button>
+            <CardContent className="p-4 space-y-3">
+              <div className="space-y-2">
+                <Button variant="outline" className="w-full justify-start h-11 rounded-md" onClick={handleDownloadTemplate}>
+                  <FileDown className="w-4 h-4 mr-3 text-gray-500" />
+                  Baixar Planilha de Exemplo
+                </Button>
 
-              <Button className="w-full justify-start h-12" onClick={handleExport} disabled={isExporting || selectedIds.size === 0}>
-                {isExporting ? <Loader2 className="animate-spin mr-2" /> : <Download className="mr-2" />}
-                Exportar Selecionados ({selectedIds.size})
-              </Button>
+                <Button 
+                  className={`w-full justify-start h-11 rounded-md ${selectedIds.size === 0 ? "opacity-60" : ""}`}
+                  onClick={handleExport}
+                  disabled={isExporting || selectedIds.size === 0}
+                >
+                  {isExporting ? <Loader2 className="animate-spin mr-2" /> : <Download className="mr-2" />}
+                  Exportar Selecionados ({selectedIds.size})
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
@@ -410,16 +416,16 @@ export default function PrintLabelsPage() {
               <div className="text-sm text-muted-foreground">Cadastre múltiplos remetentes; ao exportar cada pedido receberá aleatoriamente um deles.</div>
 
               <div className="grid grid-cols-1 gap-2">
-                <Input placeholder="Nome remetente (opcional)" value={newSender.name || ""} onChange={(e) => setNewSender(s => ({ ...s, name: e.target.value }))} />
-                <Input placeholder="Endereço" value={newSender.address} onChange={(e) => setNewSender(s => ({ ...s, address: e.target.value }))} />
-                <Input placeholder="Cidade" value={newSender.city} onChange={(e) => setNewSender(s => ({ ...s, city: e.target.value }))} />
-                <Input placeholder="Estado" value={newSender.state} onChange={(e) => setNewSender(s => ({ ...s, state: e.target.value }))} />
-                <Input placeholder="CEP" value={newSender.cep} onChange={(e) => setNewSender(s => ({ ...s, cep: e.target.value }))} />
-                <div className="flex gap-2">
-                  <Button className="flex-1" onClick={handleAddSender}>
+                <Input className="h-10 rounded-md" placeholder="Nome remetente (opcional)" value={newSender.name || ""} onChange={(e) => setNewSender(s => ({ ...s, name: e.target.value }))} />
+                <Input className="h-10 rounded-md" placeholder="Endereço" value={newSender.address} onChange={(e) => setNewSender(s => ({ ...s, address: e.target.value }))} />
+                <Input className="h-10 rounded-md" placeholder="Cidade" value={newSender.city} onChange={(e) => setNewSender(s => ({ ...s, city: e.target.value }))} />
+                <Input className="h-10 rounded-md" placeholder="Estado" value={newSender.state} onChange={(e) => setNewSender(s => ({ ...s, state: e.target.value }))} />
+                <Input className="h-10 rounded-md" placeholder="CEP" value={newSender.cep} onChange={(e) => setNewSender(s => ({ ...s, cep: e.target.value }))} />
+                <div className="flex items-center gap-3 mt-1">
+                  <Button className="flex-1 bg-slate-900 hover:bg-slate-800 text-white h-11 rounded-md flex items-center justify-center" onClick={handleAddSender}>
                     <Plus className="mr-2" /> Adicionar Remetente
                   </Button>
-                  <Button variant="outline" onClick={() => { setNewSender({ id: crypto.randomUUID?.() || String(Date.now()), name: "", address: "", city: "", state: "", cep: "" }); }}>
+                  <Button variant="outline" className="h-11 rounded-md" onClick={() => { setNewSender({ id: crypto.randomUUID?.() || String(Date.now()), name: "", address: "", city: "", state: "", cep: "" }); }}>
                     Limpar
                   </Button>
                 </div>
@@ -432,7 +438,7 @@ export default function PrintLabelsPage() {
                 ) : (
                   <div className="space-y-2">
                     {senders.map(s => (
-                      <div key={s.id} className="flex items-center justify-between border rounded px-3 py-2">
+                      <div key={s.id} className="flex items-center justify-between border rounded-lg px-3 py-2">
                         <div className="text-sm">
                           <div className="font-medium">{s.name || "(sem nome)"}</div>
                           <div className="text-xs text-muted-foreground">{s.address} — {s.city}{s.state ? ` / ${s.state}` : ""} {s.cep ? `• ${s.cep}` : ""}</div>
