@@ -37,7 +37,8 @@ import {
   Settings,
   LogOut,
   Box,
-  KeyRound
+  KeyRound,
+  Globe
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -193,6 +194,9 @@ const Sidebar = () => {
         <NavLink to="/dashboard/settings" className={navLinkClass}>
           {({ isActive }) => (<><Settings className={iconClass("text-slate-500", isActive)} />Configurações</>)}
         </NavLink>
++        <NavLink to="/dashboard/spoke-integration" className={navLinkClass}>
++          {({ isActive }) => (<><Globe className={iconClass("text-slate-500", isActive)} />Integração Spoke (Circuit)</>)}
++        </NavLink>
       </nav>
 
       {/* FOOTER COM LOGOUT */}
