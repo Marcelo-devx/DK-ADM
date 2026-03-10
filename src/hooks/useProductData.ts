@@ -21,6 +21,8 @@ export interface ExtendedProduct {
   variant_costs?: (number | null)[];
   allocated_in_kits?: number;
   created_at: string;
+  // NEW: optional field for imported/flavor display names
+  flavor_names?: string | null;
 }
 
 export const useProductData = () => {

@@ -104,35 +104,52 @@ const ProductsPage = () => {
     }
 
     setIsExporting(true);
-    
+
     try {
+        const MAX_CELL_LENGTH = 32767;
+        let truncatedCount = 0;
+
+        const sanitizeCell = (value: any) => {
+          if (value === undefined || value === null) return '';
+          // Preserve numbers as numbers
+          if (typeof value === 'number') return value;
+          const str = typeof value === 'string' ? value : String(value);
+          if (str.length > MAX_CELL_LENGTH) {
+            truncatedCount++;
+            return str.slice(0, MAX_CELL_LENGTH - 3) + '...';
+          }
+          return str;
+        };
+
         // Exporta todos os produtos (não apenas os filtrados)
         const headers = ["SKU", "Nome", "Sabores", "Descrição", "Preço de Custo", "Preço de Venda", "Preço Pix", "Estoque", "Categoria", "Sub-categoria", "Marca", "Imagem", "Publicado (Sim/Não)"];
         const data = products.map(p => [
-            p.sku || '', 
-            p.name, 
-            '', // Sabores - vazio por enquanto
-            p.description || '', 
-            p.cost_price || 0, 
-            p.price, 
-            p.pix_price || 0,
-            p.stock_quantity, 
-            p.category || '', 
-            p.sub_category || '', 
-            p.brand || '', 
-            p.image_url || '', 
+            sanitizeCell(p.sku || ''), 
+            sanitizeCell(p.name), 
+            sanitizeCell(p.flavor_names ?? ''), // tenta pegar sabores importados
+            sanitizeCell(p.description || ''), 
+            // Preços continuam numéricos (não truncamos números)
+            p.cost_price ?? 0, 
+            p.price ?? 0, 
+            p.pix_price ?? 0,
+            p.stock_quantity ?? 0, 
+            sanitizeCell(p.category || ''), 
+            sanitizeCell(p.sub_category || ''), 
+            sanitizeCell(p.brand || ''), 
+            sanitizeCell(p.image_url || ''), 
             p.is_visible ? 'Sim' : 'Não'
         ]);
-        
+
         const worksheet = XLSX.utils.aoa_to_sheet([headers, ...data]);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Produtos");
         XLSX.writeFile(workbook, "produtos_tabacaria.xlsx");
-        
-        showSuccess(`Exportação concluída! ${products.length} produtos exportados.`);
+
+        const succMsg = `Exportação concluída! ${products.length} produtos exportados.` + (truncatedCount > 0 ? ` ${truncatedCount} campos longos foram truncados.` : '');
+        showSuccess(succMsg);
     } catch (error: any) {
         console.error("Erro ao exportar:", error);
-        showError("Erro ao exportar: " + error.message);
+        showError("Erro ao exportar: " + (error?.message ?? String(error)));
     } finally {
         setIsExporting(false);
     }
