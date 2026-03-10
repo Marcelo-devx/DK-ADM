@@ -56,6 +56,13 @@ export default function PrintLabelsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [searchTerm, setSearchTerm] = useState("");
   const [isExporting, setIsExporting] = useState(false);
+  // Removed orders storage (persisted so downloads can be filtered out)
+  const REMOVED_STORAGE_KEY = "print_labels_removed_orders_v1";
+  const [removedIds, setRemovedIds] = useState<Set<number>>(new Set());
+
+  // Export confirmation dialog state
+  const [isExportConfirmOpen, setIsExportConfirmOpen] = useState(false);
+  const [exportPreviewOrders, setExportPreviewOrders] = useState<Order[]>([]);
 
   // State for dialog
   const [isAddSenderDialogOpen, setIsAddSenderDialogOpen] = useState(false);
@@ -97,6 +104,27 @@ export default function PrintLabelsPage() {
       console.error("Erro ao carregar remetentes do localStorage", e);
     }
   }, []);
+
+  // Load removed order ids from localStorage
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(REMOVED_STORAGE_KEY);
+      if (raw) {
+        const parsed: number[] = JSON.parse(raw);
+        setRemovedIds(new Set(parsed));
+      }
+    } catch (e) {
+      console.error("Erro ao carregar pedidos removidos do localStorage", e);
+    }
+  }, []);
+
+  const persistRemovedIds = (next: Set<number>) => {
+    try {
+      localStorage.setItem(REMOVED_STORAGE_KEY, JSON.stringify(Array.from(next)));
+    } catch (e) {
+      console.error("Erro ao persistir pedidos removidos", e);
+    }
+  };
 
   useEffect(() => {
     // Garantir id para newSender ao abrir form
@@ -189,12 +217,13 @@ export default function PrintLabelsPage() {
     staleTime: 0
   });
 
-  // Filtragem local
+  // Filtragem local (aplica remoções persistidas)
   const filteredOrders = useMemo(() => {
     if (!orders) return [];
     const term = searchTerm.trim().toLowerCase();
-    if (!term) return orders;
-    return orders.filter(o => {
+    const base = orders.filter(o => !removedIds.has(o.id));
+    if (!term) return base;
+    return base.filter(o => {
       const p = o.profiles;
       return (
         String(o.id).includes(term) ||
@@ -202,7 +231,7 @@ export default function PrintLabelsPage() {
         p?.last_name?.toLowerCase().includes(term)
       );
     });
-  }, [orders, searchTerm]);
+  }, [orders, searchTerm, removedIds]);
 
   // Seleção
   const toggleSelectAll = () => {
@@ -289,23 +318,32 @@ export default function PrintLabelsPage() {
     return senders[idx];
   };
 
-  // GERAR EXCEL (agora usando remetente aleatório por pedido)
+  // Prepare preview and open confirmation dialog instead of immediate export
   const handleExport = () => {
     if (selectedIds.size === 0) {
       showError("Selecione pelo menos um pedido.");
       return;
     }
 
+    const selectedOrders = (orders ?? []).filter(o => selectedIds.has(o.id) && !removedIds.has(o.id));
+    if (selectedOrders.length === 0) {
+      showError("Nenhum pedido selecionado disponível para exportação.");
+      return;
+    }
+
+    // set preview and open dialog
+    setExportPreviewOrders(selectedOrders);
+    setIsExportConfirmOpen(true);
+  };
+
+  const performExport = async (selectedOrders: Order[], removeAfterExport: boolean) => {
     setIsExporting(true);
     try {
-      const selectedOrders = (orders ?? []).filter(o => selectedIds.has(o.id)) || [];
-
       const exportData = selectedOrders.map(order => {
         const p = order.profiles;
         const addr = order.shipping_address || {};
         const fullName = `${cleanStr(p?.first_name)} ${cleanStr(p?.last_name)}`.trim();
 
-        // se houver remetentes cadastrados, escolhe um aleatoriamente; caso contrário usa senderInfo
         const sender = pickRandomSender();
         const remName = sender?.name || senderInfo.name || "Minha Loja";
         const remAddress = sender?.address || senderInfo.address || "";
@@ -342,12 +380,26 @@ export default function PrintLabelsPage() {
       const fileName = `Envios_${format(new Date(), "yyyy-MM-dd_HH-mm")}.xlsx`;
       XLSX.writeFile(workbook, fileName);
 
+      // if requested, persist removal so orders disappear from table
+      if (removeAfterExport) {
+        const next = new Set(removedIds);
+        selectedOrders.forEach(o => next.add(o.id));
+        setRemovedIds(next);
+        persistRemovedIds(next);
+        // also clear selection of removed ids
+        const nextSelected = new Set(selectedIds);
+        selectedOrders.forEach(o => nextSelected.delete(o.id));
+        setSelectedIds(nextSelected);
+      }
+
       showSuccess(`${selectedOrders.length} pedidos exportados!`);
     } catch (err) {
       console.error(err);
       showError("Erro ao gerar Excel.");
     } finally {
       setIsExporting(false);
+      setIsExportConfirmOpen(false);
+      setExportPreviewOrders([]);
     }
   };
 
@@ -620,6 +672,54 @@ export default function PrintLabelsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Export confirmation dialog */}
+      <Dialog open={isExportConfirmOpen} onOpenChange={setIsExportConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar Exportação</DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <div className="text-sm text-muted-foreground mb-3">Você está prestes a exportar {exportPreviewOrders.length} pedido(s). Escolha uma opção:</div>
+
+            <div className="max-h-64 overflow-auto border rounded-md p-2 mb-4">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-muted-foreground">
+                    <th className="pb-2 pr-4">ID</th>
+                    <th className="pb-2 pr-4">Nome</th>
+                    <th className="pb-2 pr-4">Endereço</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {exportPreviewOrders.map(o => {
+                    const p = o.profiles;
+                    const addr = o.shipping_address || {};
+                    const fullName = `${cleanStr(p?.first_name)} ${cleanStr(p?.last_name)}`.trim();
+                    return (
+                      <tr key={o.id} className="border-t">
+                        <td className="py-2 pr-4">{o.id}</td>
+                        <td className="py-2 pr-4">{fullName}</td>
+                        <td className="py-2 pr-4">{`${addr.street || ""}${addr.number ? `, ${addr.number}` : ""}`}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setIsExportConfirmOpen(false)}>Cancelar</Button>
+              <Button onClick={() => performExport(exportPreviewOrders, false)} disabled={isExporting}>
+                {isExporting ? "Exportando..." : "Só Exportar"}
+              </Button>
+              <Button className="bg-red-600 hover:bg-red-700 text-white" onClick={() => performExport(exportPreviewOrders, true)} disabled={isExporting}>
+                {isExporting ? "Exportando..." : "Exportar e Remover"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
