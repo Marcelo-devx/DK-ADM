@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FileSpreadsheet, FileDown, Download, Loader2, Search } from "lucide-react";
+import { FileSpreadsheet, FileDown, Download, Loader2 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -52,7 +52,7 @@ export default function PrintLabelsPage() {
     cep: ""
   });
 
-  // 1. Buscar Configurações do Remetente (Silencioso para uso na exportação)
+  // 1. Buscar Configurações do Remetente
   useQuery({
     queryKey: ["senderSettingsExport"],
     queryFn: async () => {
@@ -60,10 +60,10 @@ export default function PrintLabelsPage() {
         .from("app_settings")
         .select("key, value")
         .in("key", ["sender_name", "sender_address", "sender_city", "sender_state", "sender_cep"]);
-      
+
       const settings: any = {};
       data?.forEach(s => settings[s.key] = s.value);
-      
+
       setSenderInfo({
         name: settings.sender_name || "Minha Loja",
         address: settings.sender_address || "",
@@ -92,7 +92,7 @@ export default function PrintLabelsPage() {
 
       if (error) throw error;
 
-      // Buscar emails via edge function
+      // Buscar emails via edge function (opcional)
       let emailMap = new Map<string, string>();
       try {
           const { data: usersData } = await supabase.functions.invoke("get-users");
@@ -115,6 +115,7 @@ export default function PrintLabelsPage() {
     if (!orders) return [];
     return orders.filter(o => {
       const term = searchTerm.toLowerCase();
+      if (!term) return true;
       return (
         String(o.id).includes(term) ||
         o.profiles?.first_name?.toLowerCase().includes(term) ||
@@ -143,6 +144,28 @@ export default function PrintLabelsPage() {
   const cleanStr = (val: string | null | undefined) => val || "";
   const formatCurrency = (val: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
 
+  // Cabeçalho da planilha (ordem deve bater com o modelo)
+  const TEMPLATE_HEADERS = [
+    "Número pedido",
+    "Nome Entrega",
+    "Endereço",
+    "Complemento Entrega",
+    "Observações",
+    "Telefone Comprador",
+    "Comprador",
+    "F",
+    "Bairro Entrega",
+    "Cidade Entrega",
+    "CEP Entrega",
+    "CPF/CNPJ Comprador",
+    "E-mail Comprador",
+    "Remetente",
+    "Endereço Remetente",
+    "Cidade Remetente",
+    "Estado Remetente",
+    "CEP Remetente",
+  ];
+
   // GERAR EXCEL
   const handleExport = () => {
     if (selectedIds.size === 0) {
@@ -162,7 +185,7 @@ export default function PrintLabelsPage() {
         return {
           "Número pedido": order.id,
           "Nome Entrega": fullName,
-          "Endereço": `${addr.street || ''}, ${addr.number || ''}`,
+          "Endereço": `${addr.street || ''}, ${addr.number || ''}`.trim(),
           "Complemento Entrega": addr.complement || "",
           "Observações": "",
           "Telefone Comprador": p?.phone || "",
@@ -173,8 +196,6 @@ export default function PrintLabelsPage() {
           "CEP Entrega": addr.cep || "",
           "CPF/CNPJ Comprador": p?.cpf_cnpj || "",
           "E-mail Comprador": order.email || "",
-          
-          // Dados do Remetente (Automáticos do Banco)
           "Remetente": senderInfo.name,
           "Endereço Remetente": senderInfo.address,
           "Cidade Remetente": senderInfo.city,
@@ -183,13 +204,13 @@ export default function PrintLabelsPage() {
         };
       });
 
-      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const worksheet = XLSX.utils.json_to_sheet(exportData, { header: TEMPLATE_HEADERS });
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "Envios");
-      
+
       const fileName = `Envios_${format(new Date(), "yyyy-MM-dd_HH-mm")}.xlsx`;
       XLSX.writeFile(workbook, fileName);
-      
+
       showSuccess(`${selectedOrders.length} pedidos exportados!`);
     } catch (err) {
       console.error(err);
@@ -201,7 +222,7 @@ export default function PrintLabelsPage() {
 
   // BAIXAR EXEMPLO
   const handleDownloadTemplate = () => {
-    const headers = [
+    const sample = [
       {
         "Número pedido": "12345",
         "Nome Entrega": "João Silva",
@@ -223,8 +244,8 @@ export default function PrintLabelsPage() {
         "CEP Remetente": "01310-100"
       }
     ];
-    
-    const worksheet = XLSX.utils.json_to_sheet(headers);
+
+    const worksheet = XLSX.utils.json_to_sheet(sample, { header: TEMPLATE_HEADERS });
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Modelo");
     XLSX.writeFile(workbook, "modelo_envios.xlsx");
@@ -242,28 +263,26 @@ export default function PrintLabelsPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        
-        {/* COLUNA ESQUERDA: BOTÕES DE AÇÃO */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* Left column: actions */}
         <div className="lg:col-span-1">
-            <Card>
-                <CardContent className="p-4 space-y-4">
-                    <Button variant="outline" className="w-full justify-start h-12" onClick={handleDownloadTemplate}>
-                        <FileDown className="w-5 h-5 mr-3 text-gray-500" />
-                        Baixar Planilha de Exemplo
-                    </Button>
+          <Card>
+            <CardContent className="p-4 space-y-4">
+              <Button variant="outline" className="w-full justify-start h-12" onClick={handleDownloadTemplate}>
+                <FileDown className="w-5 h-5 mr-3 text-gray-500" />
+                Baixar Planilha de Exemplo
+              </Button>
 
-                    <Button className="w-full justify-start h-12" onClick={handleExport} disabled={isExporting || selectedIds.size === 0}>
-                      {isExporting ? <Loader2 className="animate-spin mr-2" /> : <Download className="mr-2" />}
-                      Exportar Selecionados ({selectedIds.size})
-                    </Button>
-
-                </CardContent>
-            </Card>
+              <Button className="w-full justify-start h-12" onClick={handleExport} disabled={isExporting || selectedIds.size === 0}>
+                {isExporting ? <Loader2 className="animate-spin mr-2" /> : <Download className="mr-2" />}
+                Exportar Selecionados ({selectedIds.size})
+              </Button>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* TABELA DE PEDIDOS */}
-        <div className="lg:col-span-2">
+        {/* Table: span remaining columns to give more space */}
+        <div className="lg:col-span-3">
           <Card>
             <CardHeader className="flex items-center justify-between">
               <CardTitle>Pedidos prontos para etiqueta</CardTitle>
@@ -271,51 +290,69 @@ export default function PrintLabelsPage() {
                 <Input placeholder="Buscar por ID ou nome" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-64" />
               </div>
             </CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-auto">
               {isLoading ? (
                 <div className="p-6"><Skeleton className="h-8 w-full mb-2" /><Skeleton className="h-8 w-full mb-2" /><Skeleton className="h-8 w-full" /></div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>
-                        <input type="checkbox" checked={selectedIds.size === filteredOrders.length && filteredOrders.length > 0} onChange={toggleSelectAll} />
-                      </TableHead>
-                      <TableHead>Pedido</TableHead>
-                      <TableHead>Data</TableHead>
-                      <TableHead>Cliente</TableHead>
-                      <TableHead className="text-right">Valor</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Entrega</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredOrders.length === 0 && (
+                <div className="min-w-full">
+                  <Table>
+                    <TableHeader>
                       <TableRow>
-                        <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">Nenhum pedido encontrado.</TableCell>
+                        <TableHead className="w-10">
+                          <input type="checkbox" checked={selectedIds.size === filteredOrders.length && filteredOrders.length > 0} onChange={toggleSelectAll} />
+                        </TableHead>
+                        {TEMPLATE_HEADERS.map(h => (
+                          <TableHead key={h} className="whitespace-nowrap">{h}</TableHead>
+                        ))}
                       </TableRow>
-                    )}
+                    </TableHeader>
+                    <TableBody>
+                      {filteredOrders.length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={TEMPLATE_HEADERS.length + 1} className="py-10 text-center text-muted-foreground">Nenhum pedido encontrado.</TableCell>
+                        </TableRow>
+                      )}
 
-                    {filteredOrders.map(order => (
-                      <TableRow key={order.id}>
-                        <TableCell>
-                          <input type="checkbox" checked={selectedIds.has(order.id)} onChange={() => toggleSelectOne(order.id)} />
-                        </TableCell>
-                        <TableCell className="font-medium">#{order.id}</TableCell>
-                        <TableCell>{format(new Date(order.created_at), 'dd/MM/yyyy HH:mm')}</TableCell>
-                        <TableCell>{`${cleanStr(order.profiles?.first_name)} ${cleanStr(order.profiles?.last_name)}`}</TableCell>
-                        <TableCell className="text-right font-bold">{formatCurrency(Number(order.total_price))}</TableCell>
-                        <TableCell>{order.status}</TableCell>
-                        <TableCell>{order.delivery_status}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                      {filteredOrders.map(order => {
+                        const p = order.profiles;
+                        const addr = order.shipping_address || {};
+                        const fullName = `${cleanStr(p?.first_name)} ${cleanStr(p?.last_name)}`.trim();
+
+                        return (
+                          <TableRow key={order.id}>
+                            <TableCell>
+                              <input type="checkbox" checked={selectedIds.has(order.id)} onChange={() => toggleSelectOne(order.id)} />
+                            </TableCell>
+
+                            <TableCell className="whitespace-nowrap">{order.id}</TableCell>
+                            <TableCell className="whitespace-nowrap">{fullName}</TableCell>
+                            <TableCell className="whitespace-nowrap">{`${addr.street || ''}, ${addr.number || ''}`}</TableCell>
+                            <TableCell className="whitespace-nowrap">{addr.complement || ''}</TableCell>
+                            <TableCell className="whitespace-nowrap">{/* Observações vazio por ora */}</TableCell>
+                            <TableCell className="whitespace-nowrap">{p?.phone || ''}</TableCell>
+                            <TableCell className="whitespace-nowrap">{fullName}</TableCell>
+                            <TableCell className="whitespace-nowrap">{/* F */}</TableCell>
+                            <TableCell className="whitespace-nowrap">{addr.neighborhood || ''}</TableCell>
+                            <TableCell className="whitespace-nowrap">{addr.city || ''}</TableCell>
+                            <TableCell className="whitespace-nowrap">{addr.cep || ''}</TableCell>
+                            <TableCell className="whitespace-nowrap">{p?.cpf_cnpj || ''}</TableCell>
+                            <TableCell className="whitespace-nowrap">{order.email || ''}</TableCell>
+                            <TableCell className="whitespace-nowrap">{senderInfo.name}</TableCell>
+                            <TableCell className="whitespace-nowrap">{senderInfo.address}</TableCell>
+                            <TableCell className="whitespace-nowrap">{senderInfo.city}</TableCell>
+                            <TableCell className="whitespace-nowrap">{senderInfo.state}</TableCell>
+                            <TableCell className="whitespace-nowrap">{senderInfo.cep}</TableCell>
+
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
               )}
             </CardContent>
           </Card>
         </div>
-
       </div>
     </div>
   );
