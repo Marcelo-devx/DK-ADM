@@ -67,37 +67,50 @@ export default function ClubDKPage() {
     }
   });
 
-  // Processa bônus de aniversário automaticamente
+  // Processa bônus de aniversário automaticamente — executa apenas quando for o dia do aniversário
   useEffect(() => {
-    // Don't run if we've already processed in this component lifecycle
+    // Se já processamos nesta sessão, não executamos novamente
     if (birthdayProcessedRef.current) return;
 
-    const processBirthday = async () => {
-      if (!user || !profile?.date_of_birth) return;
+    // Só tentamos processar se houver usuário e data de nascimento
+    if (!user || !profile?.date_of_birth) return;
 
-      try {
-        const { data, error } = await supabase.rpc('process_annual_birthday_bonus', { p_user_id: user.id });
-        if (error) {
-          // Show detailed error and stop
-          showError(`Erro ao processar bônus de aniversário: ${error.message}`);
-          birthdayProcessedRef.current = true;
-          return;
-        }
+    try {
+      const dob = new Date(profile.date_of_birth);
+      const today = new Date();
 
-        // If the RPC indicates a bonus was granted, invalidate and notify once
-        if (data === 'Bônus concedido com sucesso!' || (typeof data === 'string' && data.toLowerCase().includes('concedido'))) {
-          showSuccess("🎉 Feliz aniversário! Você acaba de ganhar seus pontos de presente.");
-          queryClient.invalidateQueries({ queryKey: ["loyaltyProfile"] });
-        }
-      } catch (err: any) {
-        showError(`Erro ao processar bônus de aniversário: ${err?.message ?? String(err)}`);
-      } finally {
-        // Ensure we don't re-run repeatedly
-        birthdayProcessedRef.current = true;
+      // Compara apenas dia e mês (aniversário anual)
+      const isBirthdayToday = dob.getUTCDate() === today.getUTCDate() && dob.getUTCMonth() === today.getUTCMonth();
+
+      if (!isBirthdayToday) {
+        // Não é hoje — não processar agora
+        return;
       }
-    };
 
-    processBirthday();
+      // Marca como processado para evitar reentradas enquanto aguardamos a resposta
+      birthdayProcessedRef.current = true;
+
+      (async () => {
+        try {
+          const { data, error } = await supabase.rpc('process_annual_birthday_bonus', { p_user_id: user.id });
+          if (error) {
+            showError(`Erro ao processar bônus de aniversário: ${error.message}`);
+            return;
+          }
+
+          if (data === 'Bônus concedido com sucesso!' || (typeof data === 'string' && data.toLowerCase().includes('concedido'))) {
+            showSuccess("🎉 Feliz aniversário! Você acaba de ganhar seus pontos de presente.");
+            queryClient.invalidateQueries({ queryKey: ["loyaltyProfile"] });
+          }
+        } catch (err: any) {
+          showError(`Erro ao processar bônus de aniversário: ${err?.message ?? String(err)}`);
+        }
+      })();
+    } catch (err: any) {
+      // Em caso de erro de parsing, garantimos que não vamos tentar novamente indefinidamente
+      birthdayProcessedRef.current = true;
+      console.error('ClubDK birthday processing error:', err);
+    }
   }, [user, profile?.date_of_birth, queryClient]);
 
   const saveBirthDateMutation = useMutation({
