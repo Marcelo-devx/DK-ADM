@@ -74,6 +74,35 @@ const ProductsPage = () => {
         const workbook = XLSX.read(data, { type: 'array' });
         const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]) as any[];
         
+        // Helpers to detect visibility field and parse its value
+        const parseBooleanLike = (val: any) => {
+            if (val === undefined || val === null) return false;
+            if (typeof val === 'boolean') return val;
+            const s = String(val).trim().toLowerCase();
+            if (s === '') return false;
+            // common true-ish values
+            if (['sim', 's', 'yes', 'y', 'true', '1'].includes(s)) return true;
+            // words containing these hints
+            if (s.includes('sim') || s.includes('public') || s.includes('visiv') || s.includes('vis') || s.includes('publish')) return true;
+            return false;
+        };
+
+        const findVisibilityValue = (row: any) => {
+            // row keys are normalized by mapRowKeys later, but here we inspect the raw keys first
+            for (const key in row) {
+                const normalizedKey = key
+                  .normalize('NFD')
+                  .replace(/[\u0300-\u036f]/g, '')
+                  .replace(/\s/g, '')
+                  .toLowerCase();
+                if (normalizedKey.includes('public') || normalizedKey.includes('visiv') || normalizedKey.includes('vis') || normalizedKey.includes('publicado') || normalizedKey.includes('publicados')) {
+                    return row[key];
+                }
+            }
+            // fallback to common normalized names
+            return row['Publicado'] ?? row['publicado'] ?? row['publicadossimnao'] ?? row['publicadossimnao'] ?? row['publicadosimnao'] ?? row['publicados'] ?? row['visivel'] ?? row['visivelno'] ?? undefined;
+        };
+
         const productsToInsert = json.map(mapRowKeys).map((row: any) => ({
             sku: row.sku || '',
             name: row.nome,
@@ -86,7 +115,8 @@ const ProductsPage = () => {
             sub_category: row.subcategoria || null,
             brand: row.marca || null,
             image_url: row.imagem || null,
-            is_visible: row.publicadossimnao?.toLowerCase() === 'sim',
+            // Determine visibility using flexible detection
+            is_visible: parseBooleanLike(findVisibilityValue(row) ?? row.publicadossimnao ?? row.publicado ?? row.visivel ?? row.visivelno ?? row.publicados ?? ''),
             flavor_names: row.sabores || '' 
         }));
         
