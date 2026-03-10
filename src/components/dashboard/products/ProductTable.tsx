@@ -110,7 +110,7 @@ export const ProductTable = ({
                         </div>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>{product.is_visible ? "Visível no site" : "Oculto no site"}</p>
+                        <p>{product.is_visible ? "Publicado no site" : "Não publicado no site"}</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
