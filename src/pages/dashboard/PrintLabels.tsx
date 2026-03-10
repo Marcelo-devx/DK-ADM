@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -92,6 +92,10 @@ export default function PrintLabelsPage() {
     cep: ""
   });
 
+  // refetchRef é usado para armazenar a função refetch do react-query.
+  // Declaramos aqui, antes das queries, para evitar erro de 'used before declaration'.
+  const refetchRef = useRef<(() => Promise<any>) | undefined>(undefined);
+
   useEffect(() => {
     // Carregar remetentes do localStorage ao montar
     try {
@@ -155,7 +159,7 @@ export default function PrintLabelsPage() {
   });
 
   // 2. Buscar Pedidos (somente os campos que precisamos)
-  const { data: orders, isLoading } = useQuery<Order[]>({
+  const { data: orders, isLoading, refetch } = useQuery<Order[]>({
     queryKey: ["ordersForExcelExport"],
     queryFn: async () => {
       const { data: ordersData, error } = await supabase
@@ -217,6 +221,9 @@ export default function PrintLabelsPage() {
     staleTime: 0
   });
 
+  // ligar refetch do react-query ao ref usado nas funções acima
+  refetchRef.current = refetch;
+
   // Filtragem local (aplica remoções persistidas)
   const filteredOrders = useMemo(() => {
     if (!orders) return [];
@@ -248,6 +255,36 @@ export default function PrintLabelsPage() {
     if (next.has(id)) next.delete(id);
     else next.add(id);
     setSelectedIds(next);
+  };
+
+  // Botões adicionais: limpar selecionados da lista (persistido) e atualizar pedidos
+  const handleClearSelected = () => {
+    if (selectedIds.size === 0) {
+      showError("Selecione pelo menos um pedido.");
+      return;
+    }
+    const count = selectedIds.size;
+    const next = new Set(removedIds);
+    selectedIds.forEach(id => next.add(id));
+    setRemovedIds(next);
+    persistRemovedIds(next);
+    // limpar seleção
+    setSelectedIds(new Set());
+    showSuccess(`${count} pedido(s) removido(s) da lista.`);
+  };
+
+  const handleRefresh = async () => {
+    try {
+      if (refetchRef.current) {
+        await refetchRef.current();
+        showSuccess("Pedidos atualizados.");
+      } else {
+        showError("Não foi possível atualizar no momento.");
+      }
+    } catch (e) {
+      console.error("Erro ao atualizar pedidos:", e);
+      showError("Erro ao atualizar pedidos.");
+    }
   };
 
   // Funções de gerência de remetentes (persistência local)
@@ -465,6 +502,19 @@ export default function PrintLabelsPage() {
                   {isExporting ? <Loader2 className="animate-spin mr-2" /> : <Download className="mr-2" />}
                   Exportar Selecionados ({selectedIds.size})
                 </Button>
+
+                {selectedIds.size > 0 && (
+                  <div className="flex gap-2">
+                    <Button variant="outline" className="flex-1 justify-center h-10" onClick={handleRefresh}>
+                      <Loader2 className="w-4 h-4 mr-2" />
+                      Atualizar
+                    </Button>
+                    <Button className="bg-red-600 hover:bg-red-700 text-white flex-1 justify-center h-10" onClick={handleClearSelected}>
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Limpar da lista ({selectedIds.size})
+                    </Button>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
