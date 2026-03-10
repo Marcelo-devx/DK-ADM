@@ -637,7 +637,8 @@ export default function PrintLabelsPage() {
                         "Nome Entrega": fullName,
                         "Endereço": `${addr.street || ''}${addr.number ? `, ${addr.number}` : ''}`.trim(),
                         "Complemento Entrega": addr.complement || "",
-                        "Observações": order.delivery_info || "",
+                        // Observação fixa para exportação e etiquetas
+                        "Observações": "Frágil",
                         "Telefone Comprador": p?.phone || "",
                         "Comprador": fullName,
                         "F": "",
