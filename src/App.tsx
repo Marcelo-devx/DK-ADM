@@ -96,6 +96,7 @@ const App = () => (
               <Route path="donations" element={<Donations />} />
               <Route path="crypto" element={<Crypto />} />
               <Route path="loyalty-management" element={<LoyaltyManagement />} />
+              <Route path="club-dk" element={<ClubDK />} />
               <Route path="user-coupons-history" element={<UserCouponsHistory />} />
               <Route path="delivery-routes" element={<DeliveryRoutes />} />
               <Route path="spoke-export" element={<SpokeExport />} />
