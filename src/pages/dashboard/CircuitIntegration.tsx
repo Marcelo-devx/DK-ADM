@@ -4,16 +4,18 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Globe, ShieldCheck, RefreshCw, Loader2, Save } from "lucide-react";
+import { Globe, ShieldCheck, RefreshCw, Loader2, Save, Eye, EyeOff } from "lucide-react";
 import { useState, useEffect } from "react";
 import { showSuccess, showError } from "@/utils/toast";
 
-const SpokeIntegrationPage = () => {
+const CircuitIntegrationPage = () => {
   const queryClient = useQueryClient();
   const [logisticsUrl, setLogisticsUrl] = useState("");
   const [logisticsToken, setLogisticsToken] = useState("");
   const [webhookSecret, setWebhookSecret] = useState("");
   const [isTesting, setIsTesting] = useState(false);
+  const [revealToken, setRevealToken] = useState(false);
+  const [revealWebhook, setRevealWebhook] = useState(false);
 
   const { data: settings, isLoading } = useQuery({
     queryKey: ["appSettings"],
@@ -71,7 +73,7 @@ const SpokeIntegrationPage = () => {
             throw new Error(errorMsg);
         }
 
-        showSuccess("Conexão com Spoke/Circuit estabelecida com sucesso!");
+        showSuccess("Conexão com Circuit estabelecida com sucesso!");
     } catch (err: any) {
         showError(`Falha no teste: ${err.message}`);
     } finally {
@@ -81,14 +83,14 @@ const SpokeIntegrationPage = () => {
 
   return (
     <div className="space-y-6 p-6">
-      <h1 className="text-3xl font-bold mb-4">Integração Spoke (Circuit)</h1>
+      <h1 className="text-3xl font-bold mb-4">Integração Circuit</h1>
 
       <Card className="border-blue-100 bg-blue-50/10 shadow-lg max-w-2xl">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Globe className="w-5 h-5 text-blue-600" /> Integração Spoke (Circuit)
+            <Globe className="w-5 h-5 text-blue-600" /> Integração Circuit
           </CardTitle>
-          <CardDescription>Configure a comunicação com a API v0.2b.</CardDescription>
+          <CardDescription>Gerencie aqui as suas chaves e configuração da integração com o Circuit.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
@@ -96,16 +98,26 @@ const SpokeIntegrationPage = () => {
               <Input value={logisticsUrl} onChange={(e) => setLogisticsUrl(e.target.value)} placeholder="https://api.getcircuit.com/public/v0.2b" />
               <p className="text-[10px] text-muted-foreground">URL Padrão: <code>https://api.getcircuit.com/public/v0.2b</code></p>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-2 relative">
               <Label className="font-bold">API Key (Bearer Token)</Label>
-              <Input type="password" value={logisticsToken} onChange={(e) => setLogisticsToken(e.target.value)} />
-              <p className="text-[10px] text-muted-foreground">Gere em: Configurações &gt; API no painel do Spoke/Circuit.</p>
+              <div className="flex items-center gap-2">
+                <Input type={revealToken ? 'text' : 'password'} value={logisticsToken} onChange={(e) => setLogisticsToken(e.target.value)} />
+                <Button variant="ghost" onClick={() => setRevealToken(v => !v)}>
+                  {revealToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </Button>
+              </div>
+              <p className="text-[10px] text-muted-foreground">Gere em: Configurações &gt; API no painel do Circuit.</p>
           </div>
-          <div className="space-y-2 pt-4 border-t">
+          <div className="space-y-2 pt-4 border-t relative">
               <Label className="font-bold flex items-center gap-2 text-emerald-700">
                   <ShieldCheck className="w-4 h-4" /> Webhook Secret
               </Label>
-              <Input type="password" placeholder="Chave secreta do Webhook (opcional)" value={webhookSecret} onChange={(e) => setWebhookSecret(e.target.value)} />
+              <div className="flex items-center gap-2">
+                <Input type={revealWebhook ? 'text' : 'password'} placeholder="Chave secreta do Webhook (opcional)" value={webhookSecret} onChange={(e) => setWebhookSecret(e.target.value)} />
+                <Button variant="ghost" onClick={() => setRevealWebhook(v => !v)}>
+                  {revealWebhook ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </Button>
+              </div>
           </div>
           <div className="pt-2 flex gap-2">
               <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || isTesting} className="flex-1 bg-blue-600 hover:bg-blue-700 font-bold">
@@ -115,10 +127,14 @@ const SpokeIntegrationPage = () => {
                   {isTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />} Testar
               </Button>
           </div>
+
+          <div className="pt-3 text-sm text-muted-foreground">
+            {isLoading ? 'Carregando chaves...' : (logisticsToken || webhookSecret) ? 'Suas chaves atuais foram carregadas acima.' : 'Nenhuma chave encontrada. Insira e salve para integrar.'}
+          </div>
         </CardContent>
       </Card>
     </div>
   );
 };
 
-export default SpokeIntegrationPage;
+export default CircuitIntegrationPage;
