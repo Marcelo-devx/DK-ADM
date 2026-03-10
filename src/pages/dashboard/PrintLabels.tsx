@@ -692,7 +692,7 @@ export default function PrintLabelsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {exportPreviewOrders.map(o => {
+                  {exportPreviewOrders.slice(0, 20).map(o => {
                     const p = o.profiles;
                     const addr = o.shipping_address || {};
                     const fullName = `${cleanStr(p?.first_name)} ${cleanStr(p?.last_name)}`.trim();
@@ -706,6 +706,11 @@ export default function PrintLabelsPage() {
                   })}
                 </tbody>
               </table>
+              {exportPreviewOrders.length > 20 && (
+                <div className="text-sm text-muted-foreground pt-2 text-center">
+                  ... e mais {exportPreviewOrders.length - 20} pedidos
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-2">
