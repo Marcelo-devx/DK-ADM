@@ -46,7 +46,6 @@ import LoyaltyManagement from "./pages/dashboard/LoyaltyManagement";
 import UserCouponsHistory from "./pages/dashboard/UserCouponsHistory";
 import DeliveryRoutes from "./pages/dashboard/DeliveryRoutes";
 import SpokeExport from "./pages/dashboard/SpokeExport";
-import SpokeIntegration from "./pages/dashboard/SpokeIntegration";
 import ClubDKAdmin from "./pages/dashboard/ClubDKAdmin";
 import CircuitIntegration from "./pages/dashboard/CircuitIntegration";
 
