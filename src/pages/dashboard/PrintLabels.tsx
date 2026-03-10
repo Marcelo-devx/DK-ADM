@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FileSpreadsheet, Download, Search, Loader2, CheckSquare, Square, FileDown } from "lucide-react";
+import { FileSpreadsheet, FileDown, Download, Loader2, Search } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -79,7 +79,7 @@ export default function PrintLabelsPage() {
   const { data: orders, isLoading } = useQuery<Order[]>({
     queryKey: ["ordersForExcelExport"],
     queryFn: async () => {
-      // Pedidos Pagos e Pendentes de Envio
+      // Pedidos Pagos e Pendentes de Envio (inclui Aguardando Coleta)
       const { data: ordersData, error } = await supabase
         .from("orders")
         .select(`
@@ -244,7 +244,7 @@ export default function PrintLabelsPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         
-        {/* COLUNA ESQUERDA: APENAS OS BOTÕES DE AÇÃO */}
+        {/* COLUNA ESQUERDA: BOTÕES DE AÇÃO */}
         <div className="lg:col-span-1">
             <Card>
                 <CardContent className="p-4 space-y-4">
@@ -252,12 +252,70 @@ export default function PrintLabelsPage() {
                         <FileDown className="w-5 h-5 mr-3 text-gray-500" />
                         Baixar Planilha de Exemplo
                     </Button>
+
+                    <Button className="w-full justify-start h-12" onClick={handleExport} disabled={isExporting || selectedIds.size === 0}>
+                      {isExporting ? <Loader2 className="animate-spin mr-2" /> : <Download className="mr-2" />}
+                      Exportar Selecionados ({selectedIds.size})
+                    </Button>
+
                 </CardContent>
             </Card>
         </div>
 
-        {/* Tabela de Pedidos Removida conforme solicitado */}
-        
+        {/* TABELA DE PEDIDOS */}
+        <div className="lg:col-span-2">
+          <Card>
+            <CardHeader className="flex items-center justify-between">
+              <CardTitle>Pedidos prontos para etiqueta</CardTitle>
+              <div className="flex items-center gap-2">
+                <Input placeholder="Buscar por ID ou nome" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-64" />
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {isLoading ? (
+                <div className="p-6"><Skeleton className="h-8 w-full mb-2" /><Skeleton className="h-8 w-full mb-2" /><Skeleton className="h-8 w-full" /></div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>
+                        <input type="checkbox" checked={selectedIds.size === filteredOrders.length && filteredOrders.length > 0} onChange={toggleSelectAll} />
+                      </TableHead>
+                      <TableHead>Pedido</TableHead>
+                      <TableHead>Data</TableHead>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead className="text-right">Valor</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Entrega</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredOrders.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">Nenhum pedido encontrado.</TableCell>
+                      </TableRow>
+                    )}
+
+                    {filteredOrders.map(order => (
+                      <TableRow key={order.id}>
+                        <TableCell>
+                          <input type="checkbox" checked={selectedIds.has(order.id)} onChange={() => toggleSelectOne(order.id)} />
+                        </TableCell>
+                        <TableCell className="font-medium">#{order.id}</TableCell>
+                        <TableCell>{format(new Date(order.created_at), 'dd/MM/yyyy HH:mm')}</TableCell>
+                        <TableCell>{`${cleanStr(order.profiles?.first_name)} ${cleanStr(order.profiles?.last_name)}`}</TableCell>
+                        <TableCell className="text-right font-bold">{formatCurrency(Number(order.total_price))}</TableCell>
+                        <TableCell>{order.status}</TableCell>
+                        <TableCell>{order.delivery_status}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
       </div>
     </div>
   );
