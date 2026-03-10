@@ -46,6 +46,7 @@ import LoyaltyManagement from "./pages/dashboard/LoyaltyManagement";
 import UserCouponsHistory from "./pages/dashboard/UserCouponsHistory";
 import DeliveryRoutes from "./pages/dashboard/DeliveryRoutes";
 import SpokeExport from "./pages/dashboard/SpokeExport";
+import ClubDKAdmin from "./pages/dashboard/ClubDKAdmin";
 
 const queryClient = new QueryClient();
 
@@ -96,7 +97,7 @@ const App = () => (
               <Route path="donations" element={<Donations />} />
               <Route path="crypto" element={<Crypto />} />
               <Route path="loyalty-management" element={<LoyaltyManagement />} />
-              <Route path="club-dk" element={<ClubDK />} />
+              <Route path="club-dk" element={<ClubDKAdmin />} />
               <Route path="user-coupons-history" element={<UserCouponsHistory />} />
               <Route path="delivery-routes" element={<DeliveryRoutes />} />
               <Route path="spoke-export" element={<SpokeExport />} />
