@@ -86,7 +86,7 @@ const ProductsPage = () => {
             sub_category: row.subcategoria || null,
             brand: row.marca || null,
             image_url: row.imagem || null,
-            is_visible: row.publicadosimnao?.toLowerCase() === 'sim',
+            is_visible: row.publicadossimnao?.toLowerCase() === 'sim',
             flavor_names: row.sabores || '' 
         }));
         
