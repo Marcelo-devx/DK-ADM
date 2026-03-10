@@ -194,9 +194,9 @@ const Sidebar = () => {
         <NavLink to="/dashboard/settings" className={navLinkClass}>
           {({ isActive }) => (<><Settings className={iconClass("text-slate-500", isActive)} />Configurações</>)}
         </NavLink>
-+        <NavLink to="/dashboard/spoke-integration" className={navLinkClass}>
-+          {({ isActive }) => (<><Globe className={iconClass("text-slate-500", isActive)} />Integração Spoke (Circuit)</>)}
-+        </NavLink>
+        <NavLink to="/dashboard/spoke-integration" className={navLinkClass}>
+          {({ isActive }) => (<><Globe className={iconClass("text-slate-500", isActive)} />Integração Circuit</>)}
+        </NavLink>
       </nav>
 
       {/* FOOTER COM LOGOUT */}

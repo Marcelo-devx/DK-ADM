@@ -48,6 +48,7 @@ import DeliveryRoutes from "./pages/dashboard/DeliveryRoutes";
 import SpokeExport from "./pages/dashboard/SpokeExport";
 import SpokeIntegration from "./pages/dashboard/SpokeIntegration";
 import ClubDKAdmin from "./pages/dashboard/ClubDKAdmin";
+import CircuitIntegration from "./pages/dashboard/CircuitIntegration";
 
 const queryClient = new QueryClient();
 
@@ -84,7 +85,7 @@ const App = () => (
               <Route path="promotions" element={<Promotions />} />
               <Route path="supplier-orders" element={<SupplierOrders />} />
               <Route path="settings" element={<Settings />} />
-              <Route path="spoke-integration" element={<SpokeIntegration />} />
+              <Route path="spoke-integration" element={<CircuitIntegration />} />
               <Route path="integrations" element={<Integrations />} />
               <Route path="n8n-integration" element={<N8nIntegration />} />
               <Route path="incoming-webhooks" element={<IncomingWebhooks />} />

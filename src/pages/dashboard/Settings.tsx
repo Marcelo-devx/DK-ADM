@@ -106,49 +106,7 @@ const SettingsPage = () => {
           </CardContent>
         </Card>
 
-        <Card className="border-blue-100 bg-blue-50/10 shadow-lg">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-                <Globe className="w-5 h-5 text-blue-600" /> Integração Spoke (Circuit)
-            </CardTitle>
-            <CardDescription>Configure a comunicação com a API v0.2b.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-                <Label className="font-bold">Base URL (API v0.2b)</Label>
-                <Input value={logisticsUrl} onChange={(e) => setLogisticsUrl(e.target.value)} placeholder="https://api.getcircuit.com/public/v0.2b" />
-                <p className="text-[10px] text-muted-foreground">
-                  URL Padrão: <code>https://api.getcircuit.com/public/v0.2b</code>
-                </p>
-            </div>
-            <div className="space-y-2">
-                <Label className="font-bold">API Key (Bearer Token)</Label>
-                <Input type="password" value={logisticsToken} onChange={(e) => setLogisticsToken(e.target.value)} />
-                <p className="text-[10px] text-muted-foreground">
-                  Gere em: Configurações &gt; API no painel do Spoke/Circuit.
-                </p>
-            </div>
-            <div className="space-y-2 pt-4 border-t">
-                <Label className="font-bold flex items-center gap-2 text-emerald-700">
-                    <ShieldCheck className="w-4 h-4" /> Webhook Secret
-                </Label>
-                <Input 
-                    type="password"
-                    placeholder="Chave secreta do Webhook (opcional)" 
-                    value={webhookSecret} 
-                    onChange={(e) => setWebhookSecret(e.target.value)}
-                />
-            </div>
-            <div className="pt-2 flex gap-2">
-                <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || isTesting} className="flex-1 bg-blue-600 hover:bg-blue-700 font-bold">
-                    <Save className="w-4 h-4 mr-2" /> Salvar
-                </Button>
-                <Button onClick={handleTestConnection} disabled={isTesting || saveMutation.isPending} variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50">
-                    {isTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />} Testar
-                </Button>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Circuit integration removed from Settings; moved to its own menu */}
       </div>
     </div>
   );
