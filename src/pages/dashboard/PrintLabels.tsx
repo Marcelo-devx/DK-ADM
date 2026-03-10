@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FileSpreadsheet, FileDown, Download, Loader2 } from "lucide-react";
+import { FileSpreadsheet, FileDown, Download, Loader2, Trash2, Plus } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -36,14 +36,26 @@ interface Order {
     phone: string | null;
     cpf_cnpj: string | null;
   } | null;
+  delivery_info?: string | null;
 }
+
+interface Sender {
+  id: string;
+  name?: string;
+  address: string;
+  city: string;
+  state: string;
+  cep: string;
+}
+
+const SENDERS_STORAGE_KEY = "print_labels_senders_v1";
 
 export default function PrintLabelsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [searchTerm, setSearchTerm] = useState("");
   const [isExporting, setIsExporting] = useState(false);
 
-  // Configurações do Remetente (Estado Local - Carregado do Banco)
+  // Configurações do Remetente (Estado Local - Carregado do Banco para fallback)
   const [senderInfo, setSenderInfo] = useState({
     name: "",
     address: "",
@@ -52,7 +64,38 @@ export default function PrintLabelsPage() {
     cep: ""
   });
 
-  // 1. Buscar Configurações do Remetente
+  // Lista de remetentes cadastrados (persistidos em localStorage)
+  const [senders, setSenders] = useState<Sender[]>([]);
+
+  // Campos temporários para criar novo remetente
+  const [newSender, setNewSender] = useState<Sender>({
+    id: "",
+    name: "",
+    address: "",
+    city: "",
+    state: "",
+    cep: ""
+  });
+
+  useEffect(() => {
+    // Carregar remetentes do localStorage ao montar
+    try {
+      const raw = localStorage.getItem(SENDERS_STORAGE_KEY);
+      if (raw) {
+        const parsed: Sender[] = JSON.parse(raw);
+        setSenders(parsed);
+      }
+    } catch (e) {
+      console.error("Erro ao carregar remetentes do localStorage", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Garantir id para newSender ao abrir form
+    if (!newSender.id) setNewSender(s => ({ ...s, id: crypto.randomUUID?.() || String(Date.now()) }));
+  }, [newSender.id]);
+
+  // 1. Buscar Configurações do Remetente (Silencioso para uso na exportação)
   useQuery({
     queryKey: ["senderSettingsExport"],
     queryFn: async () => {
@@ -76,11 +119,9 @@ export default function PrintLabelsPage() {
   });
 
   // 2. Buscar Pedidos (somente os campos que precisamos)
-  const { data: orders, isLoading } = useQuery<Order[], Error>({
+  const { data: orders, isLoading } = useQuery<Order[]>({
     queryKey: ["ordersForExcelExport"],
     queryFn: async () => {
-      // Busca explícita: delivery_status igual a 'Aguardando Coleta' (ou 'Pendente' se quiser)
-      // Usamos .or para garantir compatibilidade com RLS e filtros compostos
       const { data: ordersData, error } = await supabase
         .from("orders")
         .select(`
@@ -92,21 +133,19 @@ export default function PrintLabelsPage() {
           shipping_address,
           user_id
         `)
-        // Queremos apenas pedidos que estão prontos para etiqueta: status pago/finalizado e delivery_status = 'Aguardando Coleta'
+        // status pago/finalizado e delivery_status Aguardando Coleta ou Pendente
         .in("status", ["Finalizada", "Pago"])
         .or("delivery_status.eq.Aguardando Coleta,delivery_status.eq.Pendente")
         .order("created_at", { ascending: false });
 
       if (error) {
-        // Registramos o erro para facilitar debug (console do browser / servidor)
         console.error("Erro ao buscar pedidos para export:", error);
         throw error;
       }
 
-      // Se não retornou dados, devolve array vazio
       if (!ordersData || ordersData.length === 0) return [];
 
-      // Buscar perfis para os user_ids retornados (para evitar falhas por joins / RLS)
+      // Buscar perfis separadamente por user_ids (evita problemas de join/RLS)
       const userIds = Array.from(new Set(ordersData.map((o: any) => o.user_id).filter(Boolean)));
       let profilesMap = new Map<string, any>();
       if (userIds.length > 0) {
@@ -139,16 +178,15 @@ export default function PrintLabelsPage() {
         email: o.user_id ? (emailMap.get(o.user_id) || "") : ""
       }));
     },
-    // Não manter cache por muito tempo; queremos dados frescos aqui
     staleTime: 0
   });
 
   // Filtragem local
   const filteredOrders = useMemo(() => {
+    if (!orders) return [];
     const term = searchTerm.trim().toLowerCase();
-    const list = (orders ?? []) as Order[]; // ensure we have an array to call .filter on
-    if (!term) return list;
-    return list.filter(o => {
+    if (!term) return orders;
+    return orders.filter(o => {
       const p = o.profiles;
       return (
         String(o.id).includes(term) ||
@@ -173,6 +211,40 @@ export default function PrintLabelsPage() {
     if (next.has(id)) next.delete(id);
     else next.add(id);
     setSelectedIds(next);
+  };
+
+  // Funções de gerência de remetentes (persistência local)
+  const persistSenders = (next: Sender[]) => {
+    try {
+      localStorage.setItem(SENDERS_STORAGE_KEY, JSON.stringify(next));
+    } catch (e) {
+      console.error("Erro ao salvar remetentes no localStorage", e);
+    }
+  };
+
+  const handleAddSender = () => {
+    // validação mínima: endereço e cidade
+    if (!newSender.address.trim() || !newSender.city.trim()) {
+      showError("Preencha pelo menos Endereço e Cidade do remetente.");
+      return;
+    }
+    const senderToAdd: Sender = {
+      ...newSender,
+      id: newSender.id || (crypto.randomUUID?.() || String(Date.now()))
+    };
+    const next = [...senders, senderToAdd];
+    setSenders(next);
+    persistSenders(next);
+    // limpar form mantendo id novo
+    setNewSender({ id: crypto.randomUUID?.() || String(Date.now()), name: "", address: "", city: "", state: "", cep: "" });
+    showSuccess("Remetente adicionado.");
+  };
+
+  const handleRemoveSender = (id: string) => {
+    const next = senders.filter(s => s.id !== id);
+    setSenders(next);
+    persistSenders(next);
+    showSuccess("Remetente removido.");
   };
 
   // Util helpers
@@ -201,7 +273,14 @@ export default function PrintLabelsPage() {
     "CEP Remetente",
   ];
 
-  // GERAR EXCEL
+  // Função utilitária para sortear um remetente
+  const pickRandomSender = (): Sender | null => {
+    if (senders.length === 0) return null;
+    const idx = Math.floor(Math.random() * senders.length);
+    return senders[idx];
+  };
+
+  // GERAR EXCEL (agora usando remetente aleatório por pedido)
   const handleExport = () => {
     if (selectedIds.size === 0) {
       showError("Selecione pelo menos um pedido.");
@@ -217,6 +296,14 @@ export default function PrintLabelsPage() {
         const addr = order.shipping_address || {};
         const fullName = `${cleanStr(p?.first_name)} ${cleanStr(p?.last_name)}`.trim();
 
+        // se houver remetentes cadastrados, escolhe um aleatoriamente; caso contrário usa senderInfo
+        const sender = pickRandomSender();
+        const remName = sender?.name || senderInfo.name || "Minha Loja";
+        const remAddress = sender?.address || senderInfo.address || "";
+        const remCity = sender?.city || senderInfo.city || "";
+        const remState = sender?.state || senderInfo.state || "";
+        const remCep = sender?.cep || senderInfo.cep || "";
+
         return {
           "Número pedido": order.id,
           "Nome Entrega": fullName,
@@ -231,11 +318,11 @@ export default function PrintLabelsPage() {
           "CEP Entrega": addr.cep || "",
           "CPF/CNPJ Comprador": p?.cpf_cnpj || "",
           "E-mail Comprador": order.email || "",
-          "Remetente": senderInfo.name,
-          "Endereço Remetente": senderInfo.address,
-          "Cidade Remetente": senderInfo.city,
-          "Estado Remetente": senderInfo.state,
-          "CEP Remetente": senderInfo.cep
+          "Remetente": remName,
+          "Endereço Remetente": remAddress,
+          "Cidade Remetente": remCity,
+          "Estado Remetente": remState,
+          "CEP Remetente": remCep
         };
       });
 
@@ -299,8 +386,8 @@ export default function PrintLabelsPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Left column: actions */}
-        <div className="lg:col-span-1">
+        {/* Left column: actions + remetentes */}
+        <div className="lg:col-span-1 space-y-4">
           <Card>
             <CardContent className="p-4 space-y-4">
               <Button variant="outline" className="w-full justify-start h-12" onClick={handleDownloadTemplate}>
@@ -312,6 +399,54 @@ export default function PrintLabelsPage() {
                 {isExporting ? <Loader2 className="animate-spin mr-2" /> : <Download className="mr-2" />}
                 Exportar Selecionados ({selectedIds.size})
               </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Remetentes (cadastre vários)</CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 space-y-3">
+              <div className="text-sm text-muted-foreground">Cadastre múltiplos remetentes; ao exportar cada pedido receberá aleatoriamente um deles.</div>
+
+              <div className="grid grid-cols-1 gap-2">
+                <Input placeholder="Nome remetente (opcional)" value={newSender.name || ""} onChange={(e) => setNewSender(s => ({ ...s, name: e.target.value }))} />
+                <Input placeholder="Endereço" value={newSender.address} onChange={(e) => setNewSender(s => ({ ...s, address: e.target.value }))} />
+                <Input placeholder="Cidade" value={newSender.city} onChange={(e) => setNewSender(s => ({ ...s, city: e.target.value }))} />
+                <Input placeholder="Estado" value={newSender.state} onChange={(e) => setNewSender(s => ({ ...s, state: e.target.value }))} />
+                <Input placeholder="CEP" value={newSender.cep} onChange={(e) => setNewSender(s => ({ ...s, cep: e.target.value }))} />
+                <div className="flex gap-2">
+                  <Button className="flex-1" onClick={handleAddSender}>
+                    <Plus className="mr-2" /> Adicionar Remetente
+                  </Button>
+                  <Button variant="outline" onClick={() => { setNewSender({ id: crypto.randomUUID?.() || String(Date.now()), name: "", address: "", city: "", state: "", cep: "" }); }}>
+                    Limpar
+                  </Button>
+                </div>
+              </div>
+
+              <div className="mt-2">
+                <div className="text-sm font-medium mb-2">Remetentes cadastrados</div>
+                {senders.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">Nenhum remetente cadastrado — usaremos os dados padrões do sistema.</div>
+                ) : (
+                  <div className="space-y-2">
+                    {senders.map(s => (
+                      <div key={s.id} className="flex items-center justify-between border rounded px-3 py-2">
+                        <div className="text-sm">
+                          <div className="font-medium">{s.name || "(sem nome)"}</div>
+                          <div className="text-xs text-muted-foreground">{s.address} — {s.city}{s.state ? ` / ${s.state}` : ""} {s.cep ? `• ${s.cep}` : ""}</div>
+                        </div>
+                        <div>
+                          <Button variant="ghost" onClick={() => handleRemoveSender(s.id)} title="Remover remetente">
+                            <Trash2 />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -358,26 +493,37 @@ export default function PrintLabelsPage() {
                     const fullName = `${cleanStr(p?.first_name)} ${cleanStr(p?.last_name)}`.trim();
 
                     // Mapeia valores exatamente na ordem do TEMPLATE_HEADERS
-                    const rowValues = {
-                      "Número pedido": order.id,
-                      "Nome Entrega": fullName,
-                      "Endereço": `${addr.street || ''}${addr.number ? `, ${addr.number}` : ''}`.trim(),
-                      "Complemento Entrega": addr.complement || "",
-                      "Observações": order.delivery_info || "",
-                      "Telefone Comprador": p?.phone || "",
-                      "Comprador": fullName,
-                      "F": "",
-                      "Bairro Entrega": addr.neighborhood || "",
-                      "Cidade Entrega": addr.city || "",
-                      "CEP Entrega": addr.cep || "",
-                      "CPF/CNPJ Comprador": p?.cpf_cnpj || "",
-                      "E-mail Comprador": order.email || "",
-                      "Remetente": senderInfo.name,
-                      "Endereço Remetente": senderInfo.address,
-                      "Cidade Remetente": senderInfo.city,
-                      "Estado Remetente": senderInfo.state,
-                      "CEP Remetente": senderInfo.cep
-                    };
+                    // Para exibição na tabela usamos o mesmo mapeamento do export
+                    const rowValues = (() => {
+                      // escolher remetente apenas para exibição (não altera randomização no export)
+                      const previewSender = senders.length > 0 ? senders[Math.floor(Math.random() * senders.length)] : null;
+                      const remName = previewSender?.name || senderInfo.name;
+                      const remAddress = previewSender?.address || senderInfo.address;
+                      const remCity = previewSender?.city || senderInfo.city;
+                      const remState = previewSender?.state || senderInfo.state;
+                      const remCep = previewSender?.cep || senderInfo.cep;
+
+                      return {
+                        "Número pedido": order.id,
+                        "Nome Entrega": fullName,
+                        "Endereço": `${addr.street || ''}${addr.number ? `, ${addr.number}` : ''}`.trim(),
+                        "Complemento Entrega": addr.complement || "",
+                        "Observações": order.delivery_info || "",
+                        "Telefone Comprador": p?.phone || "",
+                        "Comprador": fullName,
+                        "F": "",
+                        "Bairro Entrega": addr.neighborhood || "",
+                        "Cidade Entrega": addr.city || "",
+                        "CEP Entrega": addr.cep || "",
+                        "CPF/CNPJ Comprador": p?.cpf_cnpj || "",
+                        "E-mail Comprador": order.email || "",
+                        "Remetente": remName,
+                        "Endereço Remetente": remAddress,
+                        "Cidade Remetente": remCity,
+                        "Estado Remetente": remState,
+                        "CEP Remetente": remCep
+                      };
+                    })();
 
                     return (
                       <TableRow key={order.id}>
