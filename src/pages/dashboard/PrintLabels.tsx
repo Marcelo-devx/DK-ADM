@@ -26,11 +26,11 @@ interface Order {
   created_at: string;
   total_price: number;
   status: string;
-  delivery_status: string;
+  delivery_status: string | null;
   shipping_address: any;
-  user_id: string;
+  user_id: string | null;
   email?: string;
-  profiles: {
+  profiles?: {
     first_name: string | null;
     last_name: string | null;
     phone: string | null;
@@ -62,7 +62,7 @@ export default function PrintLabelsPage() {
         .in("key", ["sender_name", "sender_address", "sender_city", "sender_state", "sender_cep"]);
 
       const settings: any = {};
-      data?.forEach(s => settings[s.key] = s.value);
+      data?.forEach(s => (settings[s.key] = s.value));
 
       setSenderInfo({
         name: settings.sender_name || "Minha Loja",
@@ -75,57 +75,92 @@ export default function PrintLabelsPage() {
     }
   });
 
-  // 2. Buscar Pedidos (Com perfis e e-mails)
-  const { data: orders, isLoading } = useQuery<Order[]>({
+  // 2. Buscar Pedidos (somente os campos que precisamos)
+  const { data: orders, isLoading } = useQuery<Order[], Error>({
     queryKey: ["ordersForExcelExport"],
     queryFn: async () => {
-      // Pedidos Pagos e Pendentes de Envio (inclui Aguardando Coleta)
+      // Busca explícita: delivery_status igual a 'Aguardando Coleta' (ou 'Pendente' se quiser)
+      // Usamos .or para garantir compatibilidade com RLS e filtros compostos
       const { data: ordersData, error } = await supabase
         .from("orders")
         .select(`
-          id, created_at, total_price, status, delivery_status, shipping_address, user_id,
-          profiles (first_name, last_name, phone, cpf_cnpj)
+          id,
+          created_at,
+          total_price,
+          status,
+          delivery_status,
+          shipping_address,
+          user_id
         `)
+        // Queremos apenas pedidos que estão prontos para etiqueta: status pago/finalizado e delivery_status = 'Aguardando Coleta'
         .in("status", ["Finalizada", "Pago"])
-        .in("delivery_status", ["Pendente", "Aguardando Coleta"])
+        .or("delivery_status.eq.Aguardando Coleta,delivery_status.eq.Pendente")
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        // Registramos o erro para facilitar debug (console do browser / servidor)
+        console.error("Erro ao buscar pedidos para export:", error);
+        throw error;
+      }
 
-      // Buscar emails via edge function (opcional)
+      // Se não retornou dados, devolve array vazio
+      if (!ordersData || ordersData.length === 0) return [];
+
+      // Buscar perfis para os user_ids retornados (para evitar falhas por joins / RLS)
+      const userIds = Array.from(new Set(ordersData.map((o: any) => o.user_id).filter(Boolean)));
+      let profilesMap = new Map<string, any>();
+      if (userIds.length > 0) {
+        const { data: profilesData, error: profilesError } = await supabase
+          .from("profiles")
+          .select("id, first_name, last_name, phone, cpf_cnpj")
+          .in("id", userIds);
+
+        if (!profilesError && profilesData) {
+          profilesData.forEach((p: any) => profilesMap.set(String(p.id), p));
+        } else if (profilesError) {
+          console.error("Erro ao buscar perfis:", profilesError);
+        }
+      }
+
+      // Tenta obter emails via edge function (não crítico)
       let emailMap = new Map<string, string>();
       try {
-          const { data: usersData } = await supabase.functions.invoke("get-users");
-          if (usersData) {
-              usersData.forEach((u: any) => emailMap.set(u.id, u.email));
-          }
+        const { data: usersData } = await supabase.functions.invoke("get-users");
+        if (usersData) {
+          usersData.forEach((u: any) => emailMap.set(u.id, u.email));
+        }
       } catch (e) {
-          console.error("Erro ao buscar emails", e);
+        console.debug("get-users edge function falhou (não crítico):", e);
       }
 
       return ordersData.map((o: any) => ({
-          ...o,
-          email: emailMap.get(o.user_id) || ""
+        ...o,
+        profiles: o.user_id ? profilesMap.get(String(o.user_id)) ?? null : null,
+        email: o.user_id ? (emailMap.get(o.user_id) || "") : ""
       }));
     },
+    // Não manter cache por muito tempo; queremos dados frescos aqui
+    staleTime: 0
   });
 
   // Filtragem local
   const filteredOrders = useMemo(() => {
-    if (!orders) return [];
-    return orders.filter(o => {
-      const term = searchTerm.toLowerCase();
-      if (!term) return true;
+    const term = searchTerm.trim().toLowerCase();
+    const list = (orders ?? []) as Order[]; // ensure we have an array to call .filter on
+    if (!term) return list;
+    return list.filter(o => {
+      const p = o.profiles;
       return (
         String(o.id).includes(term) ||
-        o.profiles?.first_name?.toLowerCase().includes(term) ||
-        o.profiles?.last_name?.toLowerCase().includes(term)
+        p?.first_name?.toLowerCase().includes(term) ||
+        p?.last_name?.toLowerCase().includes(term)
       );
     });
   }, [orders, searchTerm]);
 
   // Seleção
   const toggleSelectAll = () => {
+    if (!orders) return;
     if (selectedIds.size === filteredOrders.length) {
       setSelectedIds(new Set());
     } else {
@@ -140,7 +175,7 @@ export default function PrintLabelsPage() {
     setSelectedIds(next);
   };
 
-  // Funções Auxiliares
+  // Util helpers
   const cleanStr = (val: string | null | undefined) => val || "";
   const formatCurrency = (val: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
 
@@ -175,7 +210,7 @@ export default function PrintLabelsPage() {
 
     setIsExporting(true);
     try {
-      const selectedOrders = orders?.filter(o => selectedIds.has(o.id)) || [];
+      const selectedOrders = (orders ?? []).filter(o => selectedIds.has(o.id)) || [];
 
       const exportData = selectedOrders.map(order => {
         const p = order.profiles;
@@ -185,9 +220,9 @@ export default function PrintLabelsPage() {
         return {
           "Número pedido": order.id,
           "Nome Entrega": fullName,
-          "Endereço": `${addr.street || ''}, ${addr.number || ''}`.trim(),
+          "Endereço": `${addr.street || ''}${addr.number ? `, ${addr.number}` : ''}`.trim(),
           "Complemento Entrega": addr.complement || "",
-          "Observações": "",
+          "Observações": order.delivery_info || "",
           "Telefone Comprador": p?.phone || "",
           "Comprador": fullName,
           "F": "",
@@ -281,79 +316,87 @@ export default function PrintLabelsPage() {
           </Card>
         </div>
 
-        {/* Table: span remaining columns to give more space */}
-        <div className="lg:col-span-3">
-          <Card>
-            <CardHeader className="flex items-center justify-between">
-              <CardTitle>Pedidos prontos para etiqueta</CardTitle>
-              <div className="flex items-center gap-2">
-                <Input placeholder="Buscar por ID ou nome" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-64" />
-              </div>
-            </CardHeader>
-            <CardContent className="p-0 overflow-auto">
-              {isLoading ? (
-                <div className="p-6"><Skeleton className="h-8 w-full mb-2" /><Skeleton className="h-8 w-full mb-2" /><Skeleton className="h-8 w-full" /></div>
-              ) : (
-                <div className="min-w-full">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-10">
-                          <input type="checkbox" checked={selectedIds.size === filteredOrders.length && filteredOrders.length > 0} onChange={toggleSelectAll} />
-                        </TableHead>
+        {/* Empty spacer so actions stay left on wide screens */}
+        <div className="lg:col-span-3" />
+
+      </div>
+
+      {/* Table full width under the actions to give more space */}
+      <Card>
+        <CardHeader className="flex items-center justify-between">
+          <CardTitle>Pedidos prontos para etiqueta</CardTitle>
+          <div className="flex items-center gap-2">
+            <Input placeholder="Buscar por ID ou nome" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-64" />
+          </div>
+        </CardHeader>
+        <CardContent className="p-0 overflow-auto">
+          {isLoading ? (
+            <div className="p-6"><Skeleton className="h-8 w-full mb-2" /><Skeleton className="h-8 w-full mb-2" /><Skeleton className="h-8 w-full" /></div>
+          ) : (
+            <div className="min-w-full">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10">
+                      <input type="checkbox" checked={selectedIds.size === filteredOrders.length && filteredOrders.length > 0} onChange={toggleSelectAll} />
+                    </TableHead>
+                    {TEMPLATE_HEADERS.map(h => (
+                      <TableHead key={h} className="whitespace-nowrap">{h}</TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredOrders.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={TEMPLATE_HEADERS.length + 1} className="py-10 text-center text-muted-foreground">Nenhum pedido encontrado com delivery_status 'Aguardando Coleta' ou 'Pendente'.</TableCell>
+                    </TableRow>
+                  )}
+
+                  {filteredOrders.map(order => {
+                    const p = order.profiles;
+                    const addr = order.shipping_address || {};
+                    const fullName = `${cleanStr(p?.first_name)} ${cleanStr(p?.last_name)}`.trim();
+
+                    // Mapeia valores exatamente na ordem do TEMPLATE_HEADERS
+                    const rowValues = {
+                      "Número pedido": order.id,
+                      "Nome Entrega": fullName,
+                      "Endereço": `${addr.street || ''}${addr.number ? `, ${addr.number}` : ''}`.trim(),
+                      "Complemento Entrega": addr.complement || "",
+                      "Observações": order.delivery_info || "",
+                      "Telefone Comprador": p?.phone || "",
+                      "Comprador": fullName,
+                      "F": "",
+                      "Bairro Entrega": addr.neighborhood || "",
+                      "Cidade Entrega": addr.city || "",
+                      "CEP Entrega": addr.cep || "",
+                      "CPF/CNPJ Comprador": p?.cpf_cnpj || "",
+                      "E-mail Comprador": order.email || "",
+                      "Remetente": senderInfo.name,
+                      "Endereço Remetente": senderInfo.address,
+                      "Cidade Remetente": senderInfo.city,
+                      "Estado Remetente": senderInfo.state,
+                      "CEP Remetente": senderInfo.cep
+                    };
+
+                    return (
+                      <TableRow key={order.id}>
+                        <TableCell>
+                          <input type="checkbox" checked={selectedIds.has(order.id)} onChange={() => toggleSelectOne(order.id)} />
+                        </TableCell>
+
                         {TEMPLATE_HEADERS.map(h => (
-                          <TableHead key={h} className="whitespace-nowrap">{h}</TableHead>
+                          <TableCell key={h} className="whitespace-nowrap">{String(rowValues[h] ?? "")}</TableCell>
                         ))}
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredOrders.length === 0 && (
-                        <TableRow>
-                          <TableCell colSpan={TEMPLATE_HEADERS.length + 1} className="py-10 text-center text-muted-foreground">Nenhum pedido encontrado.</TableCell>
-                        </TableRow>
-                      )}
-
-                      {filteredOrders.map(order => {
-                        const p = order.profiles;
-                        const addr = order.shipping_address || {};
-                        const fullName = `${cleanStr(p?.first_name)} ${cleanStr(p?.last_name)}`.trim();
-
-                        return (
-                          <TableRow key={order.id}>
-                            <TableCell>
-                              <input type="checkbox" checked={selectedIds.has(order.id)} onChange={() => toggleSelectOne(order.id)} />
-                            </TableCell>
-
-                            <TableCell className="whitespace-nowrap">{order.id}</TableCell>
-                            <TableCell className="whitespace-nowrap">{fullName}</TableCell>
-                            <TableCell className="whitespace-nowrap">{`${addr.street || ''}, ${addr.number || ''}`}</TableCell>
-                            <TableCell className="whitespace-nowrap">{addr.complement || ''}</TableCell>
-                            <TableCell className="whitespace-nowrap">{/* Observações vazio por ora */}</TableCell>
-                            <TableCell className="whitespace-nowrap">{p?.phone || ''}</TableCell>
-                            <TableCell className="whitespace-nowrap">{fullName}</TableCell>
-                            <TableCell className="whitespace-nowrap">{/* F */}</TableCell>
-                            <TableCell className="whitespace-nowrap">{addr.neighborhood || ''}</TableCell>
-                            <TableCell className="whitespace-nowrap">{addr.city || ''}</TableCell>
-                            <TableCell className="whitespace-nowrap">{addr.cep || ''}</TableCell>
-                            <TableCell className="whitespace-nowrap">{p?.cpf_cnpj || ''}</TableCell>
-                            <TableCell className="whitespace-nowrap">{order.email || ''}</TableCell>
-                            <TableCell className="whitespace-nowrap">{senderInfo.name}</TableCell>
-                            <TableCell className="whitespace-nowrap">{senderInfo.address}</TableCell>
-                            <TableCell className="whitespace-nowrap">{senderInfo.city}</TableCell>
-                            <TableCell className="whitespace-nowrap">{senderInfo.state}</TableCell>
-                            <TableCell className="whitespace-nowrap">{senderInfo.cep}</TableCell>
-
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
