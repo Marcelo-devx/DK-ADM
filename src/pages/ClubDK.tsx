@@ -10,7 +10,7 @@ import { useUser } from "@/hooks/useUser";
 import { showSuccess, showError } from "@/utils/toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -28,6 +28,8 @@ export default function ClubDKPage() {
   const { user } = useUser();
   const queryClient = useQueryClient();
   const [birthDate, setBirthDate] = useState("");
+  // Prevent the birthday RPC from running repeatedly during re-renders/refetches
+  const birthdayProcessedRef = useRef(false);
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ["loyaltyProfile", user?.id],
@@ -67,15 +69,35 @@ export default function ClubDKPage() {
 
   // Processa bônus de aniversário automaticamente
   useEffect(() => {
-    if (user && profile?.date_of_birth) {
-        supabase.rpc('process_annual_birthday_bonus', { p_user_id: user.id })
-            .then(({ data }) => {
-                if (data === 'Bônus concedido com sucesso!') {
-                    showSuccess("🎉 Feliz aniversário! Você acaba de ganhar seus pontos de presente.");
-                    queryClient.invalidateQueries({ queryKey: ["loyaltyProfile"] });
-                }
-            });
-    }
+    // Don't run if we've already processed in this component lifecycle
+    if (birthdayProcessedRef.current) return;
+
+    const processBirthday = async () => {
+      if (!user || !profile?.date_of_birth) return;
+
+      try {
+        const { data, error } = await supabase.rpc('process_annual_birthday_bonus', { p_user_id: user.id });
+        if (error) {
+          // Show detailed error and stop
+          showError(`Erro ao processar bônus de aniversário: ${error.message}`);
+          birthdayProcessedRef.current = true;
+          return;
+        }
+
+        // If the RPC indicates a bonus was granted, invalidate and notify once
+        if (data === 'Bônus concedido com sucesso!' || (typeof data === 'string' && data.toLowerCase().includes('concedido'))) {
+          showSuccess("🎉 Feliz aniversário! Você acaba de ganhar seus pontos de presente.");
+          queryClient.invalidateQueries({ queryKey: ["loyaltyProfile"] });
+        }
+      } catch (err: any) {
+        showError(`Erro ao processar bônus de aniversário: ${err?.message ?? String(err)}`);
+      } finally {
+        // Ensure we don't re-run repeatedly
+        birthdayProcessedRef.current = true;
+      }
+    };
+
+    processBirthday();
   }, [user, profile?.date_of_birth, queryClient]);
 
   const saveBirthDateMutation = useMutation({
