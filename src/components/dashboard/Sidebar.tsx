@@ -86,12 +86,6 @@ const Sidebar = () => {
         <NavLink to="/dashboard/orders" className={navLinkClass}>
           {({ isActive }) => (<><DollarSign className={iconClass("text-green-600", isActive)} />Pedidos (Clientes)</>)}
         </NavLink>
-        <NavLink to="/dashboard/spoke-export" className={navLinkClass}>
-          {({ isActive }) => (<><FileOutput className={iconClass("text-green-600", isActive)} />Exportar Rotas</>)}
-        </NavLink>
-        <NavLink to="/dashboard/delivery-routes" className={navLinkClass}>
-          {({ isActive }) => (<><MapIcon className={iconClass("text-green-600", isActive)} />Rotas de Entrega</>)}
-        </NavLink>
         <NavLink to="/dashboard/supplier-orders" className={navLinkClass}>
           {({ isActive }) => (<><Truck className={iconClass("text-green-600", isActive)} />Pedidos (Fornecedor)</>)}
         </NavLink>
@@ -119,6 +113,12 @@ const Sidebar = () => {
 
         {/* LOGÍSTICA */}
         <p className={sectionTitleClass}>Logística</p>
+        <NavLink to="/dashboard/spoke-export" className={navLinkClass}>
+          {({ isActive }) => (<><FileOutput className={iconClass("text-green-600", isActive)} />Exportar Rotas</>)}
+        </NavLink>
+        <NavLink to="/dashboard/delivery-routes" className={navLinkClass}>
+          {({ isActive }) => (<><MapIcon className={iconClass("text-green-600", isActive)} />Rotas de Entrega</>)}
+        </NavLink>
         <NavLink to="/dashboard/shipping-rates" className={navLinkClass}>
           {({ isActive }) => (<><Bike className={iconClass("text-indigo-600", isActive)} />Fretes e Taxas</>)}
         </NavLink>
