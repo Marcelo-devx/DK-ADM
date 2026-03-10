@@ -45,9 +45,7 @@ import Crypto from "./pages/dashboard/Crypto";
 import LoyaltyManagement from "./pages/dashboard/LoyaltyManagement";
 import UserCouponsHistory from "./pages/dashboard/UserCouponsHistory";
 import DeliveryRoutes from "./pages/dashboard/DeliveryRoutes";
-import SpokeExport from "./pages/dashboard/routes/SpokeExport";
-import RoutePlans from "./pages/dashboard/routes/RoutePlans";
-import DriversManagement from "./pages/dashboard/routes/DriversManagement";
+import SpokeExport from "./pages/dashboard/SpokeExport";
 
 const queryClient = new QueryClient();
 
@@ -99,16 +97,8 @@ const App = () => (
               <Route path="crypto" element={<Crypto />} />
               <Route path="loyalty-management" element={<LoyaltyManagement />} />
               <Route path="user-coupons-history" element={<UserCouponsHistory />} />
-              
-              {/* Rotas - Menu Agrupado */}
-              <Route path="routes/monitoring" element={<DeliveryRoutes />} />
-              <Route path="routes/plans" element={<RoutePlans />} />
-              <Route path="routes/drivers" element={<DriversManagement />} />
-              <Route path="routes/export" element={<SpokeExport />} />
-              
-              {/* Rotas antigas para compatibilidade (redirecionam para novas) */}
-              <Route path="delivery-routes" element={<Navigate to="/dashboard/routes/monitoring" replace />} />
-              <Route path="spoke-export" element={<Navigate to="/dashboard/routes/export" replace />} />
+              <Route path="delivery-routes" element={<DeliveryRoutes />} />
+              <Route path="spoke-export" element={<SpokeExport />} />
             </Route>
             
             <Route path="*" element={<NotFound />} />

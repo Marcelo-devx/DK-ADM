@@ -1,6 +1,6 @@
 "use client";
 
-import { NavLink, useNavigate, useLocation } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import {
   Home,
   BarChart3,
@@ -37,21 +37,13 @@ import {
   Settings,
   LogOut,
   Box,
-  KeyRound,
-  ChevronDown,
-  ChevronRight,
-  Route,
-  User,
-  Navigation
+  KeyRound
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { useState } from "react";
 
 const Sidebar = () => {
   const navigate = useNavigate();
-  const location = useLocation();
-  const [routesExpanded, setRoutesExpanded] = useState(false);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -68,9 +60,6 @@ const Sidebar = () => {
   
   const iconClass = (color: string, isActive: boolean) => 
     cn("w-4 h-4 mr-3 transition-colors", isActive ? "text-primary" : color);
-
-  // Verifica se estamos em alguma rota do menu Rotas
-  const isRoutesActive = location.pathname.startsWith("/dashboard/routes");
 
   return (
     <aside className="w-64 h-screen bg-gray-50/80 border-r border-gray-200 flex flex-col">
@@ -96,38 +85,12 @@ const Sidebar = () => {
         <NavLink to="/dashboard/orders" className={navLinkClass}>
           {({ isActive }) => (<><DollarSign className={iconClass("text-green-600", isActive)} />Pedidos (Clientes)</>)}
         </NavLink>
-        
-        {/* ROTAS - Menu Agrupado */}
-        <p className={sectionTitleClass}>Logística</p>
-        <button
-          onClick={() => setRoutesExpanded(!routesExpanded)}
-          className={cn(
-            "flex items-center w-full px-3 py-2 text-slate-600 rounded-lg transition-colors duration-200 text-sm font-medium hover:bg-slate-200/60 hover:text-slate-900 group",
-            isRoutesActive && "bg-primary/10 text-primary font-semibold"
-          )}
-        >
-          <Route className={cn("w-4 h-4 mr-3 transition-colors", isRoutesActive ? "text-primary" : "text-green-600")} />
-          <span className="flex-1 text-left">Rotas</span>
-          {routesExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-        </button>
-        
-        {routesExpanded && (
-          <div className="ml-6 space-y-1 animate-in slide-in-from-left-2 duration-200">
-            <NavLink to="/dashboard/routes/monitoring" className={navLinkClass}>
-              {({ isActive }) => (<><Navigation className={iconClass("text-green-600", isActive)} />Monitoramento</>)}
-            </NavLink>
-            <NavLink to="/dashboard/routes/plans" className={navLinkClass}>
-              {({ isActive }) => (<><MapIcon className={iconClass("text-green-600", isActive)} />Planos</>)}
-            </NavLink>
-            <NavLink to="/dashboard/routes/drivers" className={navLinkClass}>
-              {({ isActive }) => (<><User className={iconClass("text-green-600", isActive)} />Motoristas</>)}
-            </NavLink>
-            <NavLink to="/dashboard/routes/export" className={navLinkClass}>
-              {({ isActive }) => (<><FileOutput className={iconClass("text-green-600", isActive)} />Exportar</>)}
-            </NavLink>
-          </div>
-        )}
-
+        <NavLink to="/dashboard/spoke-export" className={navLinkClass}>
+          {({ isActive }) => (<><FileOutput className={iconClass("text-green-600", isActive)} />Exportar Rotas</>)}
+        </NavLink>
+        <NavLink to="/dashboard/delivery-routes" className={navLinkClass}>
+          {({ isActive }) => (<><MapIcon className={iconClass("text-green-600", isActive)} />Rotas de Entrega</>)}
+        </NavLink>
         <NavLink to="/dashboard/supplier-orders" className={navLinkClass}>
           {({ isActive }) => (<><Truck className={iconClass("text-green-600", isActive)} />Pedidos (Fornecedor)</>)}
         </NavLink>
