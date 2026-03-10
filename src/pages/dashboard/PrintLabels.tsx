@@ -395,8 +395,8 @@ export default function PrintLabelsPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Left column: actions + remetentes */}
-        <div className="lg:col-span-1 space-y-4">
+        {/* Left column: actions */}
+        <div className="lg:col-span-1">
           <Card>
             <CardContent className="p-4 space-y-3">
               <div className="space-y-2">
@@ -416,7 +416,10 @@ export default function PrintLabelsPage() {
               </div>
             </CardContent>
           </Card>
+        </div>
 
+        {/* Right column: remetentes */}
+        <div className="lg:col-span-1">
           <Card>
             <CardHeader>
               <CardTitle>Gerenciar Remetentes</CardTitle>
@@ -473,8 +476,8 @@ export default function PrintLabelsPage() {
           </Card>
         </div>
 
-        {/* Empty spacer so actions stay left on wide screens */}
-        <div className="lg:col-span-3" />
+        {/* Empty spacer (2 columns) to leave space for the table below */}
+        <div className="lg:col-span-2" />
 
       </div>
 
