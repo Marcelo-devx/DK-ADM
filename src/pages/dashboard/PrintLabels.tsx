@@ -66,6 +66,8 @@ export default function PrintLabelsPage() {
 
   // State for dialog
   const [isAddSenderDialogOpen, setIsAddSenderDialogOpen] = useState(false);
+  // State for delete confirmation dialog
+  const [senderToDelete, setSenderToDelete] = useState<Sender | null>(null);
 
   // State for tabs
   const [activeTab, setActiveTab] = useState<"list" | "add">("list");
@@ -100,9 +102,13 @@ export default function PrintLabelsPage() {
     // Carregar remetentes do localStorage ao montar
     try {
       const raw = localStorage.getItem(SENDERS_STORAGE_KEY);
+      console.log("[PrintLabels] Carregando remetentes do localStorage:", raw);
       if (raw) {
         const parsed: Sender[] = JSON.parse(raw);
+        console.log("[PrintLabels] Remetentes carregados:", parsed.length, parsed);
         setSenders(parsed);
+      } else {
+        console.log("[PrintLabels] Nenhum remetente encontrado no localStorage");
       }
     } catch (e) {
       console.error("Erro ao carregar remetentes do localStorage", e);
@@ -290,7 +296,9 @@ export default function PrintLabelsPage() {
   // Funções de gerência de remetentes (persistência local)
   const persistSenders = (next: Sender[]) => {
     try {
+      console.log("[PrintLabels] Salvando remetentes no localStorage:", next.length, "itens");
       localStorage.setItem(SENDERS_STORAGE_KEY, JSON.stringify(next));
+      console.log("[PrintLabels] Remetentes salvos com sucesso");
     } catch (e) {
       console.error("Erro ao salvar remetentes no localStorage", e);
     }
@@ -316,9 +324,23 @@ export default function PrintLabelsPage() {
   };
 
   const handleRemoveSender = (id: string) => {
-    const next = senders.filter(s => s.id !== id);
+    // Find the sender being deleted
+    const sender = senders.find(s => s.id === id);
+    if (!sender) {
+      showError("Remetente não encontrado.");
+      return;
+    }
+    // Show confirmation dialog
+    setSenderToDelete(sender);
+  };
+
+  const confirmRemoveSender = () => {
+    if (!senderToDelete) return;
+    console.log("[PrintLabels] Removendo remetente:", senderToDelete);
+    const next = senders.filter(s => s.id !== senderToDelete.id);
     setSenders(next);
     persistSenders(next);
+    setSenderToDelete(null);
     showSuccess("Remetente removido.");
   };
 
@@ -554,7 +576,7 @@ export default function PrintLabelsPage() {
                               <div className="text-xs text-muted-foreground">{s.address} — {s.city}{s.state ? ` / ${s.state}` : ""} {s.cep ? `• ${s.cep}` : ""}</div>
                             </div>
                             <div>
-                              <Button variant="ghost" onClick={() => handleRemoveSender(s.id)} title="Remover remetente">
+                              <Button variant="ghost" onClick={() => handleRemoveSender(s.id)} title="Remover remetente" className="text-red-600 hover:text-red-700 hover:bg-red-50">
                                 <Trash2 />
                               </Button>
                             </div>
@@ -630,6 +652,41 @@ export default function PrintLabelsPage() {
               onClick={handleAddSender}
             >
               Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={senderToDelete !== null} onOpenChange={(open) => !open && setSenderToDelete(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar Exclusão</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground mb-4">
+              Tem certeza que deseja remover o remetente "{senderToDelete?.name || "(sem nome)"}"?
+            </p>
+            <p className="text-sm text-muted-foreground mb-4">
+              <strong>Endereço:</strong> {senderToDelete?.address}
+              {senderToDelete?.city && <span>, {senderToDelete?.city}</span>}
+              {senderToDelete?.state && <span> / {senderToDelete?.state}</span>}
+            </p>
+            <div className="bg-amber-50 border border-amber-200 rounded-md p-3">
+              <p className="text-sm text-amber-800">
+                Esta ação não pode ser desfeita. O remetente será removido permanentemente da lista.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSenderToDelete(null)}>
+              Cancelar
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={confirmRemoveSender}
+            >
+              Confirmar Exclusão
             </Button>
           </DialogFooter>
         </DialogContent>
