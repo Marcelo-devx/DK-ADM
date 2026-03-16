@@ -46,6 +46,8 @@ export default function ShippingRatesPage() {
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSedexModalOpen, setIsSedexModalOpen] = useState(false);
+  const [isTransportadoraRmcModalOpen, setIsTransportadoraRmcModalOpen] = useState(false);
+  const [isTransportadoraParanaModalOpen, setIsTransportadoraParanaModalOpen] = useState(false);
   const [editingRate, setEditingRate] = useState<ShippingRate | null>(null);
   
   // Filtros
@@ -59,6 +61,10 @@ export default function ShippingRatesPage() {
 
   // Form State (Sedex)
   const [sedexPrice, setSedexPrice] = useState("");
+
+  // Form States (Transportadoras)
+  const [transportadoraRmcPrice, setTransportadoraRmcPrice] = useState("");
+  const [transportadoraParanaPrice, setTransportadoraParanaPrice] = useState("");
 
   // Busca Taxas Individuais
   const { data: rates, isLoading } = useQuery({
@@ -87,11 +93,49 @@ export default function ShippingRatesPage() {
     }
   });
 
+  // Busca Valor da Transportadora RMC
+  const { data: transportadoraRmcSetting, isLoading: isLoadingRmc } = useQuery({
+    queryKey: ["transportadoraRmcSetting"],
+    queryFn: async () => {
+        const { data } = await supabase
+            .from("app_settings")
+            .select("value")
+            .eq("key", "shipping_transportadora_rmc")
+            .single();
+        return data?.value || "0";
+    }
+  });
+
+  // Busca Valor da Transportadora Paraná
+  const { data: transportadoraParanaSetting, isLoading: isLoadingParana } = useQuery({
+    queryKey: ["transportadoraParanaSetting"],
+    queryFn: async () => {
+        const { data } = await supabase
+            .from("app_settings")
+            .select("value")
+            .eq("key", "shipping_transportadora_parana")
+            .single();
+        return data?.value || "0";
+    }
+  });
+
   useEffect(() => {
     if (sedexSetting) {
         setSedexPrice(sedexSetting);
     }
   }, [sedexSetting]);
+
+  useEffect(() => {
+    if (transportadoraRmcSetting) {
+        setTransportadoraRmcPrice(transportadoraRmcSetting);
+    }
+  }, [transportadoraRmcSetting]);
+
+  useEffect(() => {
+    if (transportadoraParanaSetting) {
+        setTransportadoraParanaPrice(transportadoraParanaSetting);
+    }
+  }, [transportadoraParanaSetting]);
 
   const uniqueCities = useMemo(() => {
     if (!rates) return [];
@@ -123,6 +167,38 @@ export default function ShippingRatesPage() {
         queryClient.invalidateQueries({ queryKey: ["sedexPriceSetting"] });
         setIsSedexModalOpen(false);
         showSuccess("Valor do Sedex padrão atualizado!");
+    },
+    onError: (err: any) => showError(err.message),
+  });
+
+  // Mutation para salvar configuração da Transportadora RMC
+  const saveTransportadoraRmcMutation = useMutation({
+    mutationFn: async (value: string) => {
+        const { error } = await supabase
+            .from("app_settings")
+            .upsert({ key: "shipping_transportadora_rmc", value: value }, { onConflict: "key" });
+        if (error) throw error;
+    },
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["transportadoraRmcSetting"] });
+        setIsTransportadoraRmcModalOpen(false);
+        showSuccess("Valor da Transportadora RMC atualizado!");
+    },
+    onError: (err: any) => showError(err.message),
+  });
+
+  // Mutation para salvar configuração da Transportadora Paraná
+  const saveTransportadoraParanaMutation = useMutation({
+    mutationFn: async (value: string) => {
+        const { error } = await supabase
+            .from("app_settings")
+            .upsert({ key: "shipping_transportadora_parana", value: value }, { onConflict: "key" });
+        if (error) throw error;
+    },
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["transportadoraParanaSetting"] });
+        setIsTransportadoraParanaModalOpen(false);
+        showSuccess("Valor da Transportadora Paraná atualizado!");
     },
     onError: (err: any) => showError(err.message),
   });
@@ -204,7 +280,7 @@ export default function ShippingRatesPage() {
             <p className="text-muted-foreground">Defina os valores de entrega por bairro e cidade.</p>
         </div>
         
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
             {/* BOTÃO CONFIGURAR SEDEX */}
             <Dialog open={isSedexModalOpen} onOpenChange={setIsSedexModalOpen}>
                 <DialogTrigger asChild>
@@ -237,6 +313,80 @@ export default function ShippingRatesPage() {
                             className="w-full font-bold bg-indigo-600 hover:bg-indigo-700"
                         >
                             {saveSedexMutation.isPending ? "Salvando..." : "Salvar Valor Padrão"}
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* BOTÃO CONFIGURAR TRANSPORTADORA RMC */}
+            <Dialog open={isTransportadoraRmcModalOpen} onOpenChange={setIsTransportadoraRmcModalOpen}>
+                <DialogTrigger asChild>
+                    <Button variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50 font-bold">
+                        <Building2 className="w-4 h-4 mr-2" /> 
+                        Transp. RMC: {isLoadingRmc ? "..." : formatCurrency(parseFloat(transportadoraRmcSetting || "0"))}
+                    </Button>
+                </DialogTrigger>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Transportadora RMC</DialogTitle>
+                        <DialogDescription>
+                            Valor fixo para entrega via Transportadora RMC.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label>Valor da Transportadora RMC (R$)</Label>
+                            <Input 
+                                type="number" 
+                                step="0.01" 
+                                placeholder="0.00" 
+                                value={transportadoraRmcPrice} 
+                                onChange={(e) => setTransportadoraRmcPrice(e.target.value)} 
+                            />
+                        </div>
+                        <Button 
+                            onClick={() => saveTransportadoraRmcMutation.mutate(transportadoraRmcPrice)} 
+                            disabled={saveTransportadoraRmcMutation.isPending}
+                            className="w-full font-bold bg-blue-600 hover:bg-blue-700"
+                        >
+                            {saveTransportadoraRmcMutation.isPending ? "Salvando..." : "Salvar Valor"}
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* BOTÃO CONFIGURAR TRANSPORTADORA PARANÁ */}
+            <Dialog open={isTransportadoraParanaModalOpen} onOpenChange={setIsTransportadoraParanaModalOpen}>
+                <DialogTrigger asChild>
+                    <Button variant="outline" className="border-green-200 text-green-700 hover:bg-green-50 font-bold">
+                        <Building2 className="w-4 h-4 mr-2" /> 
+                        Transp. Paraná: {isLoadingParana ? "..." : formatCurrency(parseFloat(transportadoraParanaSetting || "0"))}
+                    </Button>
+                </DialogTrigger>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Transportadora Paraná</DialogTitle>
+                        <DialogDescription>
+                            Valor fixo para entrega via Transportadora Paraná.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label>Valor da Transportadora Paraná (R$)</Label>
+                            <Input 
+                                type="number" 
+                                step="0.01" 
+                                placeholder="0.00" 
+                                value={transportadoraParanaPrice} 
+                                onChange={(e) => setTransportadoraParanaPrice(e.target.value)} 
+                            />
+                        </div>
+                        <Button 
+                            onClick={() => saveTransportadoraParanaMutation.mutate(transportadoraParanaPrice)} 
+                            disabled={saveTransportadoraParanaMutation.isPending}
+                            className="w-full font-bold bg-green-600 hover:bg-green-700"
+                        >
+                            {saveTransportadoraParanaMutation.isPending ? "Salvando..." : "Salvar Valor"}
                         </Button>
                     </div>
                 </DialogContent>
