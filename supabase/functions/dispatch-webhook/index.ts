@@ -119,11 +119,33 @@ serve(async (req) => {
             console.warn('[dispatch-webhook] could not fetch user_coupons relation', e?.message || e);
         }
 
-        // B. Buscar Itens
+        // B. Buscar Itens e Imagens dos Produtos
         const { data: items } = await supabaseAdmin
             .from('order_items')
-            .select('name_at_purchase, quantity, price_at_purchase')
+            .select('name_at_purchase, quantity, price_at_purchase, product_id, variant_id')
             .eq('order_id', orderId);
+
+        // Buscar imagens dos produtos
+        let productImages: Record<string, string> = {};
+        if (items && items.length > 0) {
+            const productIds = items
+                .map((item: any) => item.product_id)
+                .filter((id: any) => id != null);
+            
+            if (productIds.length > 0) {
+                const { data: products } = await supabaseAdmin
+                    .from('products')
+                    .select('id, image_url')
+                    .in('id', productIds);
+                
+                if (products) {
+                    productImages = products.reduce((acc: any, p: any) => {
+                        if (p.id) acc[p.id] = p.image_url || '';
+                        return acc;
+                    }, {});
+                }
+            }
+        }
 
         // C. Buscar Cliente (Profile)
         const { data: profile } = await supabaseAdmin
@@ -183,18 +205,15 @@ serve(async (req) => {
         finalData = {
             id: order.id,
             total_price: Number(calculatedTotal.toFixed(2)),
-            subtotal: Number(subtotalCalc.toFixed(2)),
+            subtotal_products: Number(subtotalCalc.toFixed(2)),
+            discount_applied: couponDiscount,
             shipping_cost: shippingCost,
-            coupon_discount: couponDiscount,
-            coupon_name: couponName,
-            original_subtotal: Number(subtotalCalc.toFixed(2)),
             donation_amount: donationAmount,
-            status: order.status,
             payment_method: order.payment_method,
+            status: order.status,
             created_at: order.created_at,
+            coupon_name: couponName,
             benefits_used: order.benefits_used || null,
-            delivery_info: order.delivery_info || null,
-            delivery_status: order.delivery_status || null,
             shipping_address: {
                 cep: addr.cep || "",
                 city: addr.city || "",
@@ -203,15 +222,20 @@ serve(async (req) => {
                 street: addr.street || "",
                 neighborhood: addr.neighborhood || "",
                 complement: addr.complement || "",
-                phone: addr.phone || phone, 
+                phone: addr.phone || phone,
                 first_name: addr.first_name || firstName,
-                last_name: addr.last_name || lastName
+                last_name: addr.last_name || lastName,
+                cpf_cnpj: cpf,
+                payment_method: order.payment_method
             },
             customer: customerData,
             items: orderItems.map((item: any) => ({
                 name: item.name_at_purchase,
                 quantity: item.quantity,
-                price: Number(item.price_at_purchase)
+                price: Number(item.price_at_purchase),
+                total: Number((item.quantity * item.price_at_purchase).toFixed(2)),
+                image: productImages[item.product_id] || "",
+                type: "product"
             }))
         };
 
