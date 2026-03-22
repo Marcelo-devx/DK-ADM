@@ -89,6 +89,17 @@ export const SupplierOrderForm = ({ onSubmit, isSubmitting, products }: Supplier
     showSuccess(`${lowStockItems.length} itens (incluindo variações) adicionados.`);
   };
 
+  // new: per-row search and filter state
+  const [searchMap, setSearchMap] = useState<Record<number, string>>({});
+  const [filterMap, setFilterMap] = useState<Record<number, 'all' | 'variants' | 'products'>>({});
+
+  const setRowSearch = (index: number, value: string) => {
+    setSearchMap(s => ({ ...s, [index]: value }));
+  };
+  const setRowFilter = (index: number, value: 'all' | 'variants' | 'products') => {
+    setFilterMap(s => ({ ...s, [index]: value }));
+  };
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
@@ -150,6 +161,16 @@ export const SupplierOrderForm = ({ onSubmit, isSubmitting, products }: Supplier
                 currentVariantId ? p.variant_id === currentVariantId : p.id === Number(currentProductId) && !p.variant_id
             );
 
+            // compute filtered products for this row based on searchMap and filterMap
+            const localSearch = (searchMap[index] || '').toLowerCase().trim();
+            const localFilter = filterMap[index] || 'all';
+            const filteredProducts = products.filter(p => {
+              if (localSearch && !p.name.toLowerCase().includes(localSearch)) return false;
+              if (localFilter === 'variants' && !p.is_variant) return false;
+              if (localFilter === 'products' && p.is_variant) return false;
+              return true;
+            });
+
             return (
               <div key={field.id} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end border p-4 rounded-lg bg-gray-50 relative">
                 <div className="md:col-span-5">
@@ -168,9 +189,8 @@ export const SupplierOrderForm = ({ onSubmit, isSubmitting, products }: Supplier
                         </div>
                         <Select 
                           onValueChange={(val) => {
-                              // val será algo como "prod_1" ou "var_uuid"
-                              const isVariant = val.startsWith("var_");
-                              const idValue = val.split("_")[1];
+                              const isVariant = String(val).startsWith("var_");
+                              const idValue = String(val).split("_")[1];
                               
                               let item;
                               if (isVariant) {
@@ -194,7 +214,17 @@ export const SupplierOrderForm = ({ onSubmit, isSubmitting, products }: Supplier
                             <SelectTrigger><SelectValue placeholder="Selecione um item..." /></SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {products.map((p, idx) => (
+                            <div className="p-2 border-b">
+                              <Input placeholder="Pesquisar..." value={searchMap[index] || ''} onChange={(e) => setRowSearch(index, e.target.value)} />
+                              <div className="mt-2 flex gap-2">
+                                <select className="p-2 border rounded" value={filterMap[index] || 'all'} onChange={(e) => setRowFilter(index, e.target.value as any)}>
+                                  <option value="all">Todos</option>
+                                  <option value="products">Apenas Produtos</option>
+                                  <option value="variants">Apenas Variações</option>
+                                </select>
+                              </div>
+                            </div>
+                            {filteredProducts.map((p, idx) => (
                               <SelectItem key={`${p.id}-${p.variant_id}-${idx}`} value={p.variant_id ? `var_${p.variant_id}` : `prod_${p.id}`}>
                                   <div className="flex justify-between w-full gap-8">
                                       <span className={p.is_variant ? "pl-2" : "font-bold"}>{p.name}</span>
