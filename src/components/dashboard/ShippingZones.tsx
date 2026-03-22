@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, Pencil } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 
 interface ShippingZone {
@@ -26,6 +26,7 @@ export const ShippingZones = () => {
   const [cepEnd, setCepEnd] = useState("");
   const [price, setPrice] = useState("");
   const [city, setCity] = useState("");
+  const [selectedZone, setSelectedZone] = useState<ShippingZone | null>(null);
 
   const { data: zones, isLoading } = useQuery({
     queryKey: ["shippingZones"],
@@ -35,6 +36,19 @@ export const ShippingZones = () => {
       return data as ShippingZone[];
     },
   });
+
+  const resetForm = () => {
+    setSelectedZone(null);
+    setTransportadora("Transportadora RMC");
+    setCepStart("");
+    setCepEnd("");
+    setPrice("");
+    setCity("");
+  };
+
+  useEffect(() => {
+    if (!isModalOpen) resetForm();
+  }, [isModalOpen]);
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -51,11 +65,30 @@ export const ShippingZones = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["shippingZones"] });
       setIsModalOpen(false);
-      setCepStart("");
-      setCepEnd("");
-      setPrice("");
-      setCity("");
+      resetForm();
       showSuccess("Zona adicionada com sucesso");
+    },
+    onError: (err: any) => showError(err.message),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedZone) return;
+      const payload = {
+        transportadora,
+        cep_start: cepStart,
+        cep_end: cepEnd,
+        price: price ? parseFloat(price) : null,
+        city,
+      };
+      const { error } = await supabase.from("shipping_zones").update(payload).eq("id", selectedZone.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["shippingZones"] });
+      setIsModalOpen(false);
+      resetForm();
+      showSuccess("Zona atualizada com sucesso");
     },
     onError: (err: any) => showError(err.message),
   });
@@ -72,6 +105,24 @@ export const ShippingZones = () => {
     onError: (err: any) => showError(err.message),
   });
 
+  const openEditModal = (zone: ShippingZone) => {
+    setSelectedZone(zone);
+    setTransportadora(zone.transportadora || "Transportadora RMC");
+    setCepStart(zone.cep_start || "");
+    setCepEnd(zone.cep_end || "");
+    setPrice(zone.price ? String(zone.price) : "");
+    setCity(zone.city || "");
+    setIsModalOpen(true);
+  };
+
+  const handleSave = () => {
+    if (selectedZone) {
+      updateMutation.mutate();
+    } else {
+      createMutation.mutate();
+    }
+  };
+
   return (
     <div className="mt-6 bg-white rounded-lg border shadow-sm p-4">
       <div className="flex items-center justify-between mb-4">
@@ -82,7 +133,7 @@ export const ShippingZones = () => {
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Adicionar Zona de CEP</DialogTitle>
+              <DialogTitle>{selectedZone ? 'Editar Zona de CEP' : 'Adicionar Zona de CEP'}</DialogTitle>
             </DialogHeader>
             <div className="space-y-3 py-2">
               <div className="space-y-1">
@@ -109,9 +160,10 @@ export const ShippingZones = () => {
                   <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Ex: Curitiba e Região" />
                 </div>
               </div>
-              <div className="flex justify-end">
-                <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending} className="bg-indigo-600 hover:bg-indigo-700">
-                  {createMutation.isPending ? "Salvando..." : "Salvar Zona"}
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => { setIsModalOpen(false); resetForm(); }}>Cancelar</Button>
+                <Button onClick={handleSave} disabled={createMutation.isPending || updateMutation.isPending} className="bg-indigo-600 hover:bg-indigo-700">
+                  {createMutation.isPending || updateMutation.isPending ? "Salvando..." : (selectedZone ? "Salvar Alterações" : "Salvar Zona")}
                 </Button>
               </div>
             </div>
@@ -138,13 +190,16 @@ export const ShippingZones = () => {
           ) : (
             zones?.map((z) => (
               <TableRow key={z.id}>
-                <TableCell className="font-medium">{z.transportadora}</TableCell>
+                <TableCell className="font-medium cursor-pointer text-indigo-700" onClick={() => openEditModal(z)}>{z.transportadora}</TableCell>
                 <TableCell>{z.cep_start}</TableCell>
                 <TableCell>{z.cep_end}</TableCell>
                 <TableCell className="font-medium">{z.price ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(String(z.price))) : '-'}</TableCell>
                 <TableCell>{z.city}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-1">
+                    <Button variant="ghost" size="icon" onClick={() => openEditModal(z)}>
+                      <Pencil className="w-4 h-4 text-blue-600" />
+                    </Button>
                     <Button variant="ghost" size="icon" onClick={() => { if (confirm('Excluir esta zona?')) deleteMutation.mutate(z.id) }}>
                       <Trash2 className="w-4 h-4 text-red-500" />
                     </Button>
