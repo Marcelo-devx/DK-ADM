@@ -46,11 +46,29 @@ export const ProductVariantManager = ({
   baseCostPrice
 }: ProductVariantManagerProps) => {
   const queryClient = useQueryClient();
-  // Prevent Enter key from submitting parent forms when editing/adding variants.
-  const handlePreventEnter = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      e.stopPropagation();
+  // When Enter is pressed inside an input: prevent parent submit and treat Enter as "Salvar".
+  // If editing a variant -> trigger updateMutation; if adding -> trigger addMutation.
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    // If we're editing an existing variant, save edits
+    if (editingId) {
+      // Avoid duplicate requests while pending
+      if (!updateMutation.isPending) {
+        // Ensure id is present
+        updateMutation.mutate(editValues);
+      }
+      return;
+    }
+
+    // If we're adding a new variant, save it
+    if (isAdding) {
+      if (!addMutation.isPending) {
+        addMutation.mutate(newVariant);
+      }
+      return;
     }
   };
   const [isAdding, setIsAdding] = useState(false);
@@ -248,7 +266,7 @@ export const ProductVariantManager = ({
                 className="h-8" 
                 value={newVariant.flavor_name} 
                 onChange={(e) => setNewVariant({ ...newVariant, flavor_name: e.target.value })} 
-                onKeyDown={handlePreventEnter}
+                onKeyDown={handleKeyDown}
             />
           </div>
           <div className="space-y-1">
@@ -258,12 +276,12 @@ export const ProductVariantManager = ({
                 className="h-8" 
                 value={newVariant.color || ""} 
                 onChange={(e) => setNewVariant({ ...newVariant, color: e.target.value })} 
-                onKeyDown={handlePreventEnter}
+                onKeyDown={handleKeyDown}
             />
           </div>
           <div className="space-y-1">
             <Label className="text-[10px] uppercase font-bold">ML</Label>
-            <Input type="number" className="h-8" value={newVariant.volume_ml || ""} onChange={(e) => setNewVariant({ ...newVariant, volume_ml: Number(e.target.value) })} onKeyDown={handlePreventEnter} />
+            <Input type="number" className="h-8" value={newVariant.volume_ml || ""} onChange={(e) => setNewVariant({ ...newVariant, volume_ml: Number(e.target.value) })} onKeyDown={handleKeyDown} />
           </div>
           <div className="space-y-1">
             <Label className="text-[10px] uppercase font-bold">Tamanho</Label>
@@ -272,7 +290,7 @@ export const ProductVariantManager = ({
                 placeholder="P/M/G" 
                 value={newVariant.size || ""} 
                 onChange={(e) => setNewVariant({ ...newVariant, size: e.target.value })} 
-                onKeyDown={handlePreventEnter}
+                onKeyDown={handleKeyDown}
             />
           </div>
           <div className="space-y-1">
@@ -282,14 +300,14 @@ export const ProductVariantManager = ({
                 placeholder="0.6" 
                 value={newVariant.ohms || ""} 
                 onChange={(e) => setNewVariant({ ...newVariant, ohms: e.target.value })} 
-                onKeyDown={handlePreventEnter}
+                onKeyDown={handleKeyDown}
             />
           </div>
 
           <div className="space-y-1 lg:col-span-2">
             <Label className="text-[10px] uppercase font-bold">SKU</Label>
             <div className="flex gap-1">
-                <Input className="h-8" placeholder="Auto" value={newVariant.sku || ""} onChange={(e) => setNewVariant({ ...newVariant, sku: e.target.value.toUpperCase() })} onKeyDown={handlePreventEnter} />
+                <Input className="h-8" placeholder="Auto" value={newVariant.sku || ""} onChange={(e) => setNewVariant({ ...newVariant, sku: e.target.value.toUpperCase() })} onKeyDown={handleKeyDown} />
                 <Button type="button" size="icon" variant="outline" className="h-8 w-8 shrink-0" onClick={handleRegenerateSku} title="Gerar novo código">
                     <RefreshCw className="h-3 h-3" />
                 </Button>
@@ -297,15 +315,15 @@ export const ProductVariantManager = ({
           </div>
           <div className="space-y-1">
             <Label className="text-[10px] uppercase font-bold">Venda</Label>
-            <Input type="number" step="0.01" className="h-8" value={newVariant.price || ""} onChange={(e) => setNewVariant({ ...newVariant, price: Number(e.target.value) })} onKeyDown={handlePreventEnter} />
+            <Input type="number" step="0.01" className="h-8" value={newVariant.price || ""} onChange={(e) => setNewVariant({ ...newVariant, price: Number(e.target.value) })} onKeyDown={handleKeyDown} />
           </div>
           <div className="space-y-1">
             <Label className="text-[10px] uppercase font-bold text-green-600">Pix</Label>
-            <Input type="number" step="0.01" className="h-8" value={newVariant.pix_price || ""} onChange={(e) => setNewVariant({ ...newVariant, pix_price: Number(e.target.value) })} onKeyDown={handlePreventEnter} />
+            <Input type="number" step="0.01" className="h-8" value={newVariant.pix_price || ""} onChange={(e) => setNewVariant({ ...newVariant, pix_price: Number(e.target.value) })} onKeyDown={handleKeyDown} />
           </div>
           <div className="space-y-1">
             <Label className="text-[10px] uppercase font-bold">Estoque</Label>
-            <Input type="number" className="h-8" value={newVariant.stock_quantity || ""} onChange={(e) => setNewVariant({ ...newVariant, stock_quantity: Number(e.target.value) })} onKeyDown={handlePreventEnter} />
+            <Input type="number" className="h-8" value={newVariant.stock_quantity || ""} onChange={(e) => setNewVariant({ ...newVariant, stock_quantity: Number(e.target.value) })} onKeyDown={handleKeyDown} />
           </div>
           <div className="flex items-end pb-0.5">
             <Button type="button" className="w-full h-8" onClick={() => addMutation.mutate(newVariant)} disabled={addMutation.isPending}>
@@ -340,7 +358,7 @@ export const ProductVariantManager = ({
                             value={editValues.flavor_name || ""} 
                             onChange={(e) => setEditValues({ ...editValues, flavor_name: e.target.value })}
                             placeholder="Sabor..."
-                            onKeyDown={handlePreventEnter}
+                            onKeyDown={handleKeyDown}
                         />
                     ) : (
                         <span className="font-bold flex items-center gap-1 text-gray-800 text-xs">
@@ -358,7 +376,7 @@ export const ProductVariantManager = ({
                                     value={editValues.color || ""} 
                                     onChange={(e) => setEditValues({ ...editValues, color: e.target.value })}
                                     placeholder="Cor..."
-                                    onKeyDown={handlePreventEnter}
+                                    onKeyDown={handleKeyDown}
                                 />
                             </div>
                         ) : (
@@ -374,7 +392,7 @@ export const ProductVariantManager = ({
                                     value={editValues.size || ""} 
                                     onChange={(e) => setEditValues({ ...editValues, size: e.target.value })}
                                     placeholder="Tam..."
-                                    onKeyDown={handlePreventEnter}
+                                    onKeyDown={handleKeyDown}
                                 />
                             </div>
                         ) : (
@@ -391,7 +409,7 @@ export const ProductVariantManager = ({
                                     value={editValues.volume_ml || ""} 
                                     onChange={(e) => setEditValues({ ...editValues, volume_ml: Number(e.target.value) })}
                                     placeholder="ML"
-                                    onKeyDown={handlePreventEnter}
+                                    onKeyDown={handleKeyDown}
                                 />
                             </div>
                         ) : (
@@ -407,7 +425,7 @@ export const ProductVariantManager = ({
                                     value={editValues.ohms || ""} 
                                     onChange={(e) => setEditValues({ ...editValues, ohms: e.target.value })}
                                     placeholder="Ohms"
-                                    onKeyDown={handlePreventEnter}
+                                    onKeyDown={handleKeyDown}
                                 />
                             </div>
                         ) : (
@@ -423,7 +441,7 @@ export const ProductVariantManager = ({
                             className="h-7 text-[10px] font-mono p-1 w-24" 
                             value={editValues.sku || ""} 
                             onChange={(e) => setEditValues({ ...editValues, sku: e.target.value.toUpperCase() })} 
-                            onKeyDown={handlePreventEnter}
+                            onKeyDown={handleKeyDown}
                         />
                         <Button type="button" size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={handleRegenerateEditSku} title="Gerar novo SKU">
                             <RefreshCw className="h-3 w-3" />
@@ -435,21 +453,21 @@ export const ProductVariantManager = ({
                 </TableCell>
                 <TableCell className="text-center">
                   {editingId === v.id ? (
-                    <Input type="number" step="0.01" className="h-7 text-xs font-bold p-1 w-full" value={editValues.price || 0} onChange={(e) => setEditValues({ ...editValues, price: Number(e.target.value) })} />
+                    <Input type="number" step="0.01" className="h-7 text-xs font-bold p-1 w-full" value={editValues.price || 0} onChange={(e) => setEditValues({ ...editValues, price: Number(e.target.value) })} onKeyDown={handleKeyDown} />
                   ) : (
                     <span className="font-bold text-xs">{formatCurrency(v.price)}</span>
                   )}
                 </TableCell>
                 <TableCell className="text-center">
                   {editingId === v.id ? (
-                    <Input type="number" step="0.01" className="h-7 text-xs font-bold p-1 w-full text-green-600" value={editValues.pix_price || 0} onChange={(e) => setEditValues({ ...editValues, pix_price: Number(e.target.value) })} />
+                    <Input type="number" step="0.01" className="h-7 text-xs font-bold p-1 w-full text-green-600" value={editValues.pix_price || 0} onChange={(e) => setEditValues({ ...editValues, pix_price: Number(e.target.value) })} onKeyDown={handleKeyDown} />
                   ) : (
                     <span className="font-bold text-green-600 text-xs">{formatCurrency(v.pix_price)}</span>
                   )}
                 </TableCell>
                 <TableCell className="text-center">
                   {editingId === v.id ? (
-                    <Input type="number" className="h-7 text-xs font-bold p-1 w-full" value={editValues.stock_quantity || 0} onChange={(e) => setEditValues({ ...editValues, stock_quantity: Number(e.target.value) })} />
+                    <Input type="number" className="h-7 text-xs font-bold p-1 w-full" value={editValues.stock_quantity || 0} onChange={(e) => setEditValues({ ...editValues, stock_quantity: Number(e.target.value) })} onKeyDown={handleKeyDown} />
                   ) : (
                     <Badge variant={v.stock_quantity <= 5 ? "destructive" : "secondary"} className="font-bold text-[10px] h-5">{v.stock_quantity} un</Badge>
                   )}
