@@ -13,7 +13,7 @@ import {
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
 import { Switch } from "../ui/switch";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 const formSchema = z.object({
   id: z.number().optional(),
@@ -22,7 +22,8 @@ const formSchema = z.object({
   discount_value: z.coerce.number().min(0.01, "O valor do desconto deve ser positivo."),
   points_cost: z.coerce.number().int().min(0, "O custo em pontos não pode ser negativo."),
   minimum_order_value: z.coerce.number().min(0, "O valor mínimo do pedido não pode ser negativo."),
-  stock_quantity: z.coerce.number().int().min(0, "O estoque não pode ser negativo."),
+  // allow -1 to mean infinite, or a non-negative integer
+  stock_quantity: z.union([z.literal(-1), z.coerce.number().int().min(0, "O estoque não pode ser negativo.")]),
   is_active: z.boolean().default(true),
 });
 
@@ -39,6 +40,8 @@ export const CouponForm = ({
   isSubmitting,
   initialData,
 }: CouponFormProps) => {
+  const [infinite, setInfinite] = useState(false);
+
   const form = useForm<CouponFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: initialData || {
@@ -55,12 +58,30 @@ export const CouponForm = ({
   useEffect(() => {
     if (initialData) {
       form.reset(initialData);
+      if (initialData.stock_quantity === -1) setInfinite(true);
     }
   }, [initialData, form]);
 
+  useEffect(() => {
+    // keep form value in sync with infinite toggle
+    if (infinite) {
+      form.setValue('stock_quantity', -1, { shouldValidate: true });
+    } else {
+      // if toggling off and current value is -1, reset to 0
+      const current = form.getValues('stock_quantity');
+      if (current === -1) form.setValue('stock_quantity', 0, { shouldValidate: true });
+    }
+  }, [infinite, form]);
+
+  const handleInternalSubmit = (values: any) => {
+    // ensure the value reflects infinite state
+    if (infinite) values.stock_quantity = -1;
+    onSubmit(values);
+  };
+
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(handleInternalSubmit)} className="space-y-6">
         <FormField
           control={form.control}
           name="name"
@@ -138,9 +159,25 @@ export const CouponForm = ({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Estoque</FormLabel>
-                <FormControl>
-                  <Input type="number" min="0" placeholder="Cupons disponíveis" {...field} />
-                </FormControl>
+                <div className="flex items-center gap-2">
+                  <FormControl>
+                    <Input
+                      type="number"
+                      min="0"
+                      placeholder={infinite ? "Ilimitado" : "Cupons disponíveis"}
+                      {...field}
+                      disabled={infinite}
+                    />
+                  </FormControl>
+                  <Button
+                    type="button"
+                    variant={infinite ? 'destructive' : 'outline'}
+                    onClick={() => setInfinite(v => !v)}
+                    className="h-9"
+                  >
+                    {infinite ? 'Ilimitado' : '∞'}
+                  </Button>
+                </div>
                 <FormMessage />
               </FormItem>
             )}
