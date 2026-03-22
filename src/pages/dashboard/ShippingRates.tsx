@@ -282,6 +282,7 @@ export default function ShippingRatesPage() {
         
         <div className="flex flex-wrap gap-2">
             {/* BOTÃO CONFIGURAR SEDEX */}
+            {(!isLoadingSedex && parseFloat(sedexSetting || "0") > 0) && (
             <Dialog open={isSedexModalOpen} onOpenChange={setIsSedexModalOpen}>
                 <DialogTrigger asChild>
                     <Button variant="outline" className="border-indigo-200 text-indigo-700 hover:bg-indigo-50 font-bold">
@@ -317,6 +318,7 @@ export default function ShippingRatesPage() {
                     </div>
                 </DialogContent>
             </Dialog>
+            )}
 
             {/* BOTÃO CONFIGURAR TRANSPORTADORA RMC */}
             <Dialog open={isTransportadoraRmcModalOpen} onOpenChange={setIsTransportadoraRmcModalOpen}>
