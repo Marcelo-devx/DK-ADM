@@ -115,11 +115,29 @@ const ClientsPage = () => {
         .eq("id", userId);
       if (error) throw new Error(error.message);
     },
+    onMutate: async (variables) => {
+      // optimistic update clients list
+      await queryClient.cancelQueries({ queryKey: ["clients"] });
+      const previous = queryClient.getQueryData<Client[]>(["clients"]);
+      if (previous) {
+        queryClient.setQueryData(["clients"], previous.map(c => c.id === variables.userId ? { ...c, force_pix_on_next_purchase: variables.forcePix } : c));
+      }
+      return { previous };
+    },
     onSuccess: (_, variables) => {
+      // Invalidate a broader set so UI and other pages reflect the change
       queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["supplierOrders"] });
+      queryClient.invalidateQueries({ queryKey: ["selectableItemsForSupplierOrder"] });
+      queryClient.invalidateQueries({ queryKey: ["profiles"] });
       showSuccess(variables.forcePix ? "Restrição de PIX ativada!" : "Venda via Cartão liberada!");
     },
-    onError: (error: Error) => {
+    onError: (error: Error, variables, context: any) => {
+      // rollback optimistic update
+      if (context?.previous) {
+        queryClient.setQueryData(["clients"], context.previous);
+      }
       showError(`Erro ao atualizar segurança: ${error.message}`);
     },
   });
