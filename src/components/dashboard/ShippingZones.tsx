@@ -18,6 +18,14 @@ interface ShippingZone {
   city: string;
 }
 
+const normalizeCep = (cep: string) => cep.replace(/\D/g, '');
+const cepToNumber = (cep: string) => {
+  const n = normalizeCep(cep);
+  return n ? parseInt(n, 10) : NaN;
+}
+
+const isCepFormatValid = (cep: string) => /^\d{5}-\d{3}$/.test(cep.trim());
+
 export const ShippingZones = () => {
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -37,6 +45,9 @@ export const ShippingZones = () => {
     },
   });
 
+  const [overlapZones, setOverlapZones] = useState<ShippingZone[]>([]);
+  const [cepFormatWarning, setCepFormatWarning] = useState<string | null>(null);
+
   const resetForm = () => {
     setSelectedZone(null);
     setTransportadora("Transportadora RMC");
@@ -44,11 +55,54 @@ export const ShippingZones = () => {
     setCepEnd("");
     setPrice("");
     setCity("");
+    setOverlapZones([]);
+    setCepFormatWarning(null);
   };
 
   useEffect(() => {
     if (!isModalOpen) resetForm();
   }, [isModalOpen]);
+
+  // Compute warnings when CEPs or zones change
+  useEffect(() => {
+    // reset
+    setOverlapZones([]);
+    setCepFormatWarning(null);
+
+    if (!cepStart && !cepEnd) return;
+
+    // Validate format
+    if (cepStart && !isCepFormatValid(cepStart)) {
+      setCepFormatWarning('Formato do CEP inicial inválido. Use 00000-000');
+    }
+    if (cepEnd && !isCepFormatValid(cepEnd)) {
+      setCepFormatWarning(prev => prev ? prev + ' / Formato do CEP final inválido. Use 00000-000' : 'Formato do CEP final inválido. Use 00000-000');
+    }
+
+    const sNum = cepToNumber(cepStart);
+    const eNum = cepToNumber(cepEnd);
+
+    if (Number.isNaN(sNum) || Number.isNaN(eNum)) return;
+    if (sNum > eNum) {
+      // swap? just warn
+      setCepFormatWarning(prev => (prev ? prev + ' / CEP inicial é maior que o CEP final.' : 'CEP inicial é maior que o CEP final.'));
+    }
+
+    // find overlaps for same transportadora
+    if (zones && zones.length > 0) {
+      const overlaps = zones.filter(z => {
+        // if editing an existing zone, skip comparing to itself
+        if (selectedZone && z.id === selectedZone.id) return false;
+        if (z.transportadora !== transportadora) return false;
+        const zs = cepToNumber(z.cep_start);
+        const ze = cepToNumber(z.cep_end);
+        if (Number.isNaN(zs) || Number.isNaN(ze)) return false;
+        // overlap if ranges intersect
+        return !(eNum < zs || sNum > ze);
+      });
+      if (overlaps.length > 0) setOverlapZones(overlaps);
+    }
+  }, [cepStart, cepEnd, zones, transportadora, selectedZone]);
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -150,6 +204,25 @@ export const ShippingZones = () => {
                   <Input value={cepEnd} onChange={(e) => setCepEnd(e.target.value)} placeholder="00000-000" />
                 </div>
               </div>
+
+              {/* Warnings */}
+              {cepFormatWarning && (
+                <div className="text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 p-2 rounded">
+                  <strong>Atenção:</strong> {cepFormatWarning}
+                </div>
+              )}
+
+              {overlapZones.length > 0 && (
+                <div className="text-sm text-orange-800 bg-orange-50 border border-orange-200 p-2 rounded">
+                  <strong>Aviso:</strong> A faixa de CEP informada sobrepõe-se com as zonas abaixo para a mesma transportadora. Isso não removerá ou alterará nada automaticamente — apenas um aviso.
+                  <ul className="mt-2 list-disc pl-5">
+                    {overlapZones.map(o => (
+                      <li key={o.id}>{o.transportadora}: {o.cep_start} → {o.cep_end} ({o.city || '-'})</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <Label>Preço (R$)</Label>
