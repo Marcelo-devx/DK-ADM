@@ -29,6 +29,9 @@ const isCepFormatValid = (cep: string) => /^\d{5}-\d{3}$/.test(cep.trim());
 export const ShippingZones = () => {
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [groupModalOpen, setGroupModalOpen] = useState(false);
+  const [activeTransportadora, setActiveTransportadora] = useState<string | null>(null);
+
   const [transportadora, setTransportadora] = useState("Transportadora RMC");
   const [cepStart, setCepStart] = useState("");
   const [cepEnd, setCepEnd] = useState("");
@@ -45,12 +48,14 @@ export const ShippingZones = () => {
     },
   });
 
+  const transportadoras = Array.from(new Set((zones || []).map(z => z.transportadora))).sort();
+
   const [overlapZones, setOverlapZones] = useState<ShippingZone[]>([]);
   const [cepFormatWarning, setCepFormatWarning] = useState<string | null>(null);
 
   const resetForm = () => {
     setSelectedZone(null);
-    setTransportadora("Transportadora RMC");
+    setTransportadora(activeTransportadora || "Transportadora RMC");
     setCepStart("");
     setCepEnd("");
     setPrice("");
@@ -61,17 +66,15 @@ export const ShippingZones = () => {
 
   useEffect(() => {
     if (!isModalOpen) resetForm();
-  }, [isModalOpen]);
+  }, [isModalOpen, activeTransportadora]);
 
   // Compute warnings when CEPs or zones change
   useEffect(() => {
-    // reset
     setOverlapZones([]);
     setCepFormatWarning(null);
 
     if (!cepStart && !cepEnd) return;
 
-    // Validate format
     if (cepStart && !isCepFormatValid(cepStart)) {
       setCepFormatWarning('Formato do CEP inicial inválido. Use 00000-000');
     }
@@ -84,20 +87,16 @@ export const ShippingZones = () => {
 
     if (Number.isNaN(sNum) || Number.isNaN(eNum)) return;
     if (sNum > eNum) {
-      // swap? just warn
       setCepFormatWarning(prev => (prev ? prev + ' / CEP inicial é maior que o CEP final.' : 'CEP inicial é maior que o CEP final.'));
     }
 
-    // find overlaps for same transportadora
     if (zones && zones.length > 0) {
       const overlaps = zones.filter(z => {
-        // if editing an existing zone, skip comparing to itself
         if (selectedZone && z.id === selectedZone.id) return false;
         if (z.transportadora !== transportadora) return false;
         const zs = cepToNumber(z.cep_start);
         const ze = cepToNumber(z.cep_end);
         if (Number.isNaN(zs) || Number.isNaN(ze)) return false;
-        // overlap if ranges intersect
         return !(eNum < zs || sNum > ze);
       });
       if (overlaps.length > 0) setOverlapZones(overlaps);
@@ -169,6 +168,11 @@ export const ShippingZones = () => {
     setIsModalOpen(true);
   };
 
+  const openGroupModal = (transport: string) => {
+    setActiveTransportadora(transport);
+    setGroupModalOpen(true);
+  }
+
   const handleSave = () => {
     if (selectedZone) {
       updateMutation.mutate();
@@ -181,67 +185,127 @@ export const ShippingZones = () => {
     <div className="mt-6 bg-white rounded-lg border shadow-sm p-4">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-bold">Zonas de Entrega por CEP</h2>
-        <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-indigo-600 hover:bg-indigo-700"><Plus className="w-4 h-4 mr-2" /> Nova Zona</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{selectedZone ? 'Editar Zona de CEP' : 'Adicionar Zona de CEP'}</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-3 py-2">
-              <div className="space-y-1">
-                <Label>Transportadora</Label>
-                <Input value={transportadora} onChange={(e) => setTransportadora(e.target.value)} />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label>CEP inicial</Label>
-                  <Input value={cepStart} onChange={(e) => setCepStart(e.target.value)} placeholder="00000-000" />
+        <div className="flex items-center gap-2">
+          <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-indigo-600 hover:bg-indigo-700"><Plus className="w-4 h-4 mr-2" /> Nova Zona</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{selectedZone ? 'Editar Zona de CEP' : 'Adicionar Zona de CEP'}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3 py-2">
+                <div className="space-y-1">
+                  <Label>Transportadora</Label>
+                  <Input value={transportadora} onChange={(e) => setTransportadora(e.target.value)} />
                 </div>
-                <div>
-                  <Label>CEP final</Label>
-                  <Input value={cepEnd} onChange={(e) => setCepEnd(e.target.value)} placeholder="00000-000" />
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label>CEP inicial</Label>
+                    <Input value={cepStart} onChange={(e) => setCepStart(e.target.value)} placeholder="00000-000" />
+                  </div>
+                  <div>
+                    <Label>CEP final</Label>
+                    <Input value={cepEnd} onChange={(e) => setCepEnd(e.target.value)} placeholder="00000-000" />
+                  </div>
                 </div>
-              </div>
 
-              {/* Warnings */}
-              {cepFormatWarning && (
-                <div className="text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 p-2 rounded">
-                  <strong>Atenção:</strong> {cepFormatWarning}
-                </div>
-              )}
+                {/* Warnings */}
+                {cepFormatWarning && (
+                  <div className="text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 p-2 rounded">
+                    <strong>Atenção:</strong> {cepFormatWarning}
+                  </div>
+                )}
 
-              {overlapZones.length > 0 && (
-                <div className="text-sm text-orange-800 bg-orange-50 border border-orange-200 p-2 rounded">
-                  <strong>Aviso:</strong> A faixa de CEP informada sobrepõe-se com as zonas abaixo para a mesma transportadora. Isso não removerá ou alterará nada automaticamente — apenas um aviso.
-                  <ul className="mt-2 list-disc pl-5">
-                    {overlapZones.map(o => (
-                      <li key={o.id}>{o.transportadora}: {o.cep_start} → {o.cep_end} ({o.city || '-'})</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+                {overlapZones.length > 0 && (
+                  <div className="text-sm text-orange-800 bg-orange-50 border border-orange-200 p-2 rounded">
+                    <strong>Aviso:</strong> A faixa de CEP informada sobrepõe-se com as zonas abaixo para a mesma transportadora. Isso não removerá ou alterará nada automaticamente — apenas um aviso.
+                    <ul className="mt-2 list-disc pl-5">
+                      {overlapZones.map(o => (
+                        <li key={o.id}>{o.transportadora}: {o.cep_start} → {o.cep_end} ({o.city || '-'})</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label>Preço (R$)</Label>
-                  <Input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0.00" />
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label>Preço (R$)</Label>
+                    <Input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0.00" />
+                  </div>
+                  <div>
+                    <Label>Cidade / Região</Label>
+                    <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Ex: Curitiba e Região" />
+                  </div>
                 </div>
-                <div>
-                  <Label>Cidade / Região</Label>
-                  <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Ex: Curitiba e Região" />
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => { setIsModalOpen(false); resetForm(); }}>Cancelar</Button>
+                  <Button onClick={handleSave} disabled={createMutation.isPending || updateMutation.isPending} className="bg-indigo-600 hover:bg-indigo-700">
+                    {createMutation.isPending || updateMutation.isPending ? "Salvando..." : (selectedZone ? "Salvar Alterações" : "Salvar Zona")}
+                  </Button>
                 </div>
               </div>
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => { setIsModalOpen(false); resetForm(); }}>Cancelar</Button>
-                <Button onClick={handleSave} disabled={createMutation.isPending || updateMutation.isPending} className="bg-indigo-600 hover:bg-indigo-700">
-                  {createMutation.isPending || updateMutation.isPending ? "Salvando..." : (selectedZone ? "Salvar Alterações" : "Salvar Zona")}
-                </Button>
+            </DialogContent>
+          </Dialog>
+
+          {/* Group modal trigger list */}
+          <div className="hidden md:flex items-center space-x-2">
+            {transportadoras.map(t => (
+              <Button key={t} variant="outline" onClick={() => openGroupModal(t)}>{t}</Button>
+            ))}
+          </div>
+
+          {/* Group management modal */}
+          <Dialog open={groupModalOpen} onOpenChange={(open) => { if(!open) setActiveTransportadora(null); setGroupModalOpen(open); }}>
+            <DialogTrigger asChild>
+              {/* hidden trigger, openGroupModal handles it */}
+              <span />
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Gerenciar Zonas - {activeTransportadora}</DialogTitle>
+              </DialogHeader>
+              <div className="py-2 space-y-3">
+                <div className="flex flex-col gap-2">
+                  <Button onClick={() => { setSelectedZone(null); setTransportadora(activeTransportadora || ''); setIsModalOpen(true); setGroupModalOpen(false); }} className="w-full bg-indigo-600 hover:bg-indigo-700">Adicionar faixa para {activeTransportadora}</Button>
+                </div>
+
+                <div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>CEP Inicial</TableHead>
+                        <TableHead>CEP Final</TableHead>
+                        <TableHead>Preço</TableHead>
+                        <TableHead>Cidade</TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(zones || []).filter(z => z.transportadora === activeTransportadora).map(z => (
+                        <TableRow key={z.id}>
+                          <TableCell>{z.cep_start}</TableCell>
+                          <TableCell>{z.cep_end}</TableCell>
+                          <TableCell>{z.price ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(String(z.price))) : '-'}</TableCell>
+                          <TableCell>{z.city}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button variant="ghost" size="icon" onClick={() => { openEditModal(z); setGroupModalOpen(false); }}>
+                                <Pencil className="w-4 h-4 text-blue-600" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
               </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+            </DialogContent>
+          </Dialog>
+
+        </div>
       </div>
 
       <Table>
