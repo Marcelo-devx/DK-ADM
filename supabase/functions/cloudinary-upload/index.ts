@@ -1,19 +1,10 @@
 // @ts-nocheck
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
-import { v2 as cloudinary } from 'npm:cloudinary@^2.0.0';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
-
-// Configure Cloudinary using secrets
-cloudinary.config({
-  cloud_name: Deno.env.get('CLOUDINARY_CLOUD_NAME'),
-  api_key: Deno.env.get('CLOUDINARY_API_KEY'),
-  api_secret: Deno.env.get('CLOUDINARY_API_SECRET'),
-  secure: true,
-});
 
 serve(async (req) => {
   // Handle CORS preflight request
@@ -22,19 +13,63 @@ serve(async (req) => {
   }
 
   try {
+    console.log('[cloudinary-upload] Iniciando requisição de upload');
+
     const { image } = await req.json();
 
     if (!image) {
       throw new Error("Nenhum dado de arquivo fornecido no corpo da requisição.");
     }
 
-    const uploadResult = await cloudinary.uploader.upload(image, {
-      folder: "tabacaria-products", // Organiza os uploads em uma pasta
-      resource_type: "auto", // Detecta se é imagem ou vídeo
+    const cloudName = Deno.env.get('CLOUDINARY_CLOUD_NAME');
+    const apiKey = Deno.env.get('CLOUDINARY_API_KEY');
+    const apiSecret = Deno.env.get('CLOUDINARY_API_SECRET');
+
+    if (!cloudName || !apiKey || !apiSecret) {
+      console.error('[cloudinary-upload] Variáveis de ambiente ausentes');
+      throw new Error("Credenciais do Cloudinary não configuradas.");
+    }
+
+    console.log('[cloudinary-upload] Preparando upload para Cloudinary:', { cloudName });
+
+    // Criar FormData manualmente para upload
+    const formData = new FormData();
+    formData.append('file', image);
+    formData.append('folder', 'tabacaria-products');
+    formData.append('resource_type', 'auto'); // Detecta automaticamente se é imagem ou vídeo
+
+    // Usar Basic Auth para autenticação (mais leve que assinatura completa)
+    const authHeader = btoa(`${apiKey}:${apiSecret}`);
+
+    const uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`;
+
+    console.log('[cloudinary-upload] Enviando requisição para:', uploadUrl);
+
+    const response = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${authHeader}`,
+      },
+      body: formData,
+    });
+
+    console.log('[cloudinary-upload] Status da resposta:', response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[cloudinary-upload] Erro na resposta do Cloudinary:', response.status, errorText);
+      throw new Error(`Erro no Cloudinary: ${response.status} - ${errorText}`);
+    }
+
+    const uploadResult = await response.json();
+
+    console.log('[cloudinary-upload] Upload realizado com sucesso:', {
+      public_id: uploadResult.public_id,
+      url: uploadResult.secure_url
     });
 
     if (!uploadResult || !uploadResult.secure_url) {
-        throw new Error("A resposta do Cloudinary não continha uma URL segura.");
+      throw new Error("A resposta do Cloudinary não continha uma URL segura.");
     }
 
     return new Response(
@@ -45,15 +80,15 @@ serve(async (req) => {
       }
     )
   } catch (error) {
-    console.error('Erro detalhado no upload para o Cloudinary:', error);
+    console.error('[cloudinary-upload] Erro detalhado:', error);
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         error: 'Falha ao processar o upload.',
-        details: error.message 
+        details: error.message
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500, // Usando 500 para erro interno do servidor
+        status: 500,
       }
     )
   }
