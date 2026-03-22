@@ -117,11 +117,11 @@ const SupplierOrdersPage = () => {
     queryFn: fetchSupplierOrders 
   });
   
-  const { data: selectableItems, refetch: refetchSelectableItems } = useQuery({ 
+  // Provide explicit generic so selectableItems is typed as array (not unknown) and remove unsupported cacheTime
+  const { data: selectableItems, refetch: refetchSelectableItems } = useQuery<any[], Error>({ 
     queryKey: ["selectableItemsForSupplierOrder"], 
     queryFn: fetchProductsWithVariants,
     staleTime: 0,
-    cacheTime: 1000 * 60 * 5,
     refetchOnMount: true,
     refetchOnWindowFocus: true,
   });
@@ -131,7 +131,7 @@ const SupplierOrdersPage = () => {
     try {
       // ensure freshest data
       await queryClient.invalidateQueries({ queryKey: ["selectableItemsForSupplierOrder"] });
-      await queryClient.fetchQuery(["selectableItemsForSupplierOrder"], fetchProductsWithVariants);
+      await queryClient.fetchQuery({ queryKey: ["selectableItemsForSupplierOrder"], queryFn: fetchProductsWithVariants });
       setIsOrderModalOpen(true);
     } catch (err: any) {
       showError(`Erro ao buscar itens: ${err.message}`);
