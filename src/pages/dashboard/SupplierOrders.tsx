@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "../../components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { PlusCircle, Truck, CheckCircle2, Loader2, Eye, FileDown, AlertTriangle, Trash2 } from "lucide-react";
@@ -118,10 +117,32 @@ const SupplierOrdersPage = () => {
     queryFn: fetchSupplierOrders 
   });
   
-  const { data: selectableItems } = useQuery({ 
+  const { data: selectableItems, refetch: refetchSelectableItems } = useQuery({ 
     queryKey: ["selectableItemsForSupplierOrder"], 
-    queryFn: fetchProductsWithVariants 
+    queryFn: fetchProductsWithVariants,
+    staleTime: 0,
+    cacheTime: 1000 * 60 * 5,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
+
+  // Replace automatic invalidation with an explicit open flow that fetches fresh data
+  const openCreateOrder = async () => {
+    try {
+      // ensure freshest data
+      await queryClient.invalidateQueries({ queryKey: ["selectableItemsForSupplierOrder"] });
+      await queryClient.fetchQuery(["selectableItemsForSupplierOrder"], fetchProductsWithVariants);
+      setIsOrderModalOpen(true);
+    } catch (err: any) {
+      showError(`Erro ao buscar itens: ${err.message}`);
+    }
+  };
+
+  useEffect(() => {
+    if (!isOrderModalOpen) return;
+    // also ensure query is fresh when modal is open (safety)
+    queryClient.invalidateQueries({ queryKey: ["selectableItemsForSupplierOrder"] });
+  }, [isOrderModalOpen, queryClient]);
 
   const createOrderMutation = useMutation({
     mutationFn: async (values: any) => {
@@ -155,6 +176,7 @@ const SupplierOrdersPage = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["supplierOrders"] });
+      queryClient.invalidateQueries({ queryKey: ["selectableItemsForSupplierOrder"] });
       setIsOrderModalOpen(false);
       showSuccess("Pedido de compra registrado!");
     },
@@ -199,7 +221,7 @@ const SupplierOrdersPage = () => {
               ...(item.variant_id ? { variant_id: item.variant_id } : {})
             });
 
-          // Se for uma variação, atualiza o estoque da variação
+          // If variant update...
           if (item.variant_id) {
             const { data: variant } = await supabase
               .from("product_variants")
@@ -216,7 +238,6 @@ const SupplierOrdersPage = () => {
               await supabase.from("product_variants").update(updateData).eq("id", item.variant_id);
             }
           } else {
-            // Se for produto simples, atualiza o estoque do produto
             const { data: product } = await supabase
               .from("products")
               .select("stock_quantity, cost_price")
@@ -232,6 +253,7 @@ const SupplierOrdersPage = () => {
               await supabase.from("products").update(updateData).eq("id", item.product_id);
             }
           }
+
         }
       }
 
@@ -245,6 +267,7 @@ const SupplierOrdersPage = () => {
       queryClient.invalidateQueries({ queryKey: ["supplierOrders"] });
       queryClient.invalidateQueries({ queryKey: ["products"] });
       queryClient.invalidateQueries({ queryKey: ["productVariants"] });
+      queryClient.invalidateQueries({ queryKey: ["selectableItemsForSupplierOrder"] });
       setIsReceiveModalOpen(false);
       showSuccess("Operação finalizada!");
     },
@@ -334,13 +357,15 @@ const SupplierOrdersPage = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold flex items-center gap-2"><Truck className="h-8 w-8 text-primary" /> Pedidos ao Fornecedor</h1>
-        <Dialog open={isOrderModalOpen} onOpenChange={setIsOrderModalOpen}>
-          <DialogTrigger asChild><Button><PlusCircle className="mr-2 h-4 w-4" /> Novo Pedido de Compra</Button></DialogTrigger>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle>Criar Pedido para Fornecedor</DialogTitle></DialogHeader>
-            <SupplierOrderForm onSubmit={(v) => createOrderMutation.mutate(v)} isSubmitting={createOrderMutation.isPending} products={selectableItems || []} />
-          </DialogContent>
-        </Dialog>
+        <div>
+          <Button onClick={openCreateOrder}><PlusCircle className="mr-2 h-4 w-4" /> Novo Pedido de Compra</Button>
+          <Dialog open={isOrderModalOpen} onOpenChange={(open) => setIsOrderModalOpen(open)}>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader><DialogTitle>Criar Pedido para Fornecedor</DialogTitle></DialogHeader>
+              <SupplierOrderForm onSubmit={(v) => createOrderMutation.mutate(v)} isSubmitting={createOrderMutation.isPending} products={selectableItems || []} />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <div className="bg-white p-4 rounded-lg border shadow-sm">
