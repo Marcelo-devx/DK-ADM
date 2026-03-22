@@ -33,6 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ShippingZones } from '@/components/dashboard/ShippingZones';
 
 interface ShippingRate {
   id: number;
@@ -524,6 +525,9 @@ export default function ShippingRatesPage() {
             </TableBody>
         </Table>
       </div>
+
+      {/* Novo componente para gerenciar zonas por CEP */}
+      <ShippingZones />
     </div>
   );
 }
