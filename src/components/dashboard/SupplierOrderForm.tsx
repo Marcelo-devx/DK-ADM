@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Trash2, Plus, Package, Zap } from "lucide-react";
 import { Textarea } from "../ui/textarea";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Label } from "../ui/label";
 import { showSuccess, showError } from "@/utils/toast";
 import { Badge } from "@/components/ui/badge";
@@ -89,16 +89,31 @@ export const SupplierOrderForm = ({ onSubmit, isSubmitting, products }: Supplier
     showSuccess(`${lowStockItems.length} itens (incluindo variações) adicionados.`);
   };
 
-  // new: per-row search and filter state
+  // per-row search and filter state
   const [searchMap, setSearchMap] = useState<Record<number, string>>({});
+  const [debouncedSearchMap, setDebouncedSearchMap] = useState<Record<number, string>>({});
   const [filterMap, setFilterMap] = useState<Record<number, 'all' | 'variants' | 'products'>>({});
+  const debounceTimers = useRef<Record<number, any>>({});
 
   const setRowSearch = (index: number, value: string) => {
     setSearchMap(s => ({ ...s, [index]: value }));
+    // debounce
+    if (debounceTimers.current[index]) clearTimeout(debounceTimers.current[index]);
+    debounceTimers.current[index] = setTimeout(() => {
+      setDebouncedSearchMap(s => ({ ...s, [index]: value }));
+      delete debounceTimers.current[index];
+    }, 300);
   };
   const setRowFilter = (index: number, value: 'all' | 'variants' | 'products') => {
     setFilterMap(s => ({ ...s, [index]: value }));
   };
+
+  useEffect(() => {
+    return () => {
+      // cleanup timers on unmount
+      Object.values(debounceTimers.current).forEach((t: any) => clearTimeout(t));
+    };
+  }, []);
 
   return (
     <Form {...form}>
@@ -153,7 +168,6 @@ export const SupplierOrderForm = ({ onSubmit, isSubmitting, products }: Supplier
           {fields.map((field, index) => {
             const selectedVal = form.watch(`items.${index}.variant_id`) || String(form.watch(`items.${index}.product_id`));
             
-            // Lógica para encontrar o item correto no mapeamento de variações
             const currentVariantId = form.watch(`items.${index}.variant_id`);
             const currentProductId = form.watch(`items.${index}.product_id`);
             
@@ -161,8 +175,7 @@ export const SupplierOrderForm = ({ onSubmit, isSubmitting, products }: Supplier
                 currentVariantId ? p.variant_id === currentVariantId : p.id === Number(currentProductId) && !p.variant_id
             );
 
-            // compute filtered products for this row based on searchMap and filterMap
-            const localSearch = (searchMap[index] || '').toLowerCase().trim();
+            const localSearch = (debouncedSearchMap[index] || '').toLowerCase().trim();
             const localFilter = filterMap[index] || 'all';
             const filteredProducts = products.filter(p => {
               if (localSearch && !p.name.toLowerCase().includes(localSearch)) return false;
@@ -217,21 +230,29 @@ export const SupplierOrderForm = ({ onSubmit, isSubmitting, products }: Supplier
                             <div className="p-2 border-b">
                               <Input placeholder="Pesquisar..." value={searchMap[index] || ''} onChange={(e) => setRowSearch(index, e.target.value)} />
                               <div className="mt-2 flex gap-2">
-                                <select className="p-2 border rounded" value={filterMap[index] || 'all'} onChange={(e) => setRowFilter(index, e.target.value as any)}>
-                                  <option value="all">Todos</option>
-                                  <option value="products">Apenas Produtos</option>
-                                  <option value="variants">Apenas Variações</option>
-                                </select>
+                                <div className="inline-flex rounded-md shadow-sm" role="group" aria-label="Filtro de itens">
+                                  <button type="button" onClick={() => setRowFilter(index, 'all')} className={`px-3 py-1 text-sm rounded-l ${ (filterMap[index] || 'all') === 'all' ? 'bg-indigo-600 text-white' : 'bg-white border'} `}>Todos</button>
+                                  <button type="button" onClick={() => setRowFilter(index, 'products')} className={`px-3 py-1 text-sm ${ (filterMap[index] || 'all') === 'products' ? 'bg-indigo-600 text-white' : 'bg-white border'} `}>Produtos</button>
+                                  <button type="button" onClick={() => setRowFilter(index, 'variants')} className={`px-3 py-1 text-sm rounded-r ${ (filterMap[index] || 'all') === 'variants' ? 'bg-indigo-600 text-white' : 'bg-white border'} `}>Variações</button>
+                                </div>
                               </div>
                             </div>
+                            <div className="max-h-64 overflow-auto">
                             {filteredProducts.map((p, idx) => (
                               <SelectItem key={`${p.id}-${p.variant_id}-${idx}`} value={p.variant_id ? `var_${p.variant_id}` : `prod_${p.id}`}>
-                                  <div className="flex justify-between w-full gap-8">
-                                      <span className={p.is_variant ? "pl-2" : "font-bold"}>{p.name}</span>
-                                      <span className="text-muted-foreground text-xs opacity-70">R$ {p.cost_price || '0,00'}</span>
+                                  <div className="flex justify-between w-full gap-8 items-center">
+                                      <div className="flex flex-col">
+                                        <span className={p.is_variant ? "pl-2" : "font-bold"}>{p.name}</span>
+                                        <span className="text-xs text-muted-foreground">Estoque: {p.stock_quantity}</span>
+                                      </div>
+                                      <span className="text-muted-foreground text-xs opacity-70">R$ {p.cost_price ? Number(p.cost_price).toFixed(2) : '0.00'}</span>
                                   </div>
                               </SelectItem>
                             ))}
+                            {filteredProducts.length === 0 && (
+                              <div className="p-4 text-center text-sm text-muted-foreground">Nenhum item encontrado.</div>
+                            )}
+                            </div>
                           </SelectContent>
                         </Select>
                         <FormMessage />
