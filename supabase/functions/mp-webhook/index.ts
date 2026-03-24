@@ -19,15 +19,17 @@ serve(async (req) => {
 
     // Se não for notificação de pagamento, ignora
     if (topic !== 'payment' && topic !== 'test') {
+        console.log('[mp-webhook] Ignored topic', { topic });
         return new Response(JSON.stringify({ message: "Topic ignored" }), { status: 200, headers: corsHeaders });
     }
 
     let bodyData = {};
-    try { bodyData = await req.json(); } catch (e) {}
+    try { bodyData = await req.json(); } catch (e) { console.log('[mp-webhook] Failed to parse body as JSON', { error: String(e) }); }
 
-    const paymentId = id || bodyData?.data?.id;
+    const paymentId = id || bodyData?.data?.id || bodyData?.id;
 
     if (!paymentId) {
+        console.log('[mp-webhook] No payment ID found in request', { url: req.url, bodyData });
         return new Response(JSON.stringify({ message: "No payment ID found" }), { status: 200, headers: corsHeaders });
     }
 
@@ -54,29 +56,53 @@ serve(async (req) => {
         : settings['mercadopago_test_access_token'];
 
     if (!mpToken) {
+        console.error('[mp-webhook] Configuração de token ausente', { mode });
         return new Response(JSON.stringify({ error: `Configuração de ${mode} ausente` }), { status: 500, headers: corsHeaders });
     }
 
     // 3. Consulta MP
+    console.log('[mp-webhook] Fetching payment from MP', { paymentId, mode });
     const mpResponse = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
         headers: { 'Authorization': `Bearer ${mpToken}` }
     });
 
-    if (!mpResponse.ok) {
-        // Se falhar na consulta, pode ser que recebemos um webhook de prod mas estamos em test (ou vice-versa).
-        console.error(`Erro ao consultar MP (${mode}): ${mpResponse.status}`);
-        throw new Error(`Erro ao consultar pagamento.`);
+    let paymentData = null;
+    try {
+      paymentData = await mpResponse.json();
+    } catch (e) {
+      console.error('[mp-webhook] Failed parsing MP response JSON', { error: String(e) });
     }
 
-    const paymentData = await mpResponse.json();
-    const status = paymentData.status; 
-    const externalReference = paymentData.external_reference;
-    const paymentTypeId = paymentData.payment_type_id; 
+    if (!mpResponse.ok) {
+        // Se falhar na consulta, pode ser que recebemos um webhook de prod mas estamos em test (ou vice-versa).
+        console.error('[mp-webhook] Erro ao consultar MP', { status: mpResponse.status, body: paymentData });
+        // Return 200 so MP won't keep retrying too aggressively, but include details for us to inspect
+        return new Response(JSON.stringify({ error: `Erro ao consultar pagamento. HTTP ${mpResponse.status}`, body: paymentData }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
 
-    console.log(`[MP Webhook] PayID: ${paymentId}, Status: ${status}, Type: ${paymentTypeId}, Order: ${externalReference}`);
+    console.log('[mp-webhook] MP payment payload', { paymentId, paymentData });
 
-    if (status === 'approved' && externalReference) {
-        const orderId = externalReference.replace(/\D/g, ""); 
+    const status = paymentData?.status; 
+    // Tenta extrair external reference a partir de várias fontes possíveis
+    const externalReferenceCandidates = [
+      paymentData?.external_reference,
+      paymentData?.metadata?.external_reference,
+      paymentData?.metadata?.order_id,
+      paymentData?.additional_info?.items?.[0]?.id,
+      paymentData?.order?.external_reference,
+      paymentData?.order?.id,
+      bodyData?.external_reference,
+      bodyData?.data?.external_reference,
+      bodyData?.data?.metadata?.external_reference
+    ];
+
+    const externalReference = externalReferenceCandidates.find(Boolean);
+    const paymentTypeId = paymentData?.payment_type_id; 
+
+    console.log('[mp-webhook] Resolved external_reference', { externalReference, candidatesCount: externalReferenceCandidates.filter(Boolean).length });
+
+    if ((status === 'approved' || status === 'authorized') && externalReference) {
+        const orderId = String(externalReference).replace(/\D/g, ""); 
 
         if (orderId) {
             // Mapeia o nome correto para o banco
@@ -92,6 +118,8 @@ serve(async (req) => {
                 : 'Aguardando Validação'; // Validação manual para Pix e outros
 
             // 4. Atualiza Pedido
+            console.log('[mp-webhook] Attempting to update order', { orderId, status, methodLabel, deliveryStatusUpdate });
+
             const { error: updateError } = await supabaseAdmin
                 .from('orders')
                 .update({ 
@@ -101,8 +129,17 @@ serve(async (req) => {
                 })
                 .eq('id', orderId);
 
-            if (updateError) throw updateError;
+            if (updateError) {
+                console.error('[mp-webhook] Erro ao atualizar pedido no Supabase', { orderId, updateError });
+                return new Response(JSON.stringify({ error: 'Erro ao atualizar pedido', detail: updateError }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+            }
+
+            console.log('[mp-webhook] Pedido atualizado com sucesso', { orderId });
+        } else {
+            console.warn('[mp-webhook] external_reference encontrada, mas não contém ID válido', { externalReference });
         }
+    } else {
+        console.log('[mp-webhook] Payment status not treated as Paid or no external_reference found', { paymentId, status, externalReference });
     }
 
     return new Response(JSON.stringify({ success: true, mode: mode }), {
@@ -111,8 +148,8 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('Erro no Webhook MP:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    console.error('[mp-webhook] Erro no Webhook MP:', String(error));
+    return new Response(JSON.stringify({ error: String(error) }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200, 
     });
