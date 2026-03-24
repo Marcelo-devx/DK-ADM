@@ -9,6 +9,7 @@ import { ReviewForm } from '../components/reviews/ReviewForm';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Star } from 'lucide-react';
+import { formatBRL as formatCurrency } from '@/utils/currency';
 
 interface OrderItem {
   id: number;
@@ -24,6 +25,8 @@ interface Order {
   created_at: string;
   total_price: number;
   status: string;
+  shipping_cost: number;
+  donation_amount: number;
   order_items: OrderItem[];
 }
 
@@ -104,6 +107,36 @@ const MyOrdersPage = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent>
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Produtos</span>
+                    <span>{formatCurrency(order.total_price)}</span>
+                  </div>
+                  
+                  {order.shipping_cost > 0 ? (
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Frete</span>
+                      <span>{formatCurrency(order.shipping_cost)}</span>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between text-xs text-green-600 font-medium">
+                      <span>Frete</span>
+                      <span>Grátis</span>
+                    </div>
+                  )}
+
+                  {order.donation_amount > 0 && (
+                    <div className="flex justify-between text-xs text-rose-600 font-bold">
+                      <span>Doação Solidária</span>
+                      <span>{formatCurrency(order.donation_amount)}</span>
+                    </div>
+                  )}
+                  
+                  <div className="flex justify-between items-center mt-1 pt-1 border-t border-dashed">
+                    <span className="text-sm font-bold">Total Pago</span>
+                    <span className="text-sm font-bold">{formatCurrency(order.total_price + (order.shipping_cost || 0) + (order.donation_amount || 0))}</span>
+                  </div>
+                </div>
                 <ul className="divide-y">
                   {order.order_items.map(item => (
                     <li key={item.id} className="py-4 flex items-center justify-between">
