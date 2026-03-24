@@ -34,7 +34,7 @@ const fetchFinancialSummary = async (startDate?: string, endDate?: string) => {
   // 1. Busca pedidos de clientes no período
   let salesQuery = supabase
     .from("orders")
-    .select("total_price, coupon_discount, created_at, payment_method")
+    .select("total_price, coupon_discount, created_at, payment_method, donation_amount")
     .in("status", ["Finalizada", "Pago"]);
 
   if (startDate) salesQuery = salesQuery.gte("created_at", startDate);
@@ -87,6 +87,9 @@ const fetchFinancialSummary = async (startDate?: string, endDate?: string) => {
     ...(promos || []).map(p => (p.stock_quantity * (p.price || 0)))
   ].reduce((acc, val) => acc + val, 0);
 
+  // CALCULA TOTAL DE DOAÇÕES
+  const totalDonations = sales.reduce((acc, s) => acc + Number(s.donation_amount || 0), 0);
+
   return {
     totalRevenue,
     totalSalesCount: sales.length,
@@ -99,6 +102,7 @@ const fetchFinancialSummary = async (startDate?: string, endDate?: string) => {
     potentialRevenueValue,
     totalPointsDistributed,
     activeLoyaltyUsers,
+    totalDonations,
     rawProducts: products || [],
     rawPromos: promos || []
   };
@@ -205,6 +209,17 @@ const DashboardPage = () => {
           <CardContent>
             <div className="text-2xl font-bold text-yellow-700">{stats?.totalPointsDistributed?.toLocaleString()} pts</div>
             <p className="text-xs text-muted-foreground">{stats?.activeLoyaltyUsers} clientes com saldo</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-rose-500 shadow-sm bg-rose-50/10">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total de Doações</CardTitle>
+            <Info className="h-4 w-4 text-rose-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-rose-700">{formatCurrency(stats?.totalDonations || 0)}</div>
+            <p className="text-xs text-muted-foreground">Arrecadado no período</p>
           </CardContent>
         </Card>
 
