@@ -86,6 +86,9 @@ const Sidebar = () => {
         <NavLink to="/dashboard/orders" className={navLinkClass}>
           {({ isActive }) => (<><DollarSign className={iconClass("text-green-600", isActive)} />Pedidos (Clientes)</>)}
         </NavLink>
+        <NavLink to="/dashboard/donations" className={navLinkClass}>
+          {({ isActive }) => (<><Heart className={iconClass("text-rose-600", isActive)} />Doações</>)}
+        </NavLink>
         <NavLink to="/dashboard/supplier-orders" className={navLinkClass}>
           {({ isActive }) => (<><Truck className={iconClass("text-green-600", isActive)} />Pedidos (Fornecedor)</>)}
         </NavLink>
