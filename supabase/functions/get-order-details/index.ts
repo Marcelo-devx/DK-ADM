@@ -94,13 +94,40 @@ serve(async (req) => {
         userEmail = userData?.user?.email;
     }
 
+    // 6. CALCULAR TOTAL CORRETO (em tempo de resposta)
+    // Compute subtotal from order_items, then add shipping + donation and subtract coupon discount.
+    const items = Array.isArray(order.order_items) ? order.order_items : [];
+    const subtotal = items.reduce((acc, it) => {
+        const price = Number(it?.price_at_purchase ?? 0);
+        const qty = Number(it?.quantity ?? 0);
+        return acc + (price * qty);
+    }, 0);
+
+    const shippingCost = Number(order.shipping_cost ?? 0);
+    const donationAmount = Number(order.donation_amount ?? 0);
+    const couponDiscount = Number(order.coupon_discount ?? 0);
+
+    const calculatedTotal = Number((subtotal + shippingCost + donationAmount - couponDiscount).toFixed(2));
+
     // Montar resposta final
     const responseData = {
+        // keep original order fields but preserve stored total on original_total
         ...order,
+        original_total: order.total_price ?? null,
+        // override total_price in response with calculated value (this fixes API reads)
+        total_price: calculatedTotal,
         customer_email: userEmail,
         profiles: {
             ...(profileData || {}),
             email: userEmail
+        },
+        // include breakdown for transparency
+        totals_breakdown: {
+          subtotal: Number(subtotal.toFixed(2)),
+          shipping_cost: shippingCost,
+          donation_amount: donationAmount,
+          coupon_discount: couponDiscount,
+          calculated_total: calculatedTotal
         }
     };
 
