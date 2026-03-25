@@ -95,26 +95,7 @@ serve(async (req) => {
 
     const { data: profiles, error: profilesError } = await supabaseAdmin
       .from('profiles')
-      .select(`
-        id, 
-        first_name, 
-        last_name, 
-        role, 
-        force_pix_on_next_purchase, 
-        updated_at, 
-        created_at, 
-        accepted_terms_at,
-        phone,
-        cpf_cnpj,
-        street,
-        number,
-        neighborhood,
-        city,
-        state,
-        cep,
-        date_of_birth,
-        gender
-      `);
+      .select('id, first_name, last_name, role, force_pix_on_next_purchase, updated_at, created_at');
       
     if (profilesError) {
       console.error('[get-users] Erro ao buscar perfis:', profilesError);
@@ -148,23 +129,6 @@ serve(async (req) => {
 
     const clients = allUsers.map(u => {
       const p = profilesMap.get(u.id) || {};
-      
-      // Verificar se o cliente está 100% completo
-      const isFullyVerified = 
-        p.first_name && 
-        p.last_name && 
-        p.phone && 
-        p.cpf_cnpj &&
-        p.street && 
-        p.number && 
-        p.neighborhood && 
-        p.city && 
-        p.state && 
-        p.cep &&
-        p.date_of_birth &&
-        p.gender &&
-        p.accepted_terms_at;
-
       return {
         id: u.id,
         email: u.email,
@@ -176,8 +140,6 @@ serve(async (req) => {
         force_pix_on_next_purchase: p.force_pix_on_next_purchase || false,
         order_count: orderCountMap.get(u.id) || 0,
         completed_order_count: completedOrderMap.get(u.id) || 0,
-        accepted_terms_at: p.accepted_terms_at || null,
-        is_fully_verified: !!isFullyVerified, // ← Adicionado campo de verificação completa
       };
     });
 
