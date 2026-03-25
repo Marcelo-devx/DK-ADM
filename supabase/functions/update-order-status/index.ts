@@ -61,9 +61,9 @@ serve(async (req) => {
     const updateData: any = {};
     if (status) {
       updateData.status = status;
-      // Se o status for 'Pago', força a validação manual.
+      // Se o status for 'Pago', vai direto para 'Aguardando Coleta' (estado normal de pedido pago)
       if (status === 'Pago') {
-        updateData.delivery_status = 'Aguardando Validação';
+        updateData.delivery_status = 'Aguardando Coleta';
       }
     } else if (delivery_status) {
       updateData.delivery_status = delivery_status;
