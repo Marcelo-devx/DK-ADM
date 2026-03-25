@@ -54,7 +54,8 @@ interface Client {
   force_pix_on_next_purchase: boolean;
   order_count: number;
   completed_order_count: number;
-  accepted_terms_at: string | null; // ← Adicionado para verificar termos
+  accepted_terms_at: string | null;
+  is_fully_verified?: boolean;
 }
 
 const fetchClients = async (): Promise<Client[]> => {
@@ -266,7 +267,7 @@ const ClientsPage = () => {
               filteredClients.map((client) => (
                 <TableRow key={client.id}>
                   <TableCell className="font-medium flex items-center gap-2">
-                    {client.accepted_terms_at ? (
+                    {client.is_fully_verified ? (
                       <Badge className="bg-blue-600 text-white text-[10px] px-1.5 py-0.5 h-5 flex items-center gap-1">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                         Verificado
