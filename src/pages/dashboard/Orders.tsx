@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../../integrations/supabase/client";
 import {
@@ -156,6 +156,30 @@ const OrdersPage = () => {
     queryFn: fetchOrders,
     refetchInterval: 30000, 
   });
+
+  // ADDING REALTIME SUBSCRIPTION
+  useEffect(() => {
+    const channel = supabase
+      .channel('orders-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Escuta INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'orders'
+        },
+        (payload) => {
+          console.log('[Realtime] Pedido atualizado:', payload);
+          // Invalida a query para refrescar a lista
+          queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]); // Recria se o queryClient mudar
 
   const filteredOrders = useMemo(() => {
     return orders?.filter(order => {
