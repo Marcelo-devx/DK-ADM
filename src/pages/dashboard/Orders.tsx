@@ -546,7 +546,7 @@ const OrdersPage = () => {
                     <TableRow><TableCell colSpan={9}><Skeleton className="h-10 w-full" /></TableCell></TableRow>
                 ) : filteredOrders.map((order) => {
                     const isPaid = order.status === "Finalizada" || order.status === "Pago";
-                    const needsManualValidation = order.status === 'Pago' && order.delivery_status === 'Aguardando Validação';
+                    const needsManualValidation = order.status === 'Pago' && order.delivery_status === 'Aguardando Validação'; // Mantém para pedidos antigos
                     const isInRoute = order.delivery_status === "Despachado";
                     const isSelected = selectedIds.has(order.id);
                     const isNextRoute = checkIsNextRoute(order.created_at);
@@ -563,6 +563,44 @@ const OrdersPage = () => {
                     
                     const phone = order.profiles?.phone;
                     const name = order.profiles?.first_name || "Cliente";
+
+                    // Lógica de badge de status atualizada
+                    let statusBadge;
+                    if (order.status === 'Pago' && (order.delivery_status === 'Aguardando Coleta' || order.delivery_status === 'Pendente')) {
+                        statusBadge = (
+                            <Badge variant="secondary" className="bg-green-100 text-green-800">
+                                Pago
+                            </Badge>
+                        );
+                    } else if (needsManualValidation) {
+                        statusBadge = (
+                            <Badge variant="destructive" className="bg-orange-500 hover:bg-orange-600 gap-1">
+                                <ShieldCheck className="w-3 h-3" /> Aguardando Validação
+                            </Badge>
+                        );
+                    } else {
+                        statusBadge = (
+                            <Badge variant="secondary" className={cn("text-[10px] w-fit", isPaid && "bg-green-100 text-green-800")}>
+                                {order.status}
+                            </Badge>
+                        );
+                    }
+
+                    // Lógica de badge de entrega
+                    let deliveryBadge;
+                    if (needsManualValidation) {
+                        deliveryBadge = <Badge variant="outline" className="text-gray-400 border-gray-200">Bloqueado</Badge>;
+                    } else {
+                        deliveryBadge = (
+                            <Badge variant="secondary" className={cn(
+                                "w-fit",
+                                order.delivery_status === 'Entregue' && "bg-green-100 text-green-800",
+                                order.delivery_status === 'Despachado' && "bg-blue-100 text-blue-800 animate-pulse"
+                            )}>
+                                {order.delivery_status}
+                            </Badge>
+                        );
+                    }
 
                     return (
                     <TableRow key={order.id} className={cn(
@@ -644,28 +682,10 @@ const OrdersPage = () => {
                         </TableCell>
                         <TableCell className="font-bold">{formatCurrency(finalTotal)}</TableCell>
                         <TableCell>
-                          {needsManualValidation ? (
-                              <Badge variant="destructive" className="bg-orange-500 hover:bg-orange-600 gap-1">
-                                  <ShieldCheck className="w-3 h-3" /> Aguardando Validação
-                              </Badge>
-                          ) : (
-                              <Badge variant="secondary" className={cn("text-[10px] w-fit", isPaid && "bg-green-100 text-green-800")}>
-                                  {order.status}
-                              </Badge>
-                          )}
+                          {statusBadge}
                         </TableCell>
                         <TableCell>
-                            {needsManualValidation ? (
-                                <Badge variant="outline" className="text-gray-400 border-gray-200">Bloqueado</Badge>
-                            ) : (
-                                <Badge variant="secondary" className={cn(
-                                    "w-fit",
-                                    order.delivery_status === 'Entregue' && "bg-green-100 text-green-800",
-                                    order.delivery_status === 'Despachado' && "bg-blue-100 text-blue-800 animate-pulse"
-                                )}>
-                                    {order.delivery_status}
-                                </Badge>
-                            )}
+                            {deliveryBadge}
                         </TableCell>
                         <TableCell>
                             <Badge variant="outline" className={cn("gap-1 pr-3 w-fit", paymentDetails.style)}>

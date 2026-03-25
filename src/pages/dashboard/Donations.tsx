@@ -23,12 +23,12 @@ interface DonationOrder {
 }
 
 const fetchDonations = async (): Promise<DonationOrder[]> => {
-  // 1. Busca pedidos com doação > 0 e que foram pagos
+  // 1. Busca pedidos com doação > 0 e status PAGO APENAS
   const { data: orders, error } = await supabase
     .from("orders")
     .select("id, donation_amount, created_at, status, user_id")
     .gt('donation_amount', 0)
-    .in('status', ['Pago', 'Finalizada'])
+    .eq('status', 'Pago') // ← AGORA APENAS PAGO
     .order('created_at', { ascending: false });
 
   if (error) throw error;

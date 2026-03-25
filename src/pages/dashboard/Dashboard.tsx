@@ -31,10 +31,10 @@ import {
 } from "@/components/ui/tooltip";
 
 const fetchFinancialSummary = async (startDate?: string, endDate?: string) => {
-  // 1. Busca pedidos de clientes no período
+  // 1. Busca pedidos de clientes no período (para faturamento geral)
   let salesQuery = supabase
     .from("orders")
-    .select("total_price, coupon_discount, created_at, payment_method, donation_amount")
+    .select("total_price, coupon_discount, created_at, payment_method, donation_amount, status")
     .in("status", ["Finalizada", "Pago"]);
 
   if (startDate) salesQuery = salesQuery.gte("created_at", startDate);
@@ -87,8 +87,9 @@ const fetchFinancialSummary = async (startDate?: string, endDate?: string) => {
     ...(promos || []).map(p => (p.stock_quantity * (p.price || 0)))
   ].reduce((acc, val) => acc + val, 0);
 
-  // CALCULA TOTAL DE DOAÇÕES
-  const totalDonations = sales.reduce((acc, s) => acc + Number(s.donation_amount || 0), 0);
+  // CALCULA TOTAL DE DOAÇÕES - APENAS DE PEDIDOS PAGOS
+  const paidSales = sales.filter(s => s.status === 'Pago');
+  const totalDonations = paidSales.reduce((acc, s) => acc + Number(s.donation_amount || 0), 0);
 
   return {
     totalRevenue,
