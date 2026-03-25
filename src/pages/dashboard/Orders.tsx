@@ -366,7 +366,10 @@ const OrdersPage = () => {
                   "Valor Total Venda": totalSale,
                   "Valor Total Custo": totalCost,
                   "Lucro": profit,
-                  "Forma de Pagamento": order.payment_method || "Pix"
+                  "Forma de Pagamento": order.payment_method || "Pix",
+                  "Frete": order.shipping_cost || 0,
+                  "Doação": order.donation_amount || 0,
+                  "Total Pedido": (Number(order.total_price) || 0) + (Number(order.shipping_cost) || 0) + (Number(order.donation_amount) || 0)
               });
           });
       });
@@ -518,7 +521,7 @@ const OrdersPage = () => {
                     const isNextRoute = checkIsNextRoute(order.created_at);
                     const paymentDetails = getPaymentMethodDetails(order.payment_method);
                     const PaymentIcon = paymentDetails.icon;
-                    const finalTotal = order.total_price + (order.shipping_cost || 0);
+                    const finalTotal = (Number(order.total_price) || 0) + (Number(order.shipping_cost) || 0) + (Number(order.donation_amount) || 0);
                     
                     const phone = order.profiles?.phone;
                     const name = order.profiles?.first_name || "Cliente";

@@ -259,6 +259,7 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                             ) : (
                                 <Accordion type="single" collapsible className="w-full space-y-2">
                                     {orders.map((order: any) => (
+                                        // switched to block body so we can compute subtotal and totals
                                         <AccordionItem key={order.id} value={String(order.id)} className="border rounded-lg bg-white overflow-hidden shadow-sm">
                                             <AccordionTrigger className="px-4 py-3 hover:bg-slate-50 hover:no-underline">
                                                 <div className="flex items-center justify-between w-full pr-4">
@@ -272,38 +273,72 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                                                         </span>
                                                     </div>
                                                     <div className="text-right">
-                                                        <span className="font-black text-slate-800">{formatCurrency(order.total_price)}</span>
-                                                        <p className="text-[10px] text-muted-foreground uppercase">{order.payment_method || 'Pix'}</p>
+                                                        {/** Mostrar total completo: itens + frete + doação - cupom */}
+                                                        {(() => {
+                                                            const itemsSubtotal = (order.order_items || []).reduce((acc: number, it: any) => acc + (Number(it.price_at_purchase) || 0) * (Number(it.quantity) || 0), 0);
+                                                            const shipping = Number(order.shipping_cost) || 0;
+                                                            const donation = Number(order.donation_amount) || 0;
+                                                            const coupon = Number(order.coupon_discount) || 0;
+                                                            const orderTotal = itemsSubtotal + shipping + donation - coupon;
+                                                            return (
+                                                                <>
+                                                                    <span className="font-black text-slate-800">{formatCurrency(orderTotal)}</span>
+                                                                    <p className="text-[10px] text-muted-foreground uppercase">{order.payment_method || 'Pix'}</p>
+                                                                </>
+                                                            );
+                                                        })()}
                                                     </div>
                                                 </div>
                                             </AccordionTrigger>
                                             <AccordionContent className="px-4 pb-4 bg-slate-50/50 border-t">
                                                 <div className="pt-3 space-y-3">
-                                                    <p className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-1">
-                                                        <Package className="w-3 h-3" /> Itens Comprados ({order.order_items.length})
-                                                    </p>
-                                                    <div className="space-y-2">
-                                                        {order.order_items.map((item: any, idx: number) => (
-                                                            <div key={idx} className="flex items-center gap-3 bg-white p-2 rounded border border-slate-100">
-                                                                {item.image_url_at_purchase ? (
-                                                                    <img src={item.image_url_at_purchase} alt="" className="w-10 h-10 rounded object-cover border" />
-                                                                ) : (
-                                                                    <div className="w-10 h-10 rounded bg-slate-100 flex items-center justify-center border">
-                                                                        <ShoppingBag className="w-4 h-4 text-slate-300" />
+                                                    {/** breakdown: subtotal, frete, doação, cupom, total */}
+                                                    {(() => {
+                                                        const itemsSubtotal = (order.order_items || []).reduce((acc: number, it: any) => acc + (Number(it.price_at_purchase) || 0) * (Number(it.quantity) || 0), 0);
+                                                        const shipping = Number(order.shipping_cost) || 0;
+                                                        const donation = Number(order.donation_amount) || 0;
+                                                        const coupon = Number(order.coupon_discount) || 0;
+                                                        const orderTotal = itemsSubtotal + shipping + donation - coupon;
+                                                        return (
+                                                            <>
+                                                                <div className="flex justify-end mb-2">
+                                                                    <div className="text-sm text-slate-700 bg-white p-2 rounded shadow-sm border">
+                                                                        <div className="flex justify-between"><span className="text-xs text-muted-foreground">Subtotal</span><span>{formatCurrency(itemsSubtotal)}</span></div>
+                                                                        <div className="flex justify-between"><span className="text-xs text-muted-foreground">Frete</span><span>{formatCurrency(shipping)}</span></div>
+                                                                        {donation > 0 && <div className="flex justify-between text-rose-600 font-medium"><span className="text-xs">Doação</span><span>{formatCurrency(donation)}</span></div>}
+                                                                        {coupon > 0 && <div className="flex justify-between text-green-600 font-medium"><span className="text-xs">Desconto</span><span>-{formatCurrency(coupon)}</span></div>}
+                                                                        <div className="flex justify-between mt-1 font-bold"><span>Total</span><span>{formatCurrency(orderTotal)}</span></div>
                                                                     </div>
-                                                                )}
-                                                                <div className="flex-1">
-                                                                    <p className="text-sm font-medium text-slate-800 line-clamp-1">{item.name_at_purchase}</p>
-                                                                    <p className="text-xs text-slate-500">
-                                                                        {item.quantity} un. x {formatCurrency(item.price_at_purchase)}
-                                                                    </p>
                                                                 </div>
-                                                                <div className="font-bold text-sm text-slate-700">
-                                                                    {formatCurrency(item.quantity * item.price_at_purchase)}
+
+                                                                <p className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-1">
+                                                                    <Package className="w-3 h-3" /> Itens Comprados ({order.order_items.length})
+                                                                </p>
+                                                                <div className="space-y-2">
+                                                                    {order.order_items.map((item: any, idx: number) => (
+                                                                        <div key={idx} className="flex items-center gap-3 bg-white p-2 rounded border border-slate-100">
+                                                                            {item.image_url_at_purchase ? (
+                                                                                <img src={item.image_url_at_purchase} alt="" className="w-10 h-10 rounded object-cover border" />
+                                                                            ) : (
+                                                                                <div className="w-10 h-10 rounded bg-slate-100 flex items-center justify-center border">
+                                                                                    <ShoppingBag className="w-4 h-4 text-slate-300" />
+                                                                                </div>
+                                                                            )}
+                                                                            <div className="flex-1">
+                                                                                <p className="text-sm font-medium text-slate-800 line-clamp-1">{item.name_at_purchase}</p>
+                                                                                <p className="text-xs text-slate-500">
+                                                                                    {item.quantity} un. x {formatCurrency(item.price_at_purchase)}
+                                                                                </p>
+                                                                            </div>
+                                                                            <div className="font-bold text-sm text-slate-700">
+                                                                                {formatCurrency(item.quantity * item.price_at_purchase)}
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
                                                                 </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
+                                                            </>
+                                                        );
+                                                    })()}
                                                 </div>
                                             </AccordionContent>
                                         </AccordionItem>
