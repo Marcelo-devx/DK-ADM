@@ -58,86 +58,13 @@ interface Client {
 }
 
 const fetchClients = async (): Promise<Client[]> => {
-  // Ensure we include current user's access token so the edge function can authenticate and authorize
-  const { data: sessionData } = await supabase.auth.getSession();
-  const token = sessionData?.session?.access_token;
-  if (!token) throw new Error('Usuário não autenticado. Faça login novamente.');
-
-  const { data: profiles, error: profilesError } = await supabase
-    .from('profiles')
-    .select('id, first_name, last_name, role, force_pix_on_next_purchase, updated_at, created_at, accepted_terms_at');
-
-  const { data: users, error: usersError } = await supabase
-    .from('users')
-    .select('id, email, created_at, updated_at, first_name, last_name, role');
-
-  if (usersError) {
-    // The edge function returns structured errors; include details when available
-    const message = usersError?.message || 'Erro desconhecido';
-    throw new Error(`Falha ao buscar clientes: ${message}`);
-  }
-
-  const allUsers = users || [];
+  const { data, error } = await supabase.functions.invoke('get-users');
   
-  // Type the profiles data properly
-  type ProfileData = {
-    id: string;
-    first_name: string | null;
-    last_name: string | null;
-    role: string;
-    force_pix_on_next_purchase: boolean;
-    updated_at: string | null;
-    created_at: string | null;
-    accepted_terms_at: string | null;
-  };
+  if (error) {
+    throw new Error(error.message || 'Erro ao buscar clientes');
+  }
   
-  const profilesMap = new Map<string, ProfileData>((profiles as ProfileData[] || []).map(p => [p.id, p]));
-  const orderCountMap = new Map(allUsers.map(u => [u.id, 0]));
-  const completedOrderMap = new Map(allUsers.map(u => [u.id, 0]));
-
-  // Count orders for each user
-  for (const user of allUsers) {
-    const userId = user.id;
-    const userOrders = await supabase
-      .from('orders')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
-
-    orderCountMap.set(userId, userOrders.data.length);
-  }
-
-  // Count completed orders for each user
-  for (const user of allUsers) {
-    const userId = user.id;
-    const userOrders = await supabase
-      .from('orders')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('status', 'completed')
-      .order('created_at', { ascending: false });
-
-    completedOrderMap.set(userId, userOrders.data.length);
-  }
-
-  const clients = allUsers.map(u => {
-    const p = profilesMap.get(u.id) || {} as ProfileData;
-    return {
-      id: u.id,
-      email: u.email,
-      created_at: p.created_at || u.created_at, 
-      updated_at: p.updated_at || null,
-      first_name: p.first_name || null,
-      last_name: p.last_name || null,
-      role: (p.role || 'user') as 'user' | 'adm',
-      force_pix_on_next_purchase: p.force_pix_on_next_purchase || false,
-      order_count: orderCountMap.get(u.id) || 0,
-      completed_order_count: completedOrderMap.get(u.id) || 0,
-      accepted_terms_at: p.accepted_terms_at || null,
-    };
-  });
-
-  return clients;
+  return data || [];
 };
 
 const ClientsPage = () => {

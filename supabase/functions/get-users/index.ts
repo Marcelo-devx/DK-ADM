@@ -95,7 +95,7 @@ serve(async (req) => {
 
     const { data: profiles, error: profilesError } = await supabaseAdmin
       .from('profiles')
-      .select('id, first_name, last_name, role, force_pix_on_next_purchase, updated_at, created_at');
+      .select('id, first_name, last_name, role, force_pix_on_next_purchase, updated_at, created_at, accepted_terms_at');
       
     if (profilesError) {
       console.error('[get-users] Erro ao buscar perfis:', profilesError);
@@ -140,6 +140,7 @@ serve(async (req) => {
         force_pix_on_next_purchase: p.force_pix_on_next_purchase || false,
         order_count: orderCountMap.get(u.id) || 0,
         completed_order_count: completedOrderMap.get(u.id) || 0,
+        accepted_terms_at: p.accepted_terms_at || null,
       };
     });
 
