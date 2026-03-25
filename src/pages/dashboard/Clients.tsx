@@ -89,7 +89,7 @@ const ClientsPage = () => {
     client: Client;
   } | null>(null);
 
-  const { data: clients, isLoading, error } = useQuery<Client[]>({
+  const { data: clients, isLoading, error, refetch } = useQuery<Client[]>({
     queryKey: ["clients"],
     queryFn: fetchClients,
   });
@@ -261,7 +261,13 @@ const ClientsPage = () => {
             ) : error ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center text-red-500">
-                  Erro ao carregar clientes.
+                  <div className="space-y-2">
+                    <div>Erro ao carregar clientes:</div>
+                    <div className="text-sm text-red-600">{(error as Error)?.message}</div>
+                    <div className="flex justify-center">
+                      <Button onClick={() => refetch()}>Tentar novamente</Button>
+                    </div>
+                  </div>
                 </TableCell>
               </TableRow>
             ) : filteredClients && filteredClients.length > 0 ? (
