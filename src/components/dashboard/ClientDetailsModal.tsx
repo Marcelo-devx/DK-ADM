@@ -273,25 +273,14 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                                                         </span>
                                                     </div>
                                                     <div className="text-right">
-                                                        {/** Prefer the stored order.total_price when available (authoritative). If breakdown doesn't sum up to it, adjust displayed subtotal to match authoritative total. */}
+                                                        {/** Compute total as items subtotal + shipping + donation - coupon */}
                                                         {(() => {
                                                             const itemsSubtotalRaw = (order.order_items || []).reduce((acc: number, it: any) => acc + (Number(it.price_at_purchase) || 0) * (Number(it.quantity) || 0), 0);
                                                             const shipping = Number(order.shipping_cost) || 0;
                                                             const donation = Number(order.donation_amount) || 0;
                                                             const coupon = Number(order.coupon_discount) || 0;
 
-                                                            const authoritativeTotal = typeof order.total_price !== "undefined" && order.total_price !== null
-                                                                ? Number(order.total_price)
-                                                                : itemsSubtotalRaw + shipping + donation - coupon;
-
-                                                            const breakdownTotal = itemsSubtotalRaw + shipping + donation - coupon;
-
-                                                            // If breakdown differs significantly from authoritative, recompute subtotal to make the breakdown match authoritative total
-                                                            const itemsSubtotal = Math.abs(authoritativeTotal - breakdownTotal) > 0.01
-                                                                ? (authoritativeTotal - shipping - donation + coupon)
-                                                                : itemsSubtotalRaw;
-
-                                                            const orderTotal = itemsSubtotal + shipping + donation - coupon;
+                                                            const orderTotal = itemsSubtotalRaw + shipping + donation - coupon;
 
                                                             return (
                                                                 <>
@@ -305,30 +294,20 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                                             </AccordionTrigger>
                                             <AccordionContent className="px-4 pb-4 bg-slate-50/50 border-t">
                                                 <div className="pt-3 space-y-3">
-                                                    {/** breakdown: subtotal, frete, doação, cupom, total (use authoritative order.total_price when available) */}
+                                                    {/** breakdown: subtotal, frete, doação, cupom, total (composition: items + shipping + donation - coupon) */}
                                                     {(() => {
                                                         const itemsSubtotalRaw = (order.order_items || []).reduce((acc: number, it: any) => acc + (Number(it.price_at_purchase) || 0) * (Number(it.quantity) || 0), 0);
                                                         const shipping = Number(order.shipping_cost) || 0;
                                                         const donation = Number(order.donation_amount) || 0;
                                                         const coupon = Number(order.coupon_discount) || 0;
 
-                                                        const authoritativeTotal = typeof order.total_price !== "undefined" && order.total_price !== null
-                                                            ? Number(order.total_price)
-                                                            : itemsSubtotalRaw + shipping + donation - coupon;
-
-                                                        const breakdownTotal = itemsSubtotalRaw + shipping + donation - coupon;
-
-                                                        const itemsSubtotal = Math.abs(authoritativeTotal - breakdownTotal) > 0.01
-                                                            ? (authoritativeTotal - shipping - donation + coupon)
-                                                            : itemsSubtotalRaw;
-
-                                                        const orderTotal = itemsSubtotal + shipping + donation - coupon;
+                                                        const orderTotal = itemsSubtotalRaw + shipping + donation - coupon;
 
                                                         return (
                                                             <>
                                                                 <div className="flex justify-end mb-2">
                                                                     <div className="text-sm text-slate-700 bg-white p-2 rounded shadow-sm border">
-                                                                        <div className="flex justify-between"><span className="text-xs text-muted-foreground">Subtotal</span><span>{formatCurrency(itemsSubtotal)}</span></div>
+                                                                        <div className="flex justify-between"><span className="text-xs text-muted-foreground">Subtotal</span><span>{formatCurrency(itemsSubtotalRaw)}</span></div>
                                                                         <div className="flex justify-between"><span className="text-xs text-muted-foreground">Frete</span><span>{formatCurrency(shipping)}</span></div>
                                                                         {donation > 0 && <div className="flex justify-between text-rose-600 font-medium"><span className="text-xs">Doação</span><span>{formatCurrency(donation)}</span></div>}
                                                                         {coupon > 0 && <div className="flex justify-between text-green-600 font-medium"><span className="text-xs">Desconto</span><span>-{formatCurrency(coupon)}</span></div>}

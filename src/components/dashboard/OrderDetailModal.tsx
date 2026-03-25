@@ -84,10 +84,10 @@ export const OrderDetailModal = ({ order, isOpen, onClose }: OrderDetailModalPro
     enabled: isOpen && !!order.user_id,
   });
 
-  const subtotal = items?.reduce((acc, item) => acc + item.price_at_purchase * item.quantity, 0) || 0;
+  const subtotal = items?.reduce((acc, item) => acc + (Number(item.price_at_purchase) || 0) * (Number(item.quantity) || 0), 0) || 0;
 
-  // O total que o cliente realmente pagou (incluindo frete e doação)
-  const finalPaidTotal = order.total_price + (order.shipping_cost || 0) + (order.donation_amount || 0);
+  // O total composto: subtotal dos itens + frete + doação - desconto de cupom
+  const finalPaidTotal = subtotal + (Number(order.shipping_cost) || 0) + (Number(order.donation_amount) || 0) - (Number(order.coupon_discount) || 0);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -174,7 +174,7 @@ export const OrderDetailModal = ({ order, isOpen, onClose }: OrderDetailModalPro
             ) : (
               <div className="border rounded-lg overflow-hidden">
                 {items?.map((item, index) => (
-                  <div key={item.id} className={`flex items-center justify-between p-3 bg-white ${index !== items.length - 1 ? 'border-b' : ''}`}>
+                  <div key={item.id} className={`flex items-center justify-between p-3 bg-white ${index !== items.length - 1 ? 'border-b' : ''}`} >
                     <div className="flex items-center gap-4">
                       <div className="h-12 w-12 rounded-md border bg-gray-50 flex items-center justify-center overflow-hidden shrink-0">
                           {item.image_url_at_purchase ? (
