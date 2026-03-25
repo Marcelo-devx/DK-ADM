@@ -350,28 +350,42 @@ const OrdersPage = () => {
       const rows: any[] = [];
 
       ordersToExport.forEach(order => {
-          order.order_items.forEach((item: any) => {
-              const unitCost = (item.item_type === 'product' && item.item_id) ? (costsMap.get(item.item_id) || 0) : 0;
-              const totalCost = unitCost * item.quantity;
-              const totalSale = item.price_at_purchase * item.quantity;
-              const profit = totalSale - totalCost;
+        // compute breakdown just like in the UI so exported totals match what user sees
+        const itemsSubtotalRawEx = (order.order_items || []).reduce((acc: number, it: any) => acc + (Number(it.price_at_purchase) || 0) * (Number(it.quantity) || 0), 0);
+        const shippingEx = Number(order.shipping_cost) || 0;
+        const donationEx = Number(order.donation_amount) || 0;
+        const couponEx = Number(order.coupon_discount) || 0;
+        const authoritativeTotalEx = typeof order.total_price !== "undefined" && order.total_price !== null
+            ? Number(order.total_price)
+            : itemsSubtotalRawEx + shippingEx + donationEx - couponEx;
+        const breakdownTotalEx = itemsSubtotalRawEx + shippingEx + donationEx - couponEx;
+        const itemsSubtotalEx = Math.abs(authoritativeTotalEx - breakdownTotalEx) > 0.01
+            ? (authoritativeTotalEx - shippingEx - donationEx + couponEx)
+            : itemsSubtotalRawEx;
 
-              rows.push({
-                  "Número do Pedido": order.id,
-                  "Cliente": `${order.profiles?.first_name || ''} ${order.profiles?.last_name || ''}`.trim(),
-                  "Data": new Date(order.created_at).toLocaleDateString("pt-BR"),
-                  "Produto": item.name_at_purchase,
-                  "Quantidade": item.quantity,
-                  "Custo Unitário": unitCost,
-                  "Valor Total Venda": totalSale,
-                  "Valor Total Custo": totalCost,
-                  "Lucro": profit,
-                  "Forma de Pagamento": order.payment_method || "Pix",
-                  "Frete": order.shipping_cost || 0,
-                  "Doação": order.donation_amount || 0,
-                  "Total Pedido": (Number(order.total_price) || 0) + (Number(order.shipping_cost) || 0) + (Number(order.donation_amount) || 0)
-              });
-          });
+        order.order_items.forEach((item: any) => {
+            const unitCost = (item.item_type === 'product' && item.item_id) ? (costsMap.get(item.item_id) || 0) : 0;
+            const totalCost = unitCost * item.quantity;
+            const totalSale = (Number(item.price_at_purchase) || 0) * item.quantity;
+            const profit = totalSale - totalCost;
+
+            rows.push({
+                "Número do Pedido": order.id,
+                "Cliente": `${order.profiles?.first_name || ''} ${order.profiles?.last_name || ''}`.trim(),
+                "Data": new Date(order.created_at).toLocaleDateString("pt-BR"),
+                "Produto": item.name_at_purchase,
+                "Quantidade": item.quantity,
+                "Custo Unitário": unitCost,
+                "Valor Total Venda": totalSale,
+                "Valor Total Custo": totalCost,
+                "Lucro": profit,
+                "Forma de Pagamento": order.payment_method || "Pix",
+                "Frete": shippingEx,
+                "Doação": donationEx,
+                // Use authoritative order total for export if present, otherwise sum components
+                "Total Pedido": authoritativeTotalEx
+            });
+        });
       });
 
       const worksheet = XLSX.utils.json_to_sheet(rows);
@@ -521,7 +535,25 @@ const OrdersPage = () => {
                     const isNextRoute = checkIsNextRoute(order.created_at);
                     const paymentDetails = getPaymentMethodDetails(order.payment_method);
                     const PaymentIcon = paymentDetails.icon;
-                    const finalTotal = (Number(order.total_price) || 0) + (Number(order.shipping_cost) || 0) + (Number(order.donation_amount) || 0);
+                    
+                    // Prefer order.total_price when present (authoritative). If breakdown differs, derive subtotal to match authoritative total.
+                    const itemsSubtotalRaw = (order.order_items || []).reduce((acc: number, it: any) => acc + (Number(it.price_at_purchase) || 0) * (Number(it.quantity) || 0), 0);
+                    const shipping = Number(order.shipping_cost) || 0;
+                    const donation = Number(order.donation_amount) || 0;
+                    const coupon = Number(order.coupon_discount) || 0;
+
+                    const authoritativeTotal = typeof order.total_price !== "undefined" && order.total_price !== null
+                        ? Number(order.total_price)
+                        : itemsSubtotalRaw + shipping + donation - coupon;
+
+                    const breakdownTotal = itemsSubtotalRaw + shipping + donation - coupon;
+
+                    // If breakdown differs, trust authoritative total and compute displayed subtotal accordingly
+                    const itemsSubtotal = Math.abs(authoritativeTotal - breakdownTotal) > 0.01
+                        ? (authoritativeTotal - shipping - donation + coupon)
+                        : itemsSubtotalRaw;
+
+                    const finalTotal = itemsSubtotal + shipping + donation - coupon;
                     
                     const phone = order.profiles?.phone;
                     const name = order.profiles?.first_name || "Cliente";
