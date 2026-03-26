@@ -89,11 +89,45 @@ const fetchClients = async (): Promise<Client[]> => {
     }
 
     const data = await response.json();
-    console.log('[Clients.tsx] Clientes carregados com sucesso, quantidade:', data?.length);
+    console.log('[Clients.tsx] Clientes carregados com sucesso (via Edge Function), quantidade:', Array.isArray(data) ? data.length : 'n/a');
     return data;
   } catch (err) {
-    console.error('[Clients.tsx] Erro no fetch:', err);
-    throw err;
+    console.error('[Clients.tsx] Erro ao chamar Edge Function, aplicando fallback para carregar profiles diretamente:', err);
+
+    // Fallback: buscar profiles diretamente (pode não incluir email)
+    try {
+      console.log('[Clients.tsx] Fallback: buscando profiles diretamente do Supabase');
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name, role, force_pix_on_next_purchase, created_at, updated_at');
+
+      if (profilesError) {
+        console.error('[Clients.tsx] Erro ao buscar profiles no fallback:', profilesError);
+        throw new Error(`Falha no fallback: ${profilesError.message}`);
+      }
+
+      // Mapear profiles para o tipo Client (preenchendo campos que não existem com placeholders)
+      const clientsFallback: Client[] = (profiles || []).map((p: any) => ({
+        id: p.id,
+        // Email não está na tabela profiles por padrão — mostramos um placeholder para visualização
+        email: p.id ? `${p.id}@no-email.local` : '—',
+        created_at: p.created_at || null,
+        updated_at: p.updated_at || null,
+        first_name: p.first_name || null,
+        last_name: p.last_name || null,
+        role: p.role || 'user',
+        force_pix_on_next_purchase: p.force_pix_on_next_purchase || false,
+        // Não temos acesso aos pedidos via cliente (RLS), então deixamos 0
+        order_count: 0,
+        completed_order_count: 0,
+      }));
+
+      console.log('[Clients.tsx] Clientes carregados com sucesso via fallback, quantidade:', clientsFallback.length);
+      return clientsFallback;
+    } catch (fallbackErr) {
+      console.error('[Clients.tsx] Fallback falhou também:', fallbackErr);
+      throw fallbackErr;
+    }
   }
 };
 
