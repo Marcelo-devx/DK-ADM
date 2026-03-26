@@ -2,17 +2,24 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.51.0'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Credentials': 'true',
+// Build CORS headers per-request so we can echo the request origin when credentials are used.
+// Browsers reject Access-Control-Allow-Origin: '*' together with Access-Control-Allow-Credentials: 'true',
+// so we must return the exact origin that made the request.
+function buildCorsHeaders(req: Request) {
+  const origin = req.headers.get('origin') || '*';
+  return {
+    'Access-Control-Allow-Origin': origin,
+    'Vary': 'Origin',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Credentials': 'true',
+  };
 }
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     // Respond to preflight with OK status and required CORS headers
-    return new Response(null, { status: 204, headers: corsHeaders })
+    return new Response(null, { status: 204, headers: buildCorsHeaders(req) })
   }
 
   try {
@@ -40,7 +47,7 @@ serve(async (req) => {
     
     if (!user) {
       console.log('[get-users] Usuário não autenticado');
-      return new Response(JSON.stringify({ error: 'Não autenticado' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: 'Não autenticado' }), { status: 401, headers: { ...buildCorsHeaders(req), 'Content-Type': 'application/json' } });
     }
 
     console.log('[get-users] Usuário autenticado:', user.id);
@@ -58,7 +65,7 @@ serve(async (req) => {
 
     if (!profile || profile.role !== 'adm') {
       console.log('[get-users] Usuário não é admin');
-      return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 403, headers: { ...buildCorsHeaders(req), 'Content-Type': 'application/json' } });
     }
 
     console.log('[get-users] Usuário autorizado como admin');
@@ -146,14 +153,14 @@ serve(async (req) => {
     console.log(`[get-users] Retornando ${clients.length} clientes`);
 
     return new Response(JSON.stringify(clients), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...buildCorsHeaders(req), 'Content-Type': 'application/json' },
       status: 200,
     })
   } catch (error) {
     console.error('[get-users] Erro geral:', error);
     return new Response(
       JSON.stringify({ error: 'Falha ao buscar dados dos clientes.', details: error.message }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      { headers: { ...buildCorsHeaders(req), 'Content-Type': 'application/json' }, status: 500 }
     )
   }
 })
