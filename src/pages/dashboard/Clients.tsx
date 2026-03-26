@@ -58,43 +58,34 @@ interface Client {
 
 const fetchClients = async (): Promise<Client[]> => {
   console.log('[Clients.tsx] Iniciando fetchClients');
-  
-  const { data: sessionData } = await supabase.auth.getSession();
-  const token = sessionData?.session?.access_token;
-  
-  console.log('[Clients.tsx] Token encontrado:', !!token);
-  
-  if (!token) throw new Error('Usuário não autenticado. Faça login novamente.');
 
-  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-  const functionUrl = `${SUPABASE_URL}/functions/v1/get-users`;
-  
-  console.log('[Clients.tsx] URL da função:', functionUrl);
-
+  // Tentativa preferencial: usar supabase.functions.invoke para chamar a Edge Function,
+  // assim o supabase-js cuida dos headers e do token da sessão.
   try {
-    const response = await fetch(functionUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+    console.log('[Clients.tsx] Chamando Edge Function via supabase.functions.invoke("get-users")');
+    const { data, error } = await supabase.functions.invoke('get-users', {
+      // sem body necessário
     });
 
-    console.log('[Clients.tsx] Status da resposta:', response.status, response.statusText);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[Clients.tsx] Erro na resposta:', response.status, errorText);
-      throw new Error(`Erro ${response.status}: ${errorText || 'Falha ao buscar clientes'}`);
+    if (error) {
+      console.error('[Clients.tsx] Erro retornado pela Edge Function (invoke):', error);
+      // preserva contexto para depuração
+      throw error;
     }
 
-    const data = await response.json();
-    console.log('[Clients.tsx] Clientes carregados com sucesso (via Edge Function), quantidade:', Array.isArray(data) ? data.length : 'n/a');
-    return data;
-  } catch (err) {
-    console.error('[Clients.tsx] Erro ao chamar Edge Function, aplicando fallback para carregar profiles diretamente:', err);
+    if (!data) {
+      console.warn('[Clients.tsx] Edge Function retornou sem dados.');
+      throw new Error('Edge Function retornou sem dados.');
+    }
 
-    // Fallback: buscar profiles diretamente (pode não incluir email)
+    // O retorno esperado é um array de clients
+    console.log('[Clients.tsx] Clientes carregados com sucesso (via Edge Function invoke), quantidade:', Array.isArray(data) ? data.length : 'n/a');
+    return data as Client[];
+  } catch (err) {
+    console.error('[Clients.tsx] Falha ao chamar Edge Function via invoke, aplicando fallback para carregar profiles diretamente:', err);
+
+    // Fallback: buscar profiles diretamente (pode não incluir email) — mas tentamos recuperar o email via auth.users NÃO é possível do cliente por RLS,
+    // então usamos o placeholder caso a Edge Function realmente não esteja disponível.
     try {
       console.log('[Clients.tsx] Fallback: buscando profiles diretamente do Supabase');
       const { data: profiles, error: profilesError } = await supabase
@@ -110,6 +101,7 @@ const fetchClients = async (): Promise<Client[]> => {
       const clientsFallback: Client[] = (profiles || []).map((p: any) => ({
         id: p.id,
         // Email não está na tabela profiles por padrão — mostramos um placeholder para visualização
+        // (a Edge Function é a forma correta de obter emails reais)
         email: p.id ? `${p.id}@no-email.local` : '—',
         created_at: p.created_at || null,
         updated_at: p.updated_at || null,
