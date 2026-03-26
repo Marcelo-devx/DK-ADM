@@ -2,14 +2,23 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+// Build CORS headers per-request so we can echo the request origin when credentials are used.
+// Browsers reject Access-Control-Allow-Origin: '*' together with Access-Control-Allow-Credentials: 'true',
+// so we must return the exact origin that made the request and include Vary: Origin.
+function buildCorsHeaders(req: Request) {
+  const origin = req.headers.get('origin') || '*';
+  return {
+    'Access-Control-Allow-Origin': origin,
+    'Vary': 'Origin',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Credentials': 'true',
+  };
 }
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response(null, { status: 204, headers: buildCorsHeaders(req) })
   }
 
   try {
@@ -32,7 +41,7 @@ serve(async (req) => {
 
     const { data: profile } = await supabaseAdmin.from('profiles').select('role').eq('id', user.id).single();
     if (profile?.role !== 'adm') {
-        return new Response(JSON.stringify({ error: 'Acesso negado.' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ error: 'Acesso negado.' }), { status: 403, headers: { ...buildCorsHeaders(req), 'Content-Type': 'application/json' } });
     }
 
     // Recebe os novos campos
@@ -76,18 +85,15 @@ serve(async (req) => {
         if (updateError) console.error("Erro ao atualizar perfil:", updateError);
     }
 
-    return new Response(
-      JSON.stringify({ message: `Cliente ${email} cadastrado com sucesso!` }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      }
-    )
+    return new Response(JSON.stringify({ message: `Cliente ${email} cadastrado com sucesso!` }), {
+      headers: { ...buildCorsHeaders(req), 'Content-Type': 'application/json' },
+      status: 200,
+    })
   } catch (error) {
     return new Response(
       JSON.stringify({ error: 'Falha ao processar criação.', details: error.message }),
       {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...buildCorsHeaders(req), 'Content-Type': 'application/json' },
         status: 500,
       }
     )
