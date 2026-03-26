@@ -100,6 +100,9 @@ const ClientsPage = () => {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
 
+  // Guarda detalhes brutos do erro da Edge Function para exibição (apenas para depuração)
+  const [rawEdgeError, setRawEdgeError] = useState<any>(null);
+  
   const [actionToConfirm, setActionToConfirm] = useState<{
     action: 'resend_confirmation' | 'send_password_reset' | 'delete_orders' | 'mark_as_recurrent';
     client: Client;
@@ -107,7 +110,19 @@ const ClientsPage = () => {
 
   const { data: clients, isLoading, error, refetch } = useQuery<Client[]>({
     queryKey: ["clients"],
-    queryFn: fetchClients,
+    // wrapper para capturar detalhes brutos do erro e colocá-los no estado para exibição
+    queryFn: async () => {
+      try {
+        const data = await fetchClients();
+        setRawEdgeError(null);
+        return data;
+      } catch (e: any) {
+        // Conservar qualquer informação extra (context, status, etc.) enviada pelo client/edge function
+        // para que possamos exibir no UI para depuração.
+        setRawEdgeError(e?.context ?? e);
+        throw e;
+      }
+    },
   });
 
   const createClientMutation = useMutation({
@@ -277,11 +292,42 @@ const ClientsPage = () => {
             ) : error ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center text-red-500">
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <div>Erro ao carregar clientes:</div>
                     <div className="text-sm text-red-600">{(error as Error)?.message}</div>
-                    <div className="flex justify-center">
+                    <div className="flex items-center justify-center space-x-2">
                       <Button onClick={() => refetch()}>Tentar novamente</Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          // Expõe instrução simples para o usuário inspecionar o console
+                          // e facilita cópia das informações brutas do erro (se existirem)
+                          if (rawEdgeError) {
+                            const payload = typeof rawEdgeError === 'string' ? rawEdgeError : JSON.stringify(rawEdgeError, null, 2);
+                            navigator.clipboard?.writeText(payload);
+                            showSuccess('Detalhes do erro copiados para a área de transferência.');
+                          } else {
+                            // Caso não haja dados brutos, copia apenas a mensagem
+                            navigator.clipboard?.writeText((error as Error)?.message || 'No details');
+                            showSuccess('Mensagem de erro copiada.');
+                          }
+                        }}
+                      >
+                        Copiar Debug
+                      </Button>
+                    </div>
+
+                    {rawEdgeError && (
+                      <div className="mt-2 text-left">
+                        <div className="text-xs text-muted-foreground mb-1">Detalhes brutos da Edge Function (para depuração):</div>
+                        <pre className="max-h-48 overflow-auto bg-gray-100 p-2 rounded text-xs">
+                          {typeof rawEdgeError === 'string' ? rawEdgeError : JSON.stringify(rawEdgeError, null, 2)}
+                        </pre>
+                      </div>
+                    )}
+
+                    <div className="text-xs text-muted-foreground">
+                      Dica: abra o DevTools (Console) para ver logs adicionais. Eu já escrevo detalhes no console ao chamar a Edge Function.
                     </div>
                   </div>
                 </TableCell>
