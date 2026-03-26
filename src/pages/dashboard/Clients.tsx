@@ -57,21 +57,37 @@ interface Client {
 }
 
 const fetchClients = async (): Promise<Client[]> => {
-  // Ensure we include the current user's access token so the edge function can authenticate and authorize
+  console.log('[Clients.tsx] Iniciando fetchClients');
+  
+  // Ensure we include current user's access token so edge function can authenticate and authorize
   const { data: sessionData } = await supabase.auth.getSession();
   const token = sessionData?.session?.access_token;
+  
+  console.log('[Clients.tsx] Token encontrado:', !!token);
+  
   if (!token) throw new Error('Usuário não autenticado. Faça login novamente.');
 
+  console.log('[Clients.tsx] Chamando edge function get-users');
+  
   const { data, error } = await supabase.functions.invoke("get-users", {
     headers: { Authorization: `Bearer ${token}` }
   });
 
+  console.log('[Clients.tsx] Resposta da edge function:', { data, error });
+
   if (error) {
+    console.error('[Clients.tsx] Erro completo da edge function:', error);
     // The edge function returns structured errors; include details when available
     const message = error?.message || 'Erro desconhecido';
+    console.error('[Clients.tsx] Detalhes do erro:', { 
+      message, 
+      context: error.context,
+      status: error.status 
+    });
     throw new Error(`Falha ao buscar clientes: ${message}`);
   }
 
+  console.log('[Clients.tsx] Clientes carregados com sucesso, quantidade:', data?.length);
   return data;
 };
 
