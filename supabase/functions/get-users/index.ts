@@ -125,9 +125,12 @@ serve(async (req) => {
     const orderCountMap = new Map();
     const completedOrderMap = new Map();
 
+    // Status que consideramos como "completo/pago"
+    const completedStatuses = ['Finalizada', 'Pago', 'Entregue', 'Concluída'];
+
     for (const order of allOrders) {
         orderCountMap.set(order.user_id, (orderCountMap.get(order.user_id) || 0) + 1);
-        if (order.status === 'Finalizada' || order.status === 'Pago') {
+        if (completedStatuses.includes(order.status)) {
             completedOrderMap.set(order.user_id, (completedOrderMap.get(order.user_id) || 0) + 1);
         }
     }
