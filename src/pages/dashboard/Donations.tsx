@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Heart, DollarSign, Users, Calendar, HandHeart, X, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface DonationOrder {
   id: number;
@@ -57,6 +58,7 @@ const fetchDonations = async (): Promise<DonationOrder[]> => {
 };
 
 export default function DonationsPage() {
+  const queryClient = useQueryClient();
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
@@ -64,6 +66,45 @@ export default function DonationsPage() {
     queryKey: ["donations-list-v4"],
     queryFn: fetchDonations,
   });
+
+  // Subscribe to real-time updates from orders table
+  useEffect(() => {
+    const channel = supabase
+      .channel('orders-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'orders',
+          filter: 'status=eq.Pago'
+        },
+        (payload) => {
+          console.log('[Donations] Pedido atualizado:', payload);
+          // Refetch donations when a paid order changes
+          queryClient.invalidateQueries({ queryKey: ["donations-list-v4"] });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'orders',
+          filter: 'status=eq.Pago'
+        },
+        (payload) => {
+          console.log('[Donations] Novo pedido pago criado:', payload);
+          // Refetch donations when a new paid order is created
+          queryClient.invalidateQueries({ queryKey: ["donations-list-v4"] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 
   const filteredDonations = useMemo(() => {
     if (!donations) return [];
