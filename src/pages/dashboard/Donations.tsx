@@ -82,8 +82,8 @@ export default function DonationsPage() {
         },
         (payload) => {
           try {
-            const newRow = payload?.new;
-            const oldRow = payload?.old;
+            const newRow = payload?.new as { donation_amount?: number; status?: string } | null;
+            const oldRow = payload?.old as { status?: string } | null;
             // If there's a donation amount and the status is a paid status, invalidate
             const donationAmount = Number(newRow?.donation_amount ?? 0);
             const status = newRow?.status || oldRow?.status;
