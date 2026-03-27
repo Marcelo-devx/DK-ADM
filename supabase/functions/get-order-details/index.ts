@@ -115,6 +115,15 @@ serve(async (req) => {
         ...order,
         // Retorna o valor salvo no banco (o que o site mostra)
         total_price: storedTotal,
+        // Breakdown explícito para auditoria (N8N, Financeiro, etc)
+        price_breakdown: {
+            products_total: Number(subtotal.toFixed(2)),
+            shipping_cost: shippingCost,
+            donation_amount: donationAmount,
+            coupon_discount: couponDiscount,
+            formula: `Produtos (${Number(subtotal.toFixed(2))}) + Frete (${shippingCost}) + Doação (${donationAmount}) - Desconto (${couponDiscount}) = ${storedTotal}`,
+            matches_stored_total: storedTotal === calculatedTotal
+        },
         // Guarda o valor recalculado apenas no breakdown para comparação
         totals_breakdown: {
           stored_total: storedTotal,
