@@ -55,6 +55,7 @@ const MyProfilePage = () => {
   const queryClient = useQueryClient();
   const [isConfirmAlertOpen, setConfirmAlertOpen] = useState(false);
   const [formData, setFormData] = useState<ProfileFormValues | null>(null);
+  const [forcePixFlag, setForcePixFlag] = useState(false);
 
   const { data: profile, isLoading: isLoadingProfile } = useQuery({
     queryKey: ["profile", user?.id],
@@ -89,6 +90,7 @@ const MyProfilePage = () => {
       queryClient.invalidateQueries({ queryKey: ["profile", user?.id] });
       showSuccess("Perfil atualizado com sucesso!");
       setConfirmAlertOpen(false);
+      setForcePixFlag(false);
     },
     onError: (error: Error) => {
       showError(`Erro ao atualizar perfil: ${error.message}`);
@@ -97,31 +99,42 @@ const MyProfilePage = () => {
 
   const onSubmit = (values: ProfileFormValues) => {
     let dataChanged = false;
+    let sensitiveChanged = false;
     const formKeys = Object.keys(values) as (keyof ProfileFormValues)[];
+
+    const sensitiveFields: (keyof ProfileFormValues)[] = ["cpf_cnpj", "cep", "street", "number", "neighborhood", "city", "state"];
 
     for (const key of formKeys) {
       const originalValue = profile?.[key] ?? "";
       const newValue = values[key] ?? "";
-      // Comparação simples, ignorando nulos/vazios iguais
       if ((originalValue || "") !== (newValue || "")) {
         dataChanged = true;
-        break;
+        if (sensitiveFields.includes(key)) {
+          sensitiveChanged = true;
+        }
       }
     }
 
-    if (dataChanged) {
-      setFormData(values);
-      // Se alterou CPF ou Endereço, pede confirmação de segurança (força PIX)
-      // Se for apenas Nome/Gênero, pode salvar direto (opcional, mantendo padrão seguro para tudo por enquanto)
+    if (!dataChanged) {
+      showSuccess("Nenhuma alteração detectada.");
+      return;
+    }
+
+    setFormData(values);
+
+    // Only force PIX if sensitive fields changed. Otherwise perform update without forcing PIX.
+    if (sensitiveChanged) {
+      setForcePixFlag(true);
       setConfirmAlertOpen(true);
     } else {
-      showSuccess("Nenhuma alteração detectada.");
+      // perform update immediately without forcing PIX
+      updateProfileMutation.mutate({ values, forcePix: false });
     }
   };
 
   const handleConfirmUpdate = () => {
     if (formData) {
-      updateProfileMutation.mutate({ values: formData, forcePix: true });
+      updateProfileMutation.mutate({ values: formData, forcePix: forcePixFlag });
     }
   };
 
@@ -209,7 +222,7 @@ const MyProfilePage = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmação de Segurança</AlertDialogTitle>
             <AlertDialogDescription>
-              Detectamos uma alteração nos seus dados. Por segurança, sua próxima compra em nosso site deverá ser realizada exclusivamente via Pix. Você confirma esta alteração?
+              Detectamos alteração de dados sensíveis (CPF/Endereço). Por segurança, sua próxima compra em nosso site deverá ser realizada exclusivamente via Pix. Você confirma esta alteração?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
