@@ -19,13 +19,49 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    // Simple auth check: require a valid service token or configured admin token header
+    // Authorization: accept either
+    // - a preconfigured ADMIN_CREATE_TOKEN / N8N_SECRET_TOKEN (shared secret), or
+    // - a Supabase service role key, or
+    // - an access token of an authenticated user that has profiles.role = 'adm'
     const authHeader = req.headers.get('Authorization') || '';
     const token = authHeader.replace('Bearer ', '').trim();
     const allowedToken = Deno.env.get('N8N_SECRET_TOKEN') || Deno.env.get('ADMIN_CREATE_TOKEN');
-    // allow when invoked from the project (no token) via supabase.functions.invoke which passes service role automatically
-    // but if token is required, validate it
-    if (allowedToken && token && token !== allowedToken) {
+
+    let isAuthorized = false;
+
+    // 1) If a management token is configured and provided, allow
+    if (allowedToken && token && token === allowedToken) {
+      isAuthorized = true;
+    }
+
+    // 2) If called using the service role key, allow
+    if (!isAuthorized && token && token === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')) {
+      isAuthorized = true;
+    }
+
+    // 3) If a user access token is provided, validate it and ensure the user's profile role is 'adm'
+    if (!isAuthorized && token) {
+      try {
+        const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
+        if (!userError && userData && userData.user && userData.user.id) {
+          const userId = userData.user.id;
+          // Check profile role using admin client (bypass RLS)
+          const { data: profile, error: profileErr } = await supabaseAdmin
+            .from('profiles')
+            .select('role')
+            .eq('id', userId)
+            .maybeSingle();
+
+          if (!profileErr && profile && profile.role === 'adm') {
+            isAuthorized = true;
+          }
+        }
+      } catch (e) {
+        console.warn('[create-client-by-admin] Failed to validate user token:', String(e));
+      }
+    }
+
+    if (!isAuthorized) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
