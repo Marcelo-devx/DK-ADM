@@ -210,13 +210,24 @@ serve(async (req) => {
         }
     }
 
+    // --- 4.1. OBTER DOAÇÃO E DESCONTO DE CUPOM ---
+    // Por enquanto, definimos como 0 pois o N8N não está enviando esses campos
+    // TODO: Adicionar suporte a donation_amount e coupon_discount no payload do N8N
+    const donationAmount = 0; // Se o N8N enviar, usar addr.donation_amount ou similar
+    const couponDiscount = 0; // Se o N8N enviar, usar addr.coupon_discount ou similar
+
     // --- 5. CRIAR PEDIDO ---
+    // CORREÇÃO: total_price DEVE incluir frete + doação - desconto
+    const finalOrderTotal = totalOrderPrice + shippingCost + donationAmount - couponDiscount;
+
     const { data: order, error: orderError } = await supabaseAdmin
       .from('orders')
       .insert({
         user_id: userId,
-        total_price: totalOrderPrice, 
+        total_price: finalOrderTotal, // ✅ CORRIGIDO: Agora inclui frete
         shipping_cost: shippingCost,
+        donation_amount: donationAmount, // ✅ ADICIONADO: Salvar doação
+        coupon_discount: couponDiscount, // ✅ ADICIONADO: Salvar desconto
         status: 'Pago',
         payment_method: payment_method || 'Pix',
         delivery_status: 'Aguardando Validação',
