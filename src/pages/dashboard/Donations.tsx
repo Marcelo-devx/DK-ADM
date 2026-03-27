@@ -23,13 +23,15 @@ interface DonationOrder {
   } | null;
 }
 
+const PAID_STATUSES = ["Pago", "Finalizada"];
+
 const fetchDonations = async (): Promise<DonationOrder[]> => {
-  // 1. Busca pedidos com doação > 0 e status PAGO APENAS
+  // 1. Busca pedidos com doação > 0 e status Pago ou Finalizada
   const { data: orders, error } = await supabase
     .from("orders")
     .select("id, donation_amount, created_at, status, user_id")
     .gt('donation_amount', 0)
-    .eq('status', 'Pago') // ← AGORA APENAS PAGO
+    .in('status', PAID_STATUSES)
     .order('created_at', { ascending: false });
 
   if (error) throw error;
@@ -76,27 +78,23 @@ export default function DonationsPage() {
         {
           event: '*',
           schema: 'public',
-          table: 'orders',
-          filter: 'status=eq.Pago'
+          table: 'orders'
         },
         (payload) => {
-          console.log('[Donations] Pedido atualizado:', payload);
-          // Refetch donations when a paid order changes
-          queryClient.invalidateQueries({ queryKey: ["donations-list-v4"] });
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'orders',
-          filter: 'status=eq.Pago'
-        },
-        (payload) => {
-          console.log('[Donations] Novo pedido pago criado:', payload);
-          // Refetch donations when a new paid order is created
-          queryClient.invalidateQueries({ queryKey: ["donations-list-v4"] });
+          try {
+            const newRow = payload?.new;
+            const oldRow = payload?.old;
+            // If there's a donation amount and the status is a paid status, invalidate
+            const donationAmount = Number(newRow?.donation_amount ?? 0);
+            const status = newRow?.status || oldRow?.status;
+            if (donationAmount > 0 && PAID_STATUSES.includes(status)) {
+              console.log('[Donations] Detected paid donation change, invalidating cache', { payload });
+              queryClient.invalidateQueries({ queryKey: ["donations-list-v4"] });
+            }
+          } catch (e) {
+            console.warn('[Donations] Error handling realtime payload', e);
+            queryClient.invalidateQueries({ queryKey: ["donations-list-v4"] });
+          }
         }
       )
       .subscribe();
