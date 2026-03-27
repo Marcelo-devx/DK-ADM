@@ -49,7 +49,7 @@ serve(async (req) => {
             shipping_cost, 
             donation_amount,
             coupon_discount,
-            profiles(first_name, last_name, email, cpf_cnpj, phone, force_pix_on_next_purchase)
+            profiles(first_name, last_name, email, cpf_cnpj, phone)
         `)
         .eq('id', orderId)
         .single();
@@ -98,33 +98,7 @@ serve(async (req) => {
     const payerName = order.profiles?.first_name || "Cliente";
     const payerSurname = order.profiles?.last_name || "";
 
-    // Determine forcePix flag. Prefer latest profile value from profiles table if available.
-    let forcePix = false;
-    if (order.profiles && typeof order.profiles.force_pix_on_next_purchase !== 'undefined') {
-        forcePix = !!order.profiles.force_pix_on_next_purchase;
-    } else if (order.user_id) {
-        const { data: p } = await supabaseAdmin.from('profiles').select('force_pix_on_next_purchase').eq('id', order.user_id).maybeSingle();
-        forcePix = !!p?.force_pix_on_next_purchase;
-    }
-
     // 5. Create Preference
-    // Default excluded payment types (keep excluding non-card digital methods)
-    const excludedPaymentTypes: any[] = [
-        { id: "ticket" }, // Exclui Boletos
-        { id: "digital_currency" }
-    ];
-
-    // If user's profile requires PIX only, also exclude card payments
-    if (forcePix) {
-        excludedPaymentTypes.push({ id: "credit_card" });
-        excludedPaymentTypes.push({ id: "debit_card" });
-        // Keep bank_transfer excluded as well (if desired)
-        excludedPaymentTypes.push({ id: "bank_transfer" });
-    } else {
-        // If user DOES NOT require PIX, ensure we do not exclude card payments
-        excludedPaymentTypes.push({ id: "bank_transfer" });
-    }
-
     const preferenceBody = {
         items: [
             {
@@ -151,7 +125,11 @@ serve(async (req) => {
             } : undefined
         },
         payment_methods: {
-            excluded_payment_types: excludedPaymentTypes,
+            excluded_payment_types: [
+                { id: "ticket" }, // Exclui Boletos
+                { id: "bank_transfer" }, // Exclui Pix (conforme solicitado)
+                { id: "digital_currency" }
+            ],
             installments: 12 // Permite parcelamento
         },
         back_urls: {
@@ -186,8 +164,7 @@ serve(async (req) => {
         // Retorna o link correto baseado no modo
         init_point: mode === 'production' ? mpData.init_point : mpData.sandbox_init_point,
         mode: mode,
-        id: mpData.id,
-        excluded_payment_types: excludedPaymentTypes
+        id: mpData.id
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     )

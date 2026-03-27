@@ -35,10 +35,10 @@ const fetchDonations = async (): Promise<DonationOrder[]> => {
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  if (!orders || (Array.isArray(orders) && orders.length === 0)) return [];
+  if (!orders || orders.length === 0) return [];
 
   // 2. Coleta IDs únicos de usuários para buscar os perfis
-  const userIds = [...new Set((orders as any).map((o: any) => o.user_id))];
+  const userIds = [...new Set(orders.map(o => o.user_id))];
   
   const { data: profiles, error: profilesError } = await supabase
     .from("profiles")
@@ -47,18 +47,14 @@ const fetchDonations = async (): Promise<DonationOrder[]> => {
 
   if (profilesError) {
       console.warn("Erro ao buscar perfis dos doadores:", profilesError.message);
-      return (orders as DonationOrder[]);
+      return orders as DonationOrder[];
   }
 
-  const profilesMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+  const profilesMap = new Map(profiles.map(p => [p.id, p]));
 
   // 3. Mescla os dados
-  return (orders as any[]).map(order => ({
-    id: order.id,
-    donation_amount: Number(order.donation_amount || 0),
-    created_at: order.created_at,
-    status: order.status,
-    user_id: order.user_id,
+  return orders.map(order => ({
+    ...order,
     profiles: profilesMap.get(order.user_id) || null,
   })) as DonationOrder[];
 };
@@ -68,7 +64,7 @@ export default function DonationsPage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  const { data: donations, isLoading, refetch, isRefetching } = useQuery<DonationOrder[]>({
+  const { data: donations, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["donations-list-v4"],
     queryFn: fetchDonations,
   });
@@ -84,13 +80,13 @@ export default function DonationsPage() {
           schema: 'public',
           table: 'orders'
         },
-        (payload: any) => {
+        (payload) => {
           try {
-            const newRow: any = payload?.new;
-            const oldRow: any = payload?.old;
+            const newRow = payload?.new;
+            const oldRow = payload?.old;
             // If there's a donation amount and the status is a paid status, invalidate
             const donationAmount = Number(newRow?.donation_amount ?? 0);
-            const status = (newRow?.status as string) || (oldRow?.status as string);
+            const status = newRow?.status || oldRow?.status;
             if (donationAmount > 0 && PAID_STATUSES.includes(status)) {
               console.log('[Donations] Detected paid donation change, invalidating cache', { payload });
               queryClient.invalidateQueries({ queryKey: ["donations-list-v4"] });
