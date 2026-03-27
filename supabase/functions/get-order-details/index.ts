@@ -94,8 +94,8 @@ serve(async (req) => {
         userEmail = userData?.user?.email;
     }
 
-    // 6. CALCULAR TOTAL CORRETO (em tempo de resposta)
-    // Compute subtotal from order_items, then add shipping + donation and subtract coupon discount.
+    // 6. PREPARAR RESPOSTA DE TOTAL
+    // Calculamos o subtotal para breakdown, mas usamos o valor salvo no banco como oficial
     const items = Array.isArray(order.order_items) ? order.order_items : [];
     const subtotal = items.reduce((acc, it) => {
         const price = Number(it?.price_at_purchase ?? 0);
@@ -108,26 +108,27 @@ serve(async (req) => {
     const couponDiscount = Number(order.coupon_discount ?? 0);
 
     const calculatedTotal = Number((subtotal + shippingCost + donationAmount - couponDiscount).toFixed(2));
+    const storedTotal = Number(order.total_price ?? 0);
 
     // Montar resposta final
     const responseData = {
-        // keep original order fields but preserve stored total on original_total
         ...order,
-        original_total: order.total_price ?? null,
-        // override total_price in response with calculated value (this fixes API reads)
-        total_price: calculatedTotal,
-        customer_email: userEmail,
-        profiles: {
-            ...(profileData || {}),
-            email: userEmail
-        },
-        // include breakdown for transparency
+        // Retorna o valor salvo no banco (o que o site mostra)
+        total_price: storedTotal,
+        // Guarda o valor recalculado apenas no breakdown para comparação
         totals_breakdown: {
+          stored_total: storedTotal,
+          calculated_total: calculatedTotal,
           subtotal: Number(subtotal.toFixed(2)),
           shipping_cost: shippingCost,
           donation_amount: donationAmount,
           coupon_discount: couponDiscount,
-          calculated_total: calculatedTotal
+          note: storedTotal === calculatedTotal ? "Valores conferem" : "Divergência detectada: valor salvo difere do calculado pelos itens"
+        },
+        customer_email: userEmail,
+        profiles: {
+            ...(profileData || {}),
+            email: userEmail
         }
     };
 
