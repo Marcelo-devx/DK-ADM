@@ -78,14 +78,47 @@ export default function BulkAddPoints() {
       const sheet = workbook.Sheets[sheetName]
       const rows = utils.sheet_to_json(sheet)
 
-      for (const row of rows) {
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i]
         // Extrair email e pontos - tentar variações de nomes de colunas
         const email = row['email'] || row['Email'] || row['EMAIL'] || row['E-mail'] || row['E-MAIL']
-        const points = parseInt(
-          row['pontos'] || row['Pontos'] || row['PONTOS'] || row['ponto'] || row['Ponto'] || 
-          row['ponto(s)'] || row['Ponto(s)'] || '0'
-        )
+        const rawPoints = row['pontos'] || row['Pontos'] || row['PONTOS'] || row['ponto'] || row['Ponto'] || row['ponto(s)'] || row['Ponto(s)'] || '0'
+        const points = parseInt(String(rawPoints).toString().replace(/[^0-9-]/g, ''))
 
+        if (dryRun) {
+          // Processamento em chunks para não travar a UI
+          if (!email || isNaN(points)) {
+            processingResults.push({
+              email: email || 'N/A',
+              points: 0,
+              status: 'failed',
+              error: 'Email inválido ou pontos não informados'
+            })
+          } else {
+            processingResults.push({
+              email,
+              points,
+              status: 'success'
+            })
+          }
+
+          // A cada 500 linhas atualiza o estado para liberar o loop e permitir render
+          if (i % 500 === 0) {
+            setResults([...processingResults])
+            setSummary({
+              success: processingResults.filter(r => r.status === 'success').length,
+              failed: processingResults.filter(r => r.status === 'failed').length,
+              notFound: processingResults.filter(r => r.status === 'not_found').length
+            })
+            // yield to the event loop
+            // eslint-disable-next-line no-await-in-loop
+            await new Promise((resolve) => setTimeout(resolve, 20))
+          }
+
+          continue
+        }
+
+        // Real run (dryRun === false): query Supabase per user and apply updates
         if (!email || isNaN(points)) {
           processingResults.push({
             email: email || 'N/A',
@@ -113,57 +146,55 @@ export default function BulkAddPoints() {
 
           const userId = userData[0].get_user_id_by_email
 
-          if (!dryRun) {
-            // Buscar pontos atuais primeiro
-            const { data: profile, error: fetchError } = await supabase
-              .from('profiles')
-              .select('points')
-              .eq('id', userId)
-              .single()
+          // Buscar pontos atuais primeiro
+          const { data: profile, error: fetchError } = await supabase
+            .from('profiles')
+            .select('points')
+            .eq('id', userId)
+            .single()
 
-            if (fetchError) {
-              processingResults.push({
-                email,
-                userId,
-                points,
-                status: 'failed',
-                error: fetchError.message
-              })
-              continue
-            }
+          if (fetchError) {
+            processingResults.push({
+              email,
+              userId,
+              points,
+              status: 'failed',
+              error: fetchError.message
+            })
+            continue
+          }
 
-            const currentPoints = profile?.points || 0
+          const currentPoints = profile?.points || 0
 
-            // Adicionar pontos ao perfil (sem mudar o tier)
-            const { error: updateError } = await supabase
-              .from('profiles')
-              .update({ points: currentPoints + points })
-              .eq('id', userId)
+          // Adicionar pontos ao perfil (sem mudar o tier)
+          const { error: updateError } = await supabase
+            .from('profiles')
+            .update({ points: currentPoints + points })
+            .eq('id', userId)
 
-            if (updateError) {
-              processingResults.push({
-                email,
-                userId,
-                points,
-                status: 'failed',
-                error: updateError.message
-              })
-              continue
-            }
+          if (updateError) {
+            processingResults.push({
+              email,
+              userId,
+              points,
+              status: 'failed',
+              error: updateError.message
+            })
+            continue
+          }
 
-            // Adicionar entrada no histórico de fidelidade
-            const { error: historyError } = await supabase
-              .from('loyalty_history')
-              .insert({
-                user_id: userId,
-                points: points,
-                description: 'Bônus adicionado via importação',
-                operation_type: 'bonus'
-              })
+          // Adicionar entrada no histórico de fidelidade
+          const { error: historyError } = await supabase
+            .from('loyalty_history')
+            .insert({
+              user_id: userId,
+              points: points,
+              description: 'Bônus adicionado via importação',
+              operation_type: 'bonus'
+            })
 
-            if (historyError) {
-              console.error('Erro ao criar histórico:', historyError)
-            }
+          if (historyError) {
+            console.error('Erro ao criar histórico:', historyError)
           }
 
           processingResults.push({
