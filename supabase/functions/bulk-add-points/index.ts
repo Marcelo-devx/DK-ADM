@@ -84,14 +84,16 @@ serve(async (req) => {
         }
 
         const currentPoints = profile.points ?? 0
-        // Skip if points are already equal to import value
-        if (currentPoints === points) {
-          results.push({ email: emailRaw, userId, points, status: 'skipped', reason: 'Pontos já são iguais' })
+        // NEW LOGIC: only apply import when the user currently has 0 points.
+        // If the user already has any points, skip to avoid touching users that already have a balance.
+        if (currentPoints !== 0) {
+          results.push({ email: emailRaw, userId, points, status: 'skipped', reason: 'Usuário já possui pontos; import pulado' })
           continue
         }
 
-        // Update points using service role key (bypasses RLS)
-        const { error: updateError } = await supabase.from('profiles').update({ points: supabase.raw(`points + ${points}`) }).eq('id', userId)
+        // Apply absolute points value (set to imported total) for users with 0 points
+        const { error: updateError } = await supabase.from('profiles').update({ points }).eq('id', userId)
+
         if (updateError) {
           console.error('[bulk-add-points] update error', { email, userId, error: updateError })
           results.push({ email: emailRaw, userId, points, status: 'failed', error: updateError.message })
