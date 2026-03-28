@@ -135,6 +135,45 @@ serve(async (req) => {
             }
 
             console.log('[mp-webhook] Pedido atualizado com sucesso', { orderId });
+
+            // 5. VERIFICAR SE É A PRIMEIRA COMPRA E LIBERAR CARTÃO AUTOMATICAMENTE
+            const { data: order, error: orderFetchError } = await supabaseAdmin
+                .from('orders')
+                .select('user_id')
+                .eq('id', orderId)
+                .single();
+
+            if (!orderFetchError && order?.user_id) {
+                // Conta quantos pedidos completados/finalizados o usuário tem
+                const completedStatuses = ['Pago', 'Finalizada', 'Entregue', 'Concluída'];
+                const { count: completedOrdersCount, error: countError } = await supabaseAdmin
+                    .from('orders')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('user_id', order.user_id)
+                    .in('status', completedStatuses);
+
+                if (!countError && completedOrdersCount === 1) {
+                    // É a primeira compra paga! Libera o cartão automaticamente
+                    console.log('[mp-webhook] PRIMEIRA COMPRA CONFIRMADA! Liberando cartão para usuário', { userId: order.user_id });
+                    
+                    const { error: profileUpdateError } = await supabaseAdmin
+                        .from('profiles')
+                        .update({ force_pix_on_next_purchase: false })
+                        .eq('id', order.user_id);
+
+                    if (profileUpdateError) {
+                        console.error('[mp-webhook] Erro ao liberar cartão para primeira compra', { userId: order.user_id, error: profileUpdateError });
+                    } else {
+                        console.log('[mp-webhook] Cartão liberado com sucesso para primeira compra!', { userId: order.user_id });
+                    }
+                } else if (!countError && completedOrdersCount > 1) {
+                    console.log('[mp-webhook] Usuário já tem mais de uma compra. Mantém status atual.', { userId: order.user_id, count: completedOrdersCount });
+                } else {
+                    console.error('[mp-webhook] Erro ao contar pedidos completados', { userId: order.user_id, error: countError });
+                }
+            } else {
+                console.error('[mp-webhook] Erro ao buscar order_id do pedido', { orderId, error: orderFetchError });
+            }
         } else {
             console.warn('[mp-webhook] external_reference encontrada, mas não contém ID válido', { externalReference });
         }
