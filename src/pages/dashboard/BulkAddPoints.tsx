@@ -22,6 +22,8 @@ export default function BulkAddPoints() {
   const [processing, setProcessing] = useState(false)
   const [results, setResults] = useState<ProcessingResult[]>([])
   const [summary, setSummary] = useState<{ success: number; failed: number; notFound: number } | null>(null)
+  const [processedCount, setProcessedCount] = useState(0)
+  const [totalCount, setTotalCount] = useState(0)
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
@@ -68,6 +70,11 @@ export default function BulkAddPoints() {
     }
 
     setProcessing(true)
+    setResults([])
+    setSummary(null)
+    setProcessedCount(0)
+    setTotalCount(0)
+
     const processingResults: ProcessingResult[] = []
     
     try {
@@ -77,6 +84,8 @@ export default function BulkAddPoints() {
       const sheetName = workbook.SheetNames[0]
       const sheet = workbook.Sheets[sheetName]
       const rows = utils.sheet_to_json(sheet)
+
+      setTotalCount(rows.length)
 
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i]
@@ -102,17 +111,18 @@ export default function BulkAddPoints() {
             })
           }
 
-          // A cada 500 linhas atualiza o estado para liberar o loop e permitir render
-          if (i % 500 === 0) {
+          // Atualiza contadores e estado periodicamente para mostrar progresso
+          if (i % 200 === 0 || i === rows.length - 1) {
             setResults([...processingResults])
+            setProcessedCount(i + 1)
             setSummary({
               success: processingResults.filter(r => r.status === 'success').length,
               failed: processingResults.filter(r => r.status === 'failed').length,
               notFound: processingResults.filter(r => r.status === 'not_found').length
             })
-            // yield to the event loop
+            // cede ao event loop
             // eslint-disable-next-line no-await-in-loop
-            await new Promise((resolve) => setTimeout(resolve, 20))
+            await new Promise((resolve) => setTimeout(resolve, 10))
           }
 
           continue
@@ -126,6 +136,17 @@ export default function BulkAddPoints() {
             status: 'failed',
             error: 'Email inválido ou pontos não informados'
           })
+          setProcessedCount(i + 1)
+          if (i % 50 === 0) {
+            setResults([...processingResults])
+            setSummary({
+              success: processingResults.filter(r => r.status === 'success').length,
+              failed: processingResults.filter(r => r.status === 'failed').length,
+              notFound: processingResults.filter(r => r.status === 'not_found').length
+            })
+            // eslint-disable-next-line no-await-in-loop
+            await new Promise((resolve) => setTimeout(resolve, 10))
+          }
           continue
         }
 
@@ -141,6 +162,17 @@ export default function BulkAddPoints() {
               status: 'not_found',
               error: 'Usuário não encontrado'
             })
+            setProcessedCount(i + 1)
+            if (i % 50 === 0) {
+              setResults([...processingResults])
+              setSummary({
+                success: processingResults.filter(r => r.status === 'success').length,
+                failed: processingResults.filter(r => r.status === 'failed').length,
+                notFound: processingResults.filter(r => r.status === 'not_found').length
+              })
+              // eslint-disable-next-line no-await-in-loop
+              await new Promise((resolve) => setTimeout(resolve, 10))
+            }
             continue
           }
 
@@ -161,6 +193,17 @@ export default function BulkAddPoints() {
               status: 'failed',
               error: fetchError.message
             })
+            setProcessedCount(i + 1)
+            if (i % 50 === 0) {
+              setResults([...processingResults])
+              setSummary({
+                success: processingResults.filter(r => r.status === 'success').length,
+                failed: processingResults.filter(r => r.status === 'failed').length,
+                notFound: processingResults.filter(r => r.status === 'not_found').length
+              })
+              // eslint-disable-next-line no-await-in-loop
+              await new Promise((resolve) => setTimeout(resolve, 10))
+            }
             continue
           }
 
@@ -180,6 +223,17 @@ export default function BulkAddPoints() {
               status: 'failed',
               error: updateError.message
             })
+            setProcessedCount(i + 1)
+            if (i % 50 === 0) {
+              setResults([...processingResults])
+              setSummary({
+                success: processingResults.filter(r => r.status === 'success').length,
+                failed: processingResults.filter(r => r.status === 'failed').length,
+                notFound: processingResults.filter(r => r.status === 'not_found').length
+              })
+              // eslint-disable-next-line no-await-in-loop
+              await new Promise((resolve) => setTimeout(resolve, 10))
+            }
             continue
           }
 
@@ -204,6 +258,19 @@ export default function BulkAddPoints() {
             status: 'success'
           })
 
+          // atualiza contadores e UI periodicamente
+          if (i % 50 === 0 || i === rows.length - 1) {
+            setResults([...processingResults])
+            setProcessedCount(i + 1)
+            setSummary({
+              success: processingResults.filter(r => r.status === 'success').length,
+              failed: processingResults.filter(r => r.status === 'failed').length,
+              notFound: processingResults.filter(r => r.status === 'not_found').length
+            })
+            // eslint-disable-next-line no-await-in-loop
+            await new Promise((resolve) => setTimeout(resolve, 10))
+          }
+
         } catch (error: any) {
           processingResults.push({
             email,
@@ -211,6 +278,17 @@ export default function BulkAddPoints() {
             status: 'failed',
             error: error.message
           })
+          setProcessedCount(i + 1)
+          if (i % 50 === 0) {
+            setResults([...processingResults])
+            setSummary({
+              success: processingResults.filter(r => r.status === 'success').length,
+              failed: processingResults.filter(r => r.status === 'failed').length,
+              notFound: processingResults.filter(r => r.status === 'not_found').length
+            })
+            // eslint-disable-next-line no-await-in-loop
+            await new Promise((resolve) => setTimeout(resolve, 10))
+          }
         }
       }
 
@@ -223,6 +301,7 @@ export default function BulkAddPoints() {
 
       setResults(processingResults)
       setSummary(summaryData)
+      setProcessedCount(rows.length)
 
       toast({
         title: dryRun ? 'Simulação concluída' : 'Pontos adicionados com sucesso',
@@ -257,6 +336,8 @@ export default function BulkAddPoints() {
     URL.revokeObjectURL(url)
   }
 
+  const progressPercent = totalCount > 0 ? Math.round((processedCount / totalCount) * 100) : 0
+
   return (
     <div className="space-y-6">
       <Card>
@@ -275,6 +356,18 @@ export default function BulkAddPoints() {
               className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
             />
           </div>
+
+          {totalCount > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm text-gray-600">
+                <div>Processados: {processedCount} / {totalCount}</div>
+                <div>{progressPercent}%</div>
+              </div>
+              <div className="w-full h-2 bg-gray-200 rounded-md overflow-hidden">
+                <div className="h-2 bg-green-500 rounded-md" style={{ width: `${progressPercent}%` }} />
+              </div>
+            </div>
+          )}
 
           {preview.length > 0 && (
             <div>
