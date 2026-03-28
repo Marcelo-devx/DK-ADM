@@ -37,15 +37,16 @@ export const ProductTable = ({
     if (!product) return "-";
     const costsArray = Array.isArray(product.variant_costs) ? product.variant_costs : [];
     const pricesArray = Array.isArray(product.variant_prices) ? product.variant_prices : [];
-    const costValues = costsArray.filter(v => v !== null) as number[];
+    // filter out nulls and zero values for cost average
+    const costValues = costsArray.filter(v => v != null && Number(v) > 0) as number[];
     const priceValues = pricesArray.filter(v => v !== null) as number[];
     
-    // Para custo: se tem variações, mostra a média dos custos; senão, mostra o custo base
+    // For cost: if there are valid (non-zero) variation costs, compute exact average; otherwise use product.cost_price
     const displayCostValue = costValues.length > 0 
-      ? (costValues.reduce((a, b) => a + b, 0) / costValues.length) 
+      ? (costValues.reduce((a, b) => Number(a) + Number(b), 0) / costValues.length) 
       : (product.cost_price ?? 0);
     
-    // Para venda: se tem variações, mostra o maior preço; senão, mostra o preço base
+    // For sale: if has variations, show max price; else show base price
     const displaySaleValue = priceValues.length > 0 
       ? Math.max(...priceValues) 
       : (product.price ?? 0);
@@ -64,7 +65,7 @@ export const ProductTable = ({
               </button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>{isCost ? "Custo médio das variações" : "Preço da variação mais cara"}. Clique para ver todas.</p>
+              <p>{isCost ? "Custo médio das variações (zeros ignorados)" : "Preço da variação mais cara"}. Clique para ver todas.</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
