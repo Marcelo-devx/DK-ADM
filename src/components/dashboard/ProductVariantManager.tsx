@@ -322,6 +322,10 @@ export const ProductVariantManager = ({
             <Input type="number" step="0.01" className="h-8" value={newVariant.pix_price || ""} onChange={(e) => setNewVariant({ ...newVariant, pix_price: Number(e.target.value) })} onKeyDown={handleKeyDown} />
           </div>
           <div className="space-y-1">
+            <Label className="text-[10px] uppercase font-bold">Custo</Label>
+            <Input type="number" step="0.01" className="h-8" value={newVariant.cost_price || ""} onChange={(e) => setNewVariant({ ...newVariant, cost_price: Number(e.target.value) })} onKeyDown={handleKeyDown} />
+          </div>
+          <div className="space-y-1">
             <Label className="text-[10px] uppercase font-bold">Estoque</Label>
             <Input type="number" className="h-8" value={newVariant.stock_quantity || ""} onChange={(e) => setNewVariant({ ...newVariant, stock_quantity: Number(e.target.value) })} onKeyDown={handleKeyDown} />
           </div>
@@ -341,13 +345,14 @@ export const ProductVariantManager = ({
               <TableHead>SKU</TableHead>
               <TableHead className="w-24 text-center">Venda</TableHead>
               <TableHead className="w-24 text-center text-green-600">Pix</TableHead>
+              <TableHead className="w-24 text-center">Custo</TableHead>
               <TableHead className="w-20 text-center">Estoque</TableHead>
               <TableHead className="text-right">Ação</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isLoading ? <TableRow><TableCell colSpan={6}><Skeleton className="h-4 w-full" /></TableCell></TableRow> : 
-             variants?.length === 0 ? <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground text-xs py-10">Sem variações cadastradas.</TableCell></TableRow> :
+            {isLoading ? <TableRow><TableCell colSpan={7}><Skeleton className="h-4 w-full" /></TableCell></TableRow> : 
+             variants?.length === 0 ? <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground text-xs py-10">Sem variações cadastradas.</TableCell></TableRow> :
              variants?.map((v) => (
               <TableRow key={v.id} className={editingId === v.id ? "bg-primary/5" : ""}>
                 <TableCell>
@@ -463,6 +468,13 @@ export const ProductVariantManager = ({
                     <Input type="number" step="0.01" className="h-7 text-xs font-bold p-1 w-full text-green-600" value={editValues.pix_price || 0} onChange={(e) => setEditValues({ ...editValues, pix_price: Number(e.target.value) })} onKeyDown={handleKeyDown} />
                   ) : (
                     <span className="font-bold text-green-600 text-xs">{formatCurrency(v.pix_price)}</span>
+                  )}
+                </TableCell>
+                <TableCell className="text-center">
+                  {editingId === v.id ? (
+                    <Input type="number" step="0.01" className="h-7 text-xs font-bold p-1 w-full" value={editValues.cost_price || 0} onChange={(e) => setEditValues({ ...editValues, cost_price: Number(e.target.value) })} onKeyDown={handleKeyDown} />
+                  ) : (
+                    <span className="font-bold text-xs">{formatCurrency(v.cost_price)}</span>
                   )}
                 </TableCell>
                 <TableCell className="text-center">
