@@ -108,7 +108,8 @@ const fetchClients = async (): Promise<Client[]> => {
         first_name: p.first_name || null,
         last_name: p.last_name || null,
         role: p.role || 'user',
-        force_pix_on_next_purchase: p.force_pix_on_next_purchase || false,
+        // Preserve explicit boolean (true only when DB value is true) to avoid null being treated as false
+        force_pix_on_next_purchase: p.force_pix_on_next_purchase === true,
         // Não temos acesso aos pedidos via cliente (RLS), então deixamos 0
         order_count: 0,
         completed_order_count: 0,

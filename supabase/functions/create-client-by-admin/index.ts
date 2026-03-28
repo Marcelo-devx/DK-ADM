@@ -138,7 +138,11 @@ serve(async (req) => {
         cpf_cnpj: cpf_cnpj || null,
         phone: phone || null,
         gender: gender || null,
-        role: 'user'
+        role: 'user',
+        // Explicitly require PIX by default for newly created users (admin-created and imports)
+        force_pix_on_next_purchase: true,
+        // Ensure credit card is disabled until allowed
+        is_credit_card_enabled: false
       }, { onConflict: 'id' });
 
     if (profileError) {

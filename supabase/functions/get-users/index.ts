@@ -147,7 +147,8 @@ serve(async (req) => {
         first_name: p.first_name || null,
         last_name: p.last_name || null,
         role: p.role || 'user',
-        force_pix_on_next_purchase: p.force_pix_on_next_purchase || false,
+        // Use explicit boolean comparison to preserve true/false/null from DB
+        force_pix_on_next_purchase: p.force_pix_on_next_purchase === true,
         order_count: orderCountMap.get(u.id) || 0,
         completed_order_count: completedOrderMap.get(u.id) || 0,
       };
