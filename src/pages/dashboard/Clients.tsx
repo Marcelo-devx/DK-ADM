@@ -126,6 +126,7 @@ const fetchClients = async (): Promise<Client[]> => {
 const ClientsPage = () => {
   const queryClient = useQueryClient();
   const [showOnlyFlagged, setShowOnlyFlagged] = useState(false);
+  const [searchEmail, setSearchEmail] = useState("");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   
   // Estado para o modal de detalhes
@@ -265,15 +266,33 @@ const ClientsPage = () => {
 
   const filteredClients = clients?.filter(client => {
     if (client.role === 'adm') return false;
-    return !showOnlyFlagged || client.force_pix_on_next_purchase;
+    if (showOnlyFlagged && !client.force_pix_on_next_purchase) return false;
+    if (searchEmail && !client.email.toLowerCase().includes(searchEmail.toLowerCase())) return false;
+    return true;
   });
 
   return (
     <div>
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
-        <h1 className="text-3xl font-bold">Clientes</h1>
+        <div>
+          <h1 className="text-3xl font-bold">Clientes</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Total de clientes cadastrados: <span className="font-semibold text-primary">{filteredClients?.length || 0}</span>
+          </p>
+        </div>
         
         <div className="flex flex-wrap items-center gap-2">
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Buscar por email..."
+              value={searchEmail}
+              onChange={(e) => setSearchEmail(e.target.value)}
+              className="pl-9 pr-4 py-2 border rounded-md text-sm w-64 focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          </div>
+
           <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
             <DialogTrigger asChild>
                 <Button className="bg-primary hover:bg-primary/90">
