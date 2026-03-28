@@ -19,6 +19,7 @@ export interface ExtendedProduct {
   is_visible: boolean;
   variant_prices?: number[];
   variant_costs?: (number | null)[];
+  variant_stock_total?: number; // total stock across variants
   allocated_in_kits?: number;
   created_at: string;
   // NEW: optional field for imported/flavor display names
@@ -33,7 +34,7 @@ export const useProductData = () => {
       .from("products")
       .select(`
           *, 
-          variants:product_variants(price, cost_price),
+          variants:product_variants(price, cost_price, stock_quantity),
           promotion_items (
               quantity,
               promotions (
@@ -60,10 +61,13 @@ export const useProductData = () => {
           }
       });
 
+      const variantStockTotal = variantsList.reduce((acc: number, v: any) => acc + (Number(v.stock_quantity) || 0), 0);
+
       return {
           ...p,
           variant_prices: variantsList.map((v: any) => v.price),
           variant_costs: variantsList.map((v: any) => v.cost_price),
+          variant_stock_total: variantStockTotal,
           allocated_in_kits: allocated
       };
     }) as ExtendedProduct[];
