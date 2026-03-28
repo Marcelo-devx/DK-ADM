@@ -125,14 +125,23 @@ export const ProductTable = ({
                 <TableCell className="text-xs font-black text-green-700">{product.pix_price ? formatCurrency(product.pix_price) : '-'}</TableCell>
                 <TableCell>
                   <div className="flex flex-col gap-1">
-                      <Badge variant={product.stock_quantity <= 5 ? "destructive" : "secondary"} className="h-5 text-[10px] w-fit font-black">
-                          {product.stock_quantity} un
-                      </Badge>
-                      {product.allocated_in_kits ? (
-                          <Badge variant="outline" className="h-5 text-[9px] w-fit bg-amber-50 text-amber-700 border-amber-200 gap-1 font-bold" title="Quantidade reservada em Kits">
-                              <Lock className="w-2.5 h-2.5" /> + {product.allocated_in_kits} em Kits
-                          </Badge>
-                      ) : null}
+                      {/* Show sum of variant stock if present, otherwise product.stock_quantity */}
+                      {(() => {
+                        const variantTotal = Number(product.variant_stock_total || 0);
+                        const displayStock = variantTotal > 0 ? variantTotal : (product.stock_quantity || 0);
+                        return (
+                          <>
+                            <Badge variant={displayStock <= 5 ? "destructive" : "secondary"} className="h-5 text-[10px] w-fit font-black">
+                                {displayStock} un
+                            </Badge>
+                            {product.allocated_in_kits ? (
+                                <Badge variant="outline" className="h-5 text-[9px] w-fit bg-amber-50 text-amber-700 border-amber-200 gap-1 font-bold" title="Quantidade reservada em Kits">
+                                    <Lock className="w-2.5 h-2.5" /> + {product.allocated_in_kits} em Kits
+                                </Badge>
+                            ) : null}
+                          </>
+                        );
+                      })()}
                   </div>
                 </TableCell>
                 <TableCell className="text-right">
