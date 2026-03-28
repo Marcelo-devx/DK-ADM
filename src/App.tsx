@@ -48,6 +48,7 @@ import DeliveryRoutes from "./pages/dashboard/DeliveryRoutes";
 import SpokeExport from "./pages/dashboard/SpokeExport";
 import ClubDKAdmin from "./pages/dashboard/ClubDKAdmin";
 import CircuitIntegration from "./pages/dashboard/CircuitIntegration";
+import BulkAddPoints from "./pages/dashboard/BulkAddPoints";
 
 const queryClient = new QueryClient();
 
@@ -103,6 +104,7 @@ const App = () => (
               <Route path="user-coupons-history" element={<UserCouponsHistory />} />
               <Route path="delivery-routes" element={<DeliveryRoutes />} />
               <Route path="spoke-export" element={<SpokeExport />} />
+              <Route path="bulk-add-points" element={<BulkAddPoints />} />
             </Route>
             
             <Route path="*" element={<NotFound />} />

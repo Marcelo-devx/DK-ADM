@@ -38,7 +38,8 @@ import {
   LogOut,
   Box,
   KeyRound,
-  Globe
+  Globe,
+  Gift
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -142,6 +143,9 @@ const Sidebar = () => {
         </NavLink>
         <NavLink to="/dashboard/import-clients" className={navLinkClass}>
           {({ isActive }) => (<><FileUp className={iconClass("text-cyan-600", isActive)} />Importar Clientes</>)}
+        </NavLink>
+        <NavLink to="/dashboard/bulk-add-points" className={navLinkClass}>
+          {({ isActive }) => (<><Gift className={iconClass("text-cyan-600", isActive)} />Adicionar Pontos em Massa</>)}
         </NavLink>
 
         {/* MARKETING */}
