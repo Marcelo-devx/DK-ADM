@@ -167,20 +167,45 @@ export default function BulkAddPoints() {
         const { data: userData, error: userError } = await supabase
           .rpc('get_user_id_by_email', { user_email: normalizedEmail })
 
-        // If still not found, try a fallback replacing a common typo domain 'hormail.com' -> 'hotmail.com'
-        let finalUserData = userData
-        let finalError = userError
-        if ((!userData || !userData[0]?.get_user_id_by_email) && normalizedEmail.includes('hormail.com')) {
+        // Resolve possible shapes returned by RPC:
+        // - direct uuid string
+        // - object { get_user_id_by_email: uuid }
+        // - array [{ get_user_id_by_email: uuid }] or [{ some_column: uuid }]
+        const resolveUserIdFromRpc = (d: any) => {
+          if (!d) return null
+          if (typeof d === 'string') return d
+          if (typeof d === 'object' && !Array.isArray(d)) {
+            // pick first string-like value if known key exists
+            if (d.get_user_id_by_email) return d.get_user_id_by_email
+            // if object with single value
+            const keys = Object.keys(d)
+            if (keys.length === 1 && typeof d[keys[0]] === 'string') return d[keys[0]]
+            return null
+          }
+          if (Array.isArray(d) && d.length > 0) {
+            const first = d[0]
+            if (!first) return null
+            if (typeof first === 'string') return first
+            const keys = Object.keys(first)
+            if (keys.length > 0 && typeof first[keys[0]] === 'string') return first[keys[0]]
+            if (first.get_user_id_by_email) return first.get_user_id_by_email
+          }
+          return null
+        }
+
+        let userId = resolveUserIdFromRpc(userData)
+        // If not found, try common typo fallback (hormail -> hotmail)
+        if (!userId && normalizedEmail.includes('hormail.com')) {
           const guessed = normalizedEmail.replace('hormail.com', 'hotmail.com')
-          const { data: guessedData, error: guessedError } = await supabase
-            .rpc('get_user_id_by_email', { user_email: guessed })
-          if (guessedData && guessedData[0]?.get_user_id_by_email) {
-            finalUserData = guessedData
-            finalError = null
+          const { data: guessedData, error: guessedError } = await supabase.rpc('get_user_id_by_email', { user_email: guessed })
+          const guessedId = resolveUserIdFromRpc(guessedData)
+          if (guessedId && !guessedError) {
+            userId = guessedId
+            // note: we'll continue processing below using userId
           }
         }
 
-        if (finalError || !finalUserData || !finalUserData[0]?.get_user_id_by_email) {
+        if (!userId) {
           processingResults.push({
             email,
             points,
@@ -200,8 +225,6 @@ export default function BulkAddPoints() {
           }
           continue
         }
-
-        const userId = finalUserData[0].get_user_id_by_email
 
         // Buscar pontos atuais primeiro
         const { data: profile, error: fetchError } = await supabase
