@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.51.0'
 
@@ -69,31 +68,8 @@ serve(async (req) => {
         }
 
         const userId = userData[0].get_user_id_by_email
-
-        // Get current points to check if update is needed
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('points')
-          .eq('id', userId)
-          .single()
-
-        if (profileError || !profile) {
-          console.error('[bulk-add-points] fetch profile error', { email, userId, error: profileError })
-          results.push({ email: emailRaw, userId, points, status: 'failed', error: 'Erro ao buscar perfil' })
-          continue
-        }
-
-        const currentPoints = profile.points ?? 0
-        // NEW LOGIC: only apply import when the user currently has 0 points.
-        // If the user already has any points, skip to avoid touching users that already have a balance.
-        if (currentPoints !== 0) {
-          results.push({ email: emailRaw, userId, points, status: 'skipped', reason: 'Usuário já possui pontos; import pulado' })
-          continue
-        }
-
-        // Apply absolute points value (set to imported total) for users with 0 points
-        const { error: updateError } = await supabase.from('profiles').update({ points }).eq('id', userId)
-
+        // Update points using service role key (bypasses RLS)
+        const { error: updateError } = await supabase.from('profiles').update({ points: supabase.raw(`points + ${points}`) }).eq('id', userId)
         if (updateError) {
           console.error('[bulk-add-points] update error', { email, userId, error: updateError })
           results.push({ email: emailRaw, userId, points, status: 'failed', error: updateError.message })
@@ -115,7 +91,6 @@ serve(async (req) => {
 
     const summary = {
       success: results.filter(r => r.status === 'success').length,
-      skipped: results.filter(r => r.status === 'skipped').length,
       failed: results.filter(r => r.status === 'failed').length,
       notFound: results.filter(r => r.status === 'not_found').length
     }

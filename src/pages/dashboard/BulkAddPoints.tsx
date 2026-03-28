@@ -11,9 +11,8 @@ interface ProcessingResult {
   email: string
   userId?: string
   points: number
-  status: 'success' | 'failed' | 'not_found' | 'skipped'
+  status: 'success' | 'failed' | 'not_found'
   error?: string
-  reason?: string
 }
 
 export default function BulkAddPoints() {
@@ -22,7 +21,7 @@ export default function BulkAddPoints() {
   const [preview, setPreview] = useState<any[]>([])
   const [processing, setProcessing] = useState(false)
   const [results, setResults] = useState<ProcessingResult[]>([])
-  const [summary, setSummary] = useState<{ success: number; failed: number; notFound: number; skipped?: number } | null>(null)
+  const [summary, setSummary] = useState<{ success: number; failed: number; notFound: number } | null>(null)
   const [processedCount, setProcessedCount] = useState(0)
   const [totalCount, setTotalCount] = useState(0)
 
@@ -119,8 +118,7 @@ export default function BulkAddPoints() {
             setSummary({
               success: processingResults.filter(r => r.status === 'success').length,
               failed: processingResults.filter(r => r.status === 'failed').length,
-              notFound: processingResults.filter(r => r.status === 'not_found').length,
-              skipped: processingResults.filter(r => r.status === 'skipped').length
+              notFound: processingResults.filter(r => r.status === 'not_found').length
             })
             // cede ao event loop
             // eslint-disable-next-line no-await-in-loop
@@ -131,7 +129,6 @@ export default function BulkAddPoints() {
         }
 
         // Real run (dryRun === false): query Supabase per user and apply updates
-        // If any row is invalid, collect it and continue; we'll still send valid rows to the edge function
         if (!email || isNaN(points)) {
           processingResults.push({
             email: email || 'N/A',
@@ -139,15 +136,13 @@ export default function BulkAddPoints() {
             status: 'failed',
             error: 'Email inválido ou pontos não informados'
           })
-          // Continue to next row; invalid rows are not sent to the edge function
+          setProcessedCount(i + 1)
           if (i % 50 === 0) {
             setResults([...processingResults])
-            setProcessedCount(i + 1)
             setSummary({
               success: processingResults.filter(r => r.status === 'success').length,
               failed: processingResults.filter(r => r.status === 'failed').length,
-              notFound: processingResults.filter(r => r.status === 'not_found').length,
-              skipped: processingResults.filter(r => r.status === 'skipped').length
+              notFound: processingResults.filter(r => r.status === 'not_found').length
             })
             // eslint-disable-next-line no-await-in-loop
             await new Promise((resolve) => setTimeout(resolve, 10))
@@ -155,82 +150,182 @@ export default function BulkAddPoints() {
           continue
         }
 
-        // Instead of calling Supabase per-row (which triggers RLS when using anon key),
-        // we will collect valid rows and send them in a single request to the edge function
-        // that uses the service role (avoids RLS issues).
-      }
-
-      // All rows scanned. If this is a real run (not dryRun), call the Edge Function with valid rows.
-      if (!dryRun) {
-        // Build payload: only include valid rows (email + points)
-        const validRows = rows.map((r: any) => {
-          const emailVal = r['email'] || r['Email'] || r['EMAIL'] || r['E-mail'] || r['E-MAIL']
-          const rawPointsVal = r['pontos'] || r['Pontos'] || r['PONTOS'] || r['ponto'] || r['Ponto'] || r['ponto(s)'] || r['Ponto(s)'] || '0'
-          const pts = parseInt(String(rawPointsVal).toString().replace(/[^0-9-]/g, ''))
-          if (!emailVal || isNaN(pts)) return null
-          return { email: String(emailVal).normalize('NFKC').replace(/\u200B|\uFEFF/g, '').trim().toLowerCase(), points: pts }
-        }).filter(Boolean)
-
-        try {
-          setProcessing(true)
-          // Call the edge function (full hardcoded URL per Supabase functions guidance)
-          const res = await fetch('https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1/bulk-add-points', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ rows: validRows })
-          })
-
-          const json = await res.json()
-          if (!res.ok) {
-            throw new Error(json?.error || 'Erro na função de importação')
-          }
-
-          // The edge function returns { success:true, results, summary }
-          const remoteResults = Array.isArray(json.results) ? json.results : []
-          // Merge remoteResults into processingResults for display (preserve invalid rows we already pushed)
-          const merged = [
-            ...processingResults.filter(r => r.status !== 'success'), // earlier invalid/failed rows
-            ...remoteResults.map((r: any) => ({
-              email: r.email,
-              userId: r.userId || r.user_id || r.user,
-              points: r.points,
-              status: r.status,
-              error: r.error
-            }))
-          ]
-
-          setResults(merged)
-          setSummary(json.summary || {
-            success: merged.filter((r: any) => r.status === 'success').length,
-            failed: merged.filter((r: any) => r.status === 'failed').length,
-            notFound: merged.filter((r: any) => r.status === 'not_found').length,
-            skipped: merged.filter((r: any) => r.status === 'skipped').length
-          })
-          setProcessedCount(rows.length)
-
-          toast({
-            title: 'Pontos adicionados com sucesso',
-            description: `${json.summary?.success ?? 0} usuários receberam pontos com sucesso`
-          })
-        } catch (error: any) {
-          toast({
-            variant: 'destructive',
-            title: 'Erro ao aplicar pontos',
-            description: error.message || String(error)
-          })
-        } finally {
-          setProcessing(false)
+        // Buscar user_id pelo email
+        // Normalize email to avoid hidden chars and casing issues
+        const normalizeEmail = (raw: any) => {
+          if (!raw) return ''
+          let s = String(raw)
+            .normalize('NFKC') // normalize unicode
+            .replace(/\u200B|\uFEFF/g, '') // remove zero-width and BOM
+            .trim()
+            .toLowerCase()
+          return s
         }
+
+        const normalizedEmail = normalizeEmail(email)
+
+        const { data: userData, error: userError } = await supabase
+          .rpc('get_user_id_by_email', { user_email: normalizedEmail })
+
+        // Resolve possible shapes returned by RPC:
+        // - direct uuid string
+        // - object { get_user_id_by_email: uuid }
+        // - array [{ get_user_id_by_email: uuid }] or [{ some_column: uuid }]
+        const resolveUserIdFromRpc = (d: any) => {
+          if (!d) return null
+          if (typeof d === 'string') return d
+          if (typeof d === 'object' && !Array.isArray(d)) {
+            // pick first string-like value if known key exists
+            if (d.get_user_id_by_email) return d.get_user_id_by_email
+            // if object with single value
+            const keys = Object.keys(d)
+            if (keys.length === 1 && typeof d[keys[0]] === 'string') return d[keys[0]]
+            return null
+          }
+          if (Array.isArray(d) && d.length > 0) {
+            const first = d[0]
+            if (!first) return null
+            if (typeof first === 'string') return first
+            const keys = Object.keys(first)
+            if (keys.length > 0 && typeof first[keys[0]] === 'string') return first[keys[0]]
+            if (first.get_user_id_by_email) return first.get_user_id_by_email
+          }
+          return null
+        }
+
+        let userId = resolveUserIdFromRpc(userData)
+        // If not found, try common typo fallback (hormail -> hotmail)
+        if (!userId && normalizedEmail.includes('hormail.com')) {
+          const guessed = normalizedEmail.replace('hormail.com', 'hotmail.com')
+          const { data: guessedData, error: guessedError } = await supabase.rpc('get_user_id_by_email', { user_email: guessed })
+          const guessedId = resolveUserIdFromRpc(guessedData)
+          if (guessedId && !guessedError) {
+            userId = guessedId
+            // note: we'll continue processing below using userId
+          }
+        }
+
+        if (!userId) {
+          processingResults.push({
+            email,
+            points,
+            status: 'not_found',
+            error: 'Usuário não encontrado'
+          })
+          setProcessedCount(i + 1)
+          if (i % 50 === 0) {
+            setResults([...processingResults])
+            setSummary({
+              success: processingResults.filter(r => r.status === 'success').length,
+              failed: processingResults.filter(r => r.status === 'failed').length,
+              notFound: processingResults.filter(r => r.status === 'not_found').length
+            })
+            // eslint-disable-next-line no-await-in-loop
+            await new Promise((resolve) => setTimeout(resolve, 10))
+          }
+          continue
+        }
+
+        // Buscar pontos atuais primeiro
+        const { data: profile, error: fetchError } = await supabase
+          .from('profiles')
+          .select('points')
+          .eq('id', userId)
+          .single()
+
+        if (fetchError) {
+          processingResults.push({
+            email,
+            userId,
+            points,
+            status: 'failed',
+            error: fetchError.message
+          })
+          setProcessedCount(i + 1)
+          if (i % 50 === 0) {
+            setResults([...processingResults])
+            setSummary({
+              success: processingResults.filter(r => r.status === 'success').length,
+              failed: processingResults.filter(r => r.status === 'failed').length,
+              notFound: processingResults.filter(r => r.status === 'not_found').length
+            })
+            // eslint-disable-next-line no-await-in-loop
+            await new Promise((resolve) => setTimeout(resolve, 10))
+          }
+          continue
+        }
+
+        const currentPoints = profile?.points || 0
+
+        // Adicionar pontos ao perfil (sem mudar o tier)
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ points: currentPoints + points })
+          .eq('id', userId)
+
+        if (updateError) {
+          processingResults.push({
+            email,
+            userId,
+            points,
+            status: 'failed',
+            error: updateError.message
+          })
+          setProcessedCount(i + 1)
+          if (i % 50 === 0) {
+            setResults([...processingResults])
+            setSummary({
+              success: processingResults.filter(r => r.status === 'success').length,
+              failed: processingResults.filter(r => r.status === 'failed').length,
+              notFound: processingResults.filter(r => r.status === 'not_found').length
+            })
+            // eslint-disable-next-line no-await-in-loop
+            await new Promise((resolve) => setTimeout(resolve, 10))
+          }
+          continue
+        }
+
+        // Adicionar entrada no histórico de fidelidade
+        const { error: historyError } = await supabase
+          .from('loyalty_history')
+          .insert({
+            user_id: userId,
+            points: points,
+            description: 'Bônus adicionado via importação',
+            operation_type: 'bonus'
+          })
+
+        if (historyError) {
+          console.error('Erro ao criar histórico:', historyError)
+        }
+
+        processingResults.push({
+          email,
+          userId,
+          points,
+          status: 'success'
+        })
+
+        // atualiza contadores e UI periodicamente
+        if (i % 50 === 0 || i === rows.length - 1) {
+          setResults([...processingResults])
+          setProcessedCount(i + 1)
+          setSummary({
+            success: processingResults.filter(r => r.status === 'success').length,
+            failed: processingResults.filter(r => r.status === 'failed').length,
+            notFound: processingResults.filter(r => r.status === 'not_found').length
+          })
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise((resolve) => setTimeout(resolve, 10))
+        }
+
       }
 
       // Calcular resumo
       const summaryData = {
         success: processingResults.filter(r => r.status === 'success').length,
         failed: processingResults.filter(r => r.status === 'failed').length,
-        notFound: processingResults.filter(r => r.status === 'not_found').length,
-        skipped: processingResults.filter(r => r.status === 'skipped').length
+        notFound: processingResults.filter(r => r.status === 'not_found').length
       }
 
       setResults(processingResults)
@@ -355,7 +450,7 @@ export default function BulkAddPoints() {
                 <CardTitle>Resumo</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className={`grid grid-cols-${summary.skipped && summary.skipped > 0 ? '4' : '3'} gap-4`}>
+                <div className="grid grid-cols-3 gap-4">
                   <div className="text-center">
                     <div className="text-2xl font-bold text-green-600">{summary.success}</div>
                     <div className="text-sm text-gray-600">Sucesso</div>
@@ -368,12 +463,6 @@ export default function BulkAddPoints() {
                     <div className="text-2xl font-bold text-yellow-600">{summary.notFound}</div>
                     <div className="text-sm text-gray-600">Não encontrados</div>
                   </div>
-                  {summary.skipped && summary.skipped > 0 && (
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-yellow-500">{summary.skipped}</div>
-                      <div className="text-sm text-gray-600">Ignorados</div>
-                    </div>
-                  )}
                 </div>
                 {results.length > 0 && (
                   <Button
@@ -410,12 +499,11 @@ export default function BulkAddPoints() {
                           {result.status === 'success' && <CheckCircle className="h-4 w-4 text-green-600" />}
                           {result.status === 'failed' && <AlertCircle className="h-4 w-4 text-red-600" />}
                           {result.status === 'not_found' && <AlertCircle className="h-4 w-4 text-yellow-600" />}
-                          {result.status === 'skipped' && <AlertCircle className="h-4 w-4 text-yellow-500" />}
                         </TableCell>
                         <TableCell>{result.email}</TableCell>
                         <TableCell>{result.userId || '-'}</TableCell>
                         <TableCell>{result.points}</TableCell>
-                        <TableCell>{result.error || result.reason || '-'}</TableCell>
+                        <TableCell>{result.error || '-'}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
