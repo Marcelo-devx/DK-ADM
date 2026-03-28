@@ -150,133 +150,42 @@ export default function BulkAddPoints() {
           continue
         }
 
-        try {
-          // Buscar user_id pelo email
-          const { data: userData, error: userError } = await supabase
-            .rpc('get_user_id_by_email', { user_email: email })
+        // Buscar user_id pelo email
+        // Normalize email to avoid hidden chars and casing issues
+        const normalizeEmail = (raw: any) => {
+          if (!raw) return ''
+          let s = String(raw)
+            .normalize('NFKC') // normalize unicode
+            .replace(/\u200B|\uFEFF/g, '') // remove zero-width and BOM
+            .trim()
+            .toLowerCase()
+          return s
+        }
 
-          if (userError || !userData || !userData[0]?.get_user_id_by_email) {
-            processingResults.push({
-              email,
-              points,
-              status: 'not_found',
-              error: 'Usuário não encontrado'
-            })
-            setProcessedCount(i + 1)
-            if (i % 50 === 0) {
-              setResults([...processingResults])
-              setSummary({
-                success: processingResults.filter(r => r.status === 'success').length,
-                failed: processingResults.filter(r => r.status === 'failed').length,
-                notFound: processingResults.filter(r => r.status === 'not_found').length
-              })
-              // eslint-disable-next-line no-await-in-loop
-              await new Promise((resolve) => setTimeout(resolve, 10))
-            }
-            continue
+        const normalizedEmail = normalizeEmail(email)
+
+        const { data: userData, error: userError } = await supabase
+          .rpc('get_user_id_by_email', { user_email: normalizedEmail })
+
+        // If still not found, try a fallback replacing a common typo domain 'hormail.com' -> 'hotmail.com'
+        let finalUserData = userData
+        let finalError = userError
+        if ((!userData || !userData[0]?.get_user_id_by_email) && normalizedEmail.includes('hormail.com')) {
+          const guessed = normalizedEmail.replace('hormail.com', 'hotmail.com')
+          const { data: guessedData, error: guessedError } = await supabase
+            .rpc('get_user_id_by_email', { user_email: guessed })
+          if (guessedData && guessedData[0]?.get_user_id_by_email) {
+            finalUserData = guessedData
+            finalError = null
           }
+        }
 
-          const userId = userData[0].get_user_id_by_email
-
-          // Buscar pontos atuais primeiro
-          const { data: profile, error: fetchError } = await supabase
-            .from('profiles')
-            .select('points')
-            .eq('id', userId)
-            .single()
-
-          if (fetchError) {
-            processingResults.push({
-              email,
-              userId,
-              points,
-              status: 'failed',
-              error: fetchError.message
-            })
-            setProcessedCount(i + 1)
-            if (i % 50 === 0) {
-              setResults([...processingResults])
-              setSummary({
-                success: processingResults.filter(r => r.status === 'success').length,
-                failed: processingResults.filter(r => r.status === 'failed').length,
-                notFound: processingResults.filter(r => r.status === 'not_found').length
-              })
-              // eslint-disable-next-line no-await-in-loop
-              await new Promise((resolve) => setTimeout(resolve, 10))
-            }
-            continue
-          }
-
-          const currentPoints = profile?.points || 0
-
-          // Adicionar pontos ao perfil (sem mudar o tier)
-          const { error: updateError } = await supabase
-            .from('profiles')
-            .update({ points: currentPoints + points })
-            .eq('id', userId)
-
-          if (updateError) {
-            processingResults.push({
-              email,
-              userId,
-              points,
-              status: 'failed',
-              error: updateError.message
-            })
-            setProcessedCount(i + 1)
-            if (i % 50 === 0) {
-              setResults([...processingResults])
-              setSummary({
-                success: processingResults.filter(r => r.status === 'success').length,
-                failed: processingResults.filter(r => r.status === 'failed').length,
-                notFound: processingResults.filter(r => r.status === 'not_found').length
-              })
-              // eslint-disable-next-line no-await-in-loop
-              await new Promise((resolve) => setTimeout(resolve, 10))
-            }
-            continue
-          }
-
-          // Adicionar entrada no histórico de fidelidade
-          const { error: historyError } = await supabase
-            .from('loyalty_history')
-            .insert({
-              user_id: userId,
-              points: points,
-              description: 'Bônus adicionado via importação',
-              operation_type: 'bonus'
-            })
-
-          if (historyError) {
-            console.error('Erro ao criar histórico:', historyError)
-          }
-
-          processingResults.push({
-            email,
-            userId,
-            points,
-            status: 'success'
-          })
-
-          // atualiza contadores e UI periodicamente
-          if (i % 50 === 0 || i === rows.length - 1) {
-            setResults([...processingResults])
-            setProcessedCount(i + 1)
-            setSummary({
-              success: processingResults.filter(r => r.status === 'success').length,
-              failed: processingResults.filter(r => r.status === 'failed').length,
-              notFound: processingResults.filter(r => r.status === 'not_found').length
-            })
-            // eslint-disable-next-line no-await-in-loop
-            await new Promise((resolve) => setTimeout(resolve, 10))
-          }
-
-        } catch (error: any) {
+        if (finalError || !finalUserData || !finalUserData[0]?.get_user_id_by_email) {
           processingResults.push({
             email,
             points,
-            status: 'failed',
-            error: error.message
+            status: 'not_found',
+            error: 'Usuário não encontrado'
           })
           setProcessedCount(i + 1)
           if (i % 50 === 0) {
@@ -289,7 +198,104 @@ export default function BulkAddPoints() {
             // eslint-disable-next-line no-await-in-loop
             await new Promise((resolve) => setTimeout(resolve, 10))
           }
+          continue
         }
+
+        const userId = finalUserData[0].get_user_id_by_email
+
+        // Buscar pontos atuais primeiro
+        const { data: profile, error: fetchError } = await supabase
+          .from('profiles')
+          .select('points')
+          .eq('id', userId)
+          .single()
+
+        if (fetchError) {
+          processingResults.push({
+            email,
+            userId,
+            points,
+            status: 'failed',
+            error: fetchError.message
+          })
+          setProcessedCount(i + 1)
+          if (i % 50 === 0) {
+            setResults([...processingResults])
+            setSummary({
+              success: processingResults.filter(r => r.status === 'success').length,
+              failed: processingResults.filter(r => r.status === 'failed').length,
+              notFound: processingResults.filter(r => r.status === 'not_found').length
+            })
+            // eslint-disable-next-line no-await-in-loop
+            await new Promise((resolve) => setTimeout(resolve, 10))
+          }
+          continue
+        }
+
+        const currentPoints = profile?.points || 0
+
+        // Adicionar pontos ao perfil (sem mudar o tier)
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ points: currentPoints + points })
+          .eq('id', userId)
+
+        if (updateError) {
+          processingResults.push({
+            email,
+            userId,
+            points,
+            status: 'failed',
+            error: updateError.message
+          })
+          setProcessedCount(i + 1)
+          if (i % 50 === 0) {
+            setResults([...processingResults])
+            setSummary({
+              success: processingResults.filter(r => r.status === 'success').length,
+              failed: processingResults.filter(r => r.status === 'failed').length,
+              notFound: processingResults.filter(r => r.status === 'not_found').length
+            })
+            // eslint-disable-next-line no-await-in-loop
+            await new Promise((resolve) => setTimeout(resolve, 10))
+          }
+          continue
+        }
+
+        // Adicionar entrada no histórico de fidelidade
+        const { error: historyError } = await supabase
+          .from('loyalty_history')
+          .insert({
+            user_id: userId,
+            points: points,
+            description: 'Bônus adicionado via importação',
+            operation_type: 'bonus'
+          })
+
+        if (historyError) {
+          console.error('Erro ao criar histórico:', historyError)
+        }
+
+        processingResults.push({
+          email,
+          userId,
+          points,
+          status: 'success'
+        })
+
+        // atualiza contadores e UI periodicamente
+        if (i % 50 === 0 || i === rows.length - 1) {
+          setResults([...processingResults])
+          setProcessedCount(i + 1)
+          setSummary({
+            success: processingResults.filter(r => r.status === 'success').length,
+            failed: processingResults.filter(r => r.status === 'failed').length,
+            notFound: processingResults.filter(r => r.status === 'not_found').length
+          })
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise((resolve) => setTimeout(resolve, 10))
+        }
+
       }
 
       // Calcular resumo
