@@ -40,9 +40,9 @@ export const ProductTable = ({
     const costValues = costsArray.filter(v => v !== null) as number[];
     const priceValues = pricesArray.filter(v => v !== null) as number[];
     
-    // Para custo: se tem variações, mostra o maior custo; senão, mostra o custo base
+    // Para custo: se tem variações, mostra a média dos custos; senão, mostra o custo base
     const displayCostValue = costValues.length > 0 
-      ? Math.max(...costValues) 
+      ? (costValues.reduce((a, b) => a + b, 0) / costValues.length) 
       : (product.cost_price ?? 0);
     
     // Para venda: se tem variações, mostra o maior preço; senão, mostra o preço base
@@ -63,7 +63,9 @@ export const ProductTable = ({
                   <span className="font-bold text-xs">{formatCurrency(baseValue)}</span>
               </button>
             </TooltipTrigger>
-            <TooltipContent><p>{isCost ? "Custo da variação mais cara" : "Preço da variação mais cara"}. Clique para ver todas.</p></TooltipContent>
+            <TooltipContent>
+              <p>{isCost ? "Custo médio das variações" : "Preço da variação mais cara"}. Clique para ver todas.</p>
+            </TooltipContent>
           </Tooltip>
         </TooltipProvider>
       );
