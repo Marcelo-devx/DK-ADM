@@ -37,8 +37,25 @@ serve(async (req) => {
     if (error) throw error;
 
     // Busca usuários do Auth para cruzar o e-mail (O Auth é a fonte da verdade para e-mail)
-    const { data: { users } } = await supabaseAdmin.auth.admin.listUsers();
-    const emailMap = new Map(users.map(u => [u.id, u.email]));
+    // Usa paginação para garantir que todos os usuários sejam carregados
+    let allUsers = [];
+    let page = 1;
+    const perPage = 1000;
+    let hasMore = true;
+
+    while (hasMore) {
+        const { data: { users } } = await supabaseAdmin.auth.admin.listUsers({
+            page,
+            perPage
+        });
+        
+        if (users && users.length > 0) {
+            allUsers = allUsers.concat(users);
+        }
+        hasMore = users && users.length === perPage;
+        page++;
+    }
+    const emailMap = new Map(allUsers.map(u => [u.id, u.email]));
 
     const result = profiles.map(p => ({
         id: p.id,

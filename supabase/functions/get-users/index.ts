@@ -73,7 +73,7 @@ serve(async (req) => {
     // Buscar todos os usuários com paginação
     let allUsers = [];
     let page = 1;
-    const perPage = 100;
+    const perPage = 1000;
     let hasMore = true;
 
     console.log('[get-users] Iniciando busca de usuários com paginação');

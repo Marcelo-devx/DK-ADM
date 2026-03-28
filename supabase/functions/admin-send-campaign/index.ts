@@ -52,9 +52,25 @@ serve(async (req) => {
             .select('id, first_name, last_name, phone')
             .in('id', userIds);
         
-        // Busca Emails
-        const { data: { users } } = await supabaseAdmin.auth.admin.listUsers();
-        const emailMap = new Map(users.map(u => [u.id, u.email]));
+        // Busca Emails com paginação para garantir todos os usuários
+        let allUsers = [];
+        let page = 1;
+        const perPage = 1000;
+        let hasMore = true;
+
+        while (hasMore) {
+            const { data: { users } } = await supabaseAdmin.auth.admin.listUsers({
+                page,
+                perPage
+            });
+            
+            if (users && users.length > 0) {
+                allUsers = allUsers.concat(users);
+            }
+            hasMore = users && users.length === perPage;
+            page++;
+        }
+        const emailMap = new Map(allUsers.map(u => [u.id, u.email]));
 
         const notifications = profiles?.map(p => {
             const firstName = p.first_name || 'Cliente';
