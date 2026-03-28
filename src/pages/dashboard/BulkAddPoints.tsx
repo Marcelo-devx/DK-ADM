@@ -11,8 +11,9 @@ interface ProcessingResult {
   email: string
   userId?: string
   points: number
-  status: 'success' | 'failed' | 'not_found'
+  status: 'success' | 'failed' | 'not_found' | 'skipped'
   error?: string
+  reason?: string
 }
 
 export default function BulkAddPoints() {
@@ -21,7 +22,7 @@ export default function BulkAddPoints() {
   const [preview, setPreview] = useState<any[]>([])
   const [processing, setProcessing] = useState(false)
   const [results, setResults] = useState<ProcessingResult[]>([])
-  const [summary, setSummary] = useState<{ success: number; failed: number; notFound: number } | null>(null)
+  const [summary, setSummary] = useState<{ success: number; failed: number; notFound: number; skipped?: number } | null>(null)
   const [processedCount, setProcessedCount] = useState(0)
   const [totalCount, setTotalCount] = useState(0)
 
@@ -118,7 +119,8 @@ export default function BulkAddPoints() {
             setSummary({
               success: processingResults.filter(r => r.status === 'success').length,
               failed: processingResults.filter(r => r.status === 'failed').length,
-              notFound: processingResults.filter(r => r.status === 'not_found').length
+              notFound: processingResults.filter(r => r.status === 'not_found').length,
+              skipped: processingResults.filter(r => r.status === 'skipped').length
             })
             // cede ao event loop
             // eslint-disable-next-line no-await-in-loop
@@ -144,7 +146,8 @@ export default function BulkAddPoints() {
             setSummary({
               success: processingResults.filter(r => r.status === 'success').length,
               failed: processingResults.filter(r => r.status === 'failed').length,
-              notFound: processingResults.filter(r => r.status === 'not_found').length
+              notFound: processingResults.filter(r => r.status === 'not_found').length,
+              skipped: processingResults.filter(r => r.status === 'skipped').length
             })
             // eslint-disable-next-line no-await-in-loop
             await new Promise((resolve) => setTimeout(resolve, 10))
@@ -202,7 +205,8 @@ export default function BulkAddPoints() {
           setSummary(json.summary || {
             success: merged.filter((r: any) => r.status === 'success').length,
             failed: merged.filter((r: any) => r.status === 'failed').length,
-            notFound: merged.filter((r: any) => r.status === 'not_found').length
+            notFound: merged.filter((r: any) => r.status === 'not_found').length,
+            skipped: merged.filter((r: any) => r.status === 'skipped').length
           })
           setProcessedCount(rows.length)
 
@@ -225,7 +229,8 @@ export default function BulkAddPoints() {
       const summaryData = {
         success: processingResults.filter(r => r.status === 'success').length,
         failed: processingResults.filter(r => r.status === 'failed').length,
-        notFound: processingResults.filter(r => r.status === 'not_found').length
+        notFound: processingResults.filter(r => r.status === 'not_found').length,
+        skipped: processingResults.filter(r => r.status === 'skipped').length
       }
 
       setResults(processingResults)
@@ -350,7 +355,7 @@ export default function BulkAddPoints() {
                 <CardTitle>Resumo</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-3 gap-4">
+                <div className={`grid grid-cols-${summary.skipped && summary.skipped > 0 ? '4' : '3'} gap-4`}>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-green-600">{summary.success}</div>
                     <div className="text-sm text-gray-600">Sucesso</div>
@@ -363,6 +368,12 @@ export default function BulkAddPoints() {
                     <div className="text-2xl font-bold text-yellow-600">{summary.notFound}</div>
                     <div className="text-sm text-gray-600">Não encontrados</div>
                   </div>
+                  {summary.skipped && summary.skipped > 0 && (
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-yellow-500">{summary.skipped}</div>
+                      <div className="text-sm text-gray-600">Ignorados</div>
+                    </div>
+                  )}
                 </div>
                 {results.length > 0 && (
                   <Button
@@ -399,11 +410,12 @@ export default function BulkAddPoints() {
                           {result.status === 'success' && <CheckCircle className="h-4 w-4 text-green-600" />}
                           {result.status === 'failed' && <AlertCircle className="h-4 w-4 text-red-600" />}
                           {result.status === 'not_found' && <AlertCircle className="h-4 w-4 text-yellow-600" />}
+                          {result.status === 'skipped' && <AlertCircle className="h-4 w-4 text-yellow-500" />}
                         </TableCell>
                         <TableCell>{result.email}</TableCell>
                         <TableCell>{result.userId || '-'}</TableCell>
                         <TableCell>{result.points}</TableCell>
-                        <TableCell>{result.error || '-'}</TableCell>
+                        <TableCell>{result.error || result.reason || '-'}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

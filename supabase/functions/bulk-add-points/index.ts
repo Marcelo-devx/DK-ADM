@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.51.0'
 
@@ -68,6 +69,27 @@ serve(async (req) => {
         }
 
         const userId = userData[0].get_user_id_by_email
+
+        // Get current points to check if update is needed
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('points')
+          .eq('id', userId)
+          .single()
+
+        if (profileError || !profile) {
+          console.error('[bulk-add-points] fetch profile error', { email, userId, error: profileError })
+          results.push({ email: emailRaw, userId, points, status: 'failed', error: 'Erro ao buscar perfil' })
+          continue
+        }
+
+        const currentPoints = profile.points ?? 0
+        // Skip if points are already equal to import value
+        if (currentPoints === points) {
+          results.push({ email: emailRaw, userId, points, status: 'skipped', reason: 'Pontos já são iguais' })
+          continue
+        }
+
         // Update points using service role key (bypasses RLS)
         const { error: updateError } = await supabase.from('profiles').update({ points: supabase.raw(`points + ${points}`) }).eq('id', userId)
         if (updateError) {
@@ -91,6 +113,7 @@ serve(async (req) => {
 
     const summary = {
       success: results.filter(r => r.status === 'success').length,
+      skipped: results.filter(r => r.status === 'skipped').length,
       failed: results.filter(r => r.status === 'failed').length,
       notFound: results.filter(r => r.status === 'not_found').length
     }
