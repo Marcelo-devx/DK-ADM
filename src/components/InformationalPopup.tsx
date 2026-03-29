@@ -12,7 +12,6 @@ import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { Info } from "lucide-react";
 import { useUser } from "@/hooks/useUser";
-import DOMPurify from 'dompurify';
 
 const fetchActivePopups = async () => {
   const { data, error } = await supabase
@@ -62,6 +61,8 @@ export const InformationalPopup = () => {
     }
   }, [pendingPopups, location.pathname, isOpen, isAdmin, userLoading]);
 
+  const currentPopup = pendingPopups[currentIndex];
+
   const handleClose = () => {
     if (currentPopup) {
       sessionStorage.setItem(`popup-${currentPopup.id}`, 'true');
@@ -70,8 +71,8 @@ export const InformationalPopup = () => {
     if (currentIndex < pendingPopups.length - 1) {
         setCurrentIndex(prev => prev + 1);
     } else {
-      setIsOpen(false);
-      setCurrentIndex(0);
+        setIsOpen(false);
+        setCurrentIndex(0);
     }
   };
 
@@ -102,12 +103,7 @@ export const InformationalPopup = () => {
             <AlertDialogDescription className="text-gray-400 text-base leading-relaxed w-full mt-4" asChild>
               <div 
                 className="formatted-content max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar"
-                dangerouslySetInnerHTML={{ 
-                  __html: DOMPurify.sanitize(currentPopup.content, {
-                    ALLOWED_TAGS: ['p', 'b', 'i', 'u', 'strong', 'br', 'div', 'span', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'em'],
-                    ALLOWED_ATTR: ['class', 'style', 'id']
-                  })
-                }} 
+                dangerouslySetInnerHTML={{ __html: currentPopup.content }} 
               />
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -132,11 +128,11 @@ export const InformationalPopup = () => {
             width: 4px;
           }
           .custom-scrollbar::-webkit-scrollbar-track {
-            background: rgba(255, 255,255, 0.05);
+            background: rgba(255, 255, 255, 0.05);
             border-radius: 10px;
           }
           .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: rgba(255,255,255, 0.2);
+            background: rgba(255, 255, 255, 0.2);
             border-radius: 10px;
           }
         `}</style>
