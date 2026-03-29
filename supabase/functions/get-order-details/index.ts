@@ -4,7 +4,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, content-type',
 }
 
 serve(async (req) => {
@@ -22,7 +22,6 @@ serve(async (req) => {
 
     // 1. Validação de Segurança
     const authHeader = req.headers.get('Authorization') || req.headers.get('authorization');
-    const apiKeyHeader = req.headers.get('apikey') || req.headers.get('x-api-key') || '';
     const token = authHeader?.replace(/^Bearer\s+/i, '') || '';
     
     let isAuthorized = false;
@@ -38,12 +37,6 @@ serve(async (req) => {
         
         if (setting?.value && token && token === setting.value) {
             isAuthorized = true;
-        }
-
-        // Minimal additional support: allow apikey/x-api-key header to match service role or configured token
-        if (!isAuthorized && apiKeyHeader) {
-          if (apiKeyHeader === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')) isAuthorized = true;
-          if (!isAuthorized && setting?.value && apiKeyHeader === setting.value) isAuthorized = true;
         }
     }
 

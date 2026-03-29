@@ -3,7 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, content-type',
 }
 
 serve(async (req) => {
@@ -16,15 +16,14 @@ serve(async (req) => {
 
   // Read envs
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || ''
-  const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') || ''
   const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
 
-  if (!SUPABASE_URL || (!SUPABASE_ANON_KEY && !SUPABASE_SERVICE_ROLE_KEY)) {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     console.error(`[${FN}] missing supabase envs`)
     return new Response(JSON.stringify({ error: 'Server misconfiguration' }), { status: 500, headers: { 'Content-Type': 'application/json' } })
   }
 
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY)
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
   try {
     // Support GET with query params for quick testing: ?order_id=..&status=..
@@ -32,9 +31,8 @@ serve(async (req) => {
     const params = url.searchParams
 
     const authHeader = req.headers.get('authorization') || ''
-    const apiKeyHeader = req.headers.get('apikey') || req.headers.get('x-api-key') || ''
 
-    console.log(`[${FN}] headers present`, { hasAuthorization: !!authHeader, hasApikey: !!apiKeyHeader })
+    console.log(`[${FN}] headers present`, { hasAuthorization: !!authHeader })
 
     // Fetch the configured integration token from app_settings (if exists)
     let configuredToken: string | null = null
@@ -51,7 +49,7 @@ serve(async (req) => {
       console.log(`[${FN}] error reading app_settings`, e.message)
     }
 
-    // Normalize bearer token (if any)
+    // Normalize bearer token (required)
     let bearer = ''
     if (authHeader) {
       const parts = authHeader.split(' ')
@@ -59,16 +57,15 @@ serve(async (req) => {
       else bearer = authHeader
     }
 
-    // Accept if any of these match: service role, anon key, configured n8n token, or apikey header equals configured token/service role/anon
+    // Only accept Authorization: Bearer <token> that matches service role key or configured token
     const validKeys = new Set<string>()
     if (SUPABASE_SERVICE_ROLE_KEY) validKeys.add(SUPABASE_SERVICE_ROLE_KEY)
-    if (SUPABASE_ANON_KEY) validKeys.add(SUPABASE_ANON_KEY)
     if (configuredToken) validKeys.add(configuredToken)
 
-    const isAuthorized = (bearer && validKeys.has(bearer)) || (apiKeyHeader && validKeys.has(apiKeyHeader))
+    const isAuthorized = !!bearer && validKeys.has(bearer)
 
     if (!isAuthorized) {
-      console.warn(`[${FN}] authorization failed`, { bearerPresent: !!bearer, apiKeyPresent: !!apiKeyHeader })
+      console.warn(`[${FN}] authorization failed`, { bearerPresent: !!bearer })
       return new Response(JSON.stringify({ error: 'Authorization failed – Token de autenticação inválido' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
