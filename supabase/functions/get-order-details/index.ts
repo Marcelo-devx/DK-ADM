@@ -21,12 +21,13 @@ serve(async (req) => {
     );
 
     // 1. Validação de Segurança
-    const authHeader = req.headers.get('Authorization');
-    const token = authHeader?.replace('Bearer ', '');
+    const authHeader = req.headers.get('Authorization') || req.headers.get('authorization');
+    const apiKeyHeader = req.headers.get('apikey') || req.headers.get('x-api-key') || '';
+    const token = authHeader?.replace(/^Bearer\s+/i, '') || '';
     
     let isAuthorized = false;
 
-    if (token === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')) {
+    if (token && token === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')) {
         isAuthorized = true;
     } else {
         const { data: setting } = await supabaseAdmin
@@ -35,8 +36,14 @@ serve(async (req) => {
             .eq('key', 'n8n_integration_token')
             .single();
         
-        if (setting?.value && token === setting.value) {
+        if (setting?.value && token && token === setting.value) {
             isAuthorized = true;
+        }
+
+        // Minimal additional support: allow apikey/x-api-key header to match service role or configured token
+        if (!isAuthorized && apiKeyHeader) {
+          if (apiKeyHeader === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')) isAuthorized = true;
+          if (!isAuthorized && setting?.value && apiKeyHeader === setting.value) isAuthorized = true;
         }
     }
 
