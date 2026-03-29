@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import DOMPurify from 'dompurify';
 
 const PopupsPage = () => {
   const queryClient = useQueryClient();
@@ -141,14 +142,18 @@ const PopupsPage = () => {
                             <Badge className="bg-green-500 text-[10px] uppercase font-black">Em exibição</Badge>
                           ) : (
                             <Badge variant="secondary" className="text-[10px] uppercase font-bold">Pausado</Badge>
-                          )}
+                          )} 
                       </div>
                   </CardHeader>
                   <CardContent className="text-sm text-gray-600 py-4">
                       <div 
                         className="line-clamp-4 italic bg-gray-50 p-3 rounded-lg border border-gray-100 overflow-hidden max-h-[100px]"
-                        dangerouslySetInnerHTML={{ __html: popup.content }}
-                      />
+                        dangerouslySetInnerHTML={{ 
+                          __html: DOMPurify.sanitize(popup.content, {
+                            ALLOWED_TAGS: ['p', 'b', 'i', 'u', 'strong', 'br', 'div', 'span'],
+                            ALLOWED_ATTR: ['class']
+                          })
+                        }}
                   </CardContent>
                   <CardFooter className="flex justify-between pt-3 border-t bg-gray-50/30">
                       <Button 
@@ -177,7 +182,7 @@ const PopupsPage = () => {
               <AlertCircle className="h-10 w-10 mx-auto text-gray-300 mb-4" />
               <h3 className="text-lg font-bold text-gray-400 uppercase tracking-wider">Nenhum aviso criado</h3>
           </div>
-        )}
+        )} 
       </div>
     </div>
   );

@@ -17,6 +17,7 @@ import { Eye, Smartphone, Monitor, Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
+import DOMPurify from 'dompurify';
 
 const formSchema = z.object({
   id: z.number().optional(),
@@ -91,8 +92,7 @@ export const PopupForm = ({
                   </FormControl>
                   <FormMessage />
                 </FormItem>
-              )}
-            />
+              )} />
             
             <FormField
               control={form.control}
@@ -115,8 +115,7 @@ export const PopupForm = ({
                   </FormControl>
                   <FormMessage />
                 </FormItem>
-              )}
-            />
+              )} />
 
             <div className="grid grid-cols-2 gap-4">
                 <FormField
@@ -130,8 +129,7 @@ export const PopupForm = ({
                         </FormControl>
                         <FormMessage />
                         </FormItem>
-                    )}
-                />
+                    )} />
                 <FormField
                     control={form.control}
                     name="sort_order"
@@ -143,8 +141,7 @@ export const PopupForm = ({
                         </FormControl>
                         <FormMessage />
                         </FormItem>
-                    )}
-                />
+                    )} />
             </div>
 
             <FormField
@@ -162,8 +159,7 @@ export const PopupForm = ({
                     />
                   </FormControl>
                 </FormItem>
-              )}
-            />
+              )} />
             <Button type="submit" disabled={isSubmitting} className="w-full h-12 text-lg font-bold">
               {isSubmitting ? "Processando..." : (initialData?.id ? "Salvar Alterações" : "Criar Aviso")}
             </Button>
@@ -197,7 +193,12 @@ export const PopupForm = ({
               
               <div 
                 className="text-gray-400 text-base leading-relaxed w-full ql-editor-preview custom-scrollbar-preview max-h-[300px] overflow-y-auto pr-2"
-                dangerouslySetInnerHTML={{ __html: watchedValues.content || "Digite o conteúdo ao lado..." }}
+                dangerouslySetInnerHTML={{ 
+                  __html: DOMPurify.sanitize(watchedValues.content || "Digite o conteúdo ao lado...", {
+                    ALLOWED_TAGS: ['p', 'b', 'i', 'u', 'strong', 'br', 'div', 'span', 'ul', 'ol', 'li'],
+                    ALLOWED_ATTR: ['class', 'style']
+                  })
+                }} 
               />
               
               <div className="w-full pt-4">
@@ -208,7 +209,6 @@ export const PopupForm = ({
             </div>
           </div>
         </div>
-      </div>
 
       <style>{`
         .ql-editor-preview {
