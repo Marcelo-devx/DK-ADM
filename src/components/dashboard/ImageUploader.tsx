@@ -44,19 +44,58 @@ export const ImageUploader = ({
     reader.onloadend = async () => {
       const base64data = reader.result as string;
       try {
+        // First attempt: use the Cloudinary edge function (preferred)
         const { data, error } = await supabase.functions.invoke("cloudinary-upload", {
           body: { image: base64data },
         });
 
-        if (error) throw error;
+        if (error || !data?.secure_url) {
+          throw error || new Error('Cloudinary upload did not return a secure_url');
+        }
 
         const { secure_url } = data;
         setMediaUrl(secure_url);
         onUploadSuccess(secure_url);
         showSuccess("Arquivo enviado com sucesso!");
       } catch (err: any) {
-        console.error("Error uploading file:", err);
-        showError(err.message || "Falha no upload do arquivo.");
+        console.error("Cloudinary upload failed, attempting Supabase Storage fallback:", err);
+        // Fallback: upload directly to Supabase Storage public bucket
+        try {
+          // Try common bucket names in order
+          const bucketCandidates = ['public', 'images', 'uploads'];
+          let uploadedUrl: string | null = null;
+
+          for (const bucket of bucketCandidates) {
+            try {
+              const filePath = `${Date.now()}_${file.name}`;
+              const { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, file, { upsert: true });
+              if (uploadError) {
+                console.warn(`Upload to bucket ${bucket} failed:`, uploadError.message);
+                continue; // try next bucket
+              }
+
+              const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(filePath);
+              if (publicData?.publicUrl) {
+                uploadedUrl = publicData.publicUrl;
+                break;
+              }
+            } catch (innerErr) {
+              console.warn('Fallback upload attempt error:', innerErr);
+              continue;
+            }
+          }
+
+          if (!uploadedUrl) {
+            throw new Error('Fallback upload failed: no bucket available or permission denied');
+          }
+
+          setMediaUrl(uploadedUrl);
+          onUploadSuccess(uploadedUrl);
+          showSuccess('Arquivo enviado via Supabase Storage!');
+        } catch (fallbackErr: any) {
+          console.error('Both upload methods failed:', fallbackErr);
+          showError(fallbackErr.message || 'Falha no upload do arquivo.');
+        }
       } finally {
         setUploading(false);
       }
