@@ -21,6 +21,7 @@ serve(async (req) => {
     );
 
     // 1. Validação de Segurança
+    const supabaseForLogs = supabaseAdmin;
     const authHeader = req.headers.get('Authorization') || req.headers.get('authorization');
     const token = authHeader?.replace(/^Bearer\s+/i, '') || '';
     
@@ -41,6 +42,16 @@ serve(async (req) => {
     }
 
     if (!isAuthorized) {
+      // Temporary debug: log masked auth header to integration_logs
+      try {
+        const raw = authHeader || '';
+        const masked = raw ? (raw.length > 12 ? raw.slice(0,8) + '...' + raw.slice(-4) : raw) : 'none';
+        await supabaseForLogs.from('integration_logs').insert({ event_type: 'get_order_details', status: 'unauthorized', details: `Unauthorized attempt. Auth header: ${masked}`, created_at: new Date().toISOString() });
+      } catch (e) {
+        // ignore logging errors
+        console.error('failed to write debug log', e?.message || e);
+      }
+
       return new Response(JSON.stringify({ error: 'Unauthorized.' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
