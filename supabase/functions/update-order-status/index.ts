@@ -27,7 +27,7 @@ serve(async (req) => {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY)
 
   try {
-    // Support GET with query params for quick testing: ?order_id=..&status=..&token=..
+    // Support GET with query params for quick testing: ?order_id=..&status=..
     const url = new URL(req.url)
     const params = url.searchParams
 
@@ -59,10 +59,6 @@ serve(async (req) => {
       else bearer = authHeader
     }
 
-    // If token provided via query param (testing), accept it as bearer fallback
-    const tokenParam = params.get('token')
-    if (!bearer && tokenParam) bearer = tokenParam
-
     // Accept if any of these match: service role, anon key, configured n8n token, or apikey header equals configured token/service role/anon
     const validKeys = new Set<string>()
     if (SUPABASE_SERVICE_ROLE_KEY) validKeys.add(SUPABASE_SERVICE_ROLE_KEY)
@@ -72,7 +68,7 @@ serve(async (req) => {
     const isAuthorized = (bearer && validKeys.has(bearer)) || (apiKeyHeader && validKeys.has(apiKeyHeader))
 
     if (!isAuthorized) {
-      console.warn(`[${FN}] authorization failed`, { bearerPresent: !!bearer, apiKeyPresent: !!apiKeyHeader, tokenParamPresent: !!tokenParam })
+      console.warn(`[${FN}] authorization failed`, { bearerPresent: !!bearer, apiKeyPresent: !!apiKeyHeader })
       return new Response(JSON.stringify({ error: 'Authorization failed – Token de autenticação inválido' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
