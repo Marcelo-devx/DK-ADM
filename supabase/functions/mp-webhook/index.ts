@@ -33,6 +33,55 @@ serve(async (req) => {
         return new Response(JSON.stringify({ message: "No payment ID found" }), { status: 200, headers: corsHeaders });
     }
 
+    // 🔒 SECURITY: OPTIONAL HMAC SIGNATURE VERIFICATION
+    // Se MP_WEBHOOK_SECRET estiver configurado, verifica a assinatura
+    // Se NÃO estiver configurado, funciona em modo de compatibilidade (como antes)
+    const signature = req.headers.get('x-signature');
+    const webhookSecret = Deno.env.get('MP_WEBHOOK_SECRET');
+
+    if (webhookSecret) {
+      // Modo SEGURO: Verifica assinatura
+      console.log('[mp-webhook] MP_WEBHOOK_SECRET configurado. Verificando assinatura HMAC.');
+      
+      if (!signature) {
+        console.error('[mp-webhook] Assinatura ausente, mas secret está configurado.');
+        return new Response(JSON.stringify({ error: 'Missing signature' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // Obter o corpo RAW da requisição para verificação
+      const rawBody = await req.clone().text();
+      
+      // Calcular HMAC-SHA256 usando o secret
+      const key = await crypto.subtle.importKey(
+        'raw',
+        new TextEncoder().encode(webhookSecret),
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['verify']
+      );
+
+      const signatureBytes = hexToBytes(signature);
+      const keyBytes = new TextEncoder().encode(webhookSecret);
+      const bodyBytes = new TextEncoder().encode(rawBody);
+
+      const isValid = await crypto.subtle.verify(
+        'HMAC',
+        key,
+        signatureBytes,
+        bodyBytes
+      );
+
+      if (!isValid) {
+        console.error('[mp-webhook] Assinatura inválida!');
+        return new Response(JSON.stringify({ error: 'Invalid signature' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      console.log('[mp-webhook] Assinatura verificada com sucesso!');
+    } else {
+      // Modo COMPATIBILIDADE: Não verifica assinatura se secret não estiver configurado
+      console.warn('[mp-webhook] MP_WEBHOOK_SECRET não configurado. Operando em modo compatibilidade (sem verificação de assinatura). Configure MP_WEBHOOK_SECRET para proteção completa.');
+    }
+
     // 1. Inicializa Admin
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -77,7 +126,7 @@ serve(async (req) => {
         // Se falhar na consulta, pode ser que recebemos um webhook de prod mas estamos em test (ou vice-versa).
         console.error('[mp-webhook] Erro ao consultar MP', { status: mpResponse.status, body: paymentData });
         // Return 200 so MP won't keep retrying too aggressively, but include details for us to inspect
-        return new Response(JSON.stringify({ error: `Erro ao consultar pagamento. HTTP ${mpResponse.status}`, body: paymentData }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ error: `Erro ao consultar pagamento. HTTP ${mpResponse.status}`, body: paymentData }), { status: 200, headers: corsHeaders });
     }
 
     console.log('[mp-webhook] MP payment payload', { paymentId, paymentData });
@@ -194,3 +243,12 @@ serve(async (req) => {
     });
   }
 })
+
+// Helper para converter string hex em bytes
+function hexToBytes(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+  }
+  return bytes;
+}

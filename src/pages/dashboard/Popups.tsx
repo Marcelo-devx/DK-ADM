@@ -11,12 +11,21 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import DOMPurify from 'dompurify'; // Import DOMPurify for XSS protection
 
 const PopupsPage = () => {
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedPopup, setSelectedPopup] = useState<any>(null);
   const [isPreviewOnly, setIsPreviewOnly] = useState(false);
+
+  // Configure DOMPurify to allow React Quill's generated HTML
+  const purifyConfig = {
+    ALLOWED_TAGS: ['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'span', 'div', 'ul', 'ol', 'li', 'h1', 'h2', 'h3'],
+    ALLOWED_ATTR: ['class', 'style', 'align'],
+    ALLOW_DATA_ATTR: false,
+    KEEP_CONTENT: true,
+  };
 
   const { data: popups, isLoading } = useQuery({
     queryKey: ["popups-admin"],
@@ -145,9 +154,12 @@ const PopupsPage = () => {
                       </div>
                   </CardHeader>
                   <CardContent className="text-sm text-gray-600 py-4">
+                      {/* SAFEGUARD: Sanitize HTML in card preview to prevent XSS */}
                       <div 
                         className="line-clamp-4 italic bg-gray-50 p-3 rounded-lg border border-gray-100 overflow-hidden max-h-[100px]"
-                        dangerouslySetInnerHTML={{ __html: popup.content }}
+                        dangerouslySetInnerHTML={{ 
+                          __html: DOMPurify.sanitize(popup.content, purifyConfig) 
+                        }}
                       />
                   </CardContent>
                   <CardFooter className="flex justify-between pt-3 border-t bg-gray-50/30">

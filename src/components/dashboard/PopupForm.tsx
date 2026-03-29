@@ -17,6 +17,7 @@ import { Eye, Smartphone, Monitor, Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
+import DOMPurify from 'dompurify'; // Import DOMPurify for XSS protection
 
 const formSchema = z.object({
   id: z.number().optional(),
@@ -49,6 +50,14 @@ const quillFormats = [
   'header', 'bold', 'italic', 'underline', 'strike',
   'color', 'background', 'align'
 ];
+
+// Configure DOMPurify to allow React Quill's generated HTML
+const purifyConfig = {
+  ALLOWED_TAGS: ['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'span', 'div', 'ul', 'ol', 'li', 'h1', 'h2', 'h3'],
+  ALLOWED_ATTR: ['class', 'style', 'align'],
+  ALLOW_DATA_ATTR: false,
+  KEEP_CONTENT: true,
+};
 
 export const PopupForm = ({
   onSubmit,
@@ -91,8 +100,7 @@ export const PopupForm = ({
                   </FormControl>
                   <FormMessage />
                 </FormItem>
-              )}
-            />
+              )} />
             
             <FormField
               control={form.control}
@@ -115,8 +123,7 @@ export const PopupForm = ({
                   </FormControl>
                   <FormMessage />
                 </FormItem>
-              )}
-            />
+              )} />
 
             <div className="grid grid-cols-2 gap-4">
                 <FormField
@@ -130,8 +137,7 @@ export const PopupForm = ({
                         </FormControl>
                         <FormMessage />
                         </FormItem>
-                    )}
-                />
+                    )} />
                 <FormField
                     control={form.control}
                     name="sort_order"
@@ -143,8 +149,7 @@ export const PopupForm = ({
                         </FormControl>
                         <FormMessage />
                         </FormItem>
-                    )}
-                />
+                    )} />
             </div>
 
             <FormField
@@ -162,8 +167,7 @@ export const PopupForm = ({
                     />
                   </FormControl>
                 </FormItem>
-              )}
-            />
+              )} />
             <Button type="submit" disabled={isSubmitting} className="w-full h-12 text-lg font-bold">
               {isSubmitting ? "Processando..." : (initialData?.id ? "Salvar Alterações" : "Criar Aviso")}
             </Button>
@@ -195,9 +199,12 @@ export const PopupForm = ({
                 {watchedValues.title || "Título do Seu Aviso"}
               </h3>
               
+              {/* SAFEGUARD: Sanitize HTML in preview to prevent XSS */}
               <div 
                 className="text-gray-400 text-base leading-relaxed w-full ql-editor-preview custom-scrollbar-preview max-h-[300px] overflow-y-auto pr-2"
-                dangerouslySetInnerHTML={{ __html: watchedValues.content || "Digite o conteúdo ao lado..." }}
+                dangerouslySetInnerHTML={{ 
+                  __html: DOMPurify.sanitize(watchedValues.content || "Digite o conteúdo ao lado...", purifyConfig) 
+                }}
               />
               
               <div className="w-full pt-4">
