@@ -6,6 +6,11 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Helper to convert ArrayBuffer to hex
+function toHex(buffer) {
+  return Array.from(new Uint8Array(buffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 serve(async (req) => {
   // Handle CORS preflight request
   if (req.method === 'OPTIONS') {
@@ -32,24 +37,33 @@ serve(async (req) => {
 
     console.log('[cloudinary-upload] Preparando upload para Cloudinary:', { cloudName });
 
-    // Criar FormData manualmente para upload
-    const formData = new FormData();
-    formData.append('file', image);
-    formData.append('folder', 'tabacaria-products');
-    formData.append('resource_type', 'auto'); // Detecta automaticamente se é imagem ou vídeo
+    // Use signed upload: compute timestamp and signature per Cloudinary API
+    const folder = 'tabacaria-products';
+    const timestamp = Math.floor(Date.now() / 1000);
 
-    // Usar Basic Auth para autenticação (mais leve que assinatura completa)
-    const authHeader = btoa(`${apiKey}:${apiSecret}`);
+    // Build the string to sign - order of params matters and must not include empty values
+    const paramsToSign = `folder=${folder}&timestamp=${timestamp}`;
+    const toSign = paramsToSign + apiSecret;
+
+    // Compute sha1 signature
+    const sigBuffer = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(toSign));
+    const signature = toHex(sigBuffer);
 
     const uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`;
 
-    console.log('[cloudinary-upload] Enviando requisição para:', uploadUrl);
+    const formData = new FormData();
+    // Cloudinary accepts both data URLs and binary file - we send the data URL as-is
+    formData.append('file', image);
+    formData.append('api_key', apiKey);
+    formData.append('timestamp', String(timestamp));
+    formData.append('signature', signature);
+    formData.append('folder', folder);
+    formData.append('resource_type', 'auto');
+
+    console.log('[cloudinary-upload] Enviando requisição para:', uploadUrl, { folder, timestamp });
 
     const response = await fetch(uploadUrl, {
       method: 'POST',
-      headers: {
-        'Authorization': `Basic ${authHeader}`,
-      },
       body: formData,
     });
 
