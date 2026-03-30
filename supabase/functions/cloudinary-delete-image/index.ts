@@ -7,13 +7,20 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Configure Cloudinary using secrets
-cloudinary.config({
-  cloud_name: Deno.env.get('CLOUDINARY_CLOUD_NAME'),
-  api_key: Deno.env.get('CLOUDINARY_API_KEY'),
-  api_secret: Deno.env.get('CLOUDINARY_API_SECRET'),
-  secure: true,
-});
+const CLOUDINARY_CLOUD_NAME = Deno.env.get('CLOUDINARY_CLOUD_NAME');
+const CLOUDINARY_API_KEY = Deno.env.get('CLOUDINARY_API_KEY');
+const CLOUDINARY_API_SECRET = Deno.env.get('CLOUDINARY_API_SECRET');
+
+if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
+  cloudinary.config({
+    cloud_name: CLOUDINARY_CLOUD_NAME,
+    api_key: CLOUDINARY_API_KEY,
+    api_secret: CLOUDINARY_API_SECRET,
+    secure: true,
+  });
+} else {
+  console.error('[cloudinary-delete-image] Cloudinary env vars missing or empty');
+}
 
 serve(async (req) => {
   // Handle CORS preflight request
@@ -22,6 +29,14 @@ serve(async (req) => {
   }
 
   try {
+    if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) {
+      console.error('[cloudinary-delete-image] Variáveis de ambiente do Cloudinary ausentes');
+      return new Response(
+        JSON.stringify({ error: 'Cloudinary credentials not configured in Edge Function (missing CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET).' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      );
+    }
+
     const { public_id } = await req.json();
 
     if (!public_id) {
