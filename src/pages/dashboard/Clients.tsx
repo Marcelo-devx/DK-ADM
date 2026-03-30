@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -56,13 +56,14 @@ interface Client {
   completed_order_count: number;
 }
 
-// Accept options for limit and search so we can fetch just the first N by default
-const fetchClients = async (options?: { limit?: number; search?: string }): Promise<Client[]> => {
+// Accept options for limit, page and search so we can fetch paged results
+const fetchClients = async (options?: { limit?: number; page?: number; search?: string }): Promise<Client[]> => {
   console.log('[Clients.tsx] Iniciando fetchClients', options);
 
   try {
     const body: any = {};
     if (options?.limit) body.limit = options.limit;
+    if (options?.page) body.page = options.page;
     if (options?.search) body.search = options.search;
 
     console.log('[Clients.tsx] Chamando Edge Function via supabase.functions.invoke("get-users") com body:', body);
@@ -91,9 +92,13 @@ const fetchClients = async (options?: { limit?: number; search?: string }): Prom
         .from('profiles')
         .select('id, first_name, last_name, role, force_pix_on_next_purchase, created_at, updated_at');
 
-      // Apply limit if provided to keep fallback lightweight
-      if (options?.limit) {
-        // supabase-js .limit is available
+      // Apply range if page and limit provided to keep fallback lightweight
+      if (options?.limit && options?.page) {
+        const start = (options.page - 1) * options.limit;
+        const end = start + options.limit - 1;
+        // @ts-ignore
+        query = query.range(start, end);
+      } else if (options?.limit) {
         // @ts-ignore
         query = query.limit(options.limit);
       }
@@ -138,8 +143,9 @@ const ClientsPage = () => {
   const [showOnlyFlagged, setShowOnlyFlagged] = useState(false);
   const [searchEmail, setSearchEmail] = useState("");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [showAll, setShowAll] = useState(false); // controls whether we fetch all clients or only the first page
-  
+  const [page, setPage] = useState(1);
+  const pageSize = 10; // items per page
+
   // Estado para o modal de detalhes
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
@@ -165,15 +171,19 @@ const ClientsPage = () => {
     },
   });
 
-  // Determine options for fetch: if searching, fetch server-side results (no limit),
-  // otherwise fetch only the first 10 unless showAll is true.
+  // Reset to first page when user starts a new search
+  useEffect(() => {
+    setPage(1);
+  }, [searchEmail]);
+
   const fetchOptions = {
-    limit: !showAll && !searchEmail ? 10 : undefined,
+    limit: pageSize,
+    page,
     search: searchEmail && searchEmail.trim().length > 0 ? searchEmail.trim() : undefined,
-  } as { limit?: number; search?: string };
+  } as { limit?: number; page?: number; search?: string };
 
   const { data: clients, isLoading, error, refetch } = useQuery<Client[]>({
-    queryKey: ["clients", showAll, searchEmail],
+    queryKey: ["clients", page, searchEmail],
     queryFn: async () => {
       try {
         const data = await fetchClients(fetchOptions);
@@ -236,16 +246,16 @@ const ClientsPage = () => {
       if (error) throw new Error(error.message);
     },
     onMutate: async (variables) => {
-      // optimistic update clients list
-      await queryClient.cancelQueries({ queryKey: ["clients"] });
-      const previous = queryClient.getQueryData<Client[]>(["clients"]);
+      // optimistic update clients list for the current page/search
+      await queryClient.cancelQueries({ queryKey: ["clients", page, searchEmail] });
+      const previous = queryClient.getQueryData<Client[]>(["clients", page, searchEmail]);
       if (previous) {
-        queryClient.setQueryData(["clients"], previous.map(c => c.id === variables.userId ? { ...c, force_pix_on_next_purchase: variables.forcePix } : c));
+        queryClient.setQueryData(["clients", page, searchEmail], previous.map(c => c.id === variables.userId ? { ...c, force_pix_on_next_purchase: variables.forcePix } : c));
       }
       return { previous };
     },
     onSuccess: (_, variables) => {
-      // Invalidate a broader set so UI and other pages reflect the change
+      // Invalidate queries so UI and other pages reflect the change
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["supplierOrders"] });
@@ -256,7 +266,7 @@ const ClientsPage = () => {
     onError: (error: Error, variables, context: any) => {
       // rollback optimistic update
       if (context?.previous) {
-        queryClient.setQueryData(["clients"], context.previous);
+        queryClient.setQueryData(["clients", page, searchEmail], context.previous);
       }
       showError(`Erro ao atualizar segurança: ${error.message}`);
     },
@@ -317,6 +327,8 @@ const ClientsPage = () => {
     return true;
   });
 
+  const maxPage = totalClients ? Math.max(1, Math.ceil(totalClients / pageSize)) : undefined;
+
   return (
     <div>
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
@@ -324,8 +336,8 @@ const ClientsPage = () => {
           <h1 className="text-3xl font-bold">Clientes</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Total de clientes cadastrados: <span className="font-semibold text-primary">{totalClients?.toLocaleString("pt-BR") || filteredClients?.length || 0}</span>
-            {!searchEmail && !showAll && (
-              <span className="text-xs text-muted-foreground ml-2">(Mostrando os 10 primeiros para melhorar performance)</span>
+            {!searchEmail && (
+              <span className="text-xs text-muted-foreground ml-2">(Mostrando página {page}{maxPage ? ` de ${maxPage}` : ''})</span>
             )}
           </p>
         </div>
@@ -336,7 +348,7 @@ const ClientsPage = () => {
               type="text"
               placeholder="Buscar por email..."
               value={searchEmail}
-              onChange={(e) => setSearchEmail(e.target.value)}
+              onChange={(e) => { setSearchEmail(e.target.value); setPage(1); }}
               className="pl-9 pr-4 py-2 border rounded-md text-sm w-64 focus:outline-none focus:ring-2 focus:ring-primary"
             />
             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -368,13 +380,26 @@ const ClientsPage = () => {
             <Label htmlFor="filter-flagged" className="text-sm">Apenas alertas</Label>
           </div>
 
-          {/* Button to toggle fetching all clients */}
-          <div className="pl-4">
+          {/* Pagination controls */}
+          <div className="pl-4 flex items-center space-x-2">
             <Button
-              variant={showAll ? 'secondary' : 'outline'}
-              onClick={() => { setShowAll(!showAll); /* refetch with new options */ queryClient.invalidateQueries({ queryKey: ["clients"] }); }}
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1 || isLoading}
             >
-              {showAll ? 'Mostrar apenas 10' : 'Mostrar todos'}
+              Anterior
+            </Button>
+
+            <div className="text-sm text-muted-foreground">Página {page}{maxPage ? ` de ${maxPage}` : ''}</div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => p + 1)}
+              disabled={isLoading || (totalClients ? page >= (maxPage || 1) : (clients ? clients.length < pageSize : true))}
+            >
+              Próxima
             </Button>
           </div>
         </div>
