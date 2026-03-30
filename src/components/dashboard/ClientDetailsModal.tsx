@@ -55,6 +55,9 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
           id, 
           created_at, 
           total_price, 
+          shipping_cost,
+          donation_amount,
+          coupon_discount,
           status, 
           payment_method,
           order_items (
