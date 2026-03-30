@@ -115,7 +115,7 @@ serve(async (req) => {
 
     console.log('[create-mercadopago-preference] Total amount for preference', { totalAmount, mode });
 
-    // 7. Build payer object — phone e cpf só se válidos (evita rejeição do MP)
+    // Build payer object — phone e cpf só se válidos (evita rejeição do MP)
     const payer: any = {
       name: profileData?.first_name || "Cliente",
       surname: profileData?.last_name || "",
@@ -168,9 +168,19 @@ serve(async (req) => {
         },
         auto_return: "approved",
         external_reference: String(orderId),
-        notification_url: `${Deno.env.get('SUPABASE_URL')}/functions/v1/mp-webhook`,
         statement_descriptor: "TABACARIA"
     };
+
+    // Ensure notification_url is a reachable public URL.
+    // Prefer Deno.env SUPABASE_URL, but fallback to the known project URL (public Supabase domain).
+    const envSupabaseUrl = Deno.env.get('SUPABASE_URL');
+    const fallbackSupabaseHost = 'https://jrlozhhvwqfmjtkmvukf.supabase.co';
+    const resolvedSupabaseUrl = envSupabaseUrl && envSupabaseUrl.trim() !== '' ? envSupabaseUrl.replace(/\/$/, '') : fallbackSupabaseHost;
+    const notificationUrl = `${resolvedSupabaseUrl}/functions/v1/mp-webhook`;
+
+    // attach notification_url and log it
+    preferenceBody.notification_url = notificationUrl;
+    console.log('[create-mercadopago-preference] Using notification_url for MP webhook', { notificationUrl });
 
     console.log('[create-mercadopago-preference] Sending preference to MP', { 
       orderId, 
