@@ -1,43 +1,29 @@
-import { useState, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { MoreHorizontal, Mail, KeyRound, RotateCcw, CheckCircle, Lock, Unlock, UserPlus, Eye, CalendarDays } from "lucide-react";
+import {
+  MoreHorizontal, Mail, KeyRound, RotateCcw,
+  CheckCircle, Lock, Unlock, UserPlus, Eye, CalendarDays,
+} from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuLabel, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { showSuccess, showError } from "@/utils/toast";
 import { CreateClientForm } from "@/components/dashboard/CreateClientForm";
@@ -50,372 +36,280 @@ interface Client {
   updated_at: string | null;
   first_name: string | null;
   last_name: string | null;
-  role: 'user' | 'adm';
+  role: "user" | "adm";
   force_pix_on_next_purchase: boolean;
   order_count: number;
   completed_order_count: number;
 }
 
-// Accept options for limit, page and search so we can fetch paged results
-const fetchClients = async (options?: { limit?: number; page?: number; search?: string }): Promise<Client[]> => {
-  // Keep logs minimal to avoid UI perf impact
-  try {
-    const body: any = {};
-    if (options?.limit) body.limit = options.limit;
-    if (options?.page) body.page = options.page;
-    if (options?.search) body.search = options.search;
+const PAGE_SIZE = 10;
+const ANON_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpybG96aGh2d3FmbWp0a212dWtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDU2NjQsImV4cCI6MjA2NzkyMTY2NH0.Do5c1-TKqpyZTJeX_hLbw1SU40CbwXfCIC-pPpcD_JM";
 
-    const { data, error } = await supabase.functions.invoke('get-users', {
-      body: Object.keys(body).length ? body : undefined,
-    });
+// ── Data fetchers ────────────────────────────────────────────────────────────
 
-    if (error) {
-      throw error;
-    }
+async function loadPage(page: number, search: string): Promise<Client[]> {
+  const body: Record<string, unknown> = { limit: PAGE_SIZE, page };
+  if (search) body.search = search;
+  const { data, error } = await supabase.functions.invoke("get-users", { body });
+  if (error) throw new Error(error.message);
+  if (!Array.isArray(data)) throw new Error("Resposta inválida da Edge Function.");
+  return data as Client[];
+}
 
-    if (!data) {
-      throw new Error('Edge Function retornou sem dados.');
-    }
+async function loadTotal(): Promise<number> {
+  const { count, error } = await supabase
+    .from("profiles")
+    .select("*", { count: "exact", head: true })
+    .eq("role", "user");
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
 
-    return data as Client[];
-  } catch (err) {
-    try {
-      let query = supabase
-        .from('profiles')
-        .select('id, first_name, last_name, role, force_pix_on_next_purchase, created_at, updated_at');
+// ── Component ────────────────────────────────────────────────────────────────
 
-      if (options?.limit && options?.page) {
-        const start = (options.page - 1) * options.limit;
-        const end = start + options.limit - 1;
-        // @ts-ignore
-        query = query.range(start, end);
-      } else if (options?.limit) {
-        // @ts-ignore
-        query = query.limit(options.limit);
-      }
+export default function ClientsPage() {
+  const qc = useQueryClient();
 
-      const { data: profiles, error: profilesError } = await query;
-
-      if (profilesError) {
-        throw new Error(`Falha no fallback: ${profilesError.message}`);
-      }
-
-      const clientsFallback: Client[] = (profiles || []).map((p: any) => ({
-        id: p.id,
-        email: p.id ? `${p.id}@no-email.local` : '—',
-        created_at: p.created_at || null,
-        updated_at: p.updated_at || null,
-        first_name: p.first_name || null,
-        last_name: p.last_name || null,
-        role: p.role || 'user',
-        force_pix_on_next_purchase: p.force_pix_on_next_purchase === true,
-        order_count: 0,
-        completed_order_count: 0,
-      }));
-
-      return clientsFallback;
-    } catch (fallbackErr) {
-      throw fallbackErr;
-    }
-  }
-};
-
-const ClientsPage = () => {
-  const queryClient = useQueryClient();
-  const [showOnlyFlagged, setShowOnlyFlagged] = useState(false);
-  const [searchEmail, setSearchEmail] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [page, setPage] = useState(1);
-  const pageSize = 10; // items per page
-
-  // Estado para o modal de detalhes
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState(""); // debounced value
+  const [showFlagged, setShowFlagged] = useState(false);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
-
-  // Guarda detalhes brutos do erro da Edge Function para exibição (apenas para depuração)
-  const [rawEdgeError, setRawEdgeError] = useState<any>(null);
-  
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [actionToConfirm, setActionToConfirm] = useState<{
-    action: 'resend_confirmation' | 'send_password_reset' | 'delete_orders' | 'mark_as_recurrent';
+    action: "resend_confirmation" | "send_password_reset" | "delete_orders" | "mark_as_recurrent";
     client: Client;
   } | null>(null);
 
-  // Total real de clientes direto do banco
-  const { data: totalClients } = useQuery<number>({
+  // Debounce search — only fires query 600 ms after user stops typing
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleSearchChange = (value: string) => {
+    setSearchInput(value);
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => {
+      setSearch(value.trim());
+      setPage(1);
+    }, 600);
+  };
+  useEffect(() => () => { if (debounceTimer.current) clearTimeout(debounceTimer.current); }, []);
+
+  // ── Queries ──────────────────────────────────────────────────────────────
+
+  const { data: total = 0 } = useQuery<number>({
     queryKey: ["clientsTotal"],
-    queryFn: async () => {
-      const { count, error } = await supabase
-        .from("profiles")
-        .select("*", { count: "exact", head: true })
-        .eq("role", "user");
-      if (error) throw error;
-      return count || 0;
-    },
+    queryFn: loadTotal,
+    staleTime: 60_000,
   });
 
-  // Debounce search input to avoid too many requests while typing
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(searchEmail.trim()), 500);
-    return () => clearTimeout(t);
-  }, [searchEmail]);
-
-  // Reset to first page when user starts a new search (debounced)
-  useEffect(() => {
-    setPage(1);
-  }, [debouncedSearch]);
-
-  const fetchOptions = {
-    limit: pageSize,
-    page,
-    search: debouncedSearch && debouncedSearch.length > 0 ? debouncedSearch : undefined,
-  } as { limit?: number; page?: number; search?: string };
-
-  const { data: clients, isLoading, error, refetch } = useQuery<Client[]>({
-    queryKey: ["clients", page, debouncedSearch],
-    queryFn: async () => {
-      try {
-        const data = await fetchClients(fetchOptions);
-        setRawEdgeError(null);
-        return data;
-      } catch (e: any) {
-        setRawEdgeError(e?.context ?? e);
-        throw e;
-      }
-    },
+  const {
+    data: clients = [],
+    isLoading,
+    isFetching,
+    error,
+    refetch,
+  } = useQuery<Client[]>({
+    queryKey: ["clients", page, search],
+    queryFn: () => loadPage(page, search),
+    staleTime: 30_000,
   });
 
-  const createClientMutation = useMutation({
+  const maxPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const visible = clients.filter((c) => {
+    if (c.role === "adm") return false;
+    if (showFlagged && !c.force_pix_on_next_purchase) return false;
+    return true;
+  });
+
+  // ── Create client ────────────────────────────────────────────────────────
+
+  const createMutation = useMutation({
     mutationFn: async (values: any) => {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const token = sessionData?.session?.access_token;
-        const adminTokenFallback = typeof window !== 'undefined' ? window.localStorage.getItem('ADMIN_CREATE_TOKEN') : null;
-        const authHeader = token ? `Bearer ${token}` : adminTokenFallback ? `Bearer ${adminTokenFallback}` : null;
-        if (!authHeader) throw new Error("Sessão expirada. Faça login novamente ou configure o token administrativo temporário.");
+      const { data: sd } = await supabase.auth.getSession();
+      const token = sd?.session?.access_token;
+      if (!token) throw new Error("Sessão expirada. Faça login novamente.");
 
-        const response = await fetch(
-          "https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1/admin-create-user",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": authHeader,
-              "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpybG96aGh2d3FmbWp0a212dWtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDU2NjQsImV4cCI6MjA2NzkyMTY2NH0.Do5c1-TKqpyZTJeX_hLbw1SU40CbwXfCIC-pPpcD_JM",
-            },
-            body: JSON.stringify(values),
-          }
-        );
-
-        const result = await response.json();
-        if (!response.ok || result.error) {
-          throw new Error(result.details || result.error || `Erro ${response.status}`);
+      const res = await fetch(
+        "https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1/admin-create-user",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+            apikey: ANON_KEY,
+          },
+          body: JSON.stringify(values),
         }
-        return { result, values };
+      );
+      const json = await res.json();
+      if (!res.ok || json.error)
+        throw new Error(json.details || json.error || `Erro ${res.status}`);
+      return { json, values };
     },
-    onSuccess: (data) => {
-        const { result, values } = data as any;
+    onSuccess: ({ json, values }) => {
+      const created = json?.user || json;
+      const nameParts = (values?.full_name || "").split(" ");
+      const newClient: Client = {
+        id: created?.id || `tmp-${Date.now()}`,
+        email: created?.email || values?.email || "",
+        first_name: nameParts[0] || null,
+        last_name: nameParts.slice(1).join(" ") || null,
+        created_at: created?.created_at || new Date().toISOString(),
+        updated_at: null,
+        role: "user",
+        force_pix_on_next_purchase: true,
+        order_count: 0,
+        completed_order_count: 0,
+      };
 
-        // Try to update the cache directly to avoid expensive refetches
-        try {
-          // Increment total count if present
-          queryClient.setQueryData<number>(["clientsTotal"], (prev) => (prev || 0) + 1);
+      // Update total count locally
+      qc.setQueryData<number>(["clientsTotal"], (prev = 0) => prev + 1);
 
-          // Build a minimal client object from result (best-effort)
-          const created = result?.user || result;
-          const newClient: Client = {
-            id: created?.id || created?.user?.id || `new-${Date.now()}`,
-            email: created?.email || values?.email || '',
-            first_name: created?.user_metadata?.first_name || created?.first_name || values?.full_name || null,
-            last_name: created?.user_metadata?.last_name || created?.last_name || null,
-            created_at: created?.created_at || new Date().toISOString(),
-            updated_at: null,
-            role: 'user',
-            force_pix_on_next_purchase: false,
-            order_count: 0,
-            completed_order_count: 0,
-          };
+      // Prepend to page-1 cache (no refetch needed)
+      qc.setQueryData<Client[]>(["clients", 1, ""], (prev = []) =>
+        [newClient, ...prev].slice(0, PAGE_SIZE)
+      );
 
-          // Prepend to first page cache if exists
-          const firstPageKey = ["clients", 1, ""];
-          const firstPage = queryClient.getQueryData<Client[]>(firstPageKey);
-          if (firstPage) {
-            const updated = [newClient, ...firstPage].slice(0, pageSize);
-            queryClient.setQueryData(firstPageKey, updated);
-          } else {
-            // If no cache, set the first page to contain new client
-            queryClient.setQueryData<Client[]>(firstPageKey, [newClient]);
-          }
-        } catch (cacheErr) {
-          // fallback: invalidate queries
-          queryClient.invalidateQueries({ queryKey: ["clientsTotal"] });
-          queryClient.invalidateQueries({ queryKey: ["clients"] });
-        }
-
-        showSuccess("Cliente criado com sucesso!");
-        setIsCreateModalOpen(false);
+      showSuccess("Cliente criado com sucesso!");
+      setIsCreateOpen(false);
     },
-    onError: (error: Error) => {
-        showError(`Erro ao criar cliente: ${error.message}`);
-    },
+    onError: (err: Error) => showError(`Erro ao criar cliente: ${err.message}`),
   });
 
-  const toggleSecurityMutation = useMutation({
+  // ── Toggle PIX ───────────────────────────────────────────────────────────
+
+  const togglePixMutation = useMutation({
     mutationFn: async ({ userId, forcePix }: { userId: string; forcePix: boolean }) => {
       const { error } = await supabase
         .from("profiles")
         .update({ force_pix_on_next_purchase: forcePix })
         .eq("id", userId);
       if (error) throw new Error(error.message);
+      return { userId, forcePix };
     },
-    onMutate: async (variables) => {
-      await queryClient.cancelQueries({ queryKey: ["clients", page, debouncedSearch] });
-      const previous = queryClient.getQueryData<Client[]>(["clients", page, debouncedSearch]);
-      if (previous) {
-        queryClient.setQueryData(["clients", page, debouncedSearch], previous.map(c => c.id === variables.userId ? { ...c, force_pix_on_next_purchase: variables.forcePix } : c));
-      }
-      return { previous };
+    onMutate: ({ userId, forcePix }) => {
+      // Optimistic update — instant UI response
+      qc.setQueryData<Client[]>(["clients", page, search], (prev = []) =>
+        prev.map((c) =>
+          c.id === userId ? { ...c, force_pix_on_next_purchase: forcePix } : c
+        )
+      );
     },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["clients", page, debouncedSearch], exact: true });
-      queryClient.invalidateQueries({ queryKey: ["orders"] });
-      queryClient.invalidateQueries({ queryKey: ["supplierOrders"] });
-      queryClient.invalidateQueries({ queryKey: ["selectableItemsForSupplierOrder"] });
-      queryClient.invalidateQueries({ queryKey: ["profiles"] });
-      showSuccess(variables.forcePix ? "Restrição de PIX ativada!" : "Venda via Cartão liberada!");
+    onSuccess: (_, { forcePix }) => {
+      showSuccess(forcePix ? "Restrição de PIX ativada!" : "Cartão liberado!");
     },
-    onError: (error: Error, variables, context: any) => {
-      if (context?.previous) {
-        queryClient.setQueryData(["clients", page, debouncedSearch], context.previous);
-      }
-      showError(`Erro ao atualizar segurança: ${error.message}`);
+    onError: (err: Error) => {
+      showError(`Erro: ${err.message}`);
+      qc.invalidateQueries({ queryKey: ["clients", page, search], exact: true });
     },
   });
 
-  const userActionMutation = useMutation({
+  // ── User actions ─────────────────────────────────────────────────────────
+
+  const actionMutation = useMutation({
     mutationFn: async ({ action, targetUserId }: { action: string; targetUserId: string }) => {
-      let functionName = '';
-      let body: any = { targetUserId };
+      let fnName = "admin-user-actions";
+      const body: any = { targetUserId };
+      if (action === "delete_orders") fnName = "admin-delete-orders";
+      else if (action === "mark_as_recurrent") fnName = "admin-mark-as-recurrent";
+      else { body.action = action; body.redirectTo = "https://dk-l-andpage.vercel.app/login"; }
 
-      if (action === 'delete_orders') {
-        functionName = 'admin-delete-orders';
-      } else if (action === 'mark_as_recurrent') {
-        functionName = 'admin-mark-as-recurrent';
-      } else {
-        functionName = 'admin-user-actions';
-        body.action = action;
-        body.redirectTo = 'https://dk-l-andpage.vercel.app/login'; 
-      }
-
-      const { data, error } = await supabase.functions.invoke(functionName, {
-        body,
-      });
-      
-      if (error) {
-        if (error.context && typeof error.context.json === 'function') {
-            const errorJson = await error.context.json();
-            if (errorJson.details) throw new Error(errorJson.details);
-        }
-        throw new Error(error.message);
-      }
+      const { data, error } = await supabase.functions.invoke(fnName, { body });
+      if (error) throw new Error(error.message);
       return data;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["clients", page, debouncedSearch], exact: true });
-      showSuccess(data.message);
+      qc.invalidateQueries({ queryKey: ["clients", page, search], exact: true });
+      showSuccess(data?.message || "Ação realizada com sucesso!");
       setActionToConfirm(null);
     },
-    onError: (error: Error) => {
-      showError(`Erro: ${error.message}`);
-    },
+    onError: (err: Error) => showError(`Erro: ${err.message}`),
   });
 
-  const handleConfirmAction = () => {
-    if (actionToConfirm) {
-      userActionMutation.mutate({
-        action: actionToConfirm.action,
-        targetUserId: actionToConfirm.client.id,
-      });
-    }
-  };
-
-  // Keep client-side filtering light: only exclude admins and apply the flagged filter here.
-  const filteredClients = clients?.filter(client => {
-    if (client.role === 'adm') return false;
-    if (showOnlyFlagged && !client.force_pix_on_next_purchase) return false;
-    return true;
-  });
-
-  const maxPage = totalClients ? Math.max(1, Math.ceil(totalClients / pageSize)) : undefined;
+  // ── Render ───────────────────────────────────────────────────────────────
 
   return (
     <div>
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
         <div>
           <h1 className="text-3xl font-bold">Clientes</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Total de clientes cadastrados: <span className="font-semibold text-primary">{totalClients?.toLocaleString("pt-BR") || filteredClients?.length || 0}</span>
-            {!debouncedSearch && (
-              <span className="text-xs text-muted-foreground ml-2">(Mostrando página {page}{maxPage ? ` de ${maxPage}` : ''})</span>
+            Total:{" "}
+            <span className="font-semibold text-primary">
+              {total.toLocaleString("pt-BR")}
+            </span>
+            {!search && (
+              <span className="ml-2 text-xs text-muted-foreground">
+                — Página {page} de {maxPage}
+              </span>
             )}
           </p>
         </div>
-        
-        <div className="flex flex-wrap items-center gap-2">
+
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Search */}
           <div className="relative">
             <input
               type="text"
               placeholder="Buscar por email..."
-              value={searchEmail}
-              onChange={(e) => { setSearchEmail(e.target.value); }}
-              className="pl-9 pr-4 py-2 border rounded-md text-sm w-64 focus:outline-none focus:ring-2 focus:ring-primary"
+              value={searchInput}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="pl-9 pr-4 py-2 border rounded-md text-sm w-60 focus:outline-none focus:ring-2 focus:ring-primary"
             />
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           </div>
 
-          <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+          {/* New client */}
+          <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
             <DialogTrigger asChild>
-                <Button className="bg-primary hover:bg-primary/90">
-                    <UserPlus className="w-4 h-4 mr-2" /> Novo Cliente
-                </Button>
+              <Button>
+                <UserPlus className="w-4 h-4 mr-2" /> Novo Cliente
+              </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                    <DialogTitle>Criar Cadastro de Cliente</DialogTitle>
-                </DialogHeader>
-                <CreateClientForm 
-                    onSubmit={(v) => createClientMutation.mutate(v)} 
-                    isSubmitting={createClientMutation.isPending} 
-                />
+              <DialogHeader>
+                <DialogTitle>Criar Cadastro de Cliente</DialogTitle>
+              </DialogHeader>
+              <CreateClientForm
+                onSubmit={(v) => createMutation.mutate(v)}
+                isSubmitting={createMutation.isPending}
+              />
             </DialogContent>
           </Dialog>
 
-          <div className="flex items-center space-x-2 border-l pl-4">
+          {/* Flagged filter */}
+          <div className="flex items-center gap-2 border-l pl-3">
             <Switch
-                id="filter-flagged"
-                checked={showOnlyFlagged}
-                onCheckedChange={setShowOnlyFlagged}
+              id="filter-flagged"
+              checked={showFlagged}
+              onCheckedChange={setShowFlagged}
             />
-            <Label htmlFor="filter-flagged" className="text-sm">Apenas alertas</Label>
+            <Label htmlFor="filter-flagged" className="text-sm cursor-pointer">
+              Apenas alertas
+            </Label>
           </div>
 
-          {/* Pagination controls */}
-          <div className="pl-4 flex items-center space-x-2">
+          {/* Pagination */}
+          <div className="flex items-center gap-2 border-l pl-3">
             <Button
               variant="outline"
               size="sm"
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page <= 1 || isLoading}
+              disabled={page <= 1 || isFetching}
             >
               Anterior
             </Button>
-
-            <div className="text-sm text-muted-foreground">Página {page}{maxPage ? ` de ${maxPage}` : ''}</div>
-
+            <span className="text-sm text-muted-foreground whitespace-nowrap">
+              {page} / {maxPage}
+            </span>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setPage((p) => p + 1)}
-              disabled={isLoading || (totalClients ? page >= (maxPage || 1) : (clients ? clients.length < pageSize : true))}
+              onClick={() => setPage((p) => Math.min(maxPage, p + 1))}
+              disabled={page >= maxPage || isFetching}
             >
               Próxima
             </Button>
@@ -423,6 +317,7 @@ const ClientsPage = () => {
         </div>
       </div>
 
+      {/* Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <Table>
           <TableHeader>
@@ -437,205 +332,211 @@ const ClientsPage = () => {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              Array.from({ length: 5 }).map((_, index) => (
-                <TableRow key={index}>
-                  <TableCell colSpan={6}><Skeleton className="h-5 w-full" /></TableCell>
+              Array.from({ length: PAGE_SIZE }).map((_, i) => (
+                <TableRow key={i}>
+                  <TableCell colSpan={6}>
+                    <Skeleton className="h-5 w-full" />
+                  </TableCell>
                 </TableRow>
               ))
             ) : error ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-red-500">
-                  <div className="space-y-3">
-                    <div>Erro ao carregar clientes:</div>
-                    <div className="text-sm text-red-600">{(error as Error)?.message}</div>
-                    <div className="flex items-center justify-center space-x-2">
-                      <Button onClick={() => refetch()}>Tentar novamente</Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          if (rawEdgeError) {
-                            const payload = typeof rawEdgeError === 'string' ? rawEdgeError : JSON.stringify(rawEdgeError, null, 2);
-                            navigator.clipboard?.writeText(payload);
-                            showSuccess('Detalhes do erro copiados para a área de transferência.');
-                          } else {
-                            navigator.clipboard?.writeText((error as Error)?.message || 'No details');
-                            showSuccess('Mensagem de erro copiada.');
-                          }
-                        }}
-                      >
-                        Copiar Debug
-                      </Button>
-                    </div>
-
-                    {rawEdgeError && (
-                      <div className="mt-2 text-left">
-                        <div className="text-xs text-muted-foreground mb-1">Detalhes brutos da Edge Function (para depuração):</div>
-                        <pre className="max-h-48 overflow-auto bg-gray-100 p-2 rounded text-xs">
-                          {typeof rawEdgeError === 'string' ? rawEdgeError : JSON.stringify(rawEdgeError, null, 2)}
-                        </pre>
-                      </div>
-                    )}
-
-                    <div className="text-xs text-muted-foreground">
-                      Dica: abra o DevTools (Console) para ver logs adicionais. Eu já escrevo detalhes no console ao chamar a Edge Function.
-                    </div>
-                  </div>
+                <TableCell colSpan={6} className="text-center py-8">
+                  <p className="text-red-500 mb-3 text-sm">{(error as Error).message}</p>
+                  <Button size="sm" onClick={() => refetch()}>
+                    Tentar novamente
+                  </Button>
                 </TableCell>
               </TableRow>
-            ) : filteredClients && filteredClients.length > 0 ? (
-              filteredClients.map((client) => (
+            ) : visible.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  Nenhum cliente encontrado.
+                </TableCell>
+              </TableRow>
+            ) : (
+              visible.map((client) => (
                 <TableRow key={client.id}>
-                  <TableCell className="font-medium">{client.email}</TableCell>
-                  <TableCell>{client.first_name || '-'} {client.last_name || ''}</TableCell>
+                  <TableCell className="font-medium text-sm">{client.email}</TableCell>
+                  <TableCell className="text-sm">
+                    {client.first_name || "-"} {client.last_name || ""}
+                  </TableCell>
                   <TableCell>
-                    <div className="space-y-1">
-                      <Badge variant="outline">Total: {client.order_count} Pedido(s)</Badge>
+                    <div className="flex flex-col gap-1">
+                      <Badge variant="outline" className="w-fit text-xs">
+                        Total: {client.order_count} pedido(s)
+                      </Badge>
                       {client.completed_order_count > 0 ? (
-                        <Badge variant="default" className="bg-green-500 hover:bg-green-600">
-                          Recorrente ({client.completed_order_count} Concluído(s))
+                        <Badge className="bg-green-500 hover:bg-green-600 w-fit text-xs">
+                          Recorrente ({client.completed_order_count})
                         </Badge>
                       ) : (
-                        <Badge variant="secondary">Primeira Compra</Badge>
+                        <Badge variant="secondary" className="w-fit text-xs">
+                          Primeira Compra
+                        </Badge>
                       )}
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center space-x-3">
+                    <div className="flex items-center gap-2">
                       <Switch
                         checked={client.force_pix_on_next_purchase}
-                        onCheckedChange={(checked) => toggleSecurityMutation.mutate({ userId: client.id, forcePix: checked })}
-                        disabled={toggleSecurityMutation.isPending}
+                        onCheckedChange={(checked) =>
+                          togglePixMutation.mutate({ userId: client.id, forcePix: checked })
+                        }
+                        disabled={togglePixMutation.isPending}
                       />
-                      <div className="flex flex-col">
-                        <span className={`text-xs font-bold ${client.force_pix_on_next_purchase ? 'text-red-600' : 'text-green-600'}`}>
-                          {client.force_pix_on_next_purchase ? "PIX OBRIGATÓRIO" : "CARTÃO LIBERADO"}
-                        </span>
-                      </div>
+                      <span
+                        className={`text-xs font-bold ${
+                          client.force_pix_on_next_purchase ? "text-red-600" : "text-green-600"
+                        }`}
+                      >
+                        {client.force_pix_on_next_purchase ? "PIX OBRIGATÓRIO" : "CARTÃO LIBERADO"}
+                      </span>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <CalendarDays className="w-3 h-3" />
-                        {client.created_at 
-                          ? new Date(client.created_at).toLocaleDateString("pt-BR") 
-                          : '-'}
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <CalendarDays className="w-3 h-3" />
+                      {client.created_at
+                        ? new Date(client.created_at).toLocaleDateString("pt-BR")
+                        : "-"}
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
-                        <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="text-gray-500 hover:text-blue-600"
-                            onClick={() => { setSelectedClient(client); setIsDetailsModalOpen(true); }}
-                            title="Ver Detalhes do Cliente"
-                        >
-                            <Eye className="h-4 w-4" />
-                        </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-gray-500 hover:text-blue-600"
+                        onClick={() => {
+                          setSelectedClient(client);
+                          setIsDetailsOpen(true);
+                        }}
+                        title="Ver Detalhes"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
 
-                        <DropdownMenu>
+                      <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
-                            <span className="sr-only">Abrir menu de ações</span>
+                          <Button variant="ghost" className="h-8 w-8 p-0">
+                            <span className="sr-only">Ações</span>
                             <MoreHorizontal className="h-4 w-4" />
-                            </Button>
+                          </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Ações do Usuário</DropdownMenuLabel>
-                            
-                            <DropdownMenuItem
-                                onSelect={() => toggleSecurityMutation.mutate({ userId: client.id, forcePix: !client.force_pix_on_next_purchase })}
-                                disabled={toggleSecurityMutation.isPending}
-                                className={client.force_pix_on_next_purchase ? "text-green-600" : "text-red-600"}
-                            >
-                                {client.force_pix_on_next_purchase ? (
-                                    <><Unlock className="h-4 w-4 mr-2" /><span>Liberar Cartão</span></>
-                                ) : (
-                                    <><Lock className="h-4 w-4 mr-2" /><span>Exigir PIX (Bloquear Cartão)</span></>
-                                )}
-                            </DropdownMenuItem>
+                          <DropdownMenuLabel>Ações do Usuário</DropdownMenuLabel>
 
-                            {client.completed_order_count === 0 && (
-                            <DropdownMenuItem
-                                onSelect={() => setActionToConfirm({ action: 'mark_as_recurrent', client })}
-                            >
-                                <CheckCircle className="mr-2 h-4 w-4" />
-                                <span>Marcar como Recorrente</span>
-                            </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={() =>
+                              togglePixMutation.mutate({
+                                userId: client.id,
+                                forcePix: !client.force_pix_on_next_purchase,
+                              })
+                            }
+                            disabled={togglePixMutation.isPending}
+                            className={
+                              client.force_pix_on_next_purchase ? "text-green-600" : "text-red-600"
+                            }
+                          >
+                            {client.force_pix_on_next_purchase ? (
+                              <><Unlock className="h-4 w-4 mr-2" /><span>Liberar Cartão</span></>
+                            ) : (
+                              <><Lock className="h-4 w-4 mr-2" /><span>Exigir PIX</span></>
                             )}
-                            {client.order_count > 0 && (
+                          </DropdownMenuItem>
+
+                          {client.completed_order_count === 0 && (
                             <DropdownMenuItem
-                                onSelect={() => setActionToConfirm({ action: 'delete_orders', client })}
-                                className="text-red-600"
+                              onSelect={() =>
+                                setActionToConfirm({ action: "mark_as_recurrent", client })
+                              }
                             >
-                                <RotateCcw className="mr-2 h-4 w-4" />
-                                <span>Redefinir Status Compra</span>
+                              <CheckCircle className="mr-2 h-4 w-4" />
+                              <span>Marcar como Recorrente</span>
                             </DropdownMenuItem>
-                            )}
+                          )}
+
+                          {client.order_count > 0 && (
                             <DropdownMenuItem
-                            onSelect={() => setActionToConfirm({ action: 'resend_confirmation', client })}
+                              onSelect={() =>
+                                setActionToConfirm({ action: "delete_orders", client })
+                              }
+                              className="text-red-600"
                             >
+                              <RotateCcw className="mr-2 h-4 w-4" />
+                              <span>Redefinir Status Compra</span>
+                            </DropdownMenuItem>
+                          )}
+
+                          <DropdownMenuItem
+                            onSelect={() =>
+                              setActionToConfirm({ action: "resend_confirmation", client })
+                            }
+                          >
                             <Mail className="mr-2 h-4 w-4" />
                             <span>Reenviar Confirmação</span>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                            onSelect={() => setActionToConfirm({ action: 'send_password_reset', client })}
-                            >
+                          </DropdownMenuItem>
+
+                          <DropdownMenuItem
+                            onSelect={() =>
+                              setActionToConfirm({ action: "send_password_reset", client })
+                            }
+                          >
                             <KeyRound className="mr-2 h-4 w-4" />
-                            <span>Enviar Redefinição de Senha</span>
-                            </DropdownMenuItem>
+                            <span>Redefinir Senha</span>
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
-                        </DropdownMenu>
+                      </DropdownMenu>
                     </div>
                   </TableCell>
                 </TableRow>
               ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center">
-                  Nenhum cliente encontrado.
-                </TableCell>
-              </TableRow>
             )}
           </TableBody>
         </Table>
       </div>
 
-      {/* Confirmação de Ações e Novo Cadastro */}
+      {/* Confirm action */}
       <AlertDialog open={!!actionToConfirm} onOpenChange={() => setActionToConfirm(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmar Ação</AlertDialogTitle>
             <AlertDialogDescription>
-              {actionToConfirm?.action === 'resend_confirmation'
-                ? `Você tem certeza que deseja reenviar o e-mail de confirmação para ${actionToConfirm?.client.email}?`
-                : actionToConfirm?.action === 'send_password_reset'
-                ? `Você tem certeza que deseja enviar um link de redefinição de senha para ${actionToConfirm?.client.email}?`
-                : actionToConfirm?.action === 'mark_as_recurrent'
-                ? `Você tem certeza que deseja marcar o cliente ${actionToConfirm?.client.email} como recorrente? Isso removerá a restrição de PIX e permitirá outros métodos de pagamento.`
-                : `ATENÇÃO: Você está prestes a DELETAR PERMANENTEMENTE TODOS OS PEDIDOS do cliente ${actionToConfirm?.client.email}. Isso redefinirá o status de compra dele para 'Primeira Compra'. Esta ação é irreversível.`}
+              {actionToConfirm?.action === "resend_confirmation"
+                ? `Reenviar e-mail de confirmação para ${actionToConfirm.client.email}?`
+                : actionToConfirm?.action === "send_password_reset"
+                ? `Enviar link de redefinição de senha para ${actionToConfirm.client.email}?`
+                : actionToConfirm?.action === "mark_as_recurrent"
+                ? `Marcar ${actionToConfirm.client.email} como recorrente?`
+                : `ATENÇÃO: Deletar TODOS OS PEDIDOS de ${actionToConfirm?.client.email}? Esta ação é irreversível.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleConfirmAction}
-              disabled={userActionMutation.isPending}
+              onClick={() =>
+                actionToConfirm &&
+                actionMutation.mutate({
+                  action: actionToConfirm.action,
+                  targetUserId: actionToConfirm.client.id,
+                })
+              }
+              disabled={actionMutation.isPending}
             >
-              {userActionMutation.isPending ? "Executando..." : "Sim, Continuar"}
+              {actionMutation.isPending ? "Executando..." : "Confirmar"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Modal de Detalhes do Cliente */}
-      <ClientDetailsModal 
-        client={selectedClient} 
-        isOpen={isDetailsModalOpen} 
-        onClose={() => setIsDetailsModalOpen(false)} 
+      {/* Client details */}
+      <ClientDetailsModal
+        client={selectedClient}
+        isOpen={isDetailsOpen}
+        onClose={() => setIsDetailsOpen(false)}
       />
     </div>
   );
-};
-
-export default ClientsPage;
+}
