@@ -20,36 +20,65 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    // 1. Validação de Segurança
+    // 1. Validação de Segurança (Tolerante)
     const supabaseForLogs = supabaseAdmin;
-    const authHeader = req.headers.get('Authorization') || req.headers.get('authorization');
-    const token = authHeader?.replace(/^Bearer\s+/i, '') || '';
+    const authHeaderRaw = (req.headers.get('Authorization') || req.headers.get('authorization') || '').toString();
+    
+    // Normalize and be tolerant: remove repeated 'Bearer' words and extract last token-like segment.
+    let bearer = ''
+    if (authHeaderRaw) {
+      // remove all occurrences of the word 'bearer' (case-insensitive), then trim
+      const cleaned = authHeaderRaw.replace(/bearer/ig, ' ').replace(/[:]/g, ' ').trim()
+      // split by whitespace and take the last chunk — handles cases like 'Bearer Bearer <token>' or 'Bearer: <token>'
+      const parts = cleaned.split(/\s+/).filter(Boolean)
+      if (parts.length > 0) bearer = parts[parts.length - 1]
+    }
+
+    let configuredToken: string | null = null;
+    try {
+      const { data: setting } = await supabaseAdmin
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'n8n_integration_token')
+        .single();
+      
+      if (setting?.value) configuredToken = setting.value;
+    } catch (e) {
+      // If query fails (e.g., RLS), we proceed with configuredToken = null
+      console.error('[get-order-details] Failed to fetch app_settings', e.message);
+    }
     
     let isAuthorized = false;
 
-    if (token && token === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')) {
+    if (bearer && bearer === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')) {
         isAuthorized = true;
-    } else {
-        const { data: setting } = await supabaseAdmin
-            .from('app_settings')
-            .select('value')
-            .eq('key', 'n8n_integration_token')
-            .single();
-        
-        if (setting?.value && token && token === setting.value) {
-            isAuthorized = true;
-        }
+    } else if (bearer && configuredToken && bearer === configuredToken) {
+        isAuthorized = true;
+    } else if (authHeaderRaw && configuredToken && authHeaderRaw.includes(configuredToken)) {
+        // Fallback: if raw header contains the token, accept it (handles doubled headers)
+        isAuthorized = true;
     }
 
     if (!isAuthorized) {
-      // Temporary debug: log masked auth header to integration_logs
+      // Log debug information
       try {
-        const raw = authHeader || '';
-        const masked = raw ? (raw.length > 12 ? raw.slice(0,8) + '...' + raw.slice(-4) : raw) : 'none';
-        await supabaseForLogs.from('integration_logs').insert({ event_type: 'get_order_details', status: 'unauthorized', details: `Unauthorized attempt. Auth header: ${masked}`, created_at: new Date().toISOString() });
-      } catch (e) {
-        // ignore logging errors
-        console.error('failed to write debug log', e?.message || e);
+        const maskedRaw = authHeaderRaw ? (authHeaderRaw.length > 12 ? authHeaderRaw.slice(0, 8) + '...' + authHeaderRaw.slice(-4) : authHeaderRaw) : 'none';
+        const maskedBearer = bearer ? (bearer.length > 8 ? bearer.slice(0, 4) + '...' + bearer.slice(-4) : bearer) : 'none';
+        const maskedConfig = configuredToken ? (configuredToken.length > 8 ? configuredToken.slice(0, 4) + '...' + configuredToken.slice(-4) : configuredToken) : 'none';
+
+        await supabaseForLogs.from('integration_logs').insert({ 
+          event_type: 'get_order_details_auth_check', 
+          status: 'unauthorized', 
+          details: JSON.stringify({
+            raw_header_sample: maskedRaw,
+            extracted_token_sample: maskedBearer,
+            configured_token_sample: maskedConfig,
+            has_configured_token: !!configuredToken
+          }),
+          created_at: new Date().toISOString() 
+        });
+      } catch (logErr) {
+        console.error('[get-order-details] failed to write debug log', logErr?.message || logErr);
       }
 
       return new Response(JSON.stringify({ error: 'Unauthorized.' }), {

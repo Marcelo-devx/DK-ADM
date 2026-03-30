@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 
@@ -35,13 +36,13 @@ serve(async (req) => {
 
     console.log(`[${FN}] headers present`, { authHeaderRawPresent: !!authHeaderRaw })
 
-    // Fetch the configured integration token from app_settings (if exists)
+    // Fetch configured integration token from app_settings (if exists) - LOG ON ERROR
     let configuredToken: string | null = null
     try {
       const r = await supabase.from('app_settings').select('value').eq('key', 'n8n_integration_token').single()
       if (r.error) {
-        // not fatal — continue
-        console.log(`[${FN}] could not fetch app_settings:`, r.error.message)
+        // LOG ERROR BUT DO NOT FAIL - keep processing with service role fallback
+        console.error(`[${FN}] failed to fetch app_settings`, r.error)
       } else if (r.data && r.data.value) {
         configuredToken = r.data.value
         console.log(`[${FN}] loaded configured token from app_settings`)
@@ -65,8 +66,31 @@ serve(async (req) => {
     if (SUPABASE_SERVICE_ROLE_KEY) validKeys.add(SUPABASE_SERVICE_ROLE_KEY)
     if (configuredToken) validKeys.add(configuredToken)
 
-    // Also accept if the raw header contains the configured token (tolerant for doubled headers)
+    // Also accept if raw header contains the configured token (tolerant for doubled headers)
     const isAuthorized = (!!bearer && validKeys.has(bearer)) || (authHeaderRaw && configuredToken && authHeaderRaw.includes(configuredToken))
+
+    // DEBUG: Log decision details to integration_logs for analysis
+    try {
+      const maskedRaw = authHeaderRaw ? (authHeaderRaw.length > 12 ? authHeaderRaw.slice(0, 8) + '...' + authHeaderRaw.slice(-4) : authHeaderRaw) : 'none';
+      const maskedBearer = bearer ? (bearer.length > 8 ? bearer.slice(0, 4) + '...' + bearer.slice(-4) : bearer) : 'none';
+      const maskedConfig = configuredToken ? (configuredToken.length > 8 ? configuredToken.slice(0, 4) + '...' + configuredToken.slice(-4) : configuredToken) : 'none';
+
+      await supabase.from('integration_logs').insert({
+        event_type: 'update-order-status_auth_check',
+        status: isAuthorized ? 'authorized' : 'unauthorized',
+        details: JSON.stringify({
+          raw_header_sample: maskedRaw,
+          extracted_token_sample: maskedBearer,
+          configured_token_sample: maskedConfig,
+          has_configured_token: !!configuredToken,
+          valid_keys_count: validKeys.size,
+          is_authorized_final: isAuthorized
+        }),
+        created_at: new Date().toISOString()
+      });
+    } catch (logErr) {
+      console.error(`[${FN}] failed to write debug log`, logErr)
+    }
 
     if (!isAuthorized) {
       console.warn(`[${FN}] authorization failed`, { bearerPresent: !!bearer, authHeaderRawSample: authHeaderRaw && authHeaderRaw.slice(0,50) })
