@@ -35,6 +35,7 @@ import {
   Gift,
   Search,
   X,
+  Check,
 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
@@ -99,6 +100,8 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
   
   // States
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [clientConfirmed, setClientConfirmed] = useState(false);
+  const [emailInput, setEmailInput] = useState("");
   const [shippingAddress, setShippingAddress] = useState({
     street: "",
     number: "",
@@ -112,31 +115,11 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
   const [chargeFreight, setChargeFreight] = useState(true);
   const [generateLoyaltyPoints, setGenerateLoyaltyPoints] = useState(true);
   const [shippingCost, setShippingCost] = useState(0);
-  const [clientSearch, setClientSearch] = useState("");
   const [productSearch, setProductSearch] = useState("");
+  const [searchingClient, setSearchingClient] = useState(false);
+  const [clientNotFound, setClientNotFound] = useState(false);
 
   // Queries
-  const { data: clients, isLoading: loadingClients } = useQuery<Client[]>({
-    queryKey: ["clients", clientSearch],
-    queryFn: async () => {
-      let query = supabase
-        .from("profiles")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (clientSearch) {
-        const searchLower = clientSearch.toLowerCase();
-        query = query.or(
-          `first_name.ilike.%${searchLower}%,last_name.ilike.%${searchLower}%,phone.ilike.%${searchLower}%`
-        );
-      }
-
-      const { data } = await query.limit(50);
-      return data || [];
-    },
-    enabled: isOpen,
-  });
-
   const { data: products, isLoading: loadingProducts } = useQuery<Product[]>({
     queryKey: ["products-with-variants", productSearch],
     queryFn: async () => {
@@ -229,10 +212,45 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
   const finalShippingCost = chargeFreight ? shippingCost : 0;
   const finalTotal = itemsTotal + finalShippingCost;
 
+  // Função de busca de cliente por email (não carrega todos os clientes)
+  const findClientByEmail = async (email: string) => {
+    if (!email) return null;
+    setSearchingClient(true);
+    setClientNotFound(false);
+    setClientConfirmed(false);
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("email", email)
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) {
+        setSelectedClient(null);
+        setClientNotFound(true);
+        return null;
+      }
+
+      setSelectedClient(data as Client);
+      setClientNotFound(false);
+      return data as Client;
+    } catch (err: any) {
+      showError(err.message || "Erro ao buscar cliente");
+      setSelectedClient(null);
+      setClientNotFound(true);
+      return null;
+    } finally {
+      setSearchingClient(false);
+    }
+  };
+
   // Mutation para criar pedido
   const createOrderMutation = useMutation({
     mutationFn: async () => {
       if (!selectedClient) throw new Error("Selecione um cliente");
+      if (!clientConfirmed) throw new Error("Confirme o cliente antes de criar o pedido");
       if (orderItems.length === 0) throw new Error("Adicione produtos ao pedido");
 
       // Criar pedido
@@ -302,6 +320,8 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
 
   const handleClose = () => {
     setSelectedClient(null);
+    setClientConfirmed(false);
+    setEmailInput("");
     setOrderItems([]);
     setChargeFreight(true);
     setGenerateLoyaltyPoints(true);
@@ -314,8 +334,8 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
       state: "",
       cep: "",
     });
-    setClientSearch("");
     setProductSearch("");
+    setClientNotFound(false);
     onClose();
   };
 
@@ -414,55 +434,53 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
         </DialogHeader>
 
         <div className="space-y-6 py-4">
-          {/* Seção 1: Cliente */}
+          {/* Seção 1: Cliente - agora busca apenas por email, não carrega lista */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <User className="w-5 h-5 text-primary" />
               <Label className="text-base font-semibold">Cliente</Label>
             </div>
-            <Command className="border rounded-lg">
-              <div className="flex items-center px-3 border-b">
-                <Search className="w-4 h-4 mr-2 text-muted-foreground" />
-                <CommandInput
-                  placeholder="Buscar por nome ou telefone..."
-                  value={clientSearch}
-                  onValueChange={setClientSearch}
-                  className="border-0 focus-visible:ring-0"
-                />
+
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="Buscar cliente por email..."
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                onKeyDown={async (e) => {
+                  if (e.key === "Enter") {
+                    await findClientByEmail(emailInput.trim());
+                  }
+                }}
+              />
+              <Button
+                onClick={async () => {
+                  await findClientByEmail(emailInput.trim());
+                }}
+                variant="outline"
+              >
+                {searchingClient ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+              </Button>
+            </div>
+
+            {clientNotFound && (
+              <div className="text-sm text-rose-600">Cliente não encontrado. Só é possível criar pedido para clientes cadastrados.</div>
+            )}
+
+            {selectedClient && (
+              <div className="flex items-center justify-between mt-2 p-3 border rounded-lg">
+                <div>
+                  <div className="font-medium">{selectedClient.first_name} {selectedClient.last_name}</div>
+                  <div className="text-sm text-muted-foreground">{formatPhone(selectedClient.phone)} • {selectedClient.email}</div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={clientConfirmed} onChange={(e) => setClientConfirmed(e.target.checked)} />
+                    <span className="text-sm">Confirmar cliente</span>
+                  </label>
+                  {clientConfirmed && <Check className="w-5 h-5 text-green-600" />}
+                </div>
               </div>
-              <ScrollArea className="max-h-48">
-                <CommandList>
-                  {loadingClients ? (
-                    <div className="py-8 flex justify-center">
-                      <Loader2 className="w-6 h-6 animate-spin" />
-                    </div>
-                  ) : (
-                    <CommandGroup>
-                      {clients?.map((client) => (
-                        <CommandItem
-                          key={client.id}
-                          onSelect={() => setSelectedClient(client)}
-                          className="cursor-pointer"
-                        >
-                          <div className="flex flex-col flex-1">
-                            <span className="font-medium">
-                              {client.first_name} {client.last_name}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              {formatPhone(client.phone)}
-                              {client.email && ` • ${client.email}`}
-                            </span>
-                          </div>
-                          {selectedClient?.id === client.id && (
-                            <Badge className="ml-2">Selecionado</Badge>
-                          )}
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  )}
-                </CommandList>
-              </ScrollArea>
-            </Command>
+            )}
           </div>
 
           {/* Seção 2: Endereço */}
@@ -872,6 +890,7 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
             onClick={() => createOrderMutation.mutate()}
             disabled={
               !selectedClient ||
+              !clientConfirmed ||
               orderItems.length === 0 ||
               createOrderMutation.isPending
             }
