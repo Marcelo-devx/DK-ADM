@@ -121,9 +121,9 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
 
   // Queries
   const { data: products, isLoading: loadingProducts } = useQuery<Product[]>({
-    queryKey: ["products-with-variants", productSearch],
+    queryKey: ["products-with-variants"],
     queryFn: async () => {
-      let query = supabase
+      const { data } = await supabase
         .from("products")
         .select(`
           id,
@@ -137,18 +137,36 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
           product_variants(*)
         `)
         .eq("is_visible", true)
-        .order("name");
-
-      if (productSearch) {
-        const searchLower = productSearch.toLowerCase();
-        query = query.ilike("name", `%${searchLower}%`);
-      }
-
-      const { data } = await query.limit(100);
+        .order("name")
+        .limit(200);
       return data || [];
     },
     enabled: isOpen,
   });
+
+  // Helper to match product or its variants against search term
+  const productMatchesSearch = (product: Product, term: string) => {
+    if (!term) return true;
+    const t = term.toLowerCase();
+    if (product.name && product.name.toLowerCase().includes(t)) return true;
+    if (product.sku && product.sku.toLowerCase().includes(t)) return true;
+
+    if (product.product_variants && product.product_variants.length > 0) {
+      for (const v of product.product_variants) {
+        if (v.sku && v.sku.toLowerCase().includes(t)) return true;
+        if (v.color && v.color.toLowerCase().includes(t)) return true;
+        if (v.size && v.size.toLowerCase().includes(t)) return true;
+        if (v.volume_ml && String(v.volume_ml).includes(t)) return true;
+      }
+    }
+
+    return false;
+  };
+
+  // Compute filtered products based on search term (client-side)
+  const filteredProducts: Product[] = (products || []).filter((p) =>
+    productMatchesSearch(p, productSearch)
+  );
 
   const { data: shippingRates } = useQuery({
     queryKey: ["shipping-rates"],
@@ -646,7 +664,7 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
                       </div>
                     ) : (
                       <CommandGroup>
-                        {products?.map((product) => {
+                        {filteredProducts.map((product) => {
                           const hasVariants =
                             product.product_variants &&
                             product.product_variants.length > 0;
