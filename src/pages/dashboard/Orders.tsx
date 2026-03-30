@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import type { UseQueryOptions } from "@tanstack/react-query";
 import { supabase } from "../../integrations/supabase/client";
 import {
   Table,
@@ -74,13 +75,19 @@ const fetchOrders = async (): Promise<Order[]> => {
   if (ordersError) throw new Error(ordersError.message);
   if (!orders) return [];
 
-  const userIds = [...new Set(orders.map(o => o.user_id))];
-  const { data: profiles, error: profilesError } = await supabase
-    .from("profiles")
-    .select("id, first_name, last_name, phone")
-    .in("id", userIds);
+  // Filtra user_ids falsy (null/undefined) antes de solicitar profiles
+  const userIds = [...new Set(orders.map(o => o.user_id).filter(Boolean))];
+  let profiles: any[] = [];
+  if (userIds.length > 0) {
+    const { data: profilesData, error: profilesError } = await supabase
+      .from("profiles")
+      .select("id, first_name, last_name, phone")
+      .in("id", userIds);
 
-  if (profilesError) throw new Error(profilesError.message);
+    if (profilesError) throw new Error(profilesError.message);
+    profiles = profilesData || [];
+  }
+
   const profilesMap = new Map(profiles.map(p => [p.id, p]));
 
   return orders.map(order => ({
@@ -153,11 +160,16 @@ const OrdersPage = () => {
     client: any;
   } | null>(null);
 
-  const { data: orders, isLoading, refetch, isRefetching } = useQuery<Order[]>({
+  const { data: orders, isLoading, refetch, isRefetching } = useQuery<Order[], Error>({
     queryKey: ["ordersAdmin"],
     queryFn: fetchOrders,
-    refetchInterval: 30000, 
-  });
+    refetchInterval: 30000,
+    // Exibe erro via toast para facilitar diagnóstico no front-end
+    onError: (err: any) => {
+      console.error("[ordersAdmin] Erro ao buscar pedidos:", err);
+      showError(err?.message || "Erro ao carregar pedidos");
+    }
+  } as UseQueryOptions<Order[], Error>);
 
   // ADDING REALTIME SUBSCRIPTION
   useEffect(() => {
