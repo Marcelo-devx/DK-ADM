@@ -14,44 +14,80 @@ serve(async (req) => {
 
   try {
     const url = new URL(req.url);
-    const topic = url.searchParams.get('topic') || url.searchParams.get('type');
-    const id = url.searchParams.get('id') || url.searchParams.get('data.id');
 
-    // Se não for notificação de pagamento, ignora
-    if (topic !== 'payment' && topic !== 'test') {
-        console.log('[mp-webhook] Ignored topic', { topic });
-        return new Response(JSON.stringify({ message: "Topic ignored" }), { status: 200, headers: corsHeaders });
+    // MP envia tanto 'topic' (legado) quanto 'type' (moderno)
+    const topic = url.searchParams.get('topic') || url.searchParams.get('type');
+    
+    // MP moderno envia o payment ID direto em ?id=...
+    // IMPORTANTE: searchParams.get('data.id') NÃO funciona — o param real é 'id'
+    const idFromQuery = url.searchParams.get('id');
+
+    console.log('[mp-webhook] Request received', { 
+      topic, 
+      idFromQuery,
+      fullUrl: req.url,
+      method: req.method
+    });
+
+    // Lê o body
+    let bodyData: any = {};
+    let rawBody = '';
+    try { 
+      rawBody = await req.text();
+      if (rawBody) bodyData = JSON.parse(rawBody); 
+    } catch (e) { 
+      console.log('[mp-webhook] Failed to parse body as JSON', { error: String(e) }); 
     }
 
-    let bodyData = {};
-    try { bodyData = await req.json(); } catch (e) { console.log('[mp-webhook] Failed to parse body as JSON', { error: String(e) }); }
+    console.log('[mp-webhook] Body received', { bodyData });
 
-    const paymentId = id || bodyData?.data?.id || bodyData?.id;
+    // Aceita: payment, test, e também undefined/null (alguns envios do MP não mandam topic)
+    const isPaymentEvent = !topic || topic === 'payment' || topic === 'test';
+    
+    if (!isPaymentEvent) {
+      console.log('[mp-webhook] Ignored topic', { topic });
+      return new Response(JSON.stringify({ message: "Topic ignored", topic }), { 
+        status: 200, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Extrai o payment ID de todas as fontes possíveis
+    const paymentId = idFromQuery 
+      || bodyData?.data?.id 
+      || bodyData?.id
+      || bodyData?.resource?.split('/')?.pop(); // formato legado
+
+    console.log('[mp-webhook] Resolved paymentId', { 
+      paymentId, 
+      idFromQuery, 
+      bodyDataId: bodyData?.data?.id,
+      bodyId: bodyData?.id
+    });
 
     if (!paymentId) {
-        console.log('[mp-webhook] No payment ID found in request', { url: req.url, bodyData });
-        return new Response(JSON.stringify({ message: "No payment ID found" }), { status: 200, headers: corsHeaders });
+      console.log('[mp-webhook] No payment ID found in request', { url: req.url, bodyData });
+      return new Response(JSON.stringify({ message: "No payment ID found" }), { 
+        status: 200, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
     // 🔒 SECURITY: OPTIONAL HMAC SIGNATURE VERIFICATION
-    // Se MP_WEBHOOK_SECRET estiver configurado, verifica a assinatura
-    // Se NÃO estiver configurado, funciona em modo de compatibilidade (como antes)
     const signature = req.headers.get('x-signature');
     const webhookSecret = Deno.env.get('MP_WEBHOOK_SECRET');
 
     if (webhookSecret) {
-      // Modo SEGURO: Verifica assinatura
       console.log('[mp-webhook] MP_WEBHOOK_SECRET configurado. Verificando assinatura HMAC.');
       
       if (!signature) {
         console.error('[mp-webhook] Assinatura ausente, mas secret está configurado.');
-        return new Response(JSON.stringify({ error: 'Missing signature' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ error: 'Missing signature' }), { 
+          status: 401, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        });
       }
 
-      // Obter o corpo RAW da requisição para verificação
-      const rawBody = await req.clone().text();
-      
-      // Calcular HMAC-SHA256 usando o secret
       const key = await crypto.subtle.importKey(
         'raw',
         new TextEncoder().encode(webhookSecret),
@@ -61,25 +97,21 @@ serve(async (req) => {
       );
 
       const signatureBytes = hexToBytes(signature);
-      const keyBytes = new TextEncoder().encode(webhookSecret);
       const bodyBytes = new TextEncoder().encode(rawBody);
 
-      const isValid = await crypto.subtle.verify(
-        'HMAC',
-        key,
-        signatureBytes,
-        bodyBytes
-      );
+      const isValid = await crypto.subtle.verify('HMAC', key, signatureBytes, bodyBytes);
 
       if (!isValid) {
         console.error('[mp-webhook] Assinatura inválida!');
-        return new Response(JSON.stringify({ error: 'Invalid signature' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ error: 'Invalid signature' }), { 
+          status: 401, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        });
       }
 
       console.log('[mp-webhook] Assinatura verificada com sucesso!');
     } else {
-      // Modo COMPATIBILIDADE: Não verifica assinatura se secret não estiver configurado
-      console.warn('[mp-webhook] MP_WEBHOOK_SECRET não configurado. Operando em modo compatibilidade (sem verificação de assinatura). Configure MP_WEBHOOK_SECRET para proteção completa.');
+      console.warn('[mp-webhook] MP_WEBHOOK_SECRET não configurado. Operando em modo compatibilidade.');
     }
 
     // 1. Inicializa Admin
@@ -95,10 +127,9 @@ serve(async (req) => {
         .select('key, value')
         .in('key', ['mercadopago_access_token', 'mercadopago_test_access_token', 'payment_mode']);
     
-    const settings = {};
-    settingsData?.forEach(s => settings[s.key] = s.value);
+    const settings: Record<string, string> = {};
+    settingsData?.forEach((s: any) => settings[s.key] = s.value);
 
-    // Lógica de Seleção de Token
     const mode = settings['payment_mode'] === 'production' ? 'production' : 'test';
     const mpToken = mode === 'production' 
         ? settings['mercadopago_access_token'] 
@@ -106,7 +137,10 @@ serve(async (req) => {
 
     if (!mpToken) {
         console.error('[mp-webhook] Configuração de token ausente', { mode });
-        return new Response(JSON.stringify({ error: `Configuração de ${mode} ausente` }), { status: 500, headers: corsHeaders });
+        return new Response(JSON.stringify({ error: `Configuração de ${mode} ausente` }), { 
+          status: 200, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
     }
 
     // 3. Consulta MP
@@ -115,23 +149,34 @@ serve(async (req) => {
         headers: { 'Authorization': `Bearer ${mpToken}` }
     });
 
-    let paymentData = null;
+    let paymentData: any = null;
     try {
       paymentData = await mpResponse.json();
     } catch (e) {
       console.error('[mp-webhook] Failed parsing MP response JSON', { error: String(e) });
     }
 
+    console.log('[mp-webhook] MP payment response', { 
+      httpStatus: mpResponse.status,
+      paymentStatus: paymentData?.status,
+      externalReference: paymentData?.external_reference,
+      paymentTypeId: paymentData?.payment_type_id,
+      paymentId
+    });
+
     if (!mpResponse.ok) {
-        // Se falhar na consulta, pode ser que recebemos um webhook de prod mas estamos em test (ou vice-versa).
         console.error('[mp-webhook] Erro ao consultar MP', { status: mpResponse.status, body: paymentData });
-        // Return 200 so MP won't keep retrying too aggressively, but include details for us to inspect
-        return new Response(JSON.stringify({ error: `Erro ao consultar pagamento. HTTP ${mpResponse.status}`, body: paymentData }), { status: 200, headers: corsHeaders });
+        return new Response(JSON.stringify({ 
+          error: `Erro ao consultar pagamento. HTTP ${mpResponse.status}`, 
+          body: paymentData 
+        }), { 
+          status: 200, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
     }
 
-    console.log('[mp-webhook] MP payment payload', { paymentId, paymentData });
-
     const status = paymentData?.status; 
+    
     // Tenta extrair external reference a partir de várias fontes possíveis
     const externalReferenceCandidates = [
       paymentData?.external_reference,
@@ -148,89 +193,94 @@ serve(async (req) => {
     const externalReference = externalReferenceCandidates.find(Boolean);
     const paymentTypeId = paymentData?.payment_type_id; 
 
-    console.log('[mp-webhook] Resolved external_reference', { externalReference, candidatesCount: externalReferenceCandidates.filter(Boolean).length });
+    console.log('[mp-webhook] Resolved external_reference', { 
+      externalReference, 
+      status,
+      paymentTypeId,
+      allCandidates: externalReferenceCandidates.filter(Boolean)
+    });
 
     if ((status === 'approved' || status === 'authorized') && externalReference) {
         const orderId = String(externalReference).replace(/\D/g, ""); 
 
+        console.log('[mp-webhook] Extracted orderId', { orderId, externalReference });
+
         if (orderId) {
-            // Mapeia o nome correto para o banco
             let methodLabel = 'Mercado Pago';
             if (paymentTypeId === 'credit_card') methodLabel = 'Cartão de Crédito';
             else if (paymentTypeId === 'debit_card') methodLabel = 'Cartão de Débito';
             else if (paymentTypeId === 'bank_transfer') methodLabel = 'Pix (MP)';
             else if (paymentTypeId === 'account_money') methodLabel = 'Saldo Mercado Pago';
 
-            // NOVA LÓGICA DE STATUS DE ENTREGA
             const deliveryStatusUpdate = (paymentTypeId === 'credit_card' || paymentTypeId === 'debit_card')
-                ? 'Pendente' // Confiança automática para cartões
-                : 'Aguardando Validação'; // Validação manual para Pix e outros
+                ? 'Pendente'
+                : 'Aguardando Validação';
 
-            // 4. Atualiza Pedido
             console.log('[mp-webhook] Attempting to update order', { orderId, status, methodLabel, deliveryStatusUpdate });
 
-            const { error: updateError } = await supabaseAdmin
+            const { data: updatedOrder, error: updateError } = await supabaseAdmin
                 .from('orders')
                 .update({ 
                     status: 'Pago', 
                     payment_method: methodLabel,
-                    delivery_status: deliveryStatusUpdate // Usa o novo status dinâmico
+                    delivery_status: deliveryStatusUpdate
                 })
-                .eq('id', orderId);
+                .eq('id', orderId)
+                .select()
+                .single();
 
             if (updateError) {
                 console.error('[mp-webhook] Erro ao atualizar pedido no Supabase', { orderId, updateError });
-                return new Response(JSON.stringify({ error: 'Erro ao atualizar pedido', detail: updateError }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+                return new Response(JSON.stringify({ 
+                  error: 'Erro ao atualizar pedido', 
+                  detail: updateError 
+                }), { 
+                  status: 200, 
+                  headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+                });
             }
 
-            console.log('[mp-webhook] Pedido atualizado com sucesso', { orderId });
+            console.log('[mp-webhook] Pedido atualizado com sucesso', { orderId, newStatus: updatedOrder?.status });
 
-            // 5. VERIFICAR SE É A PRIMEIRA COMPRA E LIBERAR CARTÃO AUTOMATICAMENTE
-            const { data: order, error: orderFetchError } = await supabaseAdmin
-                .from('orders')
-                .select('user_id')
-                .eq('id', orderId)
-                .single();
-
-            if (!orderFetchError && order?.user_id) {
-                // Conta quantos pedidos completados/finalizados o usuário tem
+            // Verificar primeira compra e liberar cartão
+            if (updatedOrder?.user_id) {
                 const completedStatuses = ['Pago', 'Finalizada', 'Entregue', 'Concluída'];
                 const { count: completedOrdersCount, error: countError } = await supabaseAdmin
                     .from('orders')
                     .select('id', { count: 'exact', head: true })
-                    .eq('user_id', order.user_id)
+                    .eq('user_id', updatedOrder.user_id)
                     .in('status', completedStatuses);
 
                 if (!countError && completedOrdersCount === 1) {
-                    // É a primeira compra paga! Libera o cartão automaticamente
-                    console.log('[mp-webhook] PRIMEIRA COMPRA CONFIRMADA! Liberando cartão para usuário', { userId: order.user_id });
+                    console.log('[mp-webhook] PRIMEIRA COMPRA CONFIRMADA! Liberando cartão para usuário', { userId: updatedOrder.user_id });
                     
                     const { error: profileUpdateError } = await supabaseAdmin
                         .from('profiles')
                         .update({ force_pix_on_next_purchase: false })
-                        .eq('id', order.user_id);
+                        .eq('id', updatedOrder.user_id);
 
                     if (profileUpdateError) {
-                        console.error('[mp-webhook] Erro ao liberar cartão para primeira compra', { userId: order.user_id, error: profileUpdateError });
+                        console.error('[mp-webhook] Erro ao liberar cartão', { userId: updatedOrder.user_id, error: profileUpdateError });
                     } else {
-                        console.log('[mp-webhook] Cartão liberado com sucesso para primeira compra!', { userId: order.user_id });
+                        console.log('[mp-webhook] Cartão liberado com sucesso!', { userId: updatedOrder.user_id });
                     }
-                } else if (!countError && completedOrdersCount > 1) {
-                    console.log('[mp-webhook] Usuário já tem mais de uma compra. Mantém status atual.', { userId: order.user_id, count: completedOrdersCount });
                 } else {
-                    console.error('[mp-webhook] Erro ao contar pedidos completados', { userId: order.user_id, error: countError });
+                    console.log('[mp-webhook] Contagem de pedidos', { count: completedOrdersCount, countError });
                 }
-            } else {
-                console.error('[mp-webhook] Erro ao buscar order_id do pedido', { orderId, error: orderFetchError });
             }
         } else {
             console.warn('[mp-webhook] external_reference encontrada, mas não contém ID válido', { externalReference });
         }
     } else {
-        console.log('[mp-webhook] Payment status not treated as Paid or no external_reference found', { paymentId, status, externalReference });
+        console.log('[mp-webhook] Payment not approved or no external_reference', { 
+          paymentId, 
+          status, 
+          externalReference,
+          allCandidates: externalReferenceCandidates.filter(Boolean)
+        });
     }
 
-    return new Response(JSON.stringify({ success: true, mode: mode }), {
+    return new Response(JSON.stringify({ success: true, mode, paymentId, status }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });

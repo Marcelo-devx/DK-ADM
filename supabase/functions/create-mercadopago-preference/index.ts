@@ -40,21 +40,20 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    // 2. Fetch Order Details (including user_id for security check)
+    // 2. Fetch Order Details
     const { data: order, error: orderError } = await supabaseAdmin
         .from('orders')
         .select(`
             user_id,
-            total_price, 
-            shipping_cost, 
-            donation_amount,
-            coupon_discount,
+            total_price,
             profiles(first_name, last_name, email, cpf_cnpj, phone)
         `)
         .eq('id', orderId)
         .single();
 
     if (orderError || !order) throw new Error("Pedido não encontrado.");
+
+    console.log('[create-mercadopago-preference] Order fetched', { orderId, total_price: order.total_price });
 
     // 3. Security Check: Ownership or Admin
     if (order.user_id !== user.id) {
@@ -78,7 +77,6 @@ serve(async (req) => {
     const settings = {};
     settingsData?.forEach(s => settings[s.key] = s.value);
 
-    // Lógica de Seleção de Token
     const mode = settings['payment_mode'] === 'production' ? 'production' : 'test';
     const token = mode === 'production' 
         ? settings['mercadopago_access_token'] 
@@ -88,11 +86,11 @@ serve(async (req) => {
 
     if (!token) throw new Error(`Token do Mercado Pago (${mode}) não configurado.`);
 
-    // Calcula total final
-    const totalAmount = 
-        Number(order.total_price) + 
-        (Number(order.shipping_cost) || 0) + 
-        (Number(order.donation_amount) || 0);
+    // CORREÇÃO: total_price já é o valor final (inclui frete, doação, desconto de cupom)
+    // NÃO somar frete e doação novamente
+    const totalAmount = Number(order.total_price);
+
+    console.log('[create-mercadopago-preference] Total amount for preference', { totalAmount, mode });
 
     const payerEmail = order.profiles?.email || "cliente@email.com";
     const payerName = order.profiles?.first_name || "Cliente";
@@ -126,11 +124,11 @@ serve(async (req) => {
         },
         payment_methods: {
             excluded_payment_types: [
-                { id: "ticket" }, // Exclui Boletos
-                { id: "bank_transfer" }, // Exclui Pix (conforme solicitado)
+                { id: "ticket" },
+                { id: "bank_transfer" },
                 { id: "digital_currency" }
             ],
-            installments: 12 // Permite parcelamento
+            installments: 12
         },
         back_urls: {
             success: `${siteUrl}/meus-pedidos?status=success`,
@@ -142,6 +140,12 @@ serve(async (req) => {
         notification_url: `${Deno.env.get('SUPABASE_URL')}/functions/v1/mp-webhook`,
         statement_descriptor: "TABACARIA"
     };
+
+    console.log('[create-mercadopago-preference] Sending preference to MP', { 
+      orderId, 
+      totalAmount, 
+      notification_url: preferenceBody.notification_url 
+    });
 
     const mpResponse = await fetch('https://api.mercadopago.com/checkout/preferences', {
         method: 'POST',
@@ -155,13 +159,18 @@ serve(async (req) => {
     const mpData = await mpResponse.json();
 
     if (!mpResponse.ok) {
-        console.error("Erro MP:", mpData);
+        console.error('[create-mercadopago-preference] Erro MP:', mpData);
         throw new Error(mpData.message || "Erro ao gerar link de pagamento.");
     }
 
+    console.log('[create-mercadopago-preference] Preference created', { 
+      preferenceId: mpData.id, 
+      mode,
+      init_point: mode === 'production' ? mpData.init_point : mpData.sandbox_init_point
+    });
+
     return new Response(
       JSON.stringify({ 
-        // Retorna o link correto baseado no modo
         init_point: mode === 'production' ? mpData.init_point : mpData.sandbox_init_point,
         mode: mode,
         id: mpData.id
@@ -170,6 +179,7 @@ serve(async (req) => {
     )
 
   } catch (error) {
+    console.error('[create-mercadopago-preference] Error:', error.message);
     return new Response(JSON.stringify({ error: error.message }), { 
         status: 400, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
