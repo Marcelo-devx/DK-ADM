@@ -30,9 +30,10 @@ serve(async (req) => {
     const url = new URL(req.url)
     const params = url.searchParams
 
-    const authHeader = req.headers.get('authorization') || ''
+    // Read auth header (case-insensitive)
+    const authHeaderRaw = (req.headers.get('authorization') || req.headers.get('Authorization') || '').toString();
 
-    console.log(`[${FN}] headers present`, { hasAuthorization: !!authHeader })
+    console.log(`[${FN}] headers present`, { authHeaderRawPresent: !!authHeaderRaw })
 
     // Fetch the configured integration token from app_settings (if exists)
     let configuredToken: string | null = null
@@ -49,23 +50,26 @@ serve(async (req) => {
       console.log(`[${FN}] error reading app_settings`, e.message)
     }
 
-    // Normalize bearer token (required)
+    // Normalize and be tolerant: remove repeated 'Bearer' words and extract last token-like segment.
     let bearer = ''
-    if (authHeader) {
-      const parts = authHeader.split(' ')
-      if (parts.length === 2 && parts[0].toLowerCase() === 'bearer') bearer = parts[1]
-      else bearer = authHeader
+    if (authHeaderRaw) {
+      // remove all occurrences of the word 'bearer' (case-insensitive), then trim
+      const cleaned = authHeaderRaw.replace(/bearer/ig, ' ').replace(/[:]/g, ' ').trim()
+      // split by whitespace and take the last chunk — handles cases like 'Bearer Bearer <token>' or 'Bearer: <token>'
+      const parts = cleaned.split(/\s+/).filter(Boolean)
+      if (parts.length > 0) bearer = parts[parts.length - 1]
     }
 
-    // Only accept Authorization: Bearer <token> that matches service role key or configured token
+    // Only accept Authorization that matches service role key or configured token
     const validKeys = new Set<string>()
     if (SUPABASE_SERVICE_ROLE_KEY) validKeys.add(SUPABASE_SERVICE_ROLE_KEY)
     if (configuredToken) validKeys.add(configuredToken)
 
-    const isAuthorized = !!bearer && validKeys.has(bearer)
+    // Also accept if the raw header contains the configured token (tolerant for doubled headers)
+    const isAuthorized = (!!bearer && validKeys.has(bearer)) || (authHeaderRaw && configuredToken && authHeaderRaw.includes(configuredToken))
 
     if (!isAuthorized) {
-      console.warn(`[${FN}] authorization failed`, { bearerPresent: !!bearer })
+      console.warn(`[${FN}] authorization failed`, { bearerPresent: !!bearer, authHeaderRawSample: authHeaderRaw && authHeaderRaw.slice(0,50) })
       return new Response(JSON.stringify({ error: 'Authorization failed – Token de autenticação inválido' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
