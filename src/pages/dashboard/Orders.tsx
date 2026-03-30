@@ -847,10 +847,32 @@ const OrdersPage = () => {
       />
 
       {/* Modal de Criação de Pedido Manual */}
-      <CreateOrderModal 
+      <CreateOrderModal
         isOpen={isCreateOrderOpen}
         onClose={() => setIsCreateOrderOpen(false)}
       />
+
+      {/* AlertDialog de exclusão de pedido */}
+      <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir Pedido</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir o pedido <strong>#{selectedOrder?.id}</strong>? O estoque dos produtos será devolvido automaticamente. Esta ação é irreversível.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => selectedOrder && deleteOrderMutation.mutate(selectedOrder.id)}
+              disabled={deleteOrderMutation.isPending}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {deleteOrderMutation.isPending ? "Excluindo..." : "Sim, Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={!!actionToConfirm} onOpenChange={() => setActionToConfirm(null)}>
         <AlertDialogContent>
