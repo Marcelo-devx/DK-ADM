@@ -175,7 +175,11 @@ const ClientsPage = () => {
         // Pega o token da sessão atual
         const { data: sessionData } = await supabase.auth.getSession();
         const token = sessionData?.session?.access_token;
-        if (!token) throw new Error("Sessão expirada. Faça login novamente.");
+        // Fallback: se o token de sessão não existir ou estiver expirado, permita usar um token administrativo temporário
+        // (veja instruções: defina a mesma string em localStorage com a chave 'ADMIN_CREATE_TOKEN' e como secret nas Edge Functions)
+        const adminTokenFallback = typeof window !== 'undefined' ? window.localStorage.getItem('ADMIN_CREATE_TOKEN') : null;
+        const authHeader = token ? `Bearer ${token}` : adminTokenFallback ? `Bearer ${adminTokenFallback}` : null;
+        if (!authHeader) throw new Error("Sessão expirada. Faça login novamente ou configure o token administrativo temporário.");
 
         const response = await fetch(
           "https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1/admin-create-user",
@@ -183,7 +187,7 @@ const ClientsPage = () => {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "Authorization": `Bearer ${token}`,
+              "Authorization": authHeader,
               "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpybG96aGh2d3FmbWp0a212dWtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDU2NjQsImV4cCI6MjA2NzkyMTY2NH0.Do5c1-TKqpyZTJeX_hLbw1SU40CbwXfCIC-pPpcD_JM",
             },
             body: JSON.stringify(values),

@@ -23,7 +23,11 @@ serve(async (req) => {
     const authHeader = req.headers.get("Authorization") || "";
     const token = authHeader.replace("Bearer ", "").trim();
 
+    console.log("[admin-create-user] Incoming request. Authorization header present:", !!authHeader);
+    console.log("[admin-create-user] Token length:", token ? token.length : 0);
+
     if (!token) {
+      console.warn("[admin-create-user] No token provided - rejecting");
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -33,20 +37,30 @@ serve(async (req) => {
     // Validar token e checar se é admin
     const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
     if (userError || !userData?.user?.id) {
-      console.error("[admin-create-user] Token inválido:", userError?.message);
+      console.error("[admin-create-user] Token inválido ou getUser falhou:", userError?.message || userData);
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const { data: profile } = await supabaseAdmin
+    const callerId = userData.user.id;
+    console.log("[admin-create-user] Token belongs to userId:", callerId);
+
+    const { data: profile, error: profileErr } = await supabaseAdmin
       .from("profiles")
-      .select("role")
-      .eq("id", userData.user.id)
+      .select("role, first_name, last_name")
+      .eq("id", callerId)
       .maybeSingle();
 
+    if (profileErr) {
+      console.error("[admin-create-user] Erro ao buscar profile:", profileErr.message);
+    } else {
+      console.log("[admin-create-user] Caller profile:", profile);
+    }
+
     if (profile?.role !== "adm") {
+      console.warn("[admin-create-user] Caller is not admin. Role:", profile?.role);
       return new Response(JSON.stringify({ error: "Forbidden" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
