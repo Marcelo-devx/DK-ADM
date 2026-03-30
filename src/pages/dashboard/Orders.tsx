@@ -21,12 +21,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send, History, FileDown, Calendar, FilterX, ShieldCheck, ShieldX, CheckSquare } from "lucide-react";
+import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send, History, FileDown, Calendar, FilterX, ShieldCheck, ShieldX, CheckSquare, Plus } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { showSuccess, showError } from "@/utils/toast";
 import { OrderDetailModal } from "@/components/dashboard/OrderDetailModal";
 import { ShippingLabelModal } from "@/components/dashboard/ShippingLabelModal";
 import { ClientDetailsModal } from "@/components/dashboard/ClientDetailsModal";
+import { CreateOrderModal } from "@/components/dashboard/CreateOrderModal";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -130,6 +131,7 @@ const OrdersPage = () => {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
+  const [isCreateOrderOpen, setIsCreateOrderOpen] = useState(false);
   
   // States para Histórico do Cliente
   const [isClientHistoryOpen, setIsClientHistoryOpen] = useState(false);
@@ -495,6 +497,14 @@ const OrdersPage = () => {
           </div>
 
           <Button 
+            onClick={() => setIsCreateOrderOpen(true)}
+            className="bg-green-600 hover:bg-green-700 font-bold h-9 px-4 gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Criar Pedido Manual
+          </Button>
+
+          <Button 
             variant={readyToShipOnly ? "default" : "outline"} 
             size="sm" 
             className={cn("h-9 gap-2 text-xs", readyToShipOnly && "bg-blue-600")}
@@ -834,6 +844,12 @@ const OrdersPage = () => {
         client={selectedClientForHistory} 
         isOpen={isClientHistoryOpen} 
         onClose={() => setIsClientHistoryOpen(false)} 
+      />
+
+      {/* Modal de Criação de Pedido Manual */}
+      <CreateOrderModal 
+        isOpen={isCreateOrderOpen}
+        onClose={() => setIsCreateOrderOpen(false)}
       />
 
       <AlertDialog open={!!actionToConfirm} onOpenChange={() => setActionToConfirm(null)}>
