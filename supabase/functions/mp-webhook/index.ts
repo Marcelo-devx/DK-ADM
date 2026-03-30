@@ -13,20 +13,27 @@ serve(async (req) => {
   }
 
   try {
-    const url = new URL(req.url);
+    const urlObj = new URL(req.url);
 
     // MP envia tanto 'topic' (legado) quanto 'type' (moderno)
-    const topic = url.searchParams.get('topic') || url.searchParams.get('type');
-    
-    // MP moderno envia o payment ID direto em ?id=...
-    // IMPORTANTE: searchParams.get('data.id') NÃO funciona — o param real é 'id'
-    const idFromQuery = url.searchParams.get('id');
+    const topic = urlObj.searchParams.get('topic') || urlObj.searchParams.get('type');
+
+    // MP envia o payment ID em ?data.id=PAYMENT_ID (com ponto no nome do param)
+    // searchParams.get('data.id') não funciona diretamente — precisa iterar
+    let idFromQuery: string | null = null;
+    for (const [key, value] of urlObj.searchParams.entries()) {
+      if (key === 'data.id' || key === 'id') {
+        idFromQuery = value;
+        break;
+      }
+    }
 
     console.log('[mp-webhook] Request received', { 
       topic, 
       idFromQuery,
       fullUrl: req.url,
-      method: req.method
+      method: req.method,
+      allParams: Object.fromEntries(urlObj.searchParams.entries())
     });
 
     // Lê o body
@@ -34,7 +41,7 @@ serve(async (req) => {
     let rawBody = '';
     try { 
       rawBody = await req.text();
-      if (rawBody) bodyData = JSON.parse(rawBody); 
+      if (rawBody && rawBody.trim()) bodyData = JSON.parse(rawBody); 
     } catch (e) { 
       console.log('[mp-webhook] Failed to parse body as JSON', { error: String(e) }); 
     }
@@ -56,7 +63,7 @@ serve(async (req) => {
     const paymentId = idFromQuery 
       || bodyData?.data?.id 
       || bodyData?.id
-      || bodyData?.resource?.split('/')?.pop(); // formato legado
+      || (bodyData?.resource ? String(bodyData.resource).split('/').pop() : null);
 
     console.log('[mp-webhook] Resolved paymentId', { 
       paymentId, 
@@ -143,9 +150,9 @@ serve(async (req) => {
         });
     }
 
-    // 3. Consulta MP
+    // 3. Consulta MP — tenta com o token configurado, se falhar tenta o outro
     console.log('[mp-webhook] Fetching payment from MP', { paymentId, mode });
-    const mpResponse = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
+    let mpResponse = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
         headers: { 'Authorization': `Bearer ${mpToken}` }
     });
 
@@ -154,6 +161,25 @@ serve(async (req) => {
       paymentData = await mpResponse.json();
     } catch (e) {
       console.error('[mp-webhook] Failed parsing MP response JSON', { error: String(e) });
+    }
+
+    // Se falhou com o token atual (ex: modo errado), tenta com o token alternativo
+    if (!mpResponse.ok) {
+      const fallbackToken = mode === 'production'
+        ? settings['mercadopago_test_access_token']
+        : settings['mercadopago_access_token'];
+
+      if (fallbackToken) {
+        console.warn('[mp-webhook] Token principal falhou, tentando token alternativo', { httpStatus: mpResponse.status });
+        mpResponse = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
+            headers: { 'Authorization': `Bearer ${fallbackToken}` }
+        });
+        try {
+          paymentData = await mpResponse.json();
+        } catch (e) {
+          console.error('[mp-webhook] Failed parsing fallback MP response JSON', { error: String(e) });
+        }
+      }
     }
 
     console.log('[mp-webhook] MP payment response', { 
