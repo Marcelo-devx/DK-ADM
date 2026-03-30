@@ -303,7 +303,7 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
       const { error: itemsError } = await supabase.from("order_items").insert(
         orderItems.map((item) => ({
           order_id: order.id,
-          item_id: item.variantId || item.productId,
+          item_id: item.productId, // sempre o ID do produto (bigint), não o UUID da variação
           item_type: "product",
           quantity: item.quantity,
           price_at_purchase: item.price,
