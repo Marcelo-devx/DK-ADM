@@ -31,7 +31,6 @@ serve(async (req) => {
     }
 
     const { orderId } = await req.json();
-
     if (!orderId) throw new Error("Order ID is required");
 
     const supabaseAdmin = createClient(
@@ -40,14 +39,10 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    // 2. Fetch Order Details
+    // 2. Fetch Order — SEM join com profiles (profiles não tem coluna email)
     const { data: order, error: orderError } = await supabaseAdmin
         .from('orders')
-        .select(`
-            user_id,
-            total_price,
-            profiles(first_name, last_name, email, cpf_cnpj, phone)
-        `)
+        .select('id, user_id, total_price')
         .eq('id', orderId)
         .single();
 
@@ -57,47 +52,96 @@ serve(async (req) => {
 
     // 3. Security Check: Ownership or Admin
     if (order.user_id !== user.id) {
-        const { data: profile } = await supabaseAdmin
+        const { data: profileCheck } = await supabaseAdmin
             .from('profiles')
             .select('role')
             .eq('id', user.id)
             .single();
         
-        if (profile?.role !== 'adm') {
+        if (profileCheck?.role !== 'adm') {
             return new Response(JSON.stringify({ error: 'Forbidden: Acesso negado a este pedido.' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
     }
 
-    // 4. Fetch Settings and Determine Mode (Test vs Production)
+    // 4. Fetch Profile separately (first_name, last_name, phone, cpf_cnpj)
+    let profileData: any = null;
+    if (order.user_id) {
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('first_name, last_name, phone, cpf_cnpj')
+        .eq('id', order.user_id)
+        .maybeSingle();
+      profileData = profile;
+    }
+
+    // 5. Fetch Email from auth.users — profiles NÃO tem coluna email
+    let userEmail = "cliente@email.com";
+    if (order.user_id) {
+      try {
+        const { data: userData } = await supabaseAdmin.auth.admin.getUserById(order.user_id);
+        if (userData?.user?.email) userEmail = userData.user.email;
+      } catch (e) {
+        console.warn('[create-mercadopago-preference] Could not fetch user email from auth', e?.message || e);
+      }
+    }
+
+    console.log('[create-mercadopago-preference] Payer resolved', {
+      email: userEmail,
+      name: profileData?.first_name,
+      hasPhone: !!profileData?.phone,
+      hasCpf: !!profileData?.cpf_cnpj
+    });
+
+    // 6. Fetch Settings and Determine Mode (Test vs Production)
     const { data: settingsData } = await supabaseAdmin
         .from('app_settings')
         .select('key, value')
         .in('key', ['mercadopago_access_token', 'mercadopago_test_access_token', 'payment_mode', 'site_url']);
     
-    const settings = {};
-    settingsData?.forEach(s => settings[s.key] = s.value);
+    const settings: Record<string, string> = {};
+    settingsData?.forEach((s: any) => { settings[s.key] = s.value; });
 
     const mode = settings['payment_mode'] === 'production' ? 'production' : 'test';
-    const token = mode === 'production' 
-        ? settings['mercadopago_access_token'] 
+    const token = mode === 'production'
+        ? settings['mercadopago_access_token']
         : settings['mercadopago_test_access_token'];
 
     const siteUrl = settings['site_url'] || 'http://localhost:8080';
 
     if (!token) throw new Error(`Token do Mercado Pago (${mode}) não configurado.`);
 
-    // CORREÇÃO: total_price já é o valor final (inclui frete, doação, desconto de cupom)
-    // NÃO somar frete e doação novamente
+    // total_price já é o valor final (inclui frete, doação, desconto de cupom)
     const totalAmount = Number(order.total_price);
 
     console.log('[create-mercadopago-preference] Total amount for preference', { totalAmount, mode });
 
-    const payerEmail = order.profiles?.email || "cliente@email.com";
-    const payerName = order.profiles?.first_name || "Cliente";
-    const payerSurname = order.profiles?.last_name || "";
+    // 7. Build payer object — phone e cpf só se válidos (evita rejeição do MP)
+    const payer: any = {
+      name: profileData?.first_name || "Cliente",
+      surname: profileData?.last_name || "",
+      email: userEmail,
+      date_created: new Date().toISOString(),
+    };
 
-    // 5. Create Preference
-    const preferenceBody = {
+    if (profileData?.phone) {
+      const cleanPhone = profileData.phone.replace(/\D/g, "");
+      if (cleanPhone.length >= 8) {
+        payer.phone = {
+          area_code: cleanPhone.length >= 10 ? cleanPhone.slice(0, 2) : "55",
+          number: cleanPhone.length >= 10 ? cleanPhone.slice(2) : cleanPhone,
+        };
+      }
+    }
+
+    if (profileData?.cpf_cnpj) {
+      const cleanCpf = profileData.cpf_cnpj.replace(/\D/g, "");
+      if (cleanCpf.length >= 11) {
+        payer.identification = { type: "CPF", number: cleanCpf };
+      }
+    }
+
+    // 8. Create Preference
+    const preferenceBody: any = {
         items: [
             {
                 id: String(orderId),
@@ -108,20 +152,7 @@ serve(async (req) => {
                 unit_price: Number(totalAmount.toFixed(2))
             }
         ],
-        payer: {
-            name: payerName,
-            surname: payerSurname,
-            email: payerEmail,
-            date_created: new Date().toISOString(),
-            phone: {
-                area_code: "55",
-                number: order.profiles?.phone?.replace(/\D/g, "") || ""
-            },
-            identification: order.profiles?.cpf_cnpj ? {
-                type: "CPF",
-                number: order.profiles.cpf_cnpj.replace(/\D/g, "")
-            } : undefined
-        },
+        payer,
         payment_methods: {
             excluded_payment_types: [
                 { id: "ticket" },
@@ -136,7 +167,7 @@ serve(async (req) => {
             pending: `${siteUrl}/meus-pedidos?status=pending`
         },
         auto_return: "approved",
-        external_reference: String(orderId), // Vínculo CRÍTICO para o Webhook
+        external_reference: String(orderId),
         notification_url: `${Deno.env.get('SUPABASE_URL')}/functions/v1/mp-webhook`,
         statement_descriptor: "TABACARIA"
     };
@@ -159,14 +190,13 @@ serve(async (req) => {
     const mpData = await mpResponse.json();
 
     if (!mpResponse.ok) {
-        console.error('[create-mercadopago-preference] Erro MP:', mpData);
-        throw new Error(mpData.message || "Erro ao gerar link de pagamento.");
+        console.error('[create-mercadopago-preference] Erro MP:', JSON.stringify(mpData));
+        throw new Error(mpData.message || mpData.error || "Erro ao gerar link de pagamento.");
     }
 
     console.log('[create-mercadopago-preference] Preference created', { 
       preferenceId: mpData.id, 
-      mode,
-      init_point: mode === 'production' ? mpData.init_point : mpData.sandbox_init_point
+      mode
     });
 
     return new Response(
@@ -179,8 +209,8 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('[create-mercadopago-preference] Error:', error.message);
-    return new Response(JSON.stringify({ error: error.message }), { 
+    console.error('[create-mercadopago-preference] Error:', error?.message || String(error));
+    return new Response(JSON.stringify({ error: error?.message || String(error) }), { 
         status: 400, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
     });
