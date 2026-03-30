@@ -121,10 +121,48 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
 
   // Queries
   const { data: products, isLoading: loadingProducts } = useQuery<Product[]>({
-    queryKey: ["products-with-variants"],
+    queryKey: ["products-with-variants", productSearch],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("products")
+      // If no search term, load a broad list of visible products
+      if (!productSearch) {
+        const { data } = await supabase
+          .from("products")
+          .select(`
+            id,
+            name,
+            price,
+            pix_price,
+            stock_quantity,
+            image_url,
+            sku,
+            is_visible,
+            product_variants(*)
+          `)
+          .eq("is_visible", true)
+          .order("name")
+          .limit(200);
+        return data || [];
+      }
+
+      // When searching, do a server-side search:
+      const term = productSearch.trim();
+      if (!term) return [];
+      const like = `%${term}%`;
+
+      // 1) Search variants that match the term (sku, color, size, volume)
+      const { data: variantMatches } = await supabase
+        .from('product_variants')
+        .select('product_id')
+        .or(
+          `sku.ilike.${like},color.ilike.${like},size.ilike.${like}`
+        )
+        .limit(200);
+
+      const productIds = (variantMatches || []).map((v: any) => v.product_id).filter(Boolean);
+
+      // 2) Search products by name
+      const { data: productsByName } = await supabase
+        .from('products')
         .select(`
           id,
           name,
@@ -136,10 +174,38 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
           is_visible,
           product_variants(*)
         `)
-        .eq("is_visible", true)
-        .order("name")
+        .ilike('name', like)
+        .eq('is_visible', true)
         .limit(200);
-      return data || [];
+
+      // 3) If variant matches found, fetch those products as well
+      let productsById: any[] = [];
+      if (productIds.length > 0) {
+        const { data: productsFromVariants } = await supabase
+          .from('products')
+          .select(`
+            id,
+            name,
+            price,
+            pix_price,
+            stock_quantity,
+            image_url,
+            sku,
+            is_visible,
+            product_variants(*)
+          `)
+          .in('id', productIds)
+          .eq('is_visible', true)
+          .limit(200);
+        productsById = productsFromVariants || [];
+      }
+
+      // Merge and dedupe
+      const mergedMap = new Map<number, any>();
+      (productsByName || []).forEach((p: any) => mergedMap.set(p.id, p));
+      productsById.forEach((p: any) => mergedMap.set(p.id, p));
+
+      return Array.from(mergedMap.values());
     },
     enabled: isOpen,
   });
