@@ -58,41 +58,32 @@ interface Client {
 
 // Accept options for limit, page and search so we can fetch paged results
 const fetchClients = async (options?: { limit?: number; page?: number; search?: string }): Promise<Client[]> => {
-  console.log('[Clients.tsx] Iniciando fetchClients', options);
-
+  // Keep logs minimal to avoid UI perf impact
   try {
     const body: any = {};
     if (options?.limit) body.limit = options.limit;
     if (options?.page) body.page = options.page;
     if (options?.search) body.search = options.search;
 
-    console.log('[Clients.tsx] Chamando Edge Function via supabase.functions.invoke("get-users") com body:', body);
     const { data, error } = await supabase.functions.invoke('get-users', {
       body: Object.keys(body).length ? body : undefined,
     });
 
     if (error) {
-      console.error('[Clients.tsx] Erro retornado pela Edge Function (invoke):', error);
       throw error;
     }
 
     if (!data) {
-      console.warn('[Clients.tsx] Edge Function retornou sem dados.');
       throw new Error('Edge Function retornou sem dados.');
     }
 
-    console.log('[Clients.tsx] Clientes carregados com sucesso (via Edge Function invoke), quantidade:', Array.isArray(data) ? data.length : 'n/a');
     return data as Client[];
   } catch (err) {
-    console.error('[Clients.tsx] Falha ao chamar Edge Function via invoke, aplicando fallback para carregar profiles diretamente:', err);
-
     try {
-      console.log('[Clients.tsx] Fallback: buscando profiles diretamente do Supabase');
       let query = supabase
         .from('profiles')
         .select('id, first_name, last_name, role, force_pix_on_next_purchase, created_at, updated_at');
 
-      // Apply range if page and limit provided to keep fallback lightweight
       if (options?.limit && options?.page) {
         const start = (options.page - 1) * options.limit;
         const end = start + options.limit - 1;
@@ -103,16 +94,9 @@ const fetchClients = async (options?: { limit?: number; page?: number; search?: 
         query = query.limit(options.limit);
       }
 
-      // Fallback cannot reliably search by email because emails are stored in auth.users schema
-      // which is not accessible from client due to RLS. We log a warning when search is requested.
-      if (options?.search) {
-        console.warn('[Clients.tsx] Fallback não suporta busca por email no cliente. A Edge Function deve ser usada para pesquisa.');
-      }
-
       const { data: profiles, error: profilesError } = await query;
 
       if (profilesError) {
-        console.error('[Clients.tsx] Erro ao buscar profiles no fallback:', profilesError);
         throw new Error(`Falha no fallback: ${profilesError.message}`);
       }
 
@@ -129,10 +113,8 @@ const fetchClients = async (options?: { limit?: number; page?: number; search?: 
         completed_order_count: 0,
       }));
 
-      console.log('[Clients.tsx] Clientes carregados com sucesso via fallback, quantidade:', clientsFallback.length);
       return clientsFallback;
     } catch (fallbackErr) {
-      console.error('[Clients.tsx] Fallback falhou também:', fallbackErr);
       throw fallbackErr;
     }
   }
@@ -142,6 +124,7 @@ const ClientsPage = () => {
   const queryClient = useQueryClient();
   const [showOnlyFlagged, setShowOnlyFlagged] = useState(false);
   const [searchEmail, setSearchEmail] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [page, setPage] = useState(1);
   const pageSize = 10; // items per page
@@ -171,19 +154,25 @@ const ClientsPage = () => {
     },
   });
 
-  // Reset to first page when user starts a new search
+  // Debounce search input to avoid too many requests while typing
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchEmail.trim()), 500);
+    return () => clearTimeout(t);
+  }, [searchEmail]);
+
+  // Reset to first page when user starts a new search (debounced)
   useEffect(() => {
     setPage(1);
-  }, [searchEmail]);
+  }, [debouncedSearch]);
 
   const fetchOptions = {
     limit: pageSize,
     page,
-    search: searchEmail && searchEmail.trim().length > 0 ? searchEmail.trim() : undefined,
+    search: debouncedSearch && debouncedSearch.length > 0 ? debouncedSearch : undefined,
   } as { limit?: number; page?: number; search?: string };
 
   const { data: clients, isLoading, error, refetch } = useQuery<Client[]>({
-    queryKey: ["clients", page, searchEmail],
+    queryKey: ["clients", page, debouncedSearch],
     queryFn: async () => {
       try {
         const data = await fetchClients(fetchOptions);
@@ -198,11 +187,8 @@ const ClientsPage = () => {
 
   const createClientMutation = useMutation({
     mutationFn: async (values: any) => {
-        // Pega o token da sessão atual
         const { data: sessionData } = await supabase.auth.getSession();
         const token = sessionData?.session?.access_token;
-        // Fallback: se o token de sessão não existir ou estiver expirado, permita usar um token administrativo temporário
-        // (veja instruções: defina a mesma string em localStorage com a chave 'ADMIN_CREATE_TOKEN' e como secret nas Edge Functions)
         const adminTokenFallback = typeof window !== 'undefined' ? window.localStorage.getItem('ADMIN_CREATE_TOKEN') : null;
         const authHeader = token ? `Bearer ${token}` : adminTokenFallback ? `Bearer ${adminTokenFallback}` : null;
         if (!authHeader) throw new Error("Sessão expirada. Faça login novamente ou configure o token administrativo temporário.");
@@ -224,11 +210,47 @@ const ClientsPage = () => {
         if (!response.ok || result.error) {
           throw new Error(result.details || result.error || `Erro ${response.status}`);
         }
-        return result;
+        return { result, values };
     },
-    onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["clients"] });
-        queryClient.invalidateQueries({ queryKey: ["clientsTotal"] });
+    onSuccess: (data) => {
+        const { result, values } = data as any;
+
+        // Try to update the cache directly to avoid expensive refetches
+        try {
+          // Increment total count if present
+          queryClient.setQueryData<number>(["clientsTotal"], (prev) => (prev || 0) + 1);
+
+          // Build a minimal client object from result (best-effort)
+          const created = result?.user || result;
+          const newClient: Client = {
+            id: created?.id || created?.user?.id || `new-${Date.now()}`,
+            email: created?.email || values?.email || '',
+            first_name: created?.user_metadata?.first_name || created?.first_name || values?.full_name || null,
+            last_name: created?.user_metadata?.last_name || created?.last_name || null,
+            created_at: created?.created_at || new Date().toISOString(),
+            updated_at: null,
+            role: 'user',
+            force_pix_on_next_purchase: false,
+            order_count: 0,
+            completed_order_count: 0,
+          };
+
+          // Prepend to first page cache if exists
+          const firstPageKey = ["clients", 1, ""];
+          const firstPage = queryClient.getQueryData<Client[]>(firstPageKey);
+          if (firstPage) {
+            const updated = [newClient, ...firstPage].slice(0, pageSize);
+            queryClient.setQueryData(firstPageKey, updated);
+          } else {
+            // If no cache, set the first page to contain new client
+            queryClient.setQueryData<Client[]>(firstPageKey, [newClient]);
+          }
+        } catch (cacheErr) {
+          // fallback: invalidate queries
+          queryClient.invalidateQueries({ queryKey: ["clientsTotal"] });
+          queryClient.invalidateQueries({ queryKey: ["clients"] });
+        }
+
         showSuccess("Cliente criado com sucesso!");
         setIsCreateModalOpen(false);
     },
@@ -246,17 +268,15 @@ const ClientsPage = () => {
       if (error) throw new Error(error.message);
     },
     onMutate: async (variables) => {
-      // optimistic update clients list for the current page/search
-      await queryClient.cancelQueries({ queryKey: ["clients", page, searchEmail] });
-      const previous = queryClient.getQueryData<Client[]>(["clients", page, searchEmail]);
+      await queryClient.cancelQueries({ queryKey: ["clients", page, debouncedSearch] });
+      const previous = queryClient.getQueryData<Client[]>(["clients", page, debouncedSearch]);
       if (previous) {
-        queryClient.setQueryData(["clients", page, searchEmail], previous.map(c => c.id === variables.userId ? { ...c, force_pix_on_next_purchase: variables.forcePix } : c));
+        queryClient.setQueryData(["clients", page, debouncedSearch], previous.map(c => c.id === variables.userId ? { ...c, force_pix_on_next_purchase: variables.forcePix } : c));
       }
       return { previous };
     },
     onSuccess: (_, variables) => {
-      // Invalidate queries so UI and other pages reflect the change
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["clients", page, debouncedSearch], exact: true });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["supplierOrders"] });
       queryClient.invalidateQueries({ queryKey: ["selectableItemsForSupplierOrder"] });
@@ -264,9 +284,8 @@ const ClientsPage = () => {
       showSuccess(variables.forcePix ? "Restrição de PIX ativada!" : "Venda via Cartão liberada!");
     },
     onError: (error: Error, variables, context: any) => {
-      // rollback optimistic update
       if (context?.previous) {
-        queryClient.setQueryData(["clients", page, searchEmail], context.previous);
+        queryClient.setQueryData(["clients", page, debouncedSearch], context.previous);
       }
       showError(`Erro ao atualizar segurança: ${error.message}`);
     },
@@ -301,7 +320,7 @@ const ClientsPage = () => {
       return data;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["clients", page, debouncedSearch], exact: true });
       showSuccess(data.message);
       setActionToConfirm(null);
     },
@@ -320,7 +339,6 @@ const ClientsPage = () => {
   };
 
   // Keep client-side filtering light: only exclude admins and apply the flagged filter here.
-  // Search is performed server-side when a search term is provided.
   const filteredClients = clients?.filter(client => {
     if (client.role === 'adm') return false;
     if (showOnlyFlagged && !client.force_pix_on_next_purchase) return false;
@@ -336,7 +354,7 @@ const ClientsPage = () => {
           <h1 className="text-3xl font-bold">Clientes</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Total de clientes cadastrados: <span className="font-semibold text-primary">{totalClients?.toLocaleString("pt-BR") || filteredClients?.length || 0}</span>
-            {!searchEmail && (
+            {!debouncedSearch && (
               <span className="text-xs text-muted-foreground ml-2">(Mostrando página {page}{maxPage ? ` de ${maxPage}` : ''})</span>
             )}
           </p>
@@ -348,7 +366,7 @@ const ClientsPage = () => {
               type="text"
               placeholder="Buscar por email..."
               value={searchEmail}
-              onChange={(e) => { setSearchEmail(e.target.value); setPage(1); }}
+              onChange={(e) => { setSearchEmail(e.target.value); }}
               className="pl-9 pr-4 py-2 border rounded-md text-sm w-64 focus:outline-none focus:ring-2 focus:ring-primary"
             />
             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
