@@ -123,33 +123,13 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
   const { data: products, isLoading: loadingProducts } = useQuery<Product[]>({
     queryKey: ["products-with-variants", productSearch],
     queryFn: async () => {
-      // If no search term, load a broad list of visible products
-      if (!productSearch) {
-        const { data } = await supabase
-          .from("products")
-          .select(`
-            id,
-            name,
-            price,
-            pix_price,
-            stock_quantity,
-            image_url,
-            sku,
-            is_visible,
-            product_variants(*)
-          `)
-          .eq("is_visible", true)
-          .order("name")
-          .limit(200);
-        return data || [];
-      }
-
-      // When searching, do a server-side search:
+      // If no search term, do not fetch any products (avoid preloading). Return empty.
       const term = productSearch.trim();
       if (!term) return [];
+
       const like = `%${term}%`;
 
-      // 1) Search variants that match the term (sku, color, size, volume)
+      // 1) Search variants that match the term (sku, color, size)
       const { data: variantMatches } = await supabase
         .from('product_variants')
         .select('product_id')
@@ -207,7 +187,7 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
 
       return Array.from(mergedMap.values());
     },
-    enabled: isOpen,
+    enabled: isOpen && productSearch.trim().length > 0,
   });
 
   // Helper to match product or its variants against search term
@@ -724,10 +704,14 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
                 </div>
                 <ScrollArea className="max-h-64">
                   <CommandList>
-                    {loadingProducts ? (
+                    {!productSearch ? (
+                      <div className="p-6 text-center text-sm text-muted-foreground">Digite o nome ou SKU do produto para buscar (não carrega lista automaticamente).</div>
+                    ) : loadingProducts ? (
                       <div className="py-8 flex justify-center">
                         <Loader2 className="w-6 h-6 animate-spin" />
                       </div>
+                    ) : products && products.length === 0 ? (
+                      <div className="p-6 text-center text-sm text-muted-foreground">Nenhum produto encontrado para "{productSearch}".</div>
                     ) : (
                       <CommandGroup>
                         {filteredProducts.map((product) => {
