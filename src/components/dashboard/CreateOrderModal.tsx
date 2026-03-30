@@ -219,25 +219,56 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
     setClientNotFound(false);
     setClientConfirmed(false);
     try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("email", email)
-        .limit(1)
-        .maybeSingle();
+      // Primeiro tenta obter o user_id via função RPC segura
+      const { data: uidData, error: uidError } = await supabase.rpc('get_user_id_by_email', { user_email: email });
+      if (uidError) {
+        throw uidError;
+      }
 
-      if (error) throw error;
-      if (!data) {
+      // uidData pode vir como string, array ou objeto dependendo do retorno da função
+      let userId: string | null = null;
+      if (!uidData) {
+        userId = null;
+      } else if (typeof uidData === 'string') {
+        userId = uidData;
+      } else if (Array.isArray(uidData) && uidData.length > 0) {
+        // ex: [{get_user_id_by_email: 'uuid'}] ou ['uuid']
+        const first = uidData[0];
+        if (typeof first === 'string') userId = first;
+        else if (first && typeof first === 'object') {
+          const val = Object.values(first)[0];
+          if (typeof val === 'string') userId = val;
+        }
+      } else if (typeof uidData === 'object') {
+        const val = Object.values(uidData)[0];
+        if (typeof val === 'string') userId = val;
+      }
+
+      if (!userId) {
         setSelectedClient(null);
         setClientNotFound(true);
         return null;
       }
 
-      setSelectedClient(data as Client);
+      // Buscar perfil pelo id retornado
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (profileError) throw profileError;
+      if (!profile) {
+        setSelectedClient(null);
+        setClientNotFound(true);
+        return null;
+      }
+
+      setSelectedClient(profile as Client);
       setClientNotFound(false);
-      return data as Client;
+      return profile as Client;
     } catch (err: any) {
-      showError(err.message || "Erro ao buscar cliente");
+      showError(err.message || 'Erro ao buscar cliente');
       setSelectedClient(null);
       setClientNotFound(true);
       return null;
