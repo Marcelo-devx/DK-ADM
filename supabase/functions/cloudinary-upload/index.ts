@@ -32,7 +32,10 @@ serve(async (req) => {
 
     if (!cloudName || !apiKey || !apiSecret) {
       console.error('[cloudinary-upload] Variáveis de ambiente ausentes');
-      throw new Error("Credenciais do Cloudinary não configuradas.");
+      return new Response(
+        JSON.stringify({ error: 'Cloudinary credentials not configured in Edge Function (missing CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET).' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      );
     }
 
     console.log('[cloudinary-upload] Preparando upload para Cloudinary:', { cloudName });

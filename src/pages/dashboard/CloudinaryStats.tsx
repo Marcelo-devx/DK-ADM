@@ -47,7 +47,11 @@ const formatBytes = (bytes: number, decimals = 2) => {
 
 const fetchCloudinaryStats = async () => {
   const { data, error } = await supabase.functions.invoke("cloudinary-usage");
-  if (error) throw new Error(error.message);
+  // Prefer explicit error details returned by the edge function (data.error / data.details)
+  if (error) {
+    const message = data?.details || data?.error || error.message || JSON.stringify(data) || 'Unknown error';
+    throw new Error(message);
+  }
   return data;
 };
 
@@ -55,7 +59,10 @@ const fetchCloudinaryImages = async () => {
   const { data, error } = await supabase.functions.invoke(
     "cloudinary-list-images"
   );
-  if (error) throw new Error(error.message);
+  if (error) {
+    const message = data?.details || data?.error || error.message || JSON.stringify(data) || 'Unknown error';
+    throw new Error(message);
+  }
   return data;
 };
 
@@ -84,18 +91,21 @@ const CloudinaryStatsPage = () => {
 
   const deleteImageMutation = useMutation({
     mutationFn: async (publicId: string) => {
-      const { error } = await supabase.functions.invoke("cloudinary-delete-image", {
+      const { data, error } = await supabase.functions.invoke("cloudinary-delete-image", {
         body: { public_id: publicId },
       });
-      if (error) throw new Error(error.message);
+      if (error) {
+        const message = data?.details || data?.error || error.message || JSON.stringify(data) || 'Unknown error';
+        throw new Error(message);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cloudinaryImages"] });
       queryClient.invalidateQueries({ queryKey: ["cloudinaryStats"] });
       showSuccess("Imagem removida com sucesso!");
     },
-    onError: (error) => {
-      showError(`Erro ao remover imagem: ${error.message}`);
+    onError: (error: any) => {
+      showError(`Erro ao remover imagem: ${error?.message || String(error)}`);
     },
   });
 
