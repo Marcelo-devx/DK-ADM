@@ -285,12 +285,17 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
       if (!clientConfirmed) throw new Error("Confirme o cliente antes de criar o pedido");
       if (orderItems.length === 0) throw new Error("Adicione produtos ao pedido");
 
+      // Recalcula totais na hora da execução para evitar closure stale
+      const currentItemsTotal = orderItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
+      const currentShippingCost = chargeFreight ? shippingCost : 0;
+      const currentTotal = currentItemsTotal + currentShippingCost;
+
       const { data: order, error: orderError } = await supabase
         .from("orders")
         .insert({
           user_id: selectedClient.id,
-          total_price: finalTotal,
-          shipping_cost: finalShippingCost,
+          total_price: currentTotal,
+          shipping_cost: currentShippingCost,
           status: "Pago",
           payment_method: "Pix",
           delivery_status: "Aguardando Coleta",
@@ -303,7 +308,7 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
       const { error: itemsError } = await supabase.from("order_items").insert(
         orderItems.map((item) => ({
           order_id: order.id,
-          item_id: item.productId, // sempre o ID do produto (bigint), não o UUID da variação
+          item_id: item.productId,
           item_type: "product",
           quantity: item.quantity,
           price_at_purchase: item.price,
@@ -572,13 +577,16 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
                         <p className="text-xs text-muted-foreground">{fmt(item.price)} × {item.quantity} = {fmt(item.price * item.quantity)}</p>
                       </div>
                       <Input
-                        type="number"
-                        min="1"
-                        max={item.stock}
-                        value={item.quantity}
-                        onChange={(e) => handleUpdateQuantity(index, parseInt(e.target.value))}
-                        className="w-16 text-center"
-                      />
+                                type="number"
+                                min="1"
+                                max={item.stock}
+                                value={item.quantity}
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value, 10);
+                                  if (!isNaN(val)) handleUpdateQuantity(index, val);
+                                }}
+                                className="w-16 text-center"
+                              />
                       <Button variant="ghost" size="icon" onClick={() => handleRemoveItem(index)} className="text-red-500 hover:bg-red-50 shrink-0">
                         <Trash2 className="w-4 h-4" />
                       </Button>
