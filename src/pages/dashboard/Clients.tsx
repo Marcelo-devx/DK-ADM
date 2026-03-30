@@ -142,6 +142,19 @@ const ClientsPage = () => {
     client: Client;
   } | null>(null);
 
+  // Total real de clientes direto do banco
+  const { data: totalClients } = useQuery<number>({
+    queryKey: ["clientsTotal"],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("profiles")
+        .select("*", { count: "exact", head: true })
+        .eq("role", "user");
+      if (error) throw error;
+      return count || 0;
+    },
+  });
+
   const { data: clients, isLoading, error, refetch } = useQuery<Client[]>({
     queryKey: ["clients"],
     // wrapper para capturar detalhes brutos do erro e colocá-los no estado para exibição
@@ -151,8 +164,6 @@ const ClientsPage = () => {
         setRawEdgeError(null);
         return data;
       } catch (e: any) {
-        // Conservar qualquer informação extra (context, status, etc.) enviada pelo client/edge function
-        // para que possamos exibir no UI para depuração.
         setRawEdgeError(e?.context ?? e);
         throw e;
       }
@@ -161,21 +172,34 @@ const ClientsPage = () => {
 
   const createClientMutation = useMutation({
     mutationFn: async (values: any) => {
-        const { data, error } = await supabase.functions.invoke("create-client-by-admin", {
-            body: values,
-        });
-        if (error) {
-            if (error.context && typeof error.context.json === 'function') {
-                const errorJson = await error.context.json();
-                if (errorJson.details) throw new Error(errorJson.details);
-            }
-            throw new Error(error.message);
+        // Pega o token da sessão atual
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData?.session?.access_token;
+        if (!token) throw new Error("Sessão expirada. Faça login novamente.");
+
+        const response = await fetch(
+          "https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1/create-client-by-admin",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${token}`,
+              "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpybG96aGh2d3FmbWp0a212dWtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDU2NjQsImV4cCI6MjA2NzkyMTY2NH0.Do5c1-TKqpyZTJeX_hLbw1SU40CbwXfCIC-pPpcD_JM",
+            },
+            body: JSON.stringify(values),
+          }
+        );
+
+        const result = await response.json();
+        if (!response.ok || result.error) {
+          throw new Error(result.details || result.error || `Erro ${response.status}`);
         }
-        return data;
+        return result;
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ["clients"] });
-        showSuccess(data.message);
+        queryClient.invalidateQueries({ queryKey: ["clientsTotal"] });
+        showSuccess("Cliente criado com sucesso!");
         setIsCreateModalOpen(false);
     },
     onError: (error: Error) => {
@@ -278,7 +302,7 @@ const ClientsPage = () => {
         <div>
           <h1 className="text-3xl font-bold">Clientes</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Total de clientes cadastrados: <span className="font-semibold text-primary">{filteredClients?.length || 0}</span>
+            Total de clientes cadastrados: <span className="font-semibold text-primary">{totalClients?.toLocaleString("pt-BR") || filteredClients?.length || 0}</span>
           </p>
         </div>
         
