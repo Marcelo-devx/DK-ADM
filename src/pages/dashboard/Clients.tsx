@@ -56,20 +56,22 @@ interface Client {
   completed_order_count: number;
 }
 
-const fetchClients = async (): Promise<Client[]> => {
-  console.log('[Clients.tsx] Iniciando fetchClients');
+// Accept options for limit and search so we can fetch just the first N by default
+const fetchClients = async (options?: { limit?: number; search?: string }): Promise<Client[]> => {
+  console.log('[Clients.tsx] Iniciando fetchClients', options);
 
-  // Tentativa preferencial: usar supabase.functions.invoke para chamar a Edge Function,
-  // assim o supabase-js cuida dos headers e do token da sessão.
   try {
-    console.log('[Clients.tsx] Chamando Edge Function via supabase.functions.invoke("get-users")');
+    const body: any = {};
+    if (options?.limit) body.limit = options.limit;
+    if (options?.search) body.search = options.search;
+
+    console.log('[Clients.tsx] Chamando Edge Function via supabase.functions.invoke("get-users") com body:', body);
     const { data, error } = await supabase.functions.invoke('get-users', {
-      // sem body necessário
+      body: Object.keys(body).length ? body : undefined,
     });
 
     if (error) {
       console.error('[Clients.tsx] Erro retornado pela Edge Function (invoke):', error);
-      // preserva contexto para depuração
       throw error;
     }
 
@@ -78,39 +80,46 @@ const fetchClients = async (): Promise<Client[]> => {
       throw new Error('Edge Function retornou sem dados.');
     }
 
-    // O retorno esperado é um array de clients
     console.log('[Clients.tsx] Clientes carregados com sucesso (via Edge Function invoke), quantidade:', Array.isArray(data) ? data.length : 'n/a');
     return data as Client[];
   } catch (err) {
     console.error('[Clients.tsx] Falha ao chamar Edge Function via invoke, aplicando fallback para carregar profiles diretamente:', err);
 
-    // Fallback: buscar profiles diretamente (pode não incluir email) — mas tentamos recuperar o email via auth.users NÃO é possível do cliente por RLS,
-    // então usamos o placeholder caso a Edge Function realmente não esteja disponível.
     try {
       console.log('[Clients.tsx] Fallback: buscando profiles diretamente do Supabase');
-      const { data: profiles, error: profilesError } = await supabase
+      let query = supabase
         .from('profiles')
         .select('id, first_name, last_name, role, force_pix_on_next_purchase, created_at, updated_at');
+
+      // Apply limit if provided to keep fallback lightweight
+      if (options?.limit) {
+        // supabase-js .limit is available
+        // @ts-ignore
+        query = query.limit(options.limit);
+      }
+
+      // Fallback cannot reliably search by email because emails are stored in auth.users schema
+      // which is not accessible from client due to RLS. We log a warning when search is requested.
+      if (options?.search) {
+        console.warn('[Clients.tsx] Fallback não suporta busca por email no cliente. A Edge Function deve ser usada para pesquisa.');
+      }
+
+      const { data: profiles, error: profilesError } = await query;
 
       if (profilesError) {
         console.error('[Clients.tsx] Erro ao buscar profiles no fallback:', profilesError);
         throw new Error(`Falha no fallback: ${profilesError.message}`);
       }
 
-      // Mapear profiles para o tipo Client (preenchendo campos que não existem com placeholders)
       const clientsFallback: Client[] = (profiles || []).map((p: any) => ({
         id: p.id,
-        // Email não está na tabela profiles por padrão — mostramos um placeholder para visualização
-        // (a Edge Function é a forma correta de obter emails reais)
         email: p.id ? `${p.id}@no-email.local` : '—',
         created_at: p.created_at || null,
         updated_at: p.updated_at || null,
         first_name: p.first_name || null,
         last_name: p.last_name || null,
         role: p.role || 'user',
-        // Preserve explicit boolean (true only when DB value is true) to avoid null being treated as false
         force_pix_on_next_purchase: p.force_pix_on_next_purchase === true,
-        // Não temos acesso aos pedidos via cliente (RLS), então deixamos 0
         order_count: 0,
         completed_order_count: 0,
       }));
@@ -129,6 +138,7 @@ const ClientsPage = () => {
   const [showOnlyFlagged, setShowOnlyFlagged] = useState(false);
   const [searchEmail, setSearchEmail] = useState("");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [showAll, setShowAll] = useState(false); // controls whether we fetch all clients or only the first page
   
   // Estado para o modal de detalhes
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
@@ -155,12 +165,18 @@ const ClientsPage = () => {
     },
   });
 
+  // Determine options for fetch: if searching, fetch server-side results (no limit),
+  // otherwise fetch only the first 10 unless showAll is true.
+  const fetchOptions = {
+    limit: !showAll && !searchEmail ? 10 : undefined,
+    search: searchEmail && searchEmail.trim().length > 0 ? searchEmail.trim() : undefined,
+  } as { limit?: number; search?: string };
+
   const { data: clients, isLoading, error, refetch } = useQuery<Client[]>({
-    queryKey: ["clients"],
-    // wrapper para capturar detalhes brutos do erro e colocá-los no estado para exibição
+    queryKey: ["clients", showAll, searchEmail],
     queryFn: async () => {
       try {
-        const data = await fetchClients();
+        const data = await fetchClients(fetchOptions);
         setRawEdgeError(null);
         return data;
       } catch (e: any) {
@@ -293,10 +309,11 @@ const ClientsPage = () => {
     }
   };
 
+  // Keep client-side filtering light: only exclude admins and apply the flagged filter here.
+  // Search is performed server-side when a search term is provided.
   const filteredClients = clients?.filter(client => {
     if (client.role === 'adm') return false;
     if (showOnlyFlagged && !client.force_pix_on_next_purchase) return false;
-    if (searchEmail && !client.email.toLowerCase().includes(searchEmail.toLowerCase())) return false;
     return true;
   });
 
@@ -307,6 +324,9 @@ const ClientsPage = () => {
           <h1 className="text-3xl font-bold">Clientes</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Total de clientes cadastrados: <span className="font-semibold text-primary">{totalClients?.toLocaleString("pt-BR") || filteredClients?.length || 0}</span>
+            {!searchEmail && !showAll && (
+              <span className="text-xs text-muted-foreground ml-2">(Mostrando os 10 primeiros para melhorar performance)</span>
+            )}
           </p>
         </div>
         
@@ -347,6 +367,16 @@ const ClientsPage = () => {
             />
             <Label htmlFor="filter-flagged" className="text-sm">Apenas alertas</Label>
           </div>
+
+          {/* Button to toggle fetching all clients */}
+          <div className="pl-4">
+            <Button
+              variant={showAll ? 'secondary' : 'outline'}
+              onClick={() => { setShowAll(!showAll); /* refetch with new options */ queryClient.invalidateQueries({ queryKey: ["clients"] }); }}
+            >
+              {showAll ? 'Mostrar apenas 10' : 'Mostrar todos'}
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -380,14 +410,11 @@ const ClientsPage = () => {
                       <Button
                         variant="outline"
                         onClick={() => {
-                          // Expõe instrução simples para o usuário inspecionar o console
-                          // e facilita cópia das informações brutas do erro (se existirem)
                           if (rawEdgeError) {
                             const payload = typeof rawEdgeError === 'string' ? rawEdgeError : JSON.stringify(rawEdgeError, null, 2);
                             navigator.clipboard?.writeText(payload);
                             showSuccess('Detalhes do erro copiados para a área de transferência.');
                           } else {
-                            // Caso não haja dados brutos, copia apenas a mensagem
                             navigator.clipboard?.writeText((error as Error)?.message || 'No details');
                             showSuccess('Mensagem de erro copiada.');
                           }
