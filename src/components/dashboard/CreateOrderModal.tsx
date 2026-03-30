@@ -14,14 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -34,8 +26,8 @@ import {
   DollarSign,
   Gift,
   Search,
-  X,
   Check,
+  Plus,
 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
@@ -55,17 +47,6 @@ interface Client {
   cep: string | null;
 }
 
-interface Product {
-  id: number;
-  name: string;
-  price: number;
-  pix_price: number | null;
-  stock_quantity: number;
-  image_url: string | null;
-  sku: string | null;
-  product_variants: ProductVariant[];
-}
-
 interface ProductVariant {
   id: string;
   product_id: number;
@@ -78,6 +59,17 @@ interface ProductVariant {
   color: string | null;
   ohms: string | null;
   size: string | null;
+}
+
+interface Product {
+  id: number;
+  name: string;
+  price: number;
+  pix_price: number | null;
+  stock_quantity: number;
+  image_url: string | null;
+  sku: string | null;
+  product_variants: ProductVariant[];
 }
 
 interface OrderItem {
@@ -97,136 +89,36 @@ interface CreateOrderModalProps {
 
 export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => {
   const queryClient = useQueryClient();
-  
-  // States
+
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [clientConfirmed, setClientConfirmed] = useState(false);
   const [emailInput, setEmailInput] = useState("");
+  const [searchingClient, setSearchingClient] = useState(false);
+  const [clientNotFound, setClientNotFound] = useState(false);
+
   const [shippingAddress, setShippingAddress] = useState({
-    street: "",
-    number: "",
-    complement: "",
-    neighborhood: "",
-    city: "",
-    state: "",
-    cep: "",
+    street: "", number: "", complement: "", neighborhood: "", city: "", state: "", cep: "",
   });
+
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [chargeFreight, setChargeFreight] = useState(true);
   const [generateLoyaltyPoints, setGenerateLoyaltyPoints] = useState(true);
   const [shippingCost, setShippingCost] = useState(0);
+
   const [productSearch, setProductSearch] = useState("");
-  const [searchingClient, setSearchingClient] = useState(false);
-  const [clientNotFound, setClientNotFound] = useState(false);
-
-  // Queries
-  const { data: products, isLoading: loadingProducts } = useQuery<Product[]>({
-    queryKey: ["products-with-variants", productSearch],
-    queryFn: async () => {
-      // If no search term, do not fetch any products (avoid preloading). Return empty.
-      const term = productSearch.trim();
-      if (!term) return [];
-
-      const like = `%${term}%`;
-
-      // 1) Search variants that match the term (sku, color, size)
-      const { data: variantMatches } = await supabase
-        .from('product_variants')
-        .select('product_id')
-        .or(
-          `sku.ilike.${like},color.ilike.${like},size.ilike.${like}`
-        )
-        .limit(200);
-
-      const productIds = (variantMatches || []).map((v: any) => v.product_id).filter(Boolean);
-
-      // 2) Search products by name
-      const { data: productsByName } = await supabase
-        .from('products')
-        .select(`
-          id,
-          name,
-          price,
-          pix_price,
-          stock_quantity,
-          image_url,
-          sku,
-          is_visible,
-          product_variants(*)
-        `)
-        .ilike('name', like)
-        .eq('is_visible', true)
-        .limit(200);
-
-      // 3) If variant matches found, fetch those products as well
-      let productsById: any[] = [];
-      if (productIds.length > 0) {
-        const { data: productsFromVariants } = await supabase
-          .from('products')
-          .select(`
-            id,
-            name,
-            price,
-            pix_price,
-            stock_quantity,
-            image_url,
-            sku,
-            is_visible,
-            product_variants(*)
-          `)
-          .in('id', productIds)
-          .eq('is_visible', true)
-          .limit(200);
-        productsById = productsFromVariants || [];
-      }
-
-      // Merge and dedupe
-      const mergedMap = new Map<number, any>();
-      (productsByName || []).forEach((p: any) => mergedMap.set(p.id, p));
-      productsById.forEach((p: any) => mergedMap.set(p.id, p));
-
-      return Array.from(mergedMap.values());
-    },
-    enabled: isOpen && productSearch.trim().length > 0,
-  });
-
-  // Helper to match product or its variants against search term
-  const productMatchesSearch = (product: Product, term: string) => {
-    if (!term) return true;
-    const t = term.toLowerCase();
-    if (product.name && product.name.toLowerCase().includes(t)) return true;
-    if (product.sku && product.sku.toLowerCase().includes(t)) return true;
-
-    if (product.product_variants && product.product_variants.length > 0) {
-      for (const v of product.product_variants) {
-        if (v.sku && v.sku.toLowerCase().includes(t)) return true;
-        if (v.color && v.color.toLowerCase().includes(t)) return true;
-        if (v.size && v.size.toLowerCase().includes(t)) return true;
-        if (v.volume_ml && String(v.volume_ml).includes(t)) return true;
-      }
-    }
-
-    return false;
-  };
-
-  // Compute filtered products based on search term (client-side)
-  const filteredProducts: Product[] = (products || []).filter((p) =>
-    productMatchesSearch(p, productSearch)
-  );
+  const [searchResults, setSearchResults] = useState<Product[]>([]);
+  const [searchingProducts, setSearchingProducts] = useState(false);
 
   const { data: shippingRates } = useQuery({
     queryKey: ["shipping-rates"],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("shipping_rates")
-        .select("*")
-        .eq("is_active", true);
-      return data;
+      const { data } = await supabase.from("shipping_rates").select("*").eq("is_active", true);
+      return data || [];
     },
     enabled: isOpen,
   });
 
-  // Efeito para preencher endereço quando cliente é selecionado
+  // Preenche endereço ao selecionar cliente
   useEffect(() => {
     if (selectedClient) {
       setShippingAddress({
@@ -241,114 +133,158 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
     }
   }, [selectedClient]);
 
-  // Efeito para calcular frete quando endereço muda
+  // Calcula frete ao mudar bairro/cidade
   useEffect(() => {
-    if (shippingAddress.neighborhood && shippingAddress.city && shippingRates) {
-      const neighborhood = shippingAddress.neighborhood.toLowerCase().trim();
-      const city = shippingAddress.city.toLowerCase().trim();
+    if (!shippingAddress.neighborhood || !shippingAddress.city || !shippingRates) return;
+    const neighborhood = shippingAddress.neighborhood.toLowerCase().trim();
+    const city = shippingAddress.city.toLowerCase().trim();
 
-      // Tenta match exato de bairro e cidade
-      let match = shippingRates.find(
-        (r) =>
-          r.city.toLowerCase().trim() === city &&
-          r.neighborhood.toLowerCase().trim() === neighborhood
+    let match = (shippingRates as any[]).find(
+      (r) => r.city.toLowerCase().trim() === city && r.neighborhood.toLowerCase().trim() === neighborhood
+    );
+    if (!match) {
+      match = (shippingRates as any[]).find(
+        (r) => r.city.toLowerCase().trim() === city &&
+          (r.neighborhood.toLowerCase().includes(neighborhood) || neighborhood.includes(r.neighborhood.toLowerCase()))
       );
-
-      // Se não achar, tenta match parcial
-      if (!match) {
-        match = shippingRates.find(
-          (r) =>
-            r.city.toLowerCase().trim() === city &&
-            (r.neighborhood.toLowerCase().includes(neighborhood) ||
-              neighborhood.includes(r.neighborhood.toLowerCase()))
-        );
-      }
-
-      setShippingCost(match?.price ? Number(match.price) : 0);
     }
+    setShippingCost(match?.price ? Number(match.price) : 0);
   }, [shippingAddress.neighborhood, shippingAddress.city, shippingRates]);
 
-  // Cálculos
-  const itemsTotal = orderItems.reduce(
-    (acc, item) => acc + item.price * item.quantity,
-    0
-  );
+  const itemsTotal = orderItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
   const finalShippingCost = chargeFreight ? shippingCost : 0;
   const finalTotal = itemsTotal + finalShippingCost;
 
-  // Função de busca de cliente por email (não carrega todos os clientes)
+  // Busca cliente por email via RPC
   const findClientByEmail = async (email: string) => {
-    if (!email) return null;
+    if (!email) return;
     setSearchingClient(true);
     setClientNotFound(false);
     setClientConfirmed(false);
+    setSelectedClient(null);
     try {
-      // Primeiro tenta obter o user_id via função RPC segura
-      const { data: uidData, error: uidError } = await supabase.rpc('get_user_id_by_email', { user_email: email });
-      if (uidError) {
-        throw uidError;
-      }
+      const { data: uidData, error: uidError } = await supabase.rpc("get_user_id_by_email", { user_email: email });
+      if (uidError) throw uidError;
 
-      // uidData pode vir como string, array ou objeto dependendo do retorno da função
       let userId: string | null = null;
-      if (!uidData) {
-        userId = null;
-      } else if (typeof uidData === 'string') {
-        userId = uidData;
-      } else if (Array.isArray(uidData) && uidData.length > 0) {
-        // ex: [{get_user_id_by_email: 'uuid'}] ou ['uuid']
+      if (typeof uidData === "string") userId = uidData;
+      else if (Array.isArray(uidData) && uidData.length > 0) {
         const first = uidData[0];
-        if (typeof first === 'string') userId = first;
-        else if (first && typeof first === 'object') {
-          const val = Object.values(first)[0];
-          if (typeof val === 'string') userId = val;
-        }
-      } else if (typeof uidData === 'object') {
-        const val = Object.values(uidData)[0];
-        if (typeof val === 'string') userId = val;
+        userId = typeof first === "string" ? first : (Object.values(first)[0] as string);
+      } else if (uidData && typeof uidData === "object") {
+        userId = Object.values(uidData)[0] as string;
       }
 
-      if (!userId) {
-        setSelectedClient(null);
-        setClientNotFound(true);
-        return null;
-      }
+      if (!userId) { setClientNotFound(true); return; }
 
-      // Buscar perfil pelo id retornado
       const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
-
+        .from("profiles").select("*").eq("id", userId).maybeSingle();
       if (profileError) throw profileError;
-      if (!profile) {
-        setSelectedClient(null);
-        setClientNotFound(true);
-        return null;
-      }
+      if (!profile) { setClientNotFound(true); return; }
 
       setSelectedClient(profile as Client);
-      setClientNotFound(false);
-      return profile as Client;
     } catch (err: any) {
-      showError(err.message || 'Erro ao buscar cliente');
-      setSelectedClient(null);
+      showError(err.message || "Erro ao buscar cliente");
       setClientNotFound(true);
-      return null;
     } finally {
       setSearchingClient(false);
     }
   };
 
-  // Mutation para criar pedido
+  // Busca produtos por nome (server-side, sem Command)
+  const searchProducts = async (term: string) => {
+    if (!term.trim()) { setSearchResults([]); return; }
+    setSearchingProducts(true);
+    try {
+      const like = `%${term.trim()}%`;
+
+      // Busca por nome do produto
+      const { data: byName } = await supabase
+        .from("products")
+        .select("id, name, price, pix_price, stock_quantity, image_url, sku, product_variants(*)")
+        .ilike("name", like)
+        .eq("is_visible", true)
+        .limit(50);
+
+      // Busca por SKU do produto
+      const { data: bySku } = await supabase
+        .from("products")
+        .select("id, name, price, pix_price, stock_quantity, image_url, sku, product_variants(*)")
+        .ilike("sku", like)
+        .eq("is_visible", true)
+        .limit(50);
+
+      // Merge e dedupe
+      const map = new Map<number, Product>();
+      (byName || []).forEach((p: any) => map.set(p.id, p));
+      (bySku || []).forEach((p: any) => map.set(p.id, p));
+
+      setSearchResults(Array.from(map.values()));
+    } catch (err: any) {
+      showError("Erro ao buscar produtos");
+    } finally {
+      setSearchingProducts(false);
+    }
+  };
+
+  // Debounce na busca de produtos
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      searchProducts(productSearch);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [productSearch]);
+
+  const handleAddProduct = (product: Product, variant?: ProductVariant) => {
+    const priceToUse = variant ? variant.price : product.price || 0;
+    const stockAvailable = variant ? variant.stock_quantity : product.stock_quantity;
+
+    if (stockAvailable === 0) { showError("Produto sem estoque!"); return; }
+
+    const variantLabel = variant
+      ? [variant.volume_ml ? `${variant.volume_ml}ml` : "", variant.color || "", variant.size ? `Tam ${variant.size}` : ""].filter(Boolean).join(" ").trim()
+      : "";
+    const nameToUse = variant ? `${product.name}${variantLabel ? ` - ${variantLabel}` : ""}` : product.name;
+
+    const existingIndex = orderItems.findIndex(
+      (item) => item.productId === product.id && item.variantId === (variant?.id || null)
+    );
+
+    if (existingIndex >= 0) {
+      const newQty = orderItems[existingIndex].quantity + 1;
+      if (newQty > stockAvailable) { showError(`Estoque insuficiente! Disponível: ${stockAvailable}`); return; }
+      setOrderItems((prev) => {
+        const updated = [...prev];
+        updated[existingIndex] = { ...updated[existingIndex], quantity: newQty };
+        return updated;
+      });
+    } else {
+      setOrderItems((prev) => [...prev, {
+        productId: product.id,
+        variantId: variant?.id || null,
+        name: nameToUse,
+        price: priceToUse,
+        quantity: 1,
+        imageUrl: product.image_url,
+        stock: stockAvailable,
+      }]);
+    }
+  };
+
+  const handleUpdateQuantity = (index: number, quantity: number) => {
+    const item = orderItems[index];
+    const newQty = Math.max(1, Math.min(item.stock, isNaN(quantity) ? 1 : quantity));
+    setOrderItems((prev) => { const u = [...prev]; u[index] = { ...u[index], quantity: newQty }; return u; });
+  };
+
+  const handleRemoveItem = (index: number) => setOrderItems((prev) => prev.filter((_, i) => i !== index));
+
   const createOrderMutation = useMutation({
     mutationFn: async () => {
       if (!selectedClient) throw new Error("Selecione um cliente");
       if (!clientConfirmed) throw new Error("Confirme o cliente antes de criar o pedido");
       if (orderItems.length === 0) throw new Error("Adicione produtos ao pedido");
 
-      // Criar pedido
       const { data: order, error: orderError } = await supabase
         .from("orders")
         .insert({
@@ -361,46 +297,29 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
           shipping_address: shippingAddress,
           benefits_used: generateLoyaltyPoints ? null : "no_loyalty_points",
         })
-        .select()
-        .single();
-
+        .select().single();
       if (orderError) throw orderError;
 
-      // Inserir itens
-      const itemsToInsert = orderItems.map((item) => ({
-        order_id: order.id,
-        item_id: item.variantId || item.productId,
-        item_type: "product",
-        quantity: item.quantity,
-        price_at_purchase: item.price,
-        name_at_purchase: item.name,
-        image_url_at_purchase: item.imageUrl,
-      }));
-
-      const { error: itemsError } = await supabase
-        .from("order_items")
-        .insert(itemsToInsert);
-
+      const { error: itemsError } = await supabase.from("order_items").insert(
+        orderItems.map((item) => ({
+          order_id: order.id,
+          item_id: item.variantId || item.productId,
+          item_type: "product",
+          quantity: item.quantity,
+          price_at_purchase: item.price,
+          name_at_purchase: item.name,
+          image_url_at_purchase: item.imageUrl,
+        }))
+      );
       if (itemsError) throw itemsError;
 
-      // Atualizar estoque
       for (const item of orderItems) {
         if (item.variantId) {
-          const { error: variantError } = await supabase.rpc(
-            "decrement_variant_stock",
-            { variant_id: item.variantId, quantity: item.quantity }
-          );
-          if (variantError) throw variantError;
+          await supabase.rpc("decrement_variant_stock", { variant_id: item.variantId, quantity: item.quantity });
         } else {
-          const { error: productError } = await supabase.rpc("decrement_stock", {
-            table_name: "products",
-            row_id: item.productId,
-            quantity: item.quantity,
-          });
-          if (productError) throw productError;
+          await supabase.rpc("decrement_stock", { table_name: "products", row_id: item.productId, quantity: item.quantity });
         }
       }
-
       return order;
     },
     onSuccess: () => {
@@ -408,500 +327,261 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
       showSuccess("Pedido criado com sucesso!");
       handleClose();
     },
-    onError: (error: any) => {
-      showError(`Erro ao criar pedido: ${error.message}`);
-    },
+    onError: (error: any) => showError(`Erro ao criar pedido: ${error.message}`),
   });
 
   const handleClose = () => {
     setSelectedClient(null);
     setClientConfirmed(false);
     setEmailInput("");
+    setClientNotFound(false);
     setOrderItems([]);
     setChargeFreight(true);
     setGenerateLoyaltyPoints(true);
-    setShippingAddress({
-      street: "",
-      number: "",
-      complement: "",
-      neighborhood: "",
-      city: "",
-      state: "",
-      cep: "",
-    });
+    setShippingAddress({ street: "", number: "", complement: "", neighborhood: "", city: "", state: "", cep: "" });
     setProductSearch("");
-    setClientNotFound(false);
+    setSearchResults([]);
     onClose();
   };
 
-  const handleAddProduct = (product: Product, variant?: ProductVariant) => {
-    if (!product || product.stock_quantity === 0) return;
-
-    const priceToUse = variant ? variant.price : product.price || 0;
-    const nameToUse = variant
-      ? `${product.name} - ${variant.flavor_id ? `Var ${variant.flavor_id}` : ""}${variant.volume_ml ? ` ${variant.volume_ml}ml` : ""}${variant.color ? ` ${variant.color}` : ""}${variant.size ? ` ${variant.size}` : ""}`.trim()
-      : product.name;
-    const stockAvailable = variant ? variant.stock_quantity : product.stock_quantity;
-    const imageUrl = product.image_url;
-
-    // Verifica se já existe o mesmo item
-    const existingItemIndex = orderItems.findIndex(
-      (item) =>
-        item.productId === product.id &&
-        item.variantId === (variant?.id || null)
-    );
-
-    if (existingItemIndex >= 0) {
-      const existingItem = orderItems[existingItemIndex];
-      const newQuantity = existingItem.quantity + 1;
-
-      if (newQuantity > stockAvailable) {
-        showError(
-          `Estoque insuficiente! Disponível: ${stockAvailable} unidade(s)`
-        );
-        return;
-      }
-
-      setOrderItems((prev) => {
-        const updated = [...prev];
-        updated[existingItemIndex] = {
-          ...existingItem,
-          quantity: newQuantity,
-        };
-        return updated;
-      });
-    } else {
-      setOrderItems((prev) => [
-        ...prev,
-        {
-          productId: product.id,
-          variantId: variant?.id || null,
-          name: nameToUse,
-          price: priceToUse,
-          quantity: 1,
-          imageUrl,
-          stock: stockAvailable,
-        },
-      ]);
-    }
-  };
-
-  const handleUpdateQuantity = (index: number, quantity: number) => {
-    const item = orderItems[index];
-    const newQuantity = Math.max(1, Math.min(item.stock, quantity));
-
-    setOrderItems((prev) => {
-      const updated = [...prev];
-      updated[index] = { ...updated[index], quantity: newQuantity };
-      return updated;
-    });
-  };
-
-  const handleRemoveItem = (index: number) => {
-    setOrderItems((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const formatCurrency = (val: number) =>
-    new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(val);
-
-  const formatPhone = (phone: string | null) => {
+  const fmt = (val: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
+  const fmtPhone = (phone: string | null) => {
     if (!phone) return "-";
-    const cleaned = phone.replace(/\D/g, "");
-    if (cleaned.length === 11) {
-      return `(${cleaned.substring(0, 2)}) ${cleaned.substring(
-        2,
-        7
-      )}-${cleaned.substring(7)}`;
-    }
-    return phone;
+    const c = phone.replace(/\D/g, "");
+    return c.length === 11 ? `(${c.slice(0, 2)}) ${c.slice(2, 7)}-${c.slice(7)}` : phone;
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-2xl font-bold">
-            Criar Pedido Manual
-          </DialogTitle>
+          <DialogTitle className="text-xl font-bold">Criar Pedido Manual</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
-          {/* Seção 1: Cliente - agora busca apenas por email, não carrega lista */}
+        <div className="space-y-6 py-2">
+
+          {/* CLIENTE */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <User className="w-5 h-5 text-primary" />
-              <Label className="text-base font-semibold">Cliente</Label>
+              <User className="w-4 h-4 text-primary" />
+              <Label className="font-semibold">Cliente</Label>
             </div>
-
-            <div className="flex items-center gap-2">
+            <div className="flex gap-2">
               <Input
-                placeholder="Buscar cliente por email..."
+                placeholder="Digite o email do cliente..."
                 value={emailInput}
                 onChange={(e) => setEmailInput(e.target.value)}
-                onKeyDown={async (e) => {
-                  if (e.key === "Enter") {
-                    await findClientByEmail(emailInput.trim());
-                  }
-                }}
+                onKeyDown={(e) => e.key === "Enter" && findClientByEmail(emailInput.trim())}
               />
-              <Button
-                onClick={async () => {
-                  await findClientByEmail(emailInput.trim());
-                }}
-                variant="outline"
-              >
+              <Button variant="outline" onClick={() => findClientByEmail(emailInput.trim())} disabled={searchingClient}>
                 {searchingClient ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
               </Button>
             </div>
 
             {clientNotFound && (
-              <div className="text-sm text-rose-600">Cliente não encontrado. Só é possível criar pedido para clientes cadastrados.</div>
+              <p className="text-sm text-rose-600">Cliente não encontrado. Só é possível criar pedido para clientes cadastrados.</p>
             )}
 
             {selectedClient && (
-              <div className="flex items-center justify-between mt-2 p-3 border rounded-lg">
+              <div className="flex items-center justify-between p-3 border rounded-lg bg-green-50 border-green-200">
                 <div>
-                  <div className="font-medium">{selectedClient.first_name} {selectedClient.last_name}</div>
-                  <div className="text-sm text-muted-foreground">{formatPhone(selectedClient.phone)} • {selectedClient.email}</div>
+                  <p className="font-medium">{selectedClient.first_name} {selectedClient.last_name}</p>
+                  <p className="text-sm text-muted-foreground">{fmtPhone(selectedClient.phone)}</p>
                 </div>
-                <div className="flex items-center gap-3">
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" checked={clientConfirmed} onChange={(e) => setClientConfirmed(e.target.checked)} />
-                    <span className="text-sm">Confirmar cliente</span>
-                  </label>
-                  {clientConfirmed && <Check className="w-5 h-5 text-green-600" />}
-                </div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="w-4 h-4 accent-green-600"
+                    checked={clientConfirmed}
+                    onChange={(e) => setClientConfirmed(e.target.checked)}
+                  />
+                  <span className="text-sm font-medium">Confirmar</span>
+                  {clientConfirmed && <Check className="w-4 h-4 text-green-600" />}
+                </label>
               </div>
             )}
           </div>
 
-          {/* Seção 2: Endereço */}
+          {/* ENDEREÇO */}
           {selectedClient && (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <MapPin className="w-5 h-5 text-primary" />
-                <Label className="text-base font-semibold">
-                  Endereço de Entrega
-                </Label>
+                <MapPin className="w-4 h-4 text-primary" />
+                <Label className="font-semibold">Endereço de Entrega</Label>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2">
-                  <Label htmlFor="street" className="text-sm">
-                    Rua
-                  </Label>
-                  <Input
-                    id="street"
-                    placeholder="Rua"
-                    value={shippingAddress.street}
-                    onChange={(e) =>
-                      setShippingAddress({ ...shippingAddress, street: e.target.value })
-                    }
-                  />
+                  <Label className="text-xs text-muted-foreground">Rua</Label>
+                  <Input value={shippingAddress.street} onChange={(e) => setShippingAddress({ ...shippingAddress, street: e.target.value })} placeholder="Rua" />
                 </div>
                 <div>
-                  <Label htmlFor="number" className="text-sm">
-                    Número
-                  </Label>
-                  <Input
-                    id="number"
-                    placeholder="123"
-                    value={shippingAddress.number}
-                    onChange={(e) =>
-                      setShippingAddress({ ...shippingAddress, number: e.target.value })
-                    }
-                  />
+                  <Label className="text-xs text-muted-foreground">Número</Label>
+                  <Input value={shippingAddress.number} onChange={(e) => setShippingAddress({ ...shippingAddress, number: e.target.value })} placeholder="123" />
                 </div>
                 <div>
-                  <Label htmlFor="complement" className="text-sm">
-                    Complemento
-                  </Label>
-                  <Input
-                    id="complement"
-                    placeholder="Apto, Bloco..."
-                    value={shippingAddress.complement}
-                    onChange={(e) =>
-                      setShippingAddress({ ...shippingAddress, complement: e.target.value })
-                    }
-                  />
+                  <Label className="text-xs text-muted-foreground">Complemento</Label>
+                  <Input value={shippingAddress.complement} onChange={(e) => setShippingAddress({ ...shippingAddress, complement: e.target.value })} placeholder="Apto..." />
                 </div>
                 <div>
-                  <Label htmlFor="neighborhood" className="text-sm">
-                    Bairro
-                  </Label>
-                  <Input
-                    id="neighborhood"
-                    placeholder="Bairro"
-                    value={shippingAddress.neighborhood}
-                    onChange={(e) =>
-                      setShippingAddress({ ...shippingAddress, neighborhood: e.target.value })
-                    }
-                  />
+                  <Label className="text-xs text-muted-foreground">Bairro</Label>
+                  <Input value={shippingAddress.neighborhood} onChange={(e) => setShippingAddress({ ...shippingAddress, neighborhood: e.target.value })} placeholder="Bairro" />
                 </div>
                 <div>
-                  <Label htmlFor="city" className="text-sm">
-                    Cidade
-                  </Label>
-                  <Input
-                    id="city"
-                    placeholder="Cidade"
-                    value={shippingAddress.city}
-                    onChange={(e) =>
-                      setShippingAddress({ ...shippingAddress, city: e.target.value })
-                    }
-                  />
+                  <Label className="text-xs text-muted-foreground">Cidade</Label>
+                  <Input value={shippingAddress.city} onChange={(e) => setShippingAddress({ ...shippingAddress, city: e.target.value })} placeholder="Cidade" />
                 </div>
                 <div>
-                  <Label htmlFor="state" className="text-sm">
-                    Estado
-                  </Label>
-                  <Input
-                    id="state"
-                    placeholder="PR"
-                    maxLength={2}
-                    value={shippingAddress.state}
-                    onChange={(e) =>
-                      setShippingAddress({ ...shippingAddress, state: e.target.value })
-                    }
-                  />
+                  <Label className="text-xs text-muted-foreground">Estado</Label>
+                  <Input value={shippingAddress.state} onChange={(e) => setShippingAddress({ ...shippingAddress, state: e.target.value })} placeholder="PR" maxLength={2} />
                 </div>
                 <div>
-                  <Label htmlFor="cep" className="text-sm">
-                    CEP
-                  </Label>
-                  <Input
-                    id="cep"
-                    placeholder="00000-000"
-                    value={shippingAddress.cep}
-                    onChange={(e) =>
-                      setShippingAddress({ ...shippingAddress, cep: e.target.value })
-                    }
-                  />
+                  <Label className="text-xs text-muted-foreground">CEP</Label>
+                  <Input value={shippingAddress.cep} onChange={(e) => setShippingAddress({ ...shippingAddress, cep: e.target.value })} placeholder="00000-000" />
                 </div>
               </div>
             </div>
           )}
 
-          {/* Seção 3: Produtos */}
+          {/* PRODUTOS */}
           {selectedClient && (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <Package className="w-5 h-5 text-primary" />
-                <Label className="text-base font-semibold">Produtos</Label>
+                <Package className="w-4 h-4 text-primary" />
+                <Label className="font-semibold">Produtos</Label>
               </div>
 
-              <Command className="border rounded-lg">
-                <div className="flex items-center px-3 border-b">
-                  <Search className="w-4 h-4 mr-2 text-muted-foreground" />
-                  <CommandInput
-                    placeholder="Buscar produto..."
+              {/* Campo de busca simples, sem Command */}
+              <div className="relative">
+                <div className="flex items-center border rounded-lg px-3 gap-2 bg-white">
+                  <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <input
+                    type="text"
+                    className="flex-1 py-2 text-sm outline-none bg-transparent placeholder:text-muted-foreground"
+                    placeholder="Digite o nome do produto para buscar..."
                     value={productSearch}
-                    onValueChange={setProductSearch}
-                    className="border-0 focus-visible:ring-0"
+                    onChange={(e) => setProductSearch(e.target.value)}
                   />
+                  {searchingProducts && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground shrink-0" />}
                 </div>
-                <ScrollArea className="max-h-64">
-                  <CommandList>
-                    {!productSearch ? (
-                      <div className="p-6 text-center text-sm text-muted-foreground">Digite o nome ou SKU do produto para buscar (não carrega lista automaticamente).</div>
-                    ) : loadingProducts ? (
-                      <div className="py-8 flex justify-center">
-                        <Loader2 className="w-6 h-6 animate-spin" />
+
+                {/* Resultados da busca */}
+                {productSearch && (
+                  <div className="border rounded-lg mt-1 bg-white shadow-lg max-h-72 overflow-y-auto">
+                    {searchingProducts ? (
+                      <div className="p-4 text-center text-sm text-muted-foreground">Buscando...</div>
+                    ) : searchResults.length === 0 ? (
+                      <div className="p-4 text-center text-sm text-muted-foreground">
+                        Nenhum produto encontrado para "{productSearch}"
                       </div>
-                    ) : products && products.length === 0 ? (
-                      <div className="p-6 text-center text-sm text-muted-foreground">Nenhum produto encontrado para "{productSearch}".</div>
                     ) : (
-                      <CommandGroup>
-                        {filteredProducts.map((product) => {
-                          const hasVariants =
-                            product.product_variants &&
-                            product.product_variants.length > 0;
-                          const activeVariants = hasVariants
-                            ? product.product_variants.filter((v) => v.is_active)
-                            : [];
+                      searchResults.map((product) => {
+                        const activeVariants = (product.product_variants || []).filter((v) => v.is_active);
+                        const hasVariants = activeVariants.length > 0;
 
-                          // Se não tem variantes ativas, mostra o produto base
-                          if (!hasVariants || activeVariants.length === 0) {
-                            return (
-                              <CommandItem
-                                key={product.id}
-                                disabled={product.stock_quantity === 0}
-                                onSelect={() => handleAddProduct(product)}
-                                className={cn(
-                                  "cursor-pointer",
-                                  product.stock_quantity === 0 &&
-                                    "opacity-50 cursor-not-allowed"
-                                )}
-                              >
-                                <div className="flex items-center gap-3 flex-1">
-                                  {product.image_url && (
-                                    <img
-                                      src={product.image_url}
-                                      alt={product.name}
-                                      className="w-10 h-10 rounded object-cover"
-                                    />
-                                  )}
-                                  <div className="flex flex-col flex-1">
-                                    <span className="font-medium">{product.name}</span>
-                                    <div className="flex items-center gap-2 text-xs">
-                                      <Badge variant="outline">
-                                        {formatCurrency(product.price)}
-                                      </Badge>
-                                      {product.stock_quantity > 0 ? (
-                                        <Badge variant="secondary">
-                                          {product.stock_quantity} em estoque
-                                        </Badge>
-                                      ) : (
-                                        <Badge variant="destructive">
-                                          Sem estoque
-                                        </Badge>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  disabled={product.stock_quantity === 0}
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    handleAddProduct(product);
-                                  }}
-                                >
-                                  Adicionar
-                                </Button>
-                              </CommandItem>
-                            );
-                          }
-
-                          // Se tem variantes ativas, mostra cada variação
+                        if (!hasVariants) {
                           return (
-                            <div key={product.id}>
-                              <CommandItem
-                                disabled
-                                className="cursor-default font-semibold bg-muted"
+                            <div key={product.id} className="flex items-center gap-3 p-3 hover:bg-gray-50 border-b last:border-0">
+                              {product.image_url && (
+                                <img src={product.image_url} alt={product.name} className="w-10 h-10 rounded object-cover shrink-0" />
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm truncate">{product.name}</p>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className="text-xs text-muted-foreground">{fmt(product.price)}</span>
+                                  {product.stock_quantity > 0
+                                    ? <Badge variant="secondary" className="text-xs">{product.stock_quantity} em estoque</Badge>
+                                    : <Badge variant="destructive" className="text-xs">Sem estoque</Badge>
+                                  }
+                                </div>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={product.stock_quantity === 0}
+                                onClick={() => handleAddProduct(product)}
+                                className="shrink-0"
                               >
-                                <span className="flex-1">{product.name}</span>
-                                <span className="text-xs text-muted-foreground">
-                                  {activeVariants.length} variação(ões)
-                                </span>
-                              </CommandItem>
-                              {activeVariants.map((variant) => (
-                                <CommandItem
-                                  key={variant.id}
-                                  disabled={variant.stock_quantity === 0}
-                                  onSelect={() => handleAddProduct(product, variant)}
-                                  className={cn(
-                                    "pl-6 cursor-pointer",
-                                    variant.stock_quantity === 0 &&
-                                      "opacity-50 cursor-not-allowed"
+                                <Plus className="w-3 h-3 mr-1" /> Adicionar
+                              </Button>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div key={product.id}>
+                            <div className="px-3 py-2 bg-gray-50 border-b">
+                              <p className="font-semibold text-sm">{product.name}</p>
+                              <p className="text-xs text-muted-foreground">{activeVariants.length} variação(ões)</p>
+                            </div>
+                            {activeVariants.map((variant) => {
+                              const label = [
+                                variant.volume_ml ? `${variant.volume_ml}ml` : "",
+                                variant.color || "",
+                                variant.size ? `Tam ${variant.size}` : "",
+                                variant.ohms ? `${variant.ohms}Ω` : "",
+                              ].filter(Boolean).join(" • ");
+
+                              return (
+                                <div key={variant.id} className="flex items-center gap-3 p-3 pl-6 hover:bg-gray-50 border-b last:border-0">
+                                  {product.image_url && (
+                                    <img src={product.image_url} alt={product.name} className="w-8 h-8 rounded object-cover shrink-0" />
                                   )}
-                                >
-                                  <div className="flex items-center gap-3 flex-1">
-                                    {product.image_url && (
-                                      <img
-                                        src={product.image_url}
-                                        alt={product.name}
-                                        className="w-10 h-10 rounded object-cover"
-                                      />
-                                    )}
-                                    <div className="flex flex-col flex-1">
-                                      <span className="text-sm">
-                                        {variant.flavor_id && `Sab ${variant.flavor_id} `}
-                                        {variant.volume_ml && `${variant.volume_ml}ml `}
-                                        {variant.color && `${variant.color} `}
-                                        {variant.size && `Tam ${variant.size}`}
-                                      </span>
-                                      <div className="flex items-center gap-2 text-xs">
-                                        <Badge variant="outline">
-                                          {formatCurrency(variant.price)}
-                                        </Badge>
-                                        {variant.stock_quantity > 0 ? (
-                                          <Badge variant="secondary">
-                                            {variant.stock_quantity} em estoque
-                                          </Badge>
-                                        ) : (
-                                          <Badge variant="destructive">
-                                            Sem estoque
-                                          </Badge>
-                                        )}
-                                      </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm truncate">{label || `Variação ${variant.id.slice(0, 6)}`}</p>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                      <span className="text-xs text-muted-foreground">{fmt(variant.price)}</span>
+                                      {variant.stock_quantity > 0
+                                        ? <Badge variant="secondary" className="text-xs">{variant.stock_quantity} em estoque</Badge>
+                                        : <Badge variant="destructive" className="text-xs">Sem estoque</Badge>
+                                      }
                                     </div>
                                   </div>
                                   <Button
                                     size="sm"
-                                    variant="ghost"
+                                    variant="outline"
                                     disabled={variant.stock_quantity === 0}
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      handleAddProduct(product, variant);
-                                    }}
+                                    onClick={() => handleAddProduct(product, variant)}
+                                    className="shrink-0"
                                   >
-                                    Adicionar
+                                    <Plus className="w-3 h-3 mr-1" /> Adicionar
                                   </Button>
-                                </CommandItem>
-                              ))}
-                            </div>
-                          );
-                        })}
-                      </CommandGroup>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })
                     )}
-                  </CommandList>
-                </ScrollArea>
-              </Command>
+                  </div>
+                )}
+              </div>
 
-              {/* Lista de itens selecionados */}
+              {/* Itens adicionados */}
               {orderItems.length > 0 && (
-                <div className="border rounded-lg p-4 space-y-3">
-                  <Label className="text-sm font-semibold">
-                    Itens do Pedido ({orderItems.length})
-                  </Label>
+                <div className="border rounded-lg divide-y">
+                  <div className="px-4 py-2 bg-gray-50">
+                    <Label className="text-sm font-semibold">Itens do Pedido ({orderItems.length})</Label>
+                  </div>
                   {orderItems.map((item, index) => (
-                    <div
-                      key={`${item.productId}-${item.variantId}`}
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                    >
-                      <div className="flex items-center gap-3 flex-1">
-                        {item.imageUrl && (
-                          <img
-                            src={item.imageUrl}
-                            alt={item.name}
-                            className="w-12 h-12 rounded object-cover"
-                          />
-                        )}
-                        <div className="flex flex-col flex-1">
-                          <span className="font-medium text-sm">{item.name}</span>
-                          <span className="text-sm text-muted-foreground">
-                            {formatCurrency(item.price)} x {item.quantity} ={" "}
-                            {formatCurrency(item.price * item.quantity)}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            Estoque disponível: {item.stock}
-                          </span>
-                        </div>
+                    <div key={`${item.productId}-${item.variantId}-${index}`} className="flex items-center gap-3 p-3">
+                      {item.imageUrl && (
+                        <img src={item.imageUrl} alt={item.name} className="w-10 h-10 rounded object-cover shrink-0" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{item.name}</p>
+                        <p className="text-xs text-muted-foreground">{fmt(item.price)} × {item.quantity} = {fmt(item.price * item.quantity)}</p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Input
-                          type="number"
-                          min="1"
-                          max={item.stock}
-                          value={item.quantity}
-                          onChange={(e) =>
-                            handleUpdateQuantity(index, parseInt(e.target.value))
-                          }
-                          className="w-20"
-                        />
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleRemoveItem(index)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
+                      <Input
+                        type="number"
+                        min="1"
+                        max={item.stock}
+                        value={item.quantity}
+                        onChange={(e) => handleUpdateQuantity(index, parseInt(e.target.value))}
+                        className="w-16 text-center"
+                      />
+                      <Button variant="ghost" size="icon" onClick={() => handleRemoveItem(index)} className="text-red-500 hover:bg-red-50 shrink-0">
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -909,95 +589,65 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
             </div>
           )}
 
-          {/* Seção 4: Frete e Pontos de Fidelidade */}
+          {/* FRETE E PONTOS */}
           {selectedClient && (
-            <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
               <div className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="flex items-center gap-3">
-                  <DollarSign className="w-5 h-5 text-primary" />
+                <div className="flex items-center gap-2">
+                  <DollarSign className="w-4 h-4 text-primary" />
                   <div>
-                    <Label className="font-semibold">Cobrar Frete</Label>
-                    <p className="text-sm text-muted-foreground">
-                      {chargeFreight
-                        ? `Frete calculado: ${formatCurrency(shippingCost)}`
-                        : "Frete não será cobrado"}
-                    </p>
+                    <Label className="font-semibold text-sm">Cobrar Frete</Label>
+                    <p className="text-xs text-muted-foreground">{chargeFreight ? fmt(shippingCost) : "Grátis"}</p>
                   </div>
                 </div>
-                <Switch
-                  checked={chargeFreight}
-                  onCheckedChange={setChargeFreight}
-                />
+                <Switch checked={chargeFreight} onCheckedChange={setChargeFreight} />
               </div>
 
               <div className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="flex items-center gap-3">
-                  <Gift className="w-5 h-5 text-primary" />
+                <div className="flex items-center gap-2">
+                  <Gift className="w-4 h-4 text-primary" />
                   <div>
-                    <Label className="font-semibold">
-                      Gerar Pontos de Fidelidade
-                    </Label>
-                    <p className="text-sm text-muted-foreground">
-                      {generateLoyaltyPoints
-                        ? "Cliente receberá pontos por este pedido"
-                        : "Cliente NÃO receberá pontos"}
-                    </p>
+                    <Label className="font-semibold text-sm">Gerar Pontos</Label>
+                    <p className="text-xs text-muted-foreground">{generateLoyaltyPoints ? "Sim" : "Não"}</p>
                   </div>
                 </div>
-                <Switch
-                  checked={generateLoyaltyPoints}
-                  onCheckedChange={setGenerateLoyaltyPoints}
-                />
+                <Switch checked={generateLoyaltyPoints} onCheckedChange={setGenerateLoyaltyPoints} />
               </div>
             </div>
           )}
 
-          {/* Seção 5: Resumo */}
+          {/* RESUMO */}
           {selectedClient && orderItems.length > 0 && (
-            <div className="bg-gray-50 rounded-lg p-6 space-y-3">
-              <Label className="text-base font-semibold">Resumo do Pedido</Label>
+            <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+              <Label className="font-semibold">Resumo</Label>
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Itens:</span>
-                <span className="font-medium">{formatCurrency(itemsTotal)}</span>
+                <span className="text-muted-foreground">Itens</span>
+                <span>{fmt(itemsTotal)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Frete:</span>
-                <span className="font-medium">
-                  {formatCurrency(finalShippingCost)}
-                </span>
+                <span className="text-muted-foreground">Frete</span>
+                <span>{fmt(finalShippingCost)}</span>
               </div>
               {!generateLoyaltyPoints && (
-                <div className="flex justify-between text-sm text-amber-600">
-                  <span>⚠️ Pontos de fidelidade:</span>
-                  <span>Não serão gerados</span>
-                </div>
+                <p className="text-xs text-amber-600">⚠️ Pontos de fidelidade não serão gerados</p>
               )}
               <Separator />
-              <div className="flex justify-between text-xl font-bold">
-                <span>Total:</span>
-                <span className="text-primary">{formatCurrency(finalTotal)}</span>
+              <div className="flex justify-between font-bold text-lg">
+                <span>Total</span>
+                <span className="text-primary">{fmt(finalTotal)}</span>
               </div>
             </div>
           )}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={handleClose}>
-            Cancelar
-          </Button>
+          <Button variant="outline" onClick={handleClose}>Cancelar</Button>
           <Button
             onClick={() => createOrderMutation.mutate()}
-            disabled={
-              !selectedClient ||
-              !clientConfirmed ||
-              orderItems.length === 0 ||
-              createOrderMutation.isPending
-            }
+            disabled={!selectedClient || !clientConfirmed || orderItems.length === 0 || createOrderMutation.isPending}
             className="bg-green-600 hover:bg-green-700"
           >
-            {createOrderMutation.isPending && (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            )}
+            {createOrderMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Criar Pedido
           </Button>
         </DialogFooter>
