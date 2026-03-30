@@ -178,7 +178,7 @@ const ClientsPage = () => {
         if (!token) throw new Error("Sessão expirada. Faça login novamente.");
 
         const response = await fetch(
-          "https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1/create-client-by-admin",
+          "https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1/admin-create-user",
           {
             method: "POST",
             headers: {
