@@ -13,41 +13,20 @@ serve(async (req) => {
   }
 
   try {
-    // --- 0. AUTHENTICATION CHECK ---
-    const authHeader = req.headers.get('Authorization');
-    const token = authHeader?.replace('Bearer ', '');
-    
-    let currentUser = null;
-    let isServiceRole = false;
-
-    if (token === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')) {
-        isServiceRole = true;
-    } else if (token) {
-        const supabaseClient = createClient(
-            Deno.env.get('SUPABASE_URL') ?? '',
-            Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-            { global: { headers: { Authorization: authHeader } } }
-        );
-        const { data } = await supabaseClient.auth.getUser();
-        currentUser = data.user;
-    }
-
-    if (!isServiceRole && !currentUser) {
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-
-    const { event_type, payload } = await req.json();
-
-    if (!event_type) return new Response("Missing event_type", { status: 400 });
-
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
       { auth: { persistSession: false } }
     );
 
+    const { event_type, payload } = await req.json();
+
+    if (!event_type) return new Response("Missing event_type", { status: 400 });
+
+    console.log(`[dispatch-webhook] Received event: ${event_type}`, { payload });
+
     // --- 1. ID DO PEDIDO ---
-    const orderId = payload.id || payload.order_id;
+    const orderId = payload?.id || payload?.order_id;
 
     if (!orderId && ['order_created', 'order_paid', 'order_shipped', 'order_delivered'].includes(event_type)) {
         return new Response("Missing order ID", { status: 400 });
@@ -69,6 +48,7 @@ serve(async (req) => {
         });
 
         if (duplicate) {
+            console.log(`[dispatch-webhook] Duplicate skipped for order ${orderId}`);
             return new Response(JSON.stringify({ success: true, skipped: true, message: "Duplicate skipped" }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
         }
     }
@@ -85,23 +65,6 @@ serve(async (req) => {
             .single();
         
         if (orderError || !order) throw new Error(`Order ${orderId} not found`);
-
-        // --- SECURITY CHECK: OWNERSHIP OR ADMIN ---
-        if (!isServiceRole && currentUser) {
-            if (order.user_id !== currentUser.id) {
-                // If user doesn't own the order, check if they are an admin
-                const { data: profile } = await supabaseAdmin
-                    .from('profiles')
-                    .select('role')
-                    .eq('id', currentUser.id)
-                    .single();
-                
-                if (profile?.role !== 'adm') {
-                    console.error(`[dispatch-webhook] Forbidden access attempt by user ${currentUser.id} for order ${orderId}`);
-                    return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-                }
-            }
-        }
 
         // Try to fetch any coupon relation separately
         let couponName = null;
@@ -122,14 +85,14 @@ serve(async (req) => {
         // B. Buscar Itens e Imagens dos Produtos
         const { data: items } = await supabaseAdmin
             .from('order_items')
-            .select('name_at_purchase, quantity, price_at_purchase, product_id, variant_id')
+            .select('name_at_purchase, quantity, price_at_purchase, item_id, item_type')
             .eq('order_id', orderId);
 
         // Buscar imagens dos produtos
         let productImages: Record<string, string> = {};
         if (items && items.length > 0) {
             const productIds = items
-                .map((item: any) => item.product_id)
+                .map((item: any) => item.item_id)
                 .filter((id: any) => id != null);
             
             if (productIds.length > 0) {
@@ -168,16 +131,6 @@ serve(async (req) => {
         // --- 4. CÁLCULOS ---
         const orderItems = items || [];
         const subtotalCalc = orderItems.reduce((acc: number, item: any) => acc + (item.quantity * item.price_at_purchase), 0);
-        
-        if (!couponName) {
-            try {
-                if (order.user_coupons && order.user_coupons.length > 0 && order.user_coupons[0].coupons) {
-                    couponName = order.user_coupons[0].coupons.name;
-                }
-            } catch (e) {
-                // ignore
-            }
-        }
 
         const shippingCost = Number(order.shipping_cost || 0);
         const donationAmount = Number(order.donation_amount || 0);
@@ -234,24 +187,24 @@ serve(async (req) => {
                 quantity: item.quantity,
                 price: Number(item.price_at_purchase),
                 total: Number((item.quantity * item.price_at_purchase).toFixed(2)),
-                image: productImages[item.product_id] || "",
-                type: "product"
+                image: productImages[item.item_id] || "",
+                type: item.item_type || "product"
             }))
         };
 
         if (event_type !== 'order_created') {
             finalData.status_change = {
-                old_status: payload.old_status || null,
-                new_status: payload.new_status || order.status,
-                changed_at: payload.updated_at || new Date().toISOString()
+                old_status: payload?.old_status || null,
+                new_status: payload?.new_status || order.status,
+                changed_at: payload?.updated_at || new Date().toISOString()
             };
         }
     } else {
-        // Fallback
-        finalData = payload;
+        // Fallback para outros eventos
+        finalData = payload || {};
     }
 
-    // --- 6. ENVIO PARA WEBHOOKS ---
+    // --- 6. BUSCAR WEBHOOKS ATIVOS ---
     const { data: webhooks } = await supabaseAdmin
         .from('webhook_configs')
         .select('id, target_url')
