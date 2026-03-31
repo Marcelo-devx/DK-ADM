@@ -22,8 +22,15 @@ interface SupplierOrderItem {
   quantity: number;
   received_quantity: number;
   unit_cost: number;
+  variant_id?: string | null;
+  product_id?: number | null;
   products: {
     name: string;
+  } | null;
+  product_variants?: {
+    id?: string;
+    volume_ml?: number | null;
+    flavors?: { name?: string } | { name?: string }[] | null;
   } | null;
 }
 
@@ -44,19 +51,47 @@ interface SupplierOrderDetailModalProps {
 }
 
 const fetchSupplierOrderItems = async (orderId: number): Promise<SupplierOrderItem[]> => {
-  const { data, error } = await supabase
+  // First fetch the basic items (product info included)
+  const { data: itemsData, error: itemsError } = await supabase
     .from("supplier_order_items")
-    .select(`
-      id,
-      quantity,
-      received_quantity,
-      unit_cost,
-      products (name)
-    `)
+    .select(`id, quantity, received_quantity, unit_cost, variant_id, product_id, products(name)`)
     .eq("supplier_order_id", orderId);
-  
-  if (error) throw error;
-  return data as any;
+
+  if (itemsError) throw itemsError;
+
+  const items: SupplierOrderItem[] = (itemsData || []) as any;
+
+  // Collect variant ids present
+  const variantIds = Array.from(new Set(items.filter(i => i.variant_id).map(i => i.variant_id))) as string[];
+
+  if (variantIds.length === 0) {
+    // nothing to enrich
+    return items;
+  }
+
+  // Fetch variants by id and include flavor name if possible
+  const { data: variantsData, error: variantsError } = await supabase
+    .from("product_variants")
+    .select("id, volume_ml, flavors (name)")
+    .in("id", variantIds as any);
+
+  if (variantsError) {
+    // If we can't fetch variants, return items without variant info but don't fail entire flow
+    return items;
+  }
+
+  const variantsById: Record<string, any> = {};
+  (variantsData || []).forEach((v: any) => {
+    variantsById[v.id] = v;
+  });
+
+  // Attach variant info to items
+  const enriched = items.map(it => ({
+    ...it,
+    product_variants: it.variant_id ? variantsById[it.variant_id] ?? null : null,
+  }));
+
+  return enriched;
 };
 
 export const SupplierOrderDetailModal = ({ order, isOpen, onClose }: SupplierOrderDetailModalProps) => {
@@ -93,14 +128,23 @@ export const SupplierOrderDetailModal = ({ order, isOpen, onClose }: SupplierOrd
       }
 
       const tableHeaders = [["Produto", "Qtd. Pedida", "Qtd. Recebida", "Diferença", "Custo Unit.", "Subtotal Real"]];
-      const tableRows = items.map(item => [
-        item.products?.name || "Produto Removido",
-        item.quantity,
-        isProcessed ? item.received_quantity : "-",
-        isProcessed ? (item.received_quantity - item.quantity) : "-",
-        formatCurrency(item.unit_cost),
-        formatCurrency(isProcessed ? (item.received_quantity * item.unit_cost) : (item.quantity * item.unit_cost))
-      ]);
+      const tableRows = items.map(item => {
+        let displayName = item.products?.name || "Produto Removido";
+        if (item.product_variants) {
+          const v = item.product_variants as any;
+          const flavor = Array.isArray(v.flavors) ? v.flavors[0]?.name : v.flavors?.name;
+          const volumeLabel = v.volume_ml ? `${v.volume_ml}ml` : "";
+          displayName += `${flavor ? ` - ${flavor}` : ""}${volumeLabel ? ` (${volumeLabel})` : ""}`;
+        }
+        return [
+          displayName,
+          item.quantity,
+          isProcessed ? item.received_quantity : "-",
+          isProcessed ? (item.received_quantity - item.quantity) : "-",
+          formatCurrency(item.unit_cost),
+          formatCurrency(isProcessed ? (item.received_quantity * item.unit_cost) : (item.quantity * item.unit_cost))
+        ];
+      });
 
       autoTable(doc, {
         head: tableHeaders,
@@ -165,10 +209,19 @@ export const SupplierOrderDetailModal = ({ order, isOpen, onClose }: SupplierOrd
                 {isLoading ? (
                   <TableRow><TableCell colSpan={5}><Skeleton className="h-6 w-full" /></TableCell></TableRow>
                 ) : items?.map((item) => {
-                  const diff = item.received_quantity - item.quantity;
+                  const diff = (item.received_quantity || 0) - item.quantity;
+
+                  let displayName = item.products?.name || "Produto Removido";
+                  if (item.product_variants) {
+                    const v: any = item.product_variants;
+                    const flavor = Array.isArray(v.flavors) ? v.flavors[0]?.name : v.flavors?.name;
+                    const volumeLabel = v.volume_ml ? `${v.volume_ml}ml` : "";
+                    displayName += `${flavor ? ` - ${flavor}` : ""}${volumeLabel ? ` (${volumeLabel})` : ""}`;
+                  }
+
                   return (
                     <TableRow key={item.id}>
-                      <TableCell className="font-medium">{item.products?.name || "Produto Removido"}</TableCell>
+                      <TableCell className="font-medium">{displayName}</TableCell>
                       <TableCell className="text-center">{item.quantity}</TableCell>
                       {isProcessed && (
                         <TableCell className={cn("text-center font-bold", diff < 0 ? "text-red-600" : "text-green-600")}>
@@ -176,7 +229,7 @@ export const SupplierOrderDetailModal = ({ order, isOpen, onClose }: SupplierOrd
                         </TableCell>
                       )}
                       {isProcessed && (
-                        <TableCell className={cn("text-center font-bold", diff < 0 ? "text-red-600" : "")}>
+                        <TableCell className={cn("text-center font-bold", diff < 0 ? "text-red-600" : "")}> 
                           {diff === 0 ? "-" : diff > 0 ? `+${diff}` : diff}
                         </TableCell>
                       )}
