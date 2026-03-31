@@ -57,6 +57,9 @@ const fetchProductsWithVariants = async () => {
       name, 
       stock_quantity, 
       cost_price,
+      brand,
+      category,
+      is_visible,
       product_variants (
         id,
         flavor_id,
@@ -85,7 +88,10 @@ const fetchProductsWithVariants = async () => {
           name: `${p.name}${flavorName ? ` - ${flavorName}` : ""}${volumeLabel ? ` (${volumeLabel})` : ""}`,
           stock_quantity: v.stock_quantity,
           cost_price: v.cost_price || p.cost_price,
-          is_variant: true
+          is_variant: true,
+          brand: p.brand || null,
+          category: p.category || null,
+          is_visible: p.is_visible ?? true,
         });
       });
     } else {
@@ -95,7 +101,10 @@ const fetchProductsWithVariants = async () => {
         name: p.name,
         stock_quantity: p.stock_quantity,
         cost_price: p.cost_price,
-        is_variant: false
+        is_variant: false,
+        brand: p.brand || null,
+        category: p.category || null,
+        is_visible: p.is_visible ?? true,
       });
     }
   });

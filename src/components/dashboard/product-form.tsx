@@ -297,10 +297,12 @@ export const ProductForm = ({
                   <FormItem>
                   <FormLabel>Marca</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingBrands}>
+                                            <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
                       <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
                       <SelectContent>
-                      {brands.map((brand) => (<SelectItem key={brand.id} value={brand.name}>{brand.name}</SelectItem>))}
-                      </SelectContent>
+                                                  <SelectItem value="">Sem Marca</SelectItem>
+                                                {brands.map((brand) => (<SelectItem key={brand.id} value={brand.name}>{brand.name}</SelectItem>))}
+                                                </SelectContent>
                   </Select>
                   <FormMessage />
                   </FormItem>
@@ -315,8 +317,11 @@ export const ProductForm = ({
                     <FormLabel>Categoria Principal</FormLabel>
                     <div className="flex items-center gap-2">
                       <Select onValueChange={(value) => { field.onChange(value); }} value={field.value} disabled={isLoadingCategories}>
+                                              <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
                         <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
-                        <SelectContent>{categories.map((c) => (<SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>))}</SelectContent>
+                        <SelectContent>
+                                                    <SelectItem value="">Sem Categoria</SelectItem>
+                                                {categories.map((c) => (<SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>))}</SelectContent>
                       </Select>
                       <Button type="button" variant="outline" size="icon" onClick={() => setIsCategoryModalOpen(true)}><PlusCircle className="h-4 w-4" /></Button>
                     </div>
