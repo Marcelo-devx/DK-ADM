@@ -57,6 +57,16 @@ export function useClients(initialPage = 1) {
       setPage(1);
     }, 600);
   }, []);
+  // immediate search helper (bypasses debounce)
+  const searchNow = useCallback((value: string) => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    setSearchInput(value);
+    setSearch(value.trim());
+    setPage(1);
+  }, []);
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -186,6 +196,7 @@ export function useClients(initialPage = 1) {
     // search
     searchInput,
     setSearchInput: setSearchDebounced,
+    searchNow,
     search,
 
     // mutations

@@ -14,6 +14,7 @@ interface Props {
   onToggleFlagged: (v: boolean) => void;
   onOpenCreate: () => void;
   isCreating: boolean;
+  onSearchSubmit?: (v: string) => void;
 }
 
 export default function SearchBar({
@@ -23,18 +24,33 @@ export default function SearchBar({
   onToggleFlagged,
   onOpenCreate,
   isCreating,
+  onSearchSubmit,
 }: Props) {
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <div className="relative">
+      <div className="relative flex items-center">
         <input
           type="text"
           placeholder="Buscar por email..."
           value={searchInput}
           onChange={(e) => onSearchChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              onSearchSubmit?.(searchInput);
+            }
+          }}
           className="pl-9 pr-4 py-2 border rounded-md text-sm w-60 focus:outline-none focus:ring-2 focus:ring-primary"
         />
         <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+        {/* Search button */}
+        <button
+          type="button"
+          onClick={() => onSearchSubmit?.(searchInput)}
+          className="ml-2 inline-flex items-center px-3 py-2 bg-primary text-white rounded-md text-sm hover:opacity-95"
+        >
+          Buscar
+        </button>
       </div>
 
       <Button onClick={onOpenCreate} className="flex items-center">

@@ -31,6 +31,7 @@ import SearchBar from "../../components/dashboard/clients/SearchBar";
 import CreateClientModal from "../../components/dashboard/clients/CreateClientModal";
 import ClientsTable from "../../components/dashboard/clients/ClientsTable";
 import { ClientDetailsModal } from "../../components/dashboard/ClientDetailsModal";
+import ClientPreview from "../../components/dashboard/clients/ClientPreview";
 
 export default function ClientsPage() {
   const {
@@ -42,6 +43,7 @@ export default function ClientsPage() {
     isFetching,
     searchInput,
     setSearchInput,
+    searchNow,
     search,
     clients,
     isLoading: clientsLoading,
@@ -86,18 +88,30 @@ export default function ClientsPage() {
             onToggleFlagged={() => {}}
             onOpenCreate={() => setIsCreateOpen(true)}
             isCreating={createStatus.isPending}
+            onSearchSubmit={(v) => searchNow(v)}
           />
         </div>
       </div>
 
-      <ClientsTable
-        clients={visibleClients}
-        isLoading={clientsLoading}
-        toggleLoading={togglePixStatus.isPending}
-        onTogglePix={(id, val) => togglePix({ userId: id, forcePix: val })}
-        onOpenDetails={(c) => { setSelectedClient(c); setIsDetailsOpen(true); }}
-        onActionConfirm={(actionName, client) => setActionToConfirm({ action: actionName, client })}
-      />
+      {/* If user is actively searching, show a focused preview for the matched client */}
+      {search ? (
+        clients && clients.length > 0 ? (
+          <ClientPreview client={clients[0]} onOpenDetails={(c) => { setSelectedClient(c); setIsDetailsOpen(true); }} />
+        ) : (
+          <div className="bg-white rounded-lg shadow p-6 text-center">
+            <p className="text-muted-foreground">Nenhum cliente encontrado para: <span className="font-bold">{searchInput}</span></p>
+          </div>
+        )
+      ) : (
+        <ClientsTable
+          clients={visibleClients}
+          isLoading={clientsLoading}
+          toggleLoading={togglePixStatus.isPending}
+          onTogglePix={(id, val) => togglePix({ userId: id, forcePix: val })}
+          onOpenDetails={(c) => { setSelectedClient(c); setIsDetailsOpen(true); }}
+          onActionConfirm={(actionName, client) => setActionToConfirm({ action: actionName, client })}
+        />
+      )}
 
       <CreateClientModal
         open={isCreateOpen}
