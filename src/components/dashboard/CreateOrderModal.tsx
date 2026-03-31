@@ -17,6 +17,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Loader2,
   Trash2,
@@ -105,6 +106,7 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
   const [generateLoyaltyPoints, setGenerateLoyaltyPoints] = useState(true);
   const [shippingCost, setShippingCost] = useState(0);
   const [manualTotal, setManualTotal] = useState<string>("");
+  const [paymentMethod, setPaymentMethod] = useState<string | null>(null);
 
   const [productSearch, setProductSearch] = useState("");
   const [searchResults, setSearchResults] = useState<Product[]>([]);
@@ -294,6 +296,7 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
     mutationFn: async () => {
       if (!selectedClient) throw new Error("Selecione um cliente");
       if (!clientConfirmed) throw new Error("Confirme o cliente antes de criar o pedido");
+      if (!paymentMethod) throw new Error("Selecione a forma de pagamento");
       if (orderItems.length === 0) throw new Error("Adicione produtos ao pedido");
 
       // Recalcula totais na hora da execução para evitar closure stale
@@ -308,7 +311,7 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
           total_price: currentTotal,
           shipping_cost: currentShippingCost,
           status: "Pago",
-          payment_method: "Pix",
+          payment_method: paymentMethod,
           delivery_status: "Aguardando Coleta",
           shipping_address: shippingAddress,
           benefits_used: generateLoyaltyPoints ? null : "no_loyalty_points",
@@ -358,6 +361,7 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
     setProductSearch("");
     setSearchResults([]);
     setManualTotal("");
+    setPaymentMethod(null);
     onClose();
   };
 
@@ -653,6 +657,24 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
             </div>
           )}
 
+          {/* FORMA DE PAGAMENTO */}
+          {selectedClient && orderItems.length > 0 && (
+            <div className="space-y-2">
+              <Label className="font-semibold">Forma de Pagamento</Label>
+              <RadioGroup value={paymentMethod ?? ""} onValueChange={(v) => setPaymentMethod(v)} className="flex flex-row items-center gap-6">
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="Pix" />
+                  <span className="text-sm">Pix</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="MP" />
+                  <span className="text-sm">Cartão (MP)</span>
+                </div>
+              </RadioGroup>
+              {!paymentMethod && <p className="text-sm text-rose-600">Selecione a forma de pagamento antes de criar o pedido.</p>}
+            </div>
+          )}
+
           {/* RESUMO */}
           {selectedClient && orderItems.length > 0 && (
             <div className="bg-gray-50 rounded-lg p-4 space-y-2">
@@ -685,7 +707,7 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
           <Button variant="outline" onClick={handleClose}>Cancelar</Button>
           <Button
             onClick={() => createOrderMutation.mutate()}
-            disabled={!selectedClient || !clientConfirmed || orderItems.length === 0 || createOrderMutation.isPending}
+            disabled={!selectedClient || !clientConfirmed || !paymentMethod || orderItems.length === 0 || createOrderMutation.isPending}
             className="bg-green-600 hover:bg-green-700"
           >
             {createOrderMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
