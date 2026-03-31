@@ -104,6 +104,7 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
   const [chargeFreight, setChargeFreight] = useState(true);
   const [generateLoyaltyPoints, setGenerateLoyaltyPoints] = useState(true);
   const [shippingCost, setShippingCost] = useState(0);
+  const [manualTotal, setManualTotal] = useState<string>("");
 
   const [productSearch, setProductSearch] = useState("");
   const [searchResults, setSearchResults] = useState<Product[]>([]);
@@ -148,12 +149,16 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
           (r.neighborhood.toLowerCase().includes(neighborhood) || neighborhood.includes(r.neighborhood.toLowerCase()))
       );
     }
-    setShippingCost(match?.price ? Number(match.price) : 0);
+    // Only set default shipping cost if user hasn't manually edited it (i.e., manualTotal empty and user hasn't typed into shippingCost)
+    if (typeof match?.price !== 'undefined') {
+      setShippingCost((prev) => prev === 0 ? Number(match.price) : prev);
+    }
   }, [shippingAddress.neighborhood, shippingAddress.city, shippingRates]);
 
   const itemsTotal = orderItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
-  const finalShippingCost = chargeFreight ? shippingCost : 0;
-  const finalTotal = itemsTotal + finalShippingCost;
+  const finalShippingCost = chargeFreight ? Number(shippingCost || 0) : 0;
+  const computedTotal = itemsTotal + finalShippingCost;
+  const finalTotal = manualTotal && manualTotal.trim() !== "" ? Number(manualTotal) : computedTotal;
 
   // Busca cliente por email via RPC
   const findClientByEmail = async (email: string) => {
@@ -203,7 +208,7 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
         .from("products")
         .select("id, name, price, pix_price, stock_quantity, image_url, sku, product_variants(*)")
         .ilike("name", like)
-        .eq("is_visible", true)
+        //.eq("is_visible", true) // include invisibles so internal products can be used
         .limit(50);
 
       // Busca por SKU do produto
@@ -211,7 +216,7 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
         .from("products")
         .select("id, name, price, pix_price, stock_quantity, image_url, sku, product_variants(*)")
         .ilike("sku", like)
-        .eq("is_visible", true)
+        //.eq("is_visible", true)
         .limit(50);
 
       // Merge e dedupe
@@ -277,6 +282,12 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
     setOrderItems((prev) => { const u = [...prev]; u[index] = { ...u[index], quantity: newQty }; return u; });
   };
 
+  const handleUpdatePrice = (index: number, price: number) => {
+    const item = orderItems[index];
+    const newPrice = Number(isNaN(price) ? item.price : price);
+    setOrderItems((prev) => { const u = [...prev]; u[index] = { ...u[index], price: newPrice }; return u; });
+  };
+
   const handleRemoveItem = (index: number) => setOrderItems((prev) => prev.filter((_, i) => i !== index));
 
   const createOrderMutation = useMutation({
@@ -288,7 +299,7 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
       // Recalcula totais na hora da execução para evitar closure stale
       const currentItemsTotal = orderItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
       const currentShippingCost = chargeFreight ? shippingCost : 0;
-      const currentTotal = currentItemsTotal + currentShippingCost;
+      const currentTotal = manualTotal && manualTotal.trim() !== "" ? Number(manualTotal) : (currentItemsTotal + currentShippingCost);
 
       const { data: order, error: orderError } = await supabase
         .from("orders")
@@ -346,6 +357,7 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
     setShippingAddress({ street: "", number: "", complement: "", neighborhood: "", city: "", state: "", cep: "" });
     setProductSearch("");
     setSearchResults([]);
+    setManualTotal("");
     onClose();
   };
 
@@ -587,6 +599,17 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
                                 }}
                                 className="w-16 text-center"
                               />
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={item.price}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value);
+                          if (!isNaN(val)) handleUpdatePrice(index, val);
+                        }}
+                        className="w-28 text-right"
+                      />
                       <Button variant="ghost" size="icon" onClick={() => handleRemoveItem(index)} className="text-red-500 hover:bg-red-50 shrink-0">
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -605,7 +628,13 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
                   <DollarSign className="w-4 h-4 text-primary" />
                   <div>
                     <Label className="font-semibold text-sm">Cobrar Frete</Label>
-                    <p className="text-xs text-muted-foreground">{chargeFreight ? fmt(shippingCost) : "Grátis"}</p>
+                    <div className="flex items-center gap-2">
+                      {chargeFreight ? (
+                        <Input type="number" step="0.01" value={shippingCost} onChange={(e) => setShippingCost(Number(e.target.value || 0))} className="w-32 text-right" />
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Grátis</p>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <Switch checked={chargeFreight} onCheckedChange={setChargeFreight} />
@@ -635,6 +664,10 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Frete</span>
                 <span>{fmt(finalShippingCost)}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Label className="text-sm">Total manual (opcional)</Label>
+                <Input type="number" step="0.01" value={manualTotal} onChange={(e) => setManualTotal(e.target.value)} className="w-40 text-right" />
               </div>
               {!generateLoyaltyPoints && (
                 <p className="text-xs text-amber-600">⚠️ Pontos de fidelidade não serão gerados</p>
