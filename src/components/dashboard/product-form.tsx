@@ -296,11 +296,10 @@ export const ProductForm = ({
               render={({ field }) => (
                   <FormItem>
                   <FormLabel>Marca</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingBrands}>
+                  <Select onValueChange={(val) => field.onChange(val === '__none' ? '' : val)} value={field.value} disabled={isLoadingBrands}>
                                             <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
-                      <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
                       <SelectContent>
-                                                  <SelectItem value="">Sem Marca</SelectItem>
+                                                  <SelectItem value="__none">Sem Marca</SelectItem>
                                                 {brands.map((brand) => (<SelectItem key={brand.id} value={brand.name}>{brand.name}</SelectItem>))}
                                                 </SelectContent>
                   </Select>
@@ -316,11 +315,10 @@ export const ProductForm = ({
                   <FormItem>
                     <FormLabel>Categoria Principal</FormLabel>
                     <div className="flex items-center gap-2">
-                      <Select onValueChange={(value) => { field.onChange(value); }} value={field.value} disabled={isLoadingCategories}>
+                      <Select onValueChange={(value) => { field.onChange(value === '__none' ? '' : value); }} value={field.value} disabled={isLoadingCategories}>
                                               <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
-                        <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
                         <SelectContent>
-                                                    <SelectItem value="">Sem Categoria</SelectItem>
+                                                    <SelectItem value="__none">Sem Categoria</SelectItem>
                                                 {categories.map((c) => (<SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>))}</SelectContent>
                       </Select>
                       <Button type="button" variant="outline" size="icon" onClick={() => setIsCategoryModalOpen(true)}><PlusCircle className="h-4 w-4" /></Button>
