@@ -161,13 +161,51 @@ const SupplierOrdersPage = () => {
       
       if (orderError) throw orderError;
 
-      const itemsToInsert = values.items.map((item: any) => ({
-        supplier_order_id: order.id,
-        product_id: item.product_id,
-        variant_id: item.variant_id || null,
-        quantity: item.quantity,
-        unit_cost: item.unit_cost
-      }));
+      // Build metadata maps for products, variants and flavors to persist readable names
+      const productIds = Array.from(new Set(values.items.map((i: any) => Number(i.product_id)).filter(Boolean)));
+      const variantIds = Array.from(new Set(values.items.map((i: any) => i.variant_id).filter(Boolean)));
+
+      const productsMap: Record<number, any> = {};
+      if (productIds.length > 0) {
+        const { data: productsData } = await supabase.from('products').select('id, name').in('id', productIds as any);
+        (productsData || []).forEach((p: any) => { productsMap[p.id] = p; });
+      }
+
+      const variantsMap: Record<string, any> = {};
+      if (variantIds.length > 0) {
+        const { data: variantsData } = await supabase.from('product_variants').select('id, volume_ml, flavor_id').in('id', variantIds as any);
+        (variantsData || []).forEach((v: any) => { variantsMap[v.id] = v; });
+      }
+
+      const flavorIds = Array.from(new Set(Object.values(variantsMap).map((v: any) => v.flavor_id).filter(Boolean)));
+      const flavorsMap: Record<number, any> = {};
+      if (flavorIds.length > 0) {
+        const { data: flavorsData } = await supabase.from('flavors').select('id, name').in('id', flavorIds as any);
+        (flavorsData || []).forEach((f: any) => { flavorsMap[f.id] = f; });
+      }
+
+      const itemsToInsert = values.items.map((item: any) => {
+        const productName = productsMap[Number(item.product_id)]?.name || null;
+        const variant = item.variant_id ? variantsMap[item.variant_id] : null;
+        const flavor = variant?.flavor_id ? flavorsMap[variant.flavor_id] : null;
+
+        const variant_name_parts: string[] = [];
+        if (productName) variant_name_parts.push(productName);
+        if (flavor?.name) variant_name_parts.push(flavor.name);
+        const variant_name_suffix = variant?.volume_ml ? ` (${variant.volume_ml}ml)` : '';
+        const variant_name = variant_name_parts.length > 0 ? `${variant_name_parts.join(' - ')}${variant_name_suffix}` : null;
+
+        return ({
+          supplier_order_id: order.id,
+          product_id: item.product_id,
+          variant_id: item.variant_id || null,
+          quantity: item.quantity,
+          unit_cost: item.unit_cost,
+          variant_name: variant_name,
+          flavor_name: flavor?.name || null,
+          volume_ml: variant?.volume_ml || null,
+        });
+      });
 
       const { error: itemsError } = await supabase.from("supplier_order_items").insert(itemsToInsert);
       if (itemsError) throw itemsError;
