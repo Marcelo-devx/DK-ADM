@@ -94,29 +94,40 @@ export function useClients(initialPage = 1) {
   // Create client
   const createMutation = useMutation({
     mutationFn: async (values: any) => {
+      // Get current session token to authenticate the request to the edge function
       const { data: sd } = await supabase.auth.getSession();
       const token = sd?.session?.access_token;
       if (!token) throw new Error("Sessão expirada. Faça login novamente.");
 
-      const res = await fetch(
-        "https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1/admin-create-user",
-        {
-          method: "POST",
+      try {
+        // Call edge function and forward Authorization header + anon key
+        const { data, error } = await supabase.functions.invoke("admin-create-user", {
+          body: values,
           headers: {
-            "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
             apikey: ANON_KEY,
           },
-          body: JSON.stringify(values),
+        });
+
+        if (error) {
+          // Map function errors to throw
+          throw new Error(error.message || "Erro ao chamar função de criação de usuário");
         }
-      );
-      const json = await res.json();
-      if (!res.ok || json.error)
-        throw new Error(json.details || json.error || `Erro ${res.status}`);
-      return { json, values };
+
+        return { data, values };
+      } catch (e: any) {
+        // Provide clearer message when network-level failure occurs
+        const msg = String(e?.message || e);
+        if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
+          throw new Error(
+            "Erro de rede: não foi possível conectar às Edge Functions do Supabase. Verifique sua conexão, bloqueadores (adblock/privacidade) ou se o serviço de Functions está ativo."
+          );
+        }
+        throw e;
+      }
     },
-    onSuccess: ({ json, values }) => {
-      const created = json?.user || json;
+    onSuccess: ({ data, values }) => {
+      const created = data?.user || data;
       const nameParts = (values?.full_name || "").split(" ");
       const newClient: Client = {
         id: created?.id || `tmp-${Date.now()}`,
