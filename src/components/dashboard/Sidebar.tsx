@@ -19,6 +19,7 @@ import {
   ListTree,
   Tags,
   Users,
+  UserPlus,
   FileUp,
   Crown,
   TicketCheck,
@@ -140,6 +141,9 @@ const Sidebar = () => {
         <p className={sectionTitleClass}>Clientes</p>
         <NavLink to="/dashboard/clients" className={navLinkClass}>
           {({ isActive }) => (<><Users className={iconClass("text-cyan-600", isActive)} />Base de Clientes</>)}
+        </NavLink>
+        <NavLink to="/dashboard/cadastrar-cliente" className={navLinkClass}>
+          {({ isActive }) => (<><UserPlus className={iconClass("text-cyan-600", isActive)} />Cadastrar Cliente</>)}
         </NavLink>
         <NavLink to="/dashboard/import-clients" className={navLinkClass}>
           {({ isActive }) => (<><FileUp className={iconClass("text-cyan-600", isActive)} />Importar Clientes</>)}

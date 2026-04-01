@@ -16,6 +16,7 @@ import Dashboard from "./pages/dashboard/Dashboard";
 import Products from "./pages/dashboard/Products";
 import Orders from "./pages/dashboard/Orders";
 import Clients from "./pages/dashboard/Clients";
+import CadastrarCliente from "./pages/dashboard/CadastrarCliente";
 import Categories from "./pages/dashboard/Categories";
 import Brands from "./pages/dashboard/Brands";
 import SubCategories from "./pages/dashboard/SubCategories";
@@ -79,6 +80,7 @@ const App = () => (
               <Route path="products" element={<Products />} />
               <Route path="orders" element={<Orders />} />
               <Route path="clients" element={<Clients />} />
+              <Route path="cadastrar-cliente" element={<CadastrarCliente />} />
               <Route path="categories" element={<Categories />} />
               <Route path="brands" element={<Brands />} />
               <Route path="sub-categories" element={<SubCategories />} />

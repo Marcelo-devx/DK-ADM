@@ -1,34 +1,13 @@
 import { useState } from "react";
 import { useClients } from "@/hooks/useClients";
-import { supabase } from "@/integrations/supabase/client";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
-import {
-  MoreHorizontal, Mail, KeyRound, RotateCcw,
-  CheckCircle, Lock, Unlock, UserPlus, Eye, CalendarDays,
-} from "lucide-react";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
+import { showSuccess, showError } from "@/utils/toast";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
   AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuLabel, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { showSuccess, showError } from "@/utils/toast";
 // Use relative imports so TS reliably finds these files
 import SearchBar from "../../components/dashboard/clients/SearchBar";
-import CreateClientModal from "../../components/dashboard/clients/CreateClientModal";
 import ClientsTable from "../../components/dashboard/clients/ClientsTable";
 import { ClientDetailsModal } from "../../components/dashboard/ClientDetailsModal";
 import ClientPreview from "../../components/dashboard/clients/ClientPreview";
@@ -47,8 +26,6 @@ export default function ClientsPage() {
     search,
     clients,
     isLoading: clientsLoading,
-    create,
-    createStatus,
     togglePix,
     togglePixStatus,
     action,
@@ -56,7 +33,6 @@ export default function ClientsPage() {
     refetch,
   } = useClients(1);
 
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<any | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [actionToConfirm, setActionToConfirm] = useState<any | null>(null);
@@ -86,8 +62,6 @@ export default function ClientsPage() {
             onSearchChange={setSearchInput}
             showFlagged={false}
             onToggleFlagged={() => {}}
-            onOpenCreate={() => setIsCreateOpen(true)}
-            isCreating={createStatus.isPending}
             onSearchSubmit={(v) => searchNow(v)}
           />
         </div>
@@ -112,13 +86,6 @@ export default function ClientsPage() {
           onActionConfirm={(actionName, client) => setActionToConfirm({ action: actionName, client })}
         />
       )}
-
-      <CreateClientModal
-        open={isCreateOpen}
-        onOpenChange={setIsCreateOpen}
-        onCreate={(v) => create(v)}
-        isCreating={createStatus.isPending}
-      />
 
       {/* Confirm action */}
       <AlertDialog open={!!actionToConfirm} onOpenChange={() => setActionToConfirm(null)}>

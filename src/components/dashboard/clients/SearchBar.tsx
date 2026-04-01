@@ -1,9 +1,8 @@
 "use client";
 
 import React from "react";
-import { Mail, UserPlus } from "lucide-react";
+import { Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogTrigger } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
@@ -12,8 +11,6 @@ interface Props {
   onSearchChange: (v: string) => void;
   showFlagged: boolean;
   onToggleFlagged: (v: boolean) => void;
-  onOpenCreate: () => void;
-  isCreating: boolean;
   onSearchSubmit?: (v: string) => void;
 }
 
@@ -22,8 +19,6 @@ export default function SearchBar({
   onSearchChange,
   showFlagged,
   onToggleFlagged,
-  onOpenCreate,
-  isCreating,
   onSearchSubmit,
 }: Props) {
   return (
@@ -52,11 +47,6 @@ export default function SearchBar({
           Buscar
         </button>
       </div>
-
-      <Button onClick={onOpenCreate} className="flex items-center">
-        <UserPlus className="w-4 h-4 mr-2" />
-        Novo Cliente
-      </Button>
 
       <div className="flex items-center gap-2 border-l pl-3">
         <Switch id="filter-flagged" checked={showFlagged} onCheckedChange={onToggleFlagged} />
