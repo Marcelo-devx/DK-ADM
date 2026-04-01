@@ -50,7 +50,14 @@ import ClubDKAdmin from "./pages/dashboard/ClubDKAdmin";
 import CircuitIntegration from "./pages/dashboard/CircuitIntegration";
 import BulkAddPoints from "./pages/dashboard/BulkAddPoints";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      retry: false,
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
