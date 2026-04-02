@@ -25,10 +25,53 @@ const ANON_KEY =
 async function fetchClients(page: number, search: string): Promise<Client[]> {
   const body: Record<string, unknown> = { limit: PAGE_SIZE, page };
   if (search) body.search = search;
-  const { data, error } = await supabase.functions.invoke("get-users", { body });
-  if (error) throw new Error(error.message);
-  if (!Array.isArray(data)) throw new Error("Resposta inválida da Edge Function.");
-  return data as Client[];
+
+  // Try Edge Function first (preferred). If it fails or returns unexpected data,
+  // fall back to querying the profiles table directly.
+  try {
+    const { data, error } = await supabase.functions.invoke("get-users", { body });
+    if (!error && Array.isArray(data)) {
+      return data as Client[];
+    }
+    // If there was an error, fall through to fallback query
+    if (error) console.warn("get-users edge function returned error:", error);
+  } catch (e) {
+    console.warn("get-users edge function call failed, falling back to direct DB query:", e);
+  }
+
+  // FALLBACK: query profiles table directly. This works for authenticated admin sessions
+  // and avoids a hard failure when Edge Functions are unreachable or misconfigured.
+  const from = (page - 1) * PAGE_SIZE;
+  const to = page * PAGE_SIZE - 1;
+
+  try {
+    let query = supabase
+      .from("profiles")
+      .select(
+        "id, email, first_name, last_name, created_at, updated_at, role, force_pix_on_next_purchase, order_count, completed_order_count"
+      )
+      .eq("role", "user")
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+    if (search) {
+      const term = `%${search.replace(/%/g, "\\%").replace(/_/g, "\\_")}%`;
+      // Search across email, first_name and last_name
+      query = query.or(`email.ilike.${term},first_name.ilike.${term},last_name.ilike.${term}`);
+    }
+
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+    return (data || []) as Client[];
+  } catch (e: any) {
+    const msg = String(e?.message || e);
+    if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
+      throw new Error(
+        "Erro de rede: não foi possível conectar ao Supabase. Verifique sua conexão ou se o serviço está ativo."
+      );
+    }
+    throw e;
+  }
 }
 
 async function fetchTotal(): Promise<number> {
