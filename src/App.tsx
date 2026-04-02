@@ -50,6 +50,7 @@ import SpokeExport from "./pages/dashboard/SpokeExport";
 import ClubDKAdmin from "./pages/dashboard/ClubDKAdmin";
 import CircuitIntegration from "./pages/dashboard/CircuitIntegration";
 import BulkAddPoints from "./pages/dashboard/BulkAddPoints";
+import ManualAddPoints from "./pages/dashboard/ManualAddPoints";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -114,6 +115,7 @@ const App = () => (
               <Route path="delivery-routes" element={<DeliveryRoutes />} />
               <Route path="spoke-export" element={<SpokeExport />} />
               <Route path="bulk-add-points" element={<BulkAddPoints />} />
+              <Route path="manual-add-points" element={<ManualAddPoints />} />
             </Route>
             
             <Route path="*" element={<NotFound />} />
