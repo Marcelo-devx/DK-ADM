@@ -93,13 +93,13 @@ serve(async (req) => {
       const users = res?.data?.users || [];
       usersForPage = users;
     } else {
-      // Need to search by email (case-insensitive). We'll fetch users in chunks until we have enough matches
+      // Need to search by email (case-insensitive). Scan ALL pages to find matches.
       const perPage = 1000; // chunk size for scanning
       let page = 1;
       const matches: any[] = [];
       let hasMore = true;
 
-      while (hasMore && matches.length < requestedPage * requestedLimit) {
+      while (hasMore) {
         const res = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
         const users = res?.data?.users || [];
         if (!users || users.length === 0) {
@@ -115,6 +115,8 @@ serve(async (req) => {
         hasMore = users.length === perPage;
         page += 1;
       }
+
+      console.log(`[get-users] Search "${search}" found ${matches.length} matches after scanning ${page - 1} pages`);
 
       // slice the matches to the requested page
       const start = (requestedPage - 1) * requestedLimit;
