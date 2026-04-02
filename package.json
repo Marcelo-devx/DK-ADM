@@ -6,6 +6,9 @@
     "vercel-build": "vite build",
     "preview": "vite preview"
   },
+  "pnpm": {
+    "overrides": {}
+  },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
     "@radix-ui/react-accordion": "^1.2.0",
