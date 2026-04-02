@@ -38,7 +38,6 @@ import {
   Settings,
   LogOut,
   Box,
-  KeyRound,
   Globe,
   Gift,
   Award
