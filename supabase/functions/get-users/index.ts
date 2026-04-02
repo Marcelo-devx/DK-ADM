@@ -24,7 +24,7 @@ serve(async (req) => {
 
   try {
     console.log('[get-users] Iniciando requisição');
-    
+
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -44,7 +44,7 @@ serve(async (req) => {
       console.error('[get-users] Erro ao buscar usuário:', userError);
       throw userError;
     }
-    
+
     if (!user) {
       console.log('[get-users] Usuário não autenticado');
       return new Response(JSON.stringify({ error: 'Não autenticado' }), { status: 401, headers: { ...buildCorsHeaders(req), 'Content-Type': 'application/json' } });
@@ -70,84 +70,109 @@ serve(async (req) => {
 
     console.log('[get-users] Usuário autorizado como admin');
 
-    // Buscar todos os usuários com paginação
-    let allUsers = [];
-    let page = 1;
-    const perPage = 1000;
-    let hasMore = true;
+    // Ler body (esperamos POST com JSON contendo limit, page, search)
+    const body = await req.json().catch(() => ({}));
+    const requestedLimit = Math.max(1, Math.min(100, Number(body.limit) || 10));
+    const requestedPage = Math.max(1, Number(body.page) || 1);
+    const search = (body.search || '').toString().trim().toLowerCase();
 
-    console.log('[get-users] Iniciando busca de usuários com paginação');
+    console.log('[get-users] Params', { requestedLimit, requestedPage, search });
 
-    while (hasMore) {
-      const { data: { users }, error: usersError } = await supabaseAdmin.auth.admin.listUsers({
-        page,
-        perPage
-      });
-      
-      if (usersError) {
-        console.error('[get-users] Erro ao buscar usuários (paginação):', usersError);
-        throw usersError;
+    // If search is provided, we will scan pages of auth users until we collect enough matches.
+    // For normal listing (no search), we use admin.listUsers with pagination directly.
+
+    let usersForPage = [];
+
+    if (!search) {
+      // Directly request the page from admin.listUsers
+      const perPage = requestedLimit;
+      const page = requestedPage;
+      console.log('[get-users] Listing users page', page, 'perPage', perPage);
+
+      const res = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
+      const users = res?.data?.users || [];
+      usersForPage = users;
+    } else {
+      // Need to search by email (case-insensitive). We'll fetch users in chunks until we have enough matches
+      const perPage = 1000; // chunk size for scanning
+      let page = 1;
+      const matches: any[] = [];
+      let hasMore = true;
+
+      while (hasMore && matches.length < requestedPage * requestedLimit) {
+        const res = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
+        const users = res?.data?.users || [];
+        if (!users || users.length === 0) {
+          hasMore = false;
+          break;
+        }
+
+        for (const u of users) {
+          const email = (u.email || '').toString().toLowerCase();
+          if (email.includes(search)) matches.push(u);
+        }
+
+        hasMore = users.length === perPage;
+        page += 1;
       }
 
-      if (users && users.length > 0) {
-        allUsers = allUsers.concat(users);
-        console.log(`[get-users] Página ${page}: ${users.length} usuários`);
-      }
-
-      hasMore = users && users.length === perPage;
-      page++;
+      // slice the matches to the requested page
+      const start = (requestedPage - 1) * requestedLimit;
+      usersForPage = matches.slice(start, start + requestedLimit);
     }
 
-    console.log(`[get-users] Total de usuários encontrados: ${allUsers.length}`);
+    // If no users for the requested page, return empty list
+    if (!usersForPage || usersForPage.length === 0) {
+      return new Response(JSON.stringify([]), { status: 200, headers: { ...buildCorsHeaders(req), 'Content-Type': 'application/json' } });
+    }
 
+    const userIds = usersForPage.map(u => u.id);
+
+    // Fetch only the profiles for these users
     const { data: profiles, error: profilesError } = await supabaseAdmin
       .from('profiles')
-      .select('id, first_name, last_name, role, force_pix_on_next_purchase, updated_at, created_at');
-      
+      .select('id, first_name, last_name, role, force_pix_on_next_purchase, updated_at, created_at')
+      .in('id', userIds);
+
     if (profilesError) {
       console.error('[get-users] Erro ao buscar perfis:', profilesError);
       throw profilesError;
     }
 
-    console.log(`[get-users] Total de perfis encontrados: ${profiles.length}`);
+    // Fetch orders only for these userIds to compute counts
+    const { data: orders, error: ordersError } = await supabaseAdmin
+      .from('orders')
+      .select('user_id, status')
+      .in('user_id', userIds);
 
-    const { data: allOrders, error: allOrdersError } = await supabaseAdmin
-        .from('orders')
-        .select('user_id, status');
-        
-    if (allOrdersError) {
-      console.error('[get-users] Erro ao buscar pedidos:', allOrdersError);
-      throw allOrdersError;
+    if (ordersError) {
+      console.error('[get-users] Erro ao buscar pedidos:', ordersError);
+      throw ordersError;
     }
-
-    console.log(`[get-users] Total de pedidos encontrados: ${allOrders.length}`);
 
     const orderCountMap = new Map();
     const completedOrderMap = new Map();
-
-    // Status que consideramos como "completo/pago"
     const completedStatuses = ['Finalizada', 'Pago', 'Entregue', 'Concluída'];
 
-    for (const order of allOrders) {
-        orderCountMap.set(order.user_id, (orderCountMap.get(order.user_id) || 0) + 1);
-        if (completedStatuses.includes(order.status)) {
-            completedOrderMap.set(order.user_id, (completedOrderMap.get(order.user_id) || 0) + 1);
-        }
+    for (const order of orders || []) {
+      orderCountMap.set(order.user_id, (orderCountMap.get(order.user_id) || 0) + 1);
+      if (completedStatuses.includes(order.status)) {
+        completedOrderMap.set(order.user_id, (completedOrderMap.get(order.user_id) || 0) + 1);
+      }
     }
 
-    const profilesMap = new Map(profiles.map(p => [p.id, p]));
+    const profilesMap = new Map((profiles || []).map(p => [p.id, p]));
 
-    const clients = allUsers.map(u => {
+    const clients = usersForPage.map(u => {
       const p = profilesMap.get(u.id) || {};
       return {
         id: u.id,
         email: u.email,
-        created_at: p.created_at || u.created_at, 
+        created_at: p.created_at || u.created_at,
         updated_at: p.updated_at || null,
         first_name: p.first_name || null,
         last_name: p.last_name || null,
         role: p.role || 'user',
-        // Use explicit boolean comparison to preserve true/false/null from DB
         force_pix_on_next_purchase: p.force_pix_on_next_purchase === true,
         order_count: orderCountMap.get(u.id) || 0,
         completed_order_count: completedOrderMap.get(u.id) || 0,
