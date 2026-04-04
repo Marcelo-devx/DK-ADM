@@ -10,7 +10,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Truck, CreditCard, QrCode, Ticket, User, Phone, MapPin, Fingerprint, Package, Heart } from "lucide-react";
+import { Truck, CreditCard, QrCode, Ticket, User, Phone, MapPin, Fingerprint, Package, Heart, Mail } from "lucide-react";
 
 interface Order {
   id: number;
@@ -35,6 +35,7 @@ interface Order {
   profiles: {
     first_name: string | null;
     last_name: string | null;
+    email?: string | null;
   } | null;
 }
 
@@ -64,7 +65,7 @@ const fetchOrderItems = async (orderId: number): Promise<OrderItem[]> => {
 const fetchCustomerProfile = async (userId: string) => {
   const { data, error } = await supabase
     .from("profiles")
-    .select("first_name, last_name, phone, cpf_cnpj")
+    .select("first_name, last_name, phone, cpf_cnpj, email")
     .eq("id", userId)
     .single();
   if (error) return null;
@@ -131,6 +132,13 @@ export const OrderDetailModal = ({ order, isOpen, onClose }: OrderDetailModalPro
                     <div className="font-medium text-base">
                         {customer?.first_name || order.profiles?.first_name} {customer?.last_name || order.profiles?.last_name}
                     </div>
+
+                    {/* NEW: mostrar email do cliente, preferindo customer.email */}
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                        <Mail className="h-3 w-3" />
+                        <span>{customer?.email || order.profiles?.email || "Não informado"}</span>
+                    </div>
+
                     {customer?.cpf_cnpj && (
                         <div className="flex items-center gap-2 text-muted-foreground">
                             <Fingerprint className="h-3 w-3" /> 

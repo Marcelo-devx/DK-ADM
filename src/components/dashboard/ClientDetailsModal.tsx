@@ -171,6 +171,12 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                                             <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2 border-b pb-2 mb-2">
                                                 <Fingerprint className="w-4 h-4 text-slate-400" /> Dados Pessoais
                                             </h4>
+
+                                            <div className="text-sm mb-2">
+                                                <p className="text-[10px] text-muted-foreground uppercase">Email</p>
+                                                <p className="font-medium">{profile?.email || client.email || "-"}</p>
+                                            </div>
+
                                             <div className="grid grid-cols-2 gap-y-3 text-sm">
                                                 <div>
                                                     <p className="text-[10px] text-muted-foreground uppercase">CPF / CNPJ</p>
