@@ -62,6 +62,7 @@ interface Order {
     first_name: string | null;
     last_name: string | null;
     phone: string | null;
+    email?: string | null;
   } | null;
   order_items: any[];
 }
@@ -81,7 +82,7 @@ const fetchOrders = async (): Promise<Order[]> => {
   if (userIds.length > 0) {
     const { data: profilesData, error: profilesError } = await supabase
       .from("profiles")
-      .select("id, first_name, last_name, phone")
+      .select("id, first_name, last_name, phone, email")
       .in("id", userIds);
 
     if (profilesError) throw new Error(profilesError.message);
@@ -683,7 +684,7 @@ const OrdersPage = () => {
                                                         id: order.user_id,
                                                         first_name: order.profiles?.first_name,
                                                         last_name: order.profiles?.last_name,
-                                                        email: "", // Será carregado pelo modal
+                                                        email: order.profiles?.email || "", // pass existing email if available
                                                         created_at: null,
                                                         force_pix_on_next_purchase: false,
                                                         order_count: 0, 
