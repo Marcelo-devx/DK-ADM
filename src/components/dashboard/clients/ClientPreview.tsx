@@ -3,17 +3,15 @@
 import React from "react";
 import { Client } from "@/hooks/useClients";
 import { Badge } from "@/components/ui/badge";
-import { User, Mail, Calendar, Shield, Ban, Trash2 } from "lucide-react";
+import { User, Mail, Calendar, Shield, History, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface Props {
   client: Client;
   onOpenDetails: (c: Client) => void;
-  onBlockClient: (c: Client) => void;
-  onDeleteClient: (c: Client) => void;
 }
 
-export default function ClientPreview({ client, onOpenDetails, onBlockClient, onDeleteClient }: Props) {
+export default function ClientPreview({ client, onOpenDetails }: Props) {
   const formatDate = (d?: string | null) => (d ? new Date(d).toLocaleDateString("pt-BR") : "-");
 
   return (
@@ -29,7 +27,7 @@ export default function ClientPreview({ client, onOpenDetails, onBlockClient, on
             <Calendar className="w-4 h-4 ml-4" /> <span>Cliente desde {formatDate(client.created_at)}</span>
           </div>
 
-          <div className="mt-4 grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="p-3 bg-slate-50 rounded border">
               <p className="text-xs text-muted-foreground uppercase">Total Pedidos</p>
               <p className="font-bold">{client.order_count}</p>
@@ -48,25 +46,6 @@ export default function ClientPreview({ client, onOpenDetails, onBlockClient, on
             </div>
             <div className="p-3 bg-slate-50 rounded border flex items-center justify-center">
               <Button variant="ghost" onClick={() => onOpenDetails(client)}>Ver Detalhes</Button>
-            </div>
-            {/* Ações de moderação */}
-            <div className="p-3 bg-slate-50 rounded border flex flex-col gap-2 items-center justify-center">
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full text-orange-600 border-orange-300 hover:bg-orange-50 hover:text-orange-700"
-                onClick={() => onBlockClient(client)}
-              >
-                <Ban className="w-4 h-4 mr-1" /> Bloquear
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full text-red-600 border-red-300 hover:bg-red-50 hover:text-red-700"
-                onClick={() => onDeleteClient(client)}
-              >
-                <Trash2 className="w-4 h-4 mr-1" /> Excluir
-              </Button>
             </div>
           </div>
         </div>
