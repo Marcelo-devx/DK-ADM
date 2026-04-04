@@ -4,7 +4,7 @@ import React, { memo, useCallback } from "react";
 import { Client } from "@/hooks/useClients";
 import { TableCell } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
-import { CalendarDays, Eye, Lock, Unlock, MoreHorizontal, Mail, KeyRound, RotateCcw, CheckCircle } from "lucide-react";
+import { CalendarDays, Eye, Lock, Unlock, MoreHorizontal, Mail, KeyRound, RotateCcw, CheckCircle, Ban, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
@@ -90,6 +90,14 @@ function RowComponent({ client, onTogglePix, toggleLoading, onOpenDetails, onAct
 
                 <DropdownMenuItem onSelect={() => onActionConfirm("send_password_reset", client)}>
                   <KeyRound className="mr-2 h-4 w-4" /> Redefinir Senha
+                </DropdownMenuItem>
+
+                <DropdownMenuItem onSelect={() => onActionConfirm("block_user", client)} className="text-orange-600">
+                  <Ban className="mr-2 h-4 w-4" /> Bloquear Usuário
+                </DropdownMenuItem>
+
+                <DropdownMenuItem onSelect={() => onActionConfirm("delete_user", client)} className="text-red-700 font-semibold">
+                  <Trash2 className="mr-2 h-4 w-4" /> Excluir Usuário
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

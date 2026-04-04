@@ -191,6 +191,43 @@ export function useClients(initialPage = 1) {
     },
   });
 
+  // block user (ban)
+  const blockUserMutation = useMutation({
+    mutationFn: async (targetUserId: string) => {
+      const { data: sd } = await supabase.auth.getSession();
+      const token = sd?.session?.access_token;
+      if (!token) throw new Error("Sessão expirada. Faça login novamente.");
+      const { data, error } = await supabase.functions.invoke("admin-user-actions", {
+        body: { targetUserId, action: "ban_user" },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clients", page, search], exact: true });
+    },
+  });
+
+  // delete user permanently
+  const deleteUserMutation = useMutation({
+    mutationFn: async (targetUserId: string) => {
+      const { data: sd } = await supabase.auth.getSession();
+      const token = sd?.session?.access_token;
+      if (!token) throw new Error("Sessão expirada. Faça login novamente.");
+      const { data, error } = await supabase.functions.invoke("admin-delete-user", {
+        body: { targetUserId },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clients", page, search], exact: true });
+      qc.invalidateQueries({ queryKey: ["clientsTotal"] });
+    },
+  });
+
   // helpers exposed
   return {
     // state
@@ -224,6 +261,14 @@ export function useClients(initialPage = 1) {
     action: actionMutation.mutate,
     actionStatus: {
       isPending: actionMutation.isPending,
+    },
+    blockUser: blockUserMutation.mutate,
+    blockUserStatus: {
+      isPending: blockUserMutation.isPending,
+    },
+    deleteUser: deleteUserMutation.mutate,
+    deleteUserStatus: {
+      isPending: deleteUserMutation.isPending,
     },
   };
 }
