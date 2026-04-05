@@ -65,8 +65,22 @@ const fetchFinancialSummary = async (startDate?: string, endDate?: string) => {
     return acc;
   }, {});
 
-  // 3. Busca produtos e promos para estoque
-  const { data: products } = await supabase.from("products").select("stock_quantity, cost_price, price, name, brand");
+  // 3. Busca produtos COM VARIANTES para cálculo preciso de estoque e custo
+  const { data: products } = await supabase
+    .from("products")
+    .select(`
+      id, 
+      stock_quantity, 
+      cost_price, 
+      price, 
+      name, 
+      brand,
+      variants:product_variants(
+        price, 
+        cost_price, 
+        stock_quantity
+      )
+    `);
   const { data: promos } = await supabase.from("promotions").select("stock_quantity, price, name");
 
   // 4. Busca total de pontos distribuídos (saldo atual de todos os perfis)
@@ -82,9 +96,36 @@ const fetchFinancialSummary = async (startDate?: string, endDate?: string) => {
   const pixRevenue = sales.filter(s => (s.payment_method || 'pix').toLowerCase().includes('pix')).reduce((acc, s) => acc + Number(s.total_price || 0), 0);
   const cardRevenue = sales.filter(s => (s.payment_method || '').toLowerCase().includes('cart')).reduce((acc, s) => acc + Number(s.total_price || 0), 0);
 
-  const inventoryCostValue = (products || []).reduce((acc, p) => acc + (p.stock_quantity * (p.cost_price || 0)), 0);
+  // CALCULA VALOR DE ESTOQUE COM PRECISÃO - CONSIDERA CUSTOS DAS VARIANTES
+  const inventoryCostValue = (products || []).reduce((total, product) => {
+    const variants = Array.isArray(product.variants) ? product.variants : [];
+    
+    if (variants.length > 0) {
+      // Produto com variantes - somar custo individual de cada variação
+      return total + variants.reduce((sum, v) => 
+        sum + (Number(v.stock_quantity) * Number(v.cost_price || 0)), 0
+      );
+    } else {
+      // Produto sem variantes - usar custo base do produto
+      return total + (Number(product.stock_quantity) * Number(product.cost_price || 0));
+    }
+  }, 0);
+
+  // CALCULA POTENCIAL DE RECEITA COM PRECISÃO - CONSIDERA PREÇOS DAS VARIANTES
   const potentialRevenueValue = [
-    ...(products || []).map(p => (p.stock_quantity * (p.price || 0))),
+    ...(products || []).map(product => {
+      const variants = Array.isArray(product.variants) ? product.variants : [];
+      
+      if (variants.length > 0) {
+        // Produto com variantes - somar valor de cada variação
+        return variants.reduce((sum, v) => 
+          sum + (Number(v.stock_quantity) * Number(v.price || 0)), 0
+        );
+      } else {
+        // Produto sem variantes - usar preço base
+        return Number(product.stock_quantity) * Number(product.price || 0);
+      }
+    }),
     ...(promos || []).map(p => (p.stock_quantity * (p.price || 0)))
   ].reduce((acc, val) => acc + val, 0);
 
