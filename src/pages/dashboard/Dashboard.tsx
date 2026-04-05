@@ -71,8 +71,9 @@ const fetchFinancialSummary = async (startDate?: string, endDate?: string) => {
 
   // 4. Busca total de pontos distribuídos (saldo atual de todos os perfis)
   const { data: profilesPoints } = await supabase.from("profiles").select("points");
-  const totalPointsDistributed = (profilesPoints || []).reduce((acc, p) => acc + (p.points || 0), 0);
-  const activeLoyaltyUsers = (profilesPoints || []).filter(p => p.points > 0).length;
+  // Garantir que somamos números (evita concatenação quando points for string)
+  const totalPointsDistributed = (profilesPoints || []).reduce((acc, p) => acc + Number(p.points || 0), 0);
+  const activeLoyaltyUsers = (profilesPoints || []).filter(p => Number(p.points || 0) > 0).length;
 
   const totalRevenue = sales.reduce((acc, s) => acc + Number(s.total_price || 0), 0);
   const totalDiscount = sales.reduce((acc, s) => acc + Number(s.coupon_discount || 0), 0);
