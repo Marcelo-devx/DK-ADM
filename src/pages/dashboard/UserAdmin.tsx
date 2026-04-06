@@ -21,7 +21,6 @@ import {
   Trash2,
   User as UserIcon,
   Calendar,
-  Mail,
 } from "lucide-react";
 import { UserBlockModal } from "@/components/dashboard/UserBlockModal";
 import { UserDeleteModal } from "@/components/dashboard/UserDeleteModal";
@@ -91,6 +90,21 @@ export default function UserAdminPage() {
     });
   };
 
+  const formatCPF = (cpf: string | null) => {
+    if (!cpf) return "-";
+    
+    // Se for CPF (11 dígitos)
+    const cleaned = cpf.replace(/\D/g, '');
+    if (cleaned.length === 11) {
+      return cleaned.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+    }
+    // Se for CNPJ (14 dígitos)
+    if (cleaned.length === 14) {
+      return cleaned.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+    }
+    return cpf;
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -109,7 +123,7 @@ export default function UserAdminPage() {
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar usuário por nome..."
+            placeholder="Buscar usuário por CPF..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-9"
@@ -123,7 +137,7 @@ export default function UserAdminPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Usuário</TableHead>
-              <TableHead>ID</TableHead>
+              <TableHead>CPF/CNPJ</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Data de Cadastro</TableHead>
               <TableHead className="text-right">Ações</TableHead>
@@ -157,18 +171,12 @@ export default function UserAdminPage() {
                         <div className="font-medium">
                           {user.first_name} {user.last_name}
                         </div>
-                        {user.email && (
-                          <div className="text-xs text-muted-foreground flex items-center gap-1">
-                            <Mail className="h-3 w-3" />
-                            {user.email}
-                          </div>
-                        )}
                       </div>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <code className="text-xs bg-slate-100 px-2 py-1 rounded">
-                      {user.id.slice(0, 8)}...
+                    <code className="text-sm bg-slate-100 px-2 py-1 rounded font-mono">
+                      {formatCPF(user.cpf_cnpj)}
                     </code>
                   </TableCell>
                   <TableCell>

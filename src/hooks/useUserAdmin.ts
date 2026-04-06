@@ -5,6 +5,7 @@ interface User {
   id: string;
   first_name: string | null;
   last_name: string | null;
+  cpf_cnpj: string | null;
   email?: string;
   is_blocked: boolean;
   created_at: string;
@@ -14,20 +15,20 @@ interface User {
 export const useUserAdmin = (searchTerm: string = '') => {
   const queryClient = useQueryClient();
 
-  // Buscar usuários por nome - busca no banco de dados
+  // Buscar usuários por CPF - busca no banco de dados
   const searchUsers = useQuery<User[], Error>({
     queryKey: ['adminUsers', searchTerm],
     queryFn: async () => {
       let query = supabase
         .from('profiles')
-        .select('id, first_name, last_name, is_blocked, created_at, role')
+        .select('id, first_name, last_name, cpf_cnpj, is_blocked, created_at, role')
         .order('created_at', { ascending: false });
 
-      // Se tiver termo de busca, filtrar no banco
+      // Se tiver termo de busca, filtrar no banco por CPF
       if (searchTerm && searchTerm.trim()) {
         const term = searchTerm.trim().toLowerCase();
         query = query.or(
-          `first_name.ilike.%${term}%,last_name.ilike.%${term}%`
+          `cpf_cnpj.ilike.%${term}%`
         );
       }
       // SEM LIMITE - busca todos os usuários
