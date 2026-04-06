@@ -28,7 +28,7 @@ interface OrderHistoryEntry {
   old_value: string | null;
   new_value: string | null;
   changed_at: string;
-  change_type: 'status' | 'value' | 'address' | 'cancel';
+  change_type: 'status' | 'value' | 'address' | 'cancel' | 'delete';
   reason: string | null;
   profiles: {
     id: string;
@@ -36,6 +36,15 @@ interface OrderHistoryEntry {
     last_name: string | null;
     email: string | null;
   } | null;
+}
+
+export interface OrderFilters {
+  clientName: string;
+  email: string;
+  phone: string;
+  status: string;
+  dateStart: string;
+  dateEnd: string;
 }
 
 export const useOrderAdmin = () => {
@@ -65,6 +74,47 @@ export const useOrderAdmin = () => {
     }
 
     return order as Order;
+  };
+
+  // Busca avançada de pedidos
+  const searchOrdersAdvanced = async (filters: OrderFilters): Promise<Order[]> => {
+    let query = supabase
+      .from('orders')
+      .select('*, profiles(first_name, last_name, email, phone)')
+      .order('created_at', { ascending: false });
+
+    // Aplicar filtros
+    if (filters.clientName) {
+      query = query.or(`profiles.first_name.ilike.%${filters.clientName}%,profiles.last_name.ilike.%${filters.clientName}%`);
+    }
+
+    if (filters.email) {
+      query = query.ilike('profiles.email', `%${filters.email}%`);
+    }
+
+    if (filters.phone) {
+      query = query.ilike('profiles.phone', `%${filters.phone}%`);
+    }
+
+    if (filters.status) {
+      query = query.eq('status', filters.status);
+    }
+
+    if (filters.dateStart) {
+      query = query.gte('created_at', filters.dateStart);
+    }
+
+    if (filters.dateEnd) {
+      const endDate = new Date(filters.dateEnd);
+      endDate.setHours(23, 59, 59, 999);
+      query = query.lte('created_at', endDate.toISOString());
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+
+    return (data || []) as Order[];
   };
 
   // Buscar histórico do pedido
@@ -113,10 +163,29 @@ export const useOrderAdmin = () => {
     },
   });
 
+  // Excluir pedido
+  const deleteOrderMutation = useMutation({
+    mutationFn: async ({ orderId, reason }: { orderId: number; reason: string }) => {
+      const { data, error } = await supabase.functions.invoke('admin-delete-order', {
+        body: { orderId, reason }
+      });
+      
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminOrder'] });
+      queryClient.invalidateQueries({ queryKey: ['ordersAdmin'] });
+    },
+  });
+
   return {
     searchOrderById,
+    searchOrdersAdvanced,
     getOrderHistory,
     updateOrderMutation,
     cancelOrderMutation,
+    deleteOrderMutation,
   };
 };
