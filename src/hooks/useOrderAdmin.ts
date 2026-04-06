@@ -17,6 +17,7 @@ interface Order {
   profiles: {
     first_name: string | null;
     last_name: string | null;
+    email: string | null;
     phone: string | null;
   } | null;
 }
@@ -60,42 +61,56 @@ export const useOrderAdmin = () => {
   });
 
   const searchOrderById = async (orderId: number): Promise<Order | null> => {
-    const { data: order, error } = await supabase
+    // Busca pedido sem join (evita erro de schema cache)
+    const { data: orders, error: ordersError } = await supabase
       .from('orders')
-      .select('*, profiles(first_name, last_name, phone)')
-      .eq('id', orderId)
-      .single();
+      .select('*')
+      .eq('id', orderId);
 
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return null; // Not found
-      }
-      throw error;
+    if (ordersError) {
+      throw ordersError;
     }
 
-    return order as Order;
+    if (!orders || orders.length === 0) {
+      return null;
+    }
+
+    const order = orders[0];
+
+    // Busca profile separadamente se houver user_id
+    let profile = null;
+    if (order.user_id) {
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name, phone')
+        .eq('id', order.user_id)
+        .single();
+
+      if (!profilesError && profiles) {
+        profile = profiles;
+      }
+    }
+
+    // Retorna o pedido com os dados do profile
+    return {
+      ...order,
+      profiles: profile,
+    } as Order;
   };
 
   // Busca avançada de pedidos
   const searchOrdersAdvanced = async (filters: OrderFilters): Promise<Order[]> => {
+    // Busca pedidos sem join (evita erro de schema cache)
     let query = supabase
       .from('orders')
-      .select('*, profiles(first_name, last_name, email, phone)')
+      .select('*')
       .order('created_at', { ascending: false });
 
-    // Aplicar filtros
-    if (filters.clientName) {
-      query = query.or(`profiles.first_name.ilike.%${filters.clientName}%,profiles.last_name.ilike.%${filters.clientName}%`);
-    }
-
-    if (filters.email) {
-      query = query.ilike('profiles.email', `%${filters.email}%`);
-    }
-
-    if (filters.phone) {
-      query = query.ilike('profiles.phone', `%${filters.phone}%`);
-    }
-
+    // Aplicar filtros por nome
+    // Como não podemos usar join no select, vamos buscar todos e filtrar no código
+    // ou fazer uma busca separada de profiles por email/telefone
+    
+    // Aplicar filtros diretos na tabela orders
     if (filters.status) {
       query = query.eq('status', filters.status);
     }
@@ -110,11 +125,75 @@ export const useOrderAdmin = () => {
       query = query.lte('created_at', endDate.toISOString());
     }
 
-    const { data, error } = await query;
+    const { data: orders, error: ordersError } = await query;
 
-    if (error) throw error;
+    if (ordersError) throw ordersError;
 
-    return (data || []) as Order[];
+    if (!orders || orders.length === 0) {
+      return [];
+    }
+
+    // Coleta user_ids únicos
+    const userIds = [...new Set(orders.map(o => o.user_id).filter(Boolean))];
+
+    // Busca profiles separadamente
+    let profiles: any[] = [];
+    if (userIds.length > 0) {
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name, email, phone')
+        .in('id', userIds);
+
+      if (!profilesError && profilesData) {
+        profiles = profilesData;
+      }
+    }
+
+    // Cria mapa de profiles
+    const profilesMap = new Map(profiles.map(p => [p.id, p]));
+
+    // Faz o merge dos dados
+    let mergedOrders = orders.map(order => ({
+      ...order,
+      profiles: profilesMap.get(order.user_id) || null,
+    }));
+
+    // Aplica filtros que dependem de profiles (cliente, email, telefone)
+    if (filters.clientName) {
+      const searchTerm = filters.clientName.toLowerCase();
+      mergedOrders = mergedOrders.filter(order => {
+        const profile = order.profiles;
+        if (!profile) return false;
+        const firstName = (profile.first_name || '').toLowerCase();
+        const lastName = (profile.last_name || '').toLowerCase();
+        const fullName = `${firstName} ${lastName}`;
+        return firstName.includes(searchTerm) || 
+               lastName.includes(searchTerm) || 
+               fullName.includes(searchTerm);
+      });
+    }
+
+    if (filters.email) {
+      const searchTerm = filters.email.toLowerCase();
+      mergedOrders = mergedOrders.filter(order => {
+        const profile = order.profiles;
+        if (!profile) return false;
+        const email = (profile.email || '').toLowerCase();
+        return email.includes(searchTerm);
+      });
+    }
+
+    if (filters.phone) {
+      const searchTerm = filters.phone.replace(/\D/g, ''); // Remove não-dígitos
+      mergedOrders = mergedOrders.filter(order => {
+        const profile = order.profiles;
+        if (!profile) return false;
+        const phone = (profile.phone || '').replace(/\D/g, '');
+        return phone.includes(searchTerm);
+      });
+    }
+
+    return mergedOrders as Order[];
   };
 
   // Buscar histórico do pedido
