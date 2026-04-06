@@ -1,0 +1,122 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+
+interface Order {
+  id: number;
+  created_at: string;
+  total_price: number;
+  shipping_cost: number;
+  coupon_discount: number;
+  donation_amount: number;
+  status: string;
+  delivery_status: string;
+  user_id: string;
+  delivery_info: string | null;
+  payment_method: string | null;
+  shipping_address: any;
+  profiles: {
+    first_name: string | null;
+    last_name: string | null;
+    phone: string | null;
+  } | null;
+}
+
+interface OrderHistoryEntry {
+  id: number;
+  order_id: number;
+  field_name: string;
+  old_value: string | null;
+  new_value: string | null;
+  changed_at: string;
+  change_type: 'status' | 'value' | 'address' | 'cancel';
+  reason: string | null;
+  profiles: {
+    id: string;
+    first_name: string | null;
+    last_name: string | null;
+    email: string | null;
+  } | null;
+}
+
+export const useOrderAdmin = () => {
+  const queryClient = useQueryClient();
+
+  // Buscar pedido por ID
+  const searchOrder = useQuery<Order, Error>({
+    queryKey: ['adminOrder'],
+    queryFn: async () => {
+      throw new Error('Use searchOrderById instead');
+    },
+    enabled: false,
+  });
+
+  const searchOrderById = async (orderId: number): Promise<Order | null> => {
+    const { data: order, error } = await supabase
+      .from('orders')
+      .select('*, profiles(first_name, last_name, phone)')
+      .eq('id', orderId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return null; // Not found
+      }
+      throw error;
+    }
+
+    return order as Order;
+  };
+
+  // Buscar histórico do pedido
+  const getOrderHistory = async (orderId: number): Promise<OrderHistoryEntry[]> => {
+    const { data, error } = await supabase.functions.invoke('admin-get-order-history', {
+      body: { orderId }
+    });
+
+    if (error) throw error;
+    if (!data?.success) throw new Error(data?.error || 'Error fetching history');
+
+    return data.history || [];
+  };
+
+  // Atualizar pedido
+  const updateOrderMutation = useMutation({
+    mutationFn: async ({ orderId, updates, reason }: { orderId: number; updates: any; reason: string }) => {
+      const { data, error } = await supabase.functions.invoke('admin-update-order', {
+        body: { orderId, updates, reason }
+      });
+      
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminOrder'] });
+      queryClient.invalidateQueries({ queryKey: ['ordersAdmin'] });
+    },
+  });
+
+  // Cancelar pedido
+  const cancelOrderMutation = useMutation({
+    mutationFn: async ({ orderId, reason, returnStock }: { orderId: number; reason: string; returnStock: boolean }) => {
+      const { data, error } = await supabase.functions.invoke('admin-cancel-order', {
+        body: { orderId, reason, returnStock }
+      });
+      
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminOrder'] });
+      queryClient.invalidateQueries({ queryKey: ['ordersAdmin'] });
+    },
+  });
+
+  return {
+    searchOrderById,
+    getOrderHistory,
+    updateOrderMutation,
+    cancelOrderMutation,
+  };
+};

@@ -40,7 +40,9 @@ import {
   Box,
   Globe,
   Gift,
-  Award
+  Award,
+  ShieldAlert,
+  FileEdit
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -186,6 +188,15 @@ const Sidebar = () => {
         </NavLink>
         <NavLink to="/dashboard/reviews" className={navLinkClass}>
           {({ isActive }) => (<><Star className={iconClass("text-amber-600", isActive)} />Avaliações</>)}
+        </NavLink>
+
+        {/* ADMINISTRAÇÃO */}
+        <p className={sectionTitleClass}>Administração</p>
+        <NavLink to="/dashboard/user-admin" className={navLinkClass}>
+          {({ isActive }) => (<><ShieldAlert className={iconClass("text-red-600", isActive)} />Admin Usuários</>)}
+        </NavLink>
+        <NavLink to="/dashboard/order-admin" className={navLinkClass}>
+          {({ isActive }) => (<><FileEdit className={iconClass("text-red-600", isActive)} />Admin Pedidos</>)}
         </NavLink>
 
         {/* SISTEMA */}
