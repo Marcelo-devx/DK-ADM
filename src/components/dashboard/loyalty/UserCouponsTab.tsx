@@ -5,10 +5,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { TicketCheck, RefreshCw, Loader2, AlertCircle, Trash2 } from "lucide-react";
+import { TicketCheck, RefreshCw, Loader2, AlertCircle, Trash2, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { showSuccess, showError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
+import { useState } from "react";
 
 // Interface específica para o retorno da RPC (Flat structure)
 interface UserCouponRPC {
@@ -35,6 +37,8 @@ const fetchUserCoupons = async () => {
 
 export const UserCouponsTab = ({ className }: { className?: string }) => {
   const queryClient = useQueryClient();
+  const [searchTerm, setSearchTerm] = useState("");
+  
   const { data: userCoupons, isLoading, isError, refetch } = useQuery({ 
     queryKey: ["adminUserCouponsV2"], 
     queryFn: fetchUserCoupons 
@@ -53,10 +57,29 @@ export const UserCouponsTab = ({ className }: { className?: string }) => {
     onError: (err: any) => showError(err.message),
   });
 
+  // Filtrar cupons por nome ou CPF
+  const filteredCoupons = userCoupons?.filter((coupon) => {
+    if (!searchTerm.trim()) return true;
+    
+    const searchLower = searchTerm.toLowerCase();
+    
+    // Busca por nome completo ou parcial
+    const fullName = `${coupon.profile_first_name || ''} ${coupon.profile_last_name || ''}`.toLowerCase();
+    const firstName = (coupon.profile_first_name || '').toLowerCase();
+    const lastName = (coupon.profile_last_name || '').toLowerCase();
+    
+    // Tenta buscar por CPF (se estivesse disponível na tabela user_coupons)
+    // Nota: Para incluir CPF na busca, precisariamos buscar de profiles
+    
+    return fullName.includes(searchLower) || 
+           firstName.includes(searchLower) || 
+           lastName.includes(searchLower);
+  });
+
   return (
     <Card className={cn("mt-6", className)}>
         <CardHeader>
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-start">
                 <div>
                     <CardTitle className="text-base flex items-center gap-2"><TicketCheck className="w-5 h-5 text-emerald-600" /> Histórico Completo de Resgates</CardTitle>
                     <CardDescription>Visualize o histórico de uso e resgate de pontos por cupons.</CardDescription>
@@ -64,6 +87,24 @@ export const UserCouponsTab = ({ className }: { className?: string }) => {
                 <Button variant="outline" size="sm" onClick={() => refetch()}>
                     <RefreshCw className="w-4 h-4 mr-2" /> Atualizar Lista
                 </Button>
+            </div>
+            
+            {/* Campo de busca */}
+            <div className="mt-4">
+                <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                        placeholder="Buscar cliente por nome..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-10"
+                    />
+                </div>
+                {searchTerm && filteredCoupons && (
+                    <p className="text-xs text-gray-500 mt-1">
+                        {filteredCoupons.length} cupom(ns) encontrado(s) para "{searchTerm}"
+                    </p>
+                )}
             </div>
         </CardHeader>
         <CardContent>
@@ -93,10 +134,12 @@ export const UserCouponsTab = ({ className }: { className?: string }) => {
                                     </div>
                                 </TableCell>
                             </TableRow>
-                        ) : userCoupons?.length === 0 ? (
-                            <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-10">Nenhum cupom resgatado ainda.</TableCell></TableRow>
+                        ) : filteredCoupons?.length === 0 ? (
+                            <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-10">
+                                {searchTerm ? `Nenhum cupom encontrado para "${searchTerm}"` : "Nenhum cupom resgatado ainda."}
+                            </TableCell></TableRow>
                         ) : (
-                            userCoupons?.map((uc) => (
+                            filteredCoupons?.map((uc) => (
                                 <TableRow key={uc.id} className={uc.is_used ? "opacity-60 bg-gray-50" : ""}>
                                     <TableCell className="font-medium">
                                         <div className="flex flex-col">

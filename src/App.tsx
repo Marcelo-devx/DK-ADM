@@ -45,6 +45,7 @@ import Donations from "./pages/dashboard/Donations";
 import Crypto from "./pages/dashboard/Crypto";
 import LoyaltyManagement from "./pages/dashboard/LoyaltyManagement";
 import UserCouponsHistory from "./pages/dashboard/UserCouponsHistory";
+import CouponManagement from "./pages/dashboard/CouponManagement";
 import DeliveryRoutes from "./pages/dashboard/DeliveryRoutes";
 import SpokeExport from "./pages/dashboard/SpokeExport";
 import ClubDKAdmin from "./pages/dashboard/ClubDKAdmin";
@@ -114,6 +115,7 @@ const App = () => (
               <Route path="loyalty-management" element={<LoyaltyManagement />} />
               <Route path="club-dk" element={<ClubDKAdmin />} />
               <Route path="user-coupons-history" element={<UserCouponsHistory />} />
+              <Route path="coupon-management" element={<CouponManagement />} />
               <Route path="delivery-routes" element={<DeliveryRoutes />} />
               <Route path="spoke-export" element={<SpokeExport />} />
               <Route path="bulk-add-points" element={<BulkAddPoints />} />

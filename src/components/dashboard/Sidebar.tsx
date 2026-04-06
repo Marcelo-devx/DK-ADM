@@ -159,6 +159,9 @@ const Sidebar = () => {
 
         {/* MARKETING */}
         <p className={sectionTitleClass}>Marketing</p>
+        <NavLink to="/dashboard/coupon-management" className={navLinkClass}>
+          {({ isActive }) => (<><Gift className={iconClass("text-purple-600", isActive)} />Gestão de Cupons</>)}
+        </NavLink>
         <NavLink to="/dashboard/club-dk" className={navLinkClass}>
           {({ isActive }) => (<><Crown className={iconClass("text-pink-600", isActive)} />Club DK (Fidelidade)</>)}
         </NavLink>
