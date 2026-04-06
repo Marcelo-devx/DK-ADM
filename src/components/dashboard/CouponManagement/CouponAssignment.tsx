@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { AlertCircle, Gift, CheckCircle, Loader2 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
+import { translateDatabaseError } from "@/utils/error-handler";
 import { ClientData } from "./ClientSearch";
 
 interface Coupon {
@@ -30,79 +31,135 @@ export const CouponAssignment = ({ client }: CouponAssignmentProps) => {
   const queryClient = useQueryClient();
 
   // Buscar cupons disponíveis para atribuição
-  const { data: coupons, isLoading: loadingCoupons } = useQuery({
+  const { data: coupons, isLoading: loadingCoupons, refetch: refetchCoupons } = useQuery({
     queryKey: ["availableCoupons"],
     queryFn: async () => {
+      console.log('[CouponAssignment] Buscando cupons disponíveis...');
       const { data, error } = await supabase
         .from("coupons")
         .select("*")
         .eq("is_active", true)
         .order("name");
-      if (error) throw error;
+      
+      if (error) {
+        console.error('[CouponAssignment] Erro ao buscar cupons:', error);
+        throw new Error(translateDatabaseError(error));
+      }
+      
+      console.log('[CouponAssignment] Cupons carregados:', data?.length || 0);
       return data as Coupon[];
     },
+    refetchOnWindowFocus: false,
   });
 
   // Mutação para atribuir cupom a um cliente específico
   const assignCouponMutation = useMutation({
     mutationFn: async (couponId: number) => {
-      if (!client?.user_id) throw new Error("Nenhum cliente selecionado");
-      const { data, error } = await supabase.rpc("assign_coupon_to_user", {
-        p_user_id: client.user_id,
-        p_coupon_id: couponId,
-        p_expires_days: 90,
+      if (!client?.user_id) {
+        throw new Error('Nenhum cliente selecionado. Por favor, selecione um cliente antes de atribuir o cupom.');
+      }
+      
+      console.log('[CouponAssignment] Iniciando atribuição de cupom:', {
+        couponId,
+        userId: client.user_id,
+        clientName: `${client.first_name} ${client.last_name}`
       });
-      if (error) throw error;
-      return data;
+      
+      try {
+        const { data, error } = await supabase.rpc("assign_coupon_to_user", {
+          p_user_id: client.user_id,
+          p_coupon_id: couponId,
+          p_expires_days: 90,
+        });
+        
+        if (error) {
+          console.error('[CouponAssignment] Erro ao atribuir cupom:', error);
+          throw new Error(translateDatabaseError(error));
+        }
+        
+        console.log('[CouponAssignment] Cupom atribuído com sucesso:', data);
+        return data;
+      } catch (err: any) {
+        const translatedError = translateDatabaseError(err);
+        console.error('[CouponAssignment] Erro traduzido:', translatedError);
+        throw new Error(translatedError);
+      }
     },
     onSuccess: (message) => {
-      showSuccess(message);
+      const successMessage = message || 'Cupom atribuído com sucesso ao cliente!';
+      showSuccess(successMessage);
       setSelectedCouponId(null);
       queryClient.invalidateQueries({ queryKey: ["adminUserCouponsV2"] });
+      queryClient.invalidateQueries({ queryKey: ["availableCoupons"] });
     },
     onError: (err: any) => {
-      showError(err.message || "Erro ao atribuir cupom");
+      const errorMessage = translateDatabaseError(err);
+      showError(errorMessage || 'Erro ao atribuir cupom. Por favor, tente novamente.');
     },
   });
 
   // Mutação para atribuir cupom a TODOS os clientes
   const assignToAllMutation = useMutation({
     mutationFn: async (couponId: number) => {
-      const { data, error } = await supabase.rpc("assign_coupon_to_all_clients", {
-        p_coupon_id: couponId,
-      });
-      if (error) throw error;
-      return data;
+      console.log('[CouponAssignment] Iniciando atribuição de cupom para todos os clientes:', { couponId });
+      
+      try {
+        const { data, error } = await supabase.rpc("assign_coupon_to_all_clients", {
+          p_coupon_id: couponId,
+        });
+        
+        if (error) {
+          console.error('[CouponAssignment] Erro ao atribuir cupom para todos:', error);
+          throw new Error(translateDatabaseError(error));
+        }
+        
+        console.log('[CouponAssignment] Cupom atribuído a todos com sucesso:', data);
+        return data;
+      } catch (err: any) {
+        const translatedError = translateDatabaseError(err);
+        console.error('[CouponAssignment] Erro traduzido:', translatedError);
+        throw new Error(translatedError);
+      }
     },
     onSuccess: (message) => {
-      showSuccess(message);
+      const successMessage = message || 'Cupom atribuído a todos os clientes com sucesso!';
+      showSuccess(successMessage);
       setSelectedCouponId(null);
       queryClient.invalidateQueries({ queryKey: ["adminUserCouponsV2"] });
+      queryClient.invalidateQueries({ queryKey: ["availableCoupons"] });
     },
     onError: (err: any) => {
-      showError(err.message || "Erro ao atribuir cupom a todos");
+      const errorMessage = translateDatabaseError(err);
+      showError(errorMessage || 'Erro ao atribuir cupom a todos. Por favor, tente novamente.');
     },
   });
 
   const handleAssignToClient = () => {
     if (!selectedCouponId) return;
-    if (confirm(`Deseja atribuir o cupom selecionado para ${client?.first_name} ${client?.last_name}?`)) {
+    
+    if (!client) {
+      showError('Selecione um cliente para atribuir o cupom.');
+      return;
+    }
+    
+    const confirmMessage = `Deseja atribuir o cupom selecionado para ${client.first_name} ${client.last_name}?`;
+    if (confirm(confirmMessage)) {
       assignCouponMutation.mutate(selectedCouponId);
     }
   };
 
   const handleAssignToAll = () => {
     if (!selectedCouponId) return;
-    if (
-      confirm(
-        "ATENÇÃO: Isso atribuirá o cupom a TODOS os clientes ativos do sistema. Deseja continuar?"
-      )
-    ) {
+    
+    const confirmMessage = "ATENÇÃO: Isso atribuirá o cupom a TODOS os clientes ativos do sistema. Deseja continuar?";
+    if (confirm(confirmMessage)) {
       assignToAllMutation.mutate(selectedCouponId);
     }
   };
 
   const selectedCoupon = coupons?.find((c) => c.id === selectedCouponId);
+
+  const isProcessing = assignCouponMutation.isPending || assignToAllMutation.isPending;
 
   return (
     <Card>
@@ -122,14 +179,16 @@ export const CouponAssignment = ({ client }: CouponAssignmentProps) => {
           <Select
             value={selectedCouponId?.toString() || ""}
             onValueChange={(value) => setSelectedCouponId(parseInt(value))}
+            disabled={loadingCoupons}
           >
-            <SelectTrigger disabled={loadingCoupons}>
+            <SelectTrigger disabled={loadingCoupons || isProcessing}>
               <SelectValue placeholder="Escolha um cupom..." />
             </SelectTrigger>
             <SelectContent>
               {loadingCoupons ? (
                 <div className="flex items-center justify-center p-4">
                   <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="ml-2 text-sm">Carregando cupons...</span>
                 </div>
               ) : coupons && coupons.length > 0 ? (
                 coupons.map((coupon) => (
@@ -150,7 +209,16 @@ export const CouponAssignment = ({ client }: CouponAssignmentProps) => {
                   </SelectItem>
                 ))
               ) : (
-                <div className="p-2 text-sm text-gray-500">Nenhum cupom disponível</div>
+                <div className="p-2 text-sm text-gray-500">
+                  Nenhum cupom disponível
+                  <Button
+                    variant="link"
+                    className="p-0 h-auto text-purple-600"
+                    onClick={() => refetchCoupons()}
+                  >
+                    Recarregar lista
+                  </Button>
+                </div>
               )}
             </SelectContent>
           </Select>
@@ -196,29 +264,39 @@ export const CouponAssignment = ({ client }: CouponAssignmentProps) => {
         <div className="space-y-3 pt-2">
           <Button
             onClick={handleAssignToClient}
-            disabled={!selectedCouponId || !client || assignCouponMutation.isPending}
+            disabled={!selectedCouponId || !client || isProcessing}
             className="w-full"
           >
-            {assignCouponMutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            {isProcessing ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                Processando...
+              </>
             ) : (
-              <CheckCircle className="h-4 w-4 mr-2" />
+              <>
+                <CheckCircle className="h-4 w-4 mr-2" />
+                Atribuir ao Cliente Selecionado
+              </>
             )}
-            Atribuir ao Cliente Selecionado
           </Button>
 
           <Button
             onClick={handleAssignToAll}
-            disabled={!selectedCouponId || assignToAllMutation.isPending}
+            disabled={!selectedCouponId || isProcessing}
             variant="outline"
             className="w-full"
           >
-            {assignToAllMutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            {isProcessing ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                Processando...
+              </>
             ) : (
-              <Gift className="h-4 w-4 mr-2" />
+              <>
+                <Gift className="h-4 w-4 mr-2" />
+                Atribuir a Todos os Clientes
+              </>
             )}
-            Atribuir a Todos os Clientes
           </Button>
         </div>
 

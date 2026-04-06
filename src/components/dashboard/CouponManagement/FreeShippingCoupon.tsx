@@ -6,8 +6,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { Truck, CheckCircle, Loader2, Gift } from "lucide-react";
+import { Truck, CheckCircle, Loader2, Gift, AlertCircle } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
+import { translateDatabaseError } from "@/utils/error-handler";
 import { ClientData } from "./ClientSearch";
 
 interface FreeShippingCouponProps {
@@ -21,51 +22,76 @@ export const FreeShippingCoupon = ({ client }: FreeShippingCouponProps) => {
   // Mutação para atribuir cupom de frete grátis
   const assignFreeShippingMutation = useMutation({
     mutationFn: async () => {
+      console.log('[FreeShippingCoupon] Buscando cupom de frete grátis...');
+      
       // Buscar o cupom FRETEGRATIS
-      const { data: couponData } = await supabase
+      const { data: couponData, error: fetchError } = await supabase
         .from("coupons")
         .select("id")
         .eq("name", "FRETEGRATIS")
         .eq("is_active", true)
         .single();
 
-      if (!couponData) {
-        throw new Error("Cupom de frete grátis não encontrado ou inativo");
+      if (fetchError) {
+        console.error('[FreeShippingCoupon] Erro ao buscar cupom de frete grátis:', fetchError);
+        throw new Error(translateDatabaseError(fetchError));
       }
 
+      if (!couponData) {
+        console.error('[FreeShippingCoupon] Cupom de frete grátis não encontrado');
+        throw new Error("Cupom de frete grátis não encontrado ou inativo. Por favor, crie o cupom 'FRETEGRATIS' primeiro.");
+      }
+
+      console.log('[FreeShippingCoupon] Cupom encontrado:', couponData.id);
+
       if (applyToAll) {
+        console.log('[FreeShippingCoupon] Atribuindo frete grátis a todos os clientes...');
         // Atribuir a todos
         const { data, error } = await supabase.rpc("assign_coupon_to_all_clients", {
           p_coupon_id: couponData.id,
         });
-        if (error) throw error;
+        if (error) {
+          console.error('[FreeShippingCoupon] Erro ao atribuir a todos:', error);
+          throw new Error(translateDatabaseError(error));
+        }
         return data;
       } else {
         // Atribuir a cliente específico
         if (!client?.user_id) {
-          throw new Error("Selecione um cliente para atribuir o cupom");
+          throw new Error("Selecione um cliente para atribuir o cupom de frete grátis.");
         }
+        
+        console.log('[FreeShippingCoupon] Atribuindo frete grátis ao cliente:', {
+          userId: client.user_id,
+          clientName: `${client.first_name} ${client.last_name}`
+        });
+        
         const { data, error } = await supabase.rpc("assign_coupon_to_user", {
           p_user_id: client.user_id,
           p_coupon_id: couponData.id,
           p_expires_days: 90,
         });
-        if (error) throw error;
+        if (error) {
+          console.error('[FreeShippingCoupon] Erro ao atribuir ao cliente:', error);
+          throw new Error(translateDatabaseError(error));
+        }
         return data;
       }
     },
     onSuccess: (message) => {
-      showSuccess(message);
+      const successMessage = message || 'Cupom de frete grátis atribuído com sucesso!';
+      showSuccess(successMessage);
       queryClient.invalidateQueries({ queryKey: ["adminUserCouponsV2"] });
     },
     onError: (err: any) => {
-      showError(err.message || "Erro ao atribuir cupom de frete grátis");
+      const errorMessage = translateDatabaseError(err);
+      showError(errorMessage || 'Erro ao atribuir cupom de frete grátis. Por favor, tente novamente.');
     },
   });
 
   const handleAssign = () => {
     if (!applyToAll && !client) {
-      showError("Selecione um cliente para atribuir o cupom de frete grátis");
+      showError("Selecione um cliente para atribuir o cupom de frete grátis.");
       return;
     }
 
@@ -77,6 +103,8 @@ export const FreeShippingCoupon = ({ client }: FreeShippingCouponProps) => {
       assignFreeShippingMutation.mutate();
     }
   };
+
+  const isProcessing = assignFreeShippingMutation.isPending;
 
   return (
     <Card className="border-blue-200 bg-blue-50">
@@ -108,7 +136,7 @@ export const FreeShippingCoupon = ({ client }: FreeShippingCouponProps) => {
             id="apply-to-all"
             checked={applyToAll}
             onCheckedChange={setApplyToAll}
-            disabled={assignFreeShippingMutation.isPending}
+            disabled={isProcessing}
           />
         </div>
 
@@ -123,9 +151,12 @@ export const FreeShippingCoupon = ({ client }: FreeShippingCouponProps) => {
           </div>
         ) : !applyToAll && !client ? (
           <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-            <p className="text-sm text-yellow-800">
-              ⚠️ Selecione um cliente acima ou ative a opção "Aplicar para todos" para continuar.
-            </p>
+            <div className="flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+              <p className="text-sm text-yellow-800">
+                ⚠️ Selecione um cliente acima ou ative a opção "Aplicar para todos" para continuar.
+              </p>
+            </div>
           </div>
         ) : null}
 
@@ -133,13 +164,12 @@ export const FreeShippingCoupon = ({ client }: FreeShippingCouponProps) => {
         <Button
           onClick={handleAssign}
           disabled={
-            assignFreeShippingMutation.isPending ||
-            (!applyToAll && !client) ||
-            (applyToAll && !confirm)
+            isProcessing ||
+            (!applyToAll && !client)
           }
           className="w-full bg-blue-600 hover:bg-blue-700"
         >
-          {assignFreeShippingMutation.isPending ? (
+          {isProcessing ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
               Atribuindo...

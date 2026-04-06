@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { RefreshCw, CheckCircle, Loader2, AlertTriangle, Sparkles } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
+import { translateDatabaseError } from "@/utils/error-handler";
 
 interface Coupon {
   id: number;
@@ -26,29 +27,45 @@ export const FirstBuyCoupon = () => {
   const { data: coupon, isLoading, refetch } = useQuery({
     queryKey: ["firstBuyCoupon"],
     queryFn: async () => {
+      console.log('[FirstBuyCoupon] Buscando cupom PRIMEIRACOMPRA...');
       const { data, error } = await supabase
         .from("coupons")
         .select("*")
         .eq("name", "PRIMEIRACOMPRA")
         .maybeSingle();
-      if (error) throw error;
+      
+      if (error) {
+        console.error('[FirstBuyCoupon] Erro ao buscar cupom:', error);
+        throw new Error(translateDatabaseError(error));
+      }
+      
+      console.log('[FirstBuyCoupon] Cupom encontrado:', !!data);
       return data as Coupon | null;
     },
+    refetchOnWindowFocus: false,
   });
 
   // Mutação para recriar o cupom
   const recreateCouponMutation = useMutation({
     mutationFn: async () => {
+      console.log('[FirstBuyCoupon] Iniciando recriação do cupom PRIMEIRACOMPRA...');
+      
       // Primeiro, deletar o cupom existente
       if (coupon) {
+        console.log('[FirstBuyCoupon] Deletando cupom existente...');
         const { error: deleteError } = await supabase
           .from("coupons")
           .delete()
           .eq("name", "PRIMEIRACOMPRA");
-        if (deleteError) throw deleteError;
+        
+        if (deleteError) {
+          console.error('[FirstBuyCoupon] Erro ao deletar cupom existente:', deleteError);
+          throw new Error(translateDatabaseError(deleteError));
+        }
       }
 
       // Criar novo cupom
+      console.log('[FirstBuyCoupon] Criando novo cupom...');
       const { data, error } = await supabase.from("coupons").insert({
         name: "PRIMEIRACOMPRA",
         description: "Desconto de 5% para sua primeira compra! Bem-vindo(a) à Tabacaria DK!",
@@ -60,7 +77,13 @@ export const FirstBuyCoupon = () => {
         discount_type: "product",
         max_uses_per_user: 1,
       });
-      if (error) throw error;
+      
+      if (error) {
+        console.error('[FirstBuyCoupon] Erro ao criar cupom:', error);
+        throw new Error(translateDatabaseError(error));
+      }
+      
+      console.log('[FirstBuyCoupon] Cupom criado com sucesso');
       return data;
     },
     onSuccess: () => {
@@ -68,7 +91,8 @@ export const FirstBuyCoupon = () => {
       queryClient.invalidateQueries({ queryKey: ["firstBuyCoupon"] });
     },
     onError: (err: any) => {
-      showError(err.message || "Erro ao criar cupom");
+      const errorMessage = translateDatabaseError(err);
+      showError(errorMessage || "Erro ao criar cupom. Por favor, tente novamente.");
     },
   });
 
@@ -89,10 +113,13 @@ export const FirstBuyCoupon = () => {
       <Card>
         <CardContent className="p-6 flex items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+          <span className="ml-2 text-sm text-gray-600">Carregando informações do cupom...</span>
         </CardContent>
       </Card>
     );
   }
+
+  const isProcessing = recreateCouponMutation.isPending;
 
   return (
     <Card className={coupon ? "border-green-200 bg-green-50" : "border-orange-200 bg-orange-50"}>
@@ -167,7 +194,7 @@ export const FirstBuyCoupon = () => {
               onClick={() => refetch()}
               variant="outline"
               className="w-full"
-              disabled={recreateCouponMutation.isPending}
+              disabled={isProcessing}
             >
               <RefreshCw className="h-4 w-4 mr-2" />
               Atualizar Status
@@ -225,9 +252,9 @@ export const FirstBuyCoupon = () => {
             <Button
               onClick={handleRecreate}
               className="w-full bg-orange-600 hover:bg-orange-700"
-              disabled={recreateCouponMutation.isPending}
+              disabled={isProcessing}
             >
-              {recreateCouponMutation.isPending ? (
+              {isProcessing ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
                   Criando...
