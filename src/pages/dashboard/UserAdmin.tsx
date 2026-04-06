@@ -38,15 +38,9 @@ export default function UserAdminPage() {
     searchUsers,
     blockUserMutation,
     deleteUserMutation,
-  } = useUserAdmin();
+  } = useUserAdmin(searchTerm);
 
-  const filteredUsers = searchTerm
-    ? searchUsers.data?.filter(
-        (user) =>
-          user.first_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          user.last_name?.toLowerCase().includes(searchTerm.toLowerCase())
-      ) || []
-    : searchUsers.data || [];
+  const filteredUsers = searchUsers.data || [];
 
   const handleBlockClick = (user: any) => {
     setSelectedUser(user);

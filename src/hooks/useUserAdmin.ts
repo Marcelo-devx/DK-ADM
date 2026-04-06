@@ -11,38 +11,38 @@ interface User {
   role: string;
 }
 
-export const useUserAdmin = () => {
+export const useUserAdmin = (searchTerm: string = '') => {
   const queryClient = useQueryClient();
 
-  // Buscar usuários por email ou nome
+  // Buscar usuários por nome - busca no banco de dados
   const searchUsers = useQuery<User[], Error>({
-    queryKey: ['adminUsers'],
+    queryKey: ['adminUsers', searchTerm],
     queryFn: async () => {
-      const { data: profiles, error } = await supabase
+      let query = supabase
         .from('profiles')
         .select('id, first_name, last_name, is_blocked, created_at, role')
-        .order('created_at', { ascending: false })
-        .limit(100);
+        .order('created_at', { ascending: false });
+
+      // Se tiver termo de busca, filtrar no banco
+      if (searchTerm && searchTerm.trim()) {
+        const term = searchTerm.trim().toLowerCase();
+        query = query.or(
+          `first_name.ilike.%${term}%,last_name.ilike.%${term}%`
+        );
+      }
+      // SEM LIMITE - busca todos os usuários
+
+      const { data: profiles, error } = await query;
 
       if (error) throw error;
 
-      // Buscar emails de auth.users
-      const userIds = profiles.map(p => p.id);
-      let emailsMap = new Map<string, string>();
-
-      if (userIds.length > 0) {
-        // Usar o client com service role para acessar auth.users
-        // Mas como não temos acesso direto no frontend, vamos tentar outra abordagem
-        // Para simplificar, vamos buscar emails via edge function ou usar um workaround
-        // Por enquanto, vamos deixar email undefined e o frontend vai tratar isso
-      }
-
       return profiles.map(p => ({
         ...p,
-        email: undefined // Email será preenchido se disponível
+        email: undefined // Email não está disponível na tabela profiles
       })) as User[];
     },
     refetchOnWindowFocus: false,
+    enabled: true, // Sempre habilitado
   });
 
   // Bloquear/Desbloquear usuário
