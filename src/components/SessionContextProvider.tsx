@@ -40,7 +40,7 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
 
   useEffect(() => {
     // Wrap getSession in try-catch to handle auth errors gracefully
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
+    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
       if (error) {
         console.error('[SessionContext] Erro ao obter sessão:', error);
         
@@ -49,20 +49,21 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
           toast.error('Sessão expirada. Por favor, faça login novamente.');
           navigate('/login');
         }
+        setInitializing(false);
+        return;
       }
       
       if (session?.user) {
         // Verificar se está bloqueado ao carregar sessão
-        checkIfBlocked(session.user.id).then((isBlocked) => {
-          if (!isBlocked) {
-            setSession(session);
-          }
-        });
+        const isBlocked = await checkIfBlocked(session.user.id);
+        if (!isBlocked) {
+          setSession(session);
+        }
       } else {
         setSession(session);
       }
 
-      // Marcar como não inicializado APÓS tentar recuperar a sessão
+      // IMPORTANTE: só marca como não inicializando DEPOIS de tudo resolver
       setInitializing(false);
     }).catch((error) => {
       console.error('[SessionContext] Erro inesperado ao obter sessão:', error);

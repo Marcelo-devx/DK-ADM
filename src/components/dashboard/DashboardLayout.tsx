@@ -1,6 +1,7 @@
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useEffect, useCallback } from "react";
 import { useUser } from "../../hooks/useUser";
+import { useSession } from "@/components/SessionContextProvider";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 
@@ -8,9 +9,10 @@ const DashboardLayout = () => {
   const { loading, isAdmin, user } = useUser();
   const navigate = useNavigate();
   const location = useLocation();
+  const session = useSession();
 
   const checkAuth = useCallback(() => {
-    if (!loading) {
+    if (!loading && session !== undefined) {
       if (!user) {
         navigate("/login", { replace: true });
       } else if (!isAdmin) {
@@ -18,7 +20,7 @@ const DashboardLayout = () => {
         navigate("/", { replace: true });
       }
     }
-  }, [loading, isAdmin, user, navigate]);
+  }, [loading, isAdmin, user, navigate, session]);
 
   useEffect(() => {
     checkAuth();
