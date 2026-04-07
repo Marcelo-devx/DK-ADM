@@ -76,11 +76,14 @@ const fetchOrdersToExport = async (): Promise<Order[]> => {
   if (ordersError) throw new Error(ordersError.message);
   if (!orders) return [];
 
-  const userIds = [...new Set(orders.map(o => o.user_id))];
+  // Filtra apenas user_ids válidos (remove nulls)
+  const userIds = [...new Set(orders.map(o => o.user_id).filter(id => id !== null))];
+  
+  // Busca profiles apenas para user_ids válidos
   const { data: profiles, error: profilesError } = await supabase
     .from("profiles")
     .select("id, first_name, last_name, phone")
-    .in("id", userIds);
+    .in("id", userIds as string[]);
 
   if (profilesError) throw new Error(profilesError.message);
   const profilesMap = new Map(profiles.map(p => [p.id, p]));
@@ -100,8 +103,8 @@ const fetchOrdersToExport = async (): Promise<Order[]> => {
 
   return orders.map(order => ({
     ...order,
-    email: emailsMap.get(order.user_id) || "",
-    profiles: profilesMap.get(order.user_id) || null,
+    email: order.user_id ? emailsMap.get(order.user_id) || "" : "",
+    profiles: order.user_id ? profilesMap.get(order.user_id) || null : null,
   })) as Order[];
 };
 
@@ -377,7 +380,11 @@ const SpokeExportPage = () => {
                                                 </TableCell>
                                                 <TableCell>
                                                     <div className="flex flex-col">
-                                                        <span className="font-medium text-sm">{order.profiles?.first_name} {order.profiles?.last_name}</span>
+                                                        <span className="font-medium text-sm">
+                                                            {order.profiles?.first_name || order.profiles?.last_name
+                                                                ? `${order.profiles?.first_name || ""} ${order.profiles?.last_name || ""}`.trim()
+                                                                : "Não informado"}
+                                                        </span>
                                                         <span className="text-xs text-muted-foreground">{order.profiles?.phone || "-"}</span>
                                                     </div>
                                                 </TableCell>
