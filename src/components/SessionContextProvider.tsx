@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
@@ -10,8 +10,13 @@ export const SessionContext = createContext<Session | null>(null);
 export const SessionContextProvider = (props: { children: React.ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [initializing, setInitializing] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
   const navigate = useNavigate();
+
+  // Usar ref para evitar stale closure do navigate dentro dos useEffects
+  const navigateRef = useRef(navigate);
+  useEffect(() => {
+    navigateRef.current = navigate;
+  }, [navigate]);
 
   const checkIfBlocked = async (userId: string) => {
     try {
@@ -27,7 +32,6 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
       }
 
       if (profile?.is_blocked) {
-        // Usuário está bloqueado, fazer logout
         await supabase.auth.signOut();
         toast.error('Sua conta foi bloqueada. Entre em contato com o suporte.');
         return true;
@@ -40,32 +44,21 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
     }
   };
 
-  const handleRetry = () => {
-    setError(null);
-    setInitializing(true);
-    window.location.reload();
-  };
-
   useEffect(() => {
-    // Wrap getSession in try-catch to handle auth errors gracefully
     supabase.auth.getSession().then(async ({ data: { session }, error }) => {
       if (error) {
         console.error('[SessionContext] Erro ao obter sessão:', error);
-        setError(error);
-        
-        // Se for erro de refresh token, mostrar toast e redirecionar
+
         if (error.message?.includes('Refresh Token') || error.message?.includes('refresh_token')) {
           toast.error('Sessão expirada. Por favor, faça login novamente.');
-          // Usa setTimeout para evitar conflitos no rendering
-          setTimeout(() => navigate('/login'), 0);
+          setTimeout(() => navigateRef.current('/login'), 0);
         }
-        // IMPORTANTE: Sempre definir initializing como false, mesmo com erro
+
         setInitializing(false);
         return;
       }
-      
+
       if (session?.user) {
-        // Verificar se está bloqueado ao carregar sessão
         const isBlocked = await checkIfBlocked(session.user.id);
         if (!isBlocked) {
           setSession(session);
@@ -74,12 +67,9 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
         setSession(session);
       }
 
-      // IMPORTANTE: só marca como não inicializando DEPOIS de tudo resolver
       setInitializing(false);
     }).catch((error: Error) => {
       console.error('[SessionContext] Erro inesperado ao obter sessão:', error);
-      setError(error);
-      // IMPORTANTE: Sempre definir initializing como false, mesmo com erro
       setInitializing(false);
     });
 
@@ -88,7 +78,6 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       try {
         if (session?.user && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
-          // Verificar se está bloqueado ao fazer login ou refresh de token
           const isBlocked = await checkIfBlocked(session.user.id);
           if (!isBlocked) {
             setSession(session);
@@ -102,51 +91,41 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
         }
       } catch (error: any) {
         console.error('[SessionContext] Erro no tratamento de estado de autenticação:', error);
-        setError(error);
-        
-        // Se for erro de refresh token, mostrar toast e limpar sessão
+
         if (error?.message?.includes('Refresh Token') || error?.message?.includes('refresh_token')) {
           toast.error('Sessão expirada. Por favor, faça login novamente.');
           setSession(null);
-          // Usa setTimeout para evitar conflitos no rendering
-          setTimeout(() => navigate('/login'), 0);
+          setTimeout(() => navigateRef.current('/login'), 0);
         }
-        // IMPORTANTE: Não definimos initializing aqui pois este listener pode ser chamado
-        // durante a vida da aplicação, não apenas na inicialização
       }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  // Handler para quando a aba volta ao foco - tenta recuperar a sessão
+  // Quando a aba volta ao foco, tenta recuperar a sessão se não houver uma ativa
   useEffect(() => {
     const handleVisibilityChange = async () => {
-      // Se a aba voltou ao foco e não temos sessão definida, tenta recuperar
-      if (document.visibilityState === 'visible' && !session && !initializing && !error) {
+      if (document.visibilityState === 'visible' && !session && !initializing) {
         console.log('[SessionContext] Aba voltou ao foco, tentando recuperar sessão...');
-        const { data, error } = await supabase.auth.getSession();
-        if (data.session && !error) {
-          console.log('[SessionContext] Sessão recuperada com sucesso');
-          setSession(data.session);
-        } else if (error) {
-          console.error('[SessionContext] Erro ao recuperar sessão:', error);
-          // Não mostra erro automaticamente, apenas loga - pode ser sessão expirada normal
+        try {
+          const { data, error } = await supabase.auth.getSession();
+          if (data.session && !error) {
+            console.log('[SessionContext] Sessão recuperada com sucesso');
+            setSession(data.session);
+          }
+        } catch (e) {
+          console.error('[SessionContext] Erro ao recuperar sessão na visibilidade:', e);
         }
       }
     };
-    
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [session, initializing, error]);
+  }, [session, initializing]);
 
-  // Mostra LoadingScreen em vez de null durante inicialização ou erro
-  if (initializing || error) {
-    return <LoadingScreen 
-      message="Carregando sua sessão..." 
-      error={error}
-      onRetry={handleRetry}
-    />;
+  if (initializing) {
+    return <LoadingScreen message="Carregando sua sessão..." />;
   }
 
   return (

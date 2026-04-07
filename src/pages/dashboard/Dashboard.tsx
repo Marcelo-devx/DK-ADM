@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -402,9 +402,9 @@ const DashboardPage = () => {
                     <TableHeader className="bg-gray-50"><TableRow><TableHead className="w-10"></TableHead><TableHead>Nome do Item</TableHead><TableHead>Tipo</TableHead><TableHead className="text-center">Qtd. Estoque</TableHead><TableHead className="text-right">Ação Sugerida</TableHead></TableRow></TableHeader>
                     <TableBody>
                     {criticalItems.map((item, i) => (
-                        <>
+                        <React.Fragment key={item.id ?? `item-${i}`}>
                           {/* Linha do produto */}
-                          <TableRow 
+                          <TableRow
                             className={cn(
                               item.stock === 0 && "bg-red-50/50",
                               item.hasVariants && expandedProducts[item.id] && "bg-blue-50/30"
@@ -470,7 +470,7 @@ const DashboardPage = () => {
                               </TableCell>
                             </TableRow>
                           ))}
-                        </>
+                        </React.Fragment>
                     ))}
                     </TableBody>
                 </Table>
