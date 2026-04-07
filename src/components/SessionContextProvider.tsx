@@ -3,12 +3,14 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { LoadingScreen } from "@/components/LoadingScreen";
 
 export const SessionContext = createContext<Session | null>(null);
 
 export const SessionContextProvider = (props: { children: React.ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [initializing, setInitializing] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
   const navigate = useNavigate();
 
   const checkIfBlocked = async (userId: string) => {
@@ -38,11 +40,18 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
     }
   };
 
+  const handleRetry = () => {
+    setError(null);
+    setInitializing(true);
+    window.location.reload();
+  };
+
   useEffect(() => {
     // Wrap getSession in try-catch to handle auth errors gracefully
     supabase.auth.getSession().then(async ({ data: { session }, error }) => {
       if (error) {
         console.error('[SessionContext] Erro ao obter sessão:', error);
+        setError(error);
         
         // Se for erro de refresh token, mostrar toast e redirecionar
         if (error.message?.includes('Refresh Token') || error.message?.includes('refresh_token')) {
@@ -65,8 +74,9 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
 
       // IMPORTANTE: só marca como não inicializando DEPOIS de tudo resolver
       setInitializing(false);
-    }).catch((error) => {
+    }).catch((error: Error) => {
       console.error('[SessionContext] Erro inesperado ao obter sessão:', error);
+      setError(error);
       setInitializing(false);
     });
 
@@ -89,6 +99,7 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
         }
       } catch (error: any) {
         console.error('[SessionContext] Erro no tratamento de estado de autenticação:', error);
+        setError(error);
         
         // Se for erro de refresh token, mostrar toast e limpar sessão
         if (error?.message?.includes('Refresh Token') || error?.message?.includes('refresh_token')) {
@@ -102,9 +113,13 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
     return () => subscription.unsubscribe();
   }, []);
 
-  // Se estiver inicializando, não renderiza nada até recuperar a sessão
-  if (initializing) {
-    return null;
+  // Mostra LoadingScreen em vez de null durante inicialização ou erro
+  if (initializing || error) {
+    return <LoadingScreen 
+      message="Carregando sua sessão..." 
+      error={error}
+      onRetry={handleRetry}
+    />;
   }
 
   return (
