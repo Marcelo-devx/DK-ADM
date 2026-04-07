@@ -3,44 +3,25 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
+import { Search, Loader2, Check, AlertCircle, MapPin, User, Package, DollarSign, Gift, Plus, Trash2 } from "lucide-react";
+import { showSuccess, showError } from "@/utils/toast";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import {
-  Loader2,
-  Trash2,
-  Package,
-  User,
-  MapPin,
-  DollarSign,
-  Gift,
-  Search,
-  Check,
-  Plus,
-  AlertCircle,
-} from "lucide-react";
-import { showSuccess, showError } from "@/utils/toast";
-import { cn } from "@/lib/utils";
-import { Card, CardContent } from "@/components/ui/card";
+import { sortVariantsBySpecification } from "@/utils/variantSort";
 
 interface Client {
   id: string;
-  first_name: string | null;
-  last_name: string | null;
+  first_name: string;
+  last_name: string;
+  email: string;
   phone: string | null;
-  email: string | null;
   street: string | null;
   number: string | null;
   complement: string | null;
@@ -48,15 +29,15 @@ interface Client {
   city: string | null;
   state: string | null;
   cep: string | null;
+  cpf_cnpj: string | null;
 }
 
 interface ClientData {
   user_id: string;
+  first_name: string;
+  last_name: string;
   email: string;
-  first_name: string | null;
-  last_name: string | null;
   cpf_cnpj: string | null;
-  phone: string | null;
 }
 
 interface ProductVariant {
@@ -586,7 +567,9 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
                     ) : (
                       searchResults.map((product) => {
                         const activeVariants = (product.product_variants || []).filter((v) => v.is_active);
-                        const hasVariants = activeVariants.length > 0;
+                        // Aplicar ordenação alfabética por especificação nas variações
+                        const sortedVariants = sortVariantsBySpecification(activeVariants);
+                        const hasVariants = sortedVariants.length > 0;
 
                         if (!hasVariants) {
                           return (
@@ -623,7 +606,7 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
                               <p className="font-semibold text-sm">{product.name}</p>
                               <p className="text-xs text-muted-foreground">{activeVariants.length} variação(ões)</p>
                             </div>
-                            {activeVariants.map((variant) => {
+                            {sortedVariants.map((variant) => {
                               const label = [
                                 variant.volume_ml ? `${variant.volume_ml}ml` : "",
                                 variant.color || "",

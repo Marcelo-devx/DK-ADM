@@ -12,6 +12,7 @@ import { showSuccess, showError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { sortVariantsBySpecification } from "@/utils/variantSort";
 
 const PriceManagementPage = () => {
   const queryClient = useQueryClient();
@@ -148,6 +149,8 @@ const PriceManagementPage = () => {
             {isLoading ? Array.from({ length: 5 }).map((_, i) => (<TableRow key={i}><TableCell colSpan={5}><Skeleton className="h-10 w-full" /></TableCell></TableRow>)) : 
              filteredProducts?.map((product) => {
               const hasVariants = product.product_variants && product.product_variants.length > 0;
+              // Aplicar ordenação alfabética por especificação nas variações
+              const sortedVariants = hasVariants ? sortVariantsBySpecification(product.product_variants) : [];
               return (
                 <>
                   <TableRow key={product.id} className={cn(hasVariants && "bg-gray-50/30")}>
@@ -157,7 +160,7 @@ const PriceManagementPage = () => {
                     <TableCell>{!hasVariants ? (<div className="relative"><Input key={`pct-${product.id}-${product.pix_price}`} defaultValue={calculatePercent(product.price, product.pix_price)} onBlur={(e) => handlePercentBlur(product.id, 'product', product.price, product.pix_price || 0, e.target.value)} className="pr-6 h-8 text-sm text-center font-bold text-orange-600" /><span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span></div>) : (<Badge variant="secondary" className="text-[9px] w-full justify-center">Variações</Badge>)}</TableCell>
                     <TableCell><div className="relative"><span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">R$</span><Input key={`pix-${product.id}-${product.pix_price}`} defaultValue={product.pix_price?.toFixed(2)} onBlur={(e) => handleBlur(product.id, 'product', 'pix_price', product.pix_price || 0, e.target.value)} className="pl-8 h-8 text-sm font-bold text-green-700 border-green-200 bg-green-50/30" disabled={hasVariants} /></div></TableCell>
                   </TableRow>
-                  {expandedProducts[product.id] && hasVariants && product.product_variants.map((v: any) => (
+                  {expandedProducts[product.id] && hasVariants && sortedVariants.map((v: any) => (
                     <TableRow key={v.id} className="bg-white">
                       <TableCell></TableCell>
                       <TableCell className="pl-8"><div className="flex flex-wrap gap-2 text-xs text-muted-foreground items-center"><Package className="h-3 w-3" /><span className="font-bold">{v.flavors?.name || "Padrão"}</span>{v.color && <span className="flex items-center gap-1 opacity-70"><Palette className="w-2.5 h-2.5" /> {v.color}</span>}{v.volume_ml && <span className="opacity-70">{v.volume_ml}ml</span>}</div></TableCell>

@@ -10,6 +10,7 @@ import { useState, useMemo } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { sortVariantsBySpecification } from '@/utils/variantSort';
 
 interface Product {
   id: number;
@@ -62,32 +63,38 @@ const ProductDetailPage = () => {
     queryFn: () => fetchVariants(id!),
   });
 
+  // Aplicar ordenação alfabética por especificação
+  const sortedVariants = variants ? sortVariantsBySpecification(variants) : [];
+
   const flavorOptions = useMemo(() => {
     const map = new Map();
-    variants?.forEach(v => {
+    sortedVariants.forEach(v => {
       if (v.flavors) map.set(v.flavor_id, v.flavors.name);
     });
-    return Array.from(map.entries());
-  }, [variants]);
+    // Ordenar os sabores alfabeticamente
+    return Array.from(map.entries()).sort((a, b) => 
+      a[1].localeCompare(b[1], 'pt-BR')
+    );
+  }, [sortedVariants]);
 
   const volumeOptions = useMemo(() => {
     const set = new Set<number>();
-    variants?.forEach(v => {
+    sortedVariants.forEach(v => {
       if (v.volume_ml) set.add(v.volume_ml);
     });
     return Array.from(set).sort((a, b) => a - b);
-  }, [variants]);
+  }, [sortedVariants]);
 
   const activeVariant = useMemo(() => {
-    if (!variants) return null;
-    return variants.find(v => 
+    if (!sortedVariants.length) return null;
+    return sortedVariants.find(v => 
       (selectedFlavorId === "all" || String(v.flavor_id) === selectedFlavorId) &&
       (selectedVolume === "all" || String(v.volume_ml) === selectedVolume)
     );
-  }, [variants, selectedFlavorId, selectedVolume]);
+  }, [sortedVariants, selectedFlavorId, selectedVolume]);
 
   const displayPrice = activeVariant?.price || product?.price || 0;
-  const displayStock = activeVariant ? activeVariant.stock_quantity : (variants?.length ? variants.reduce((acc, v) => acc + v.stock_quantity, 0) : product?.stock_quantity || 0);
+  const displayStock = activeVariant ? activeVariant.stock_quantity : (sortedVariants.length ? sortedVariants.reduce((acc, v) => acc + v.stock_quantity, 0) : product?.stock_quantity || 0);
 
   if (isLoadingProduct) return <div className="p-8"><Skeleton className="h-96 w-full" /></div>;
 

@@ -11,6 +11,7 @@ import { Plus, Trash2, Package, Ruler, Droplets, Pencil, X, Check, Loader2, Refr
 import { showSuccess, showError } from "@/utils/toast";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { sortVariantsBySpecification } from "@/utils/variantSort";
 
 interface Variant {
   id: string;
@@ -118,6 +119,9 @@ export const ProductVariantManager = ({
     },
     enabled: !!productId,
   });
+
+  // Aplicar ordenação alfabética por especificação
+  const sortedVariants = variants ? sortVariantsBySpecification(variants) : [];
 
   const isSkuTaken = async (sku: string, currentVariantId?: string): Promise<boolean> => {
     if (!sku || sku.trim() === "") return false;
@@ -245,7 +249,7 @@ export const ProductVariantManager = ({
                         bulkUpdatePricesMutation.mutate();
                     }
                 }}
-                disabled={bulkUpdatePricesMutation.isPending || !variants || variants.length === 0}
+                disabled={bulkUpdatePricesMutation.isPending || !sortedVariants || sortedVariants.length === 0}
             >
                 {bulkUpdatePricesMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCcw className="w-4 h-4 mr-2" />}
                 Replicar Preços Base
@@ -352,8 +356,8 @@ export const ProductVariantManager = ({
           </TableHeader>
           <TableBody>
             {isLoading ? <TableRow><TableCell colSpan={7}><Skeleton className="h-4 w-full" /></TableCell></TableRow> : 
-             variants?.length === 0 ? <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground text-xs py-10">Sem variações cadastradas.</TableCell></TableRow> :
-             variants?.map((v) => (
+             sortedVariants.length === 0 ? <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground text-xs py-10">Sem variações cadastradas.</TableCell></TableRow> :
+             sortedVariants.map((v) => (
               <TableRow key={v.id} className={editingId === v.id ? "bg-primary/5" : ""}>
                 <TableCell>
                   <div className="flex flex-col gap-1">

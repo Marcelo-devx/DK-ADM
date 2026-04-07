@@ -17,6 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { sortVariantsBySpecification } from "@/utils/variantSort";
 
 interface Variant {
   id: string;
@@ -61,6 +62,9 @@ export const ProductVariantViewer = ({
     enabled: isOpen,
   });
 
+  // Aplicar ordenação alfabética por especificação
+  const sortedVariants = variants ? sortVariantsBySpecification(variants) : [];
+
   const formatCurrency = (val: number) => 
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
@@ -83,7 +87,7 @@ export const ProductVariantViewer = ({
             </div>
           ) : error ? (
             <p className="p-4 text-red-500 text-center">Erro ao carregar variações.</p>
-          ) : variants && variants.length > 0 ? (
+          ) : sortedVariants.length > 0 ? (
             <Table>
               <TableHeader className="bg-gray-50 sticky top-0 z-10">
                 <TableRow>
@@ -94,7 +98,7 @@ export const ProductVariantViewer = ({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {variants.map((v) => (
+                {sortedVariants.map((v) => (
                   <TableRow key={v.id} className="hover:bg-gray-50/50">
                     <TableCell>
                       <div className="flex flex-col">
