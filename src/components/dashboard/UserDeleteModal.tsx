@@ -1,7 +1,6 @@
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -45,7 +44,7 @@ export function UserDeleteModal({ isOpen, onClose, user, onConfirm }: UserDelete
             <AlertTriangle className="h-5 w-5" />
             Excluir Usuário
           </DialogTitle>
-          <DialogDescription className="space-y-2">
+          <div className="space-y-2 text-sm text-muted-foreground">
             <p>
               Você está prestes a excluir o usuário{" "}
               <span className="font-bold">{user?.first_name} {user?.last_name}</span>.
@@ -53,7 +52,7 @@ export function UserDeleteModal({ isOpen, onClose, user, onConfirm }: UserDelete
             <p className="text-red-600 font-medium">
               Esta ação é irreversível!
             </p>
-          </DialogDescription>
+          </div>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="space-y-3">
