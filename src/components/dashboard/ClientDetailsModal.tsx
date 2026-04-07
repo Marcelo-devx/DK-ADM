@@ -174,7 +174,7 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
 
                                             <div className="text-sm mb-2">
                                                 <p className="text-[10px] text-muted-foreground uppercase">Email</p>
-                                                <p className="font-medium">{profile?.email || client.email || "-"}</p>
+                                                <p className="font-medium">{client.email || "-"}</p>
                                             </div>
 
                                             <div className="grid grid-cols-2 gap-y-3 text-sm">
