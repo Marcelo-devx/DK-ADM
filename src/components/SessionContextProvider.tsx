@@ -18,7 +18,18 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
     navigateRef.current = navigate;
   }, [navigate]);
 
-  const checkIfBlocked = async (userId: string) => {
+  // Função utilitária com timeout para evitar deadlock no getSession
+  const getSessionWithTimeout = async (timeoutMs: number = 5000) => {
+    return Promise.race([
+      supabase.auth.getSession(),
+      new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Session load timeout')), timeoutMs)
+      )
+    ]);
+  };
+
+  // Versão não-bloqueante do checkIfBlocked - executa em background
+  const checkIfBlockedNonBlocking = async (userId: string) => {
     try {
       const { data: profile, error } = await supabase
         .from('profiles')
@@ -28,65 +39,82 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
 
       if (error) {
         console.error('[SessionContext] Erro ao verificar bloqueio:', error);
-        return false;
+        return;
       }
 
       if (profile?.is_blocked) {
+        // Fazer signOut se usuário bloqueado
         await supabase.auth.signOut();
+        setSession(null);
         toast.error('Sua conta foi bloqueada. Entre em contato com o suporte.');
-        return true;
+        // Redirecionar para login
+        setTimeout(() => navigateRef.current('/login'), 100);
       }
-
-      return false;
     } catch (error) {
       console.error('[SessionContext] Erro ao verificar bloqueio:', error);
-      return false;
     }
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
-      if (error) {
-        console.error('[SessionContext] Erro ao obter sessão:', error);
+    let mounted = true;
 
-        if (error.message?.includes('Refresh Token') || error.message?.includes('refresh_token')) {
-          toast.error('Sessão expirada. Por favor, faça login novamente.');
-          setTimeout(() => navigateRef.current('/login'), 0);
+    getSessionWithTimeout()
+      .then(({ data: { session }, error }) => {
+        if (!mounted) return;
+
+        if (error) {
+          console.error('[SessionContext] Erro ao obter sessão:', error);
+
+          if (error.message?.includes('Refresh Token') || error.message?.includes('refresh_token')) {
+            toast.error('Sessão expirada. Por favor, faça login novamente.');
+            setTimeout(() => navigateRef.current('/login'), 0);
+          } else if (error.message?.includes('timeout')) {
+            console.error('[SessionContext] Timeout ao carregar sessão - prosseguindo sem sessão');
+          }
+
+          setInitializing(false);
+          return;
+        }
+
+        if (session?.user) {
+          // Executar check de bloqueio em background (não-bloqueante)
+          checkIfBlockedNonBlocking(session.user.id);
+          setSession(session);
+        } else {
+          setSession(session);
         }
 
         setInitializing(false);
-        return;
-      }
+      })
+      .catch((error: Error) => {
+        if (!mounted) return;
 
-      if (session?.user) {
-        const isBlocked = await checkIfBlocked(session.user.id);
-        if (!isBlocked) {
-          setSession(session);
+        console.error('[SessionContext] Erro inesperado ao obter sessão:', error);
+        
+        if (error?.message?.includes('timeout')) {
+          console.error('[SessionContext] Timeout - definindo sessão como null');
+          setSession(null);
         }
-      } else {
-        setSession(session);
-      }
 
-      setInitializing(false);
-    }).catch((error: Error) => {
-      console.error('[SessionContext] Erro inesperado ao obter sessão:', error);
-      setInitializing(false);
-    });
+        setInitializing(false);
+      });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      // IMPORTANTE: Removido 'async' e 'await' para evitar deadlock no navigator.locks
+      // O callback agora é síncrono, liberando o lock imediatamente
+      
       try {
-        if (session?.user && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
-          const isBlocked = await checkIfBlocked(session.user.id);
-          if (!isBlocked) {
-            setSession(session);
-          } else {
-            setSession(null);
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          if (session?.user) {
+            // Executar check de bloqueio em background (fire-and-forget)
+            checkIfBlockedNonBlocking(session.user.id);
           }
+          setSession(session);
         } else if (event === 'SIGNED_OUT') {
           setSession(null);
-        } else {
+        } else if (event === 'INITIAL_SESSION') {
           setSession(session);
         }
       } catch (error: any) {
@@ -100,28 +128,45 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Quando a aba volta ao foco, tenta recuperar a sessão se não houver uma ativa
+  // Adicionado flag para evitar múltiplas chamadas concorrentes
   useEffect(() => {
+    let isRecoveringSession = false;
+
     const handleVisibilityChange = async () => {
-      if (document.visibilityState === 'visible' && !session && !initializing) {
+      if (document.visibilityState === 'visible' && !session && !initializing && !isRecoveringSession) {
         console.log('[SessionContext] Aba voltou ao foco, tentando recuperar sessão...');
+        
+        isRecoveringSession = true;
+        
         try {
-          const { data, error } = await supabase.auth.getSession();
+          const { data, error } = await getSessionWithTimeout();
+          
           if (data.session && !error) {
             console.log('[SessionContext] Sessão recuperada com sucesso');
             setSession(data.session);
+          } else if (error?.message?.includes('timeout')) {
+            console.error('[SessionContext] Timeout ao recuperar sessão na visibilidade');
           }
         } catch (e) {
           console.error('[SessionContext] Erro ao recuperar sessão na visibilidade:', e);
+        } finally {
+          isRecoveringSession = false;
         }
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      isRecoveringSession = false;
+    };
   }, [session, initializing]);
 
   if (initializing) {
