@@ -110,21 +110,34 @@ export function useClients(initialPage = 1) {
           },
         });
 
+        // If supabase returned an error object, include details
         if (error) {
-          // Map function errors to throw
-          throw new Error(error.message || "Erro ao chamar função de criação de usuário");
+          console.error("[useClients] Edge function returned error:", error);
+          // Try to include status or message if available
+          const statusPart = (error?.status ? `status=${error.status} ` : "");
+          throw new Error(`${statusPart}${error?.message || 'Edge Function error'}`);
+        }
+
+        // If function responded with an error payload in data, surface it
+        if (data && typeof data === 'object' && (data.error || data.details)) {
+          console.error('[useClients] Edge function response had error payload:', data);
+          const payloadMsg = data.error || data.details || JSON.stringify(data);
+          throw new Error(`Edge Function: ${payloadMsg}`);
         }
 
         return { data, values };
       } catch (e: any) {
         // Provide clearer message when network-level failure occurs
+        console.error('[useClients] Error calling admin-create-user:', e);
         const msg = String(e?.message || e);
         if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
           throw new Error(
             "Erro de rede: não foi possível conectar às Edge Functions do Supabase. Verifique sua conexão, bloqueadores (adblock/privacidade) ou se o serviço de Functions está ativo."
           );
         }
-        throw e;
+
+        // Generic fallback: include the raw error message so the UI can display more context
+        throw new Error(msg);
       }
     },
     onSuccess: ({ data, values }) => {
