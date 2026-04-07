@@ -8,6 +8,7 @@ export const SessionContext = createContext<Session | null>(null);
 
 export const SessionContextProvider = (props: { children: React.ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
+  const [initializing, setInitializing] = useState(true);
   const navigate = useNavigate();
 
   const checkIfBlocked = async (userId: string) => {
@@ -47,7 +48,6 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
         if (error.message?.includes('Refresh Token') || error.message?.includes('refresh_token')) {
           toast.error('Sessão expirada. Por favor, faça login novamente.');
           navigate('/login');
-          return;
         }
       }
       
@@ -61,8 +61,12 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
       } else {
         setSession(session);
       }
+
+      // Marcar como não inicializado APÓS tentar recuperar a sessão
+      setInitializing(false);
     }).catch((error) => {
       console.error('[SessionContext] Erro inesperado ao obter sessão:', error);
+      setInitializing(false);
     });
 
     const {
@@ -96,6 +100,11 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Se estiver inicializando, não renderiza nada até recuperar a sessão
+  if (initializing) {
+    return null;
+  }
 
   return (
     <SessionContext.Provider value={session}>
