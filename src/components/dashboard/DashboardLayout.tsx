@@ -1,5 +1,5 @@
-import { Outlet, useNavigate } from "react-router-dom";
-import { useEffect } from "react";
+import { Outlet, useNavigate, useLocation } from "react-router-dom";
+import { useEffect, useCallback } from "react";
 import { useUser } from "../../hooks/useUser";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
@@ -7,20 +7,25 @@ import Header from "./Header";
 const DashboardLayout = () => {
   const { loading, isAdmin, user } = useUser();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  useEffect(() => {
+  const checkAuth = useCallback(() => {
     if (!loading) {
       if (!user) {
-        navigate("/login");
+        navigate("/login", { replace: true });
       } else if (!isAdmin) {
         // Se não for admin, redireciona para a página inicial ou uma página de acesso negado.
-        navigate("/");
+        navigate("/", { replace: true });
       }
     }
   }, [loading, isAdmin, user, navigate]);
 
-  if (loading || !isAdmin) {
-    // Mostra uma tela de carregamento ou nulo enquanto verifica a autenticação e permissão
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
+
+  if (loading) {
+    // Mostra uma tela de carregamento enquanto verifica a autenticação e permissão
     return (
       <div className="flex items-center justify-center h-screen">
         Carregando...

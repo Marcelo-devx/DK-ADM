@@ -5,6 +5,12 @@ import path from "path";
 export default defineConfig(() => ({
   server: {
     host: true,
+    hmr: {
+      overlay: false,
+    },
+    watch: {
+      usePolling: false,
+    },
   },
   plugins: [react()],
   resolve: {
