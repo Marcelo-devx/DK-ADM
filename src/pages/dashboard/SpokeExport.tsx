@@ -21,6 +21,7 @@ import { showSuccess, showError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface Order {
   id: number;
@@ -64,12 +65,12 @@ const checkIsNextRoute = (dateString: string) => {
 };
 
 const fetchOrdersToExport = async (): Promise<Order[]> => {
-  // Busca apenas pedidos que já foram pagos/finalizados e ainda não foram entregues
+  // Busca TODOS os pedidos que já foram pagos/finalizados (sem filtro de delivery_status)
   const { data: orders, error: ordersError } = await supabase
     .from("orders")
     .select("id, created_at, total_price, status, delivery_status, user_id, shipping_address")
     .in("status", ["Finalizada", "Pago"]) // Apenas pagos
-    .in("delivery_status", ["Pendente", "Aguardando Coleta"]) // Apenas não entregues
+    // REMOVIDO O FILTRO: .in("delivery_status", ["Pendente", "Aguardando Coleta"])
     .order("created_at", { ascending: false });
 
   if (ordersError) throw new Error(ordersError.message);
@@ -108,21 +109,40 @@ const SpokeExportPage = () => {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [isExporting, setIsExporting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // NOVOS ESTADOS
+  const [changeStatus, setChangeStatus] = useState(false);
+  const [clearSelection, setClearSelection] = useState(true);
 
   const { data: orders, isLoading, refetch, isRefetching } = useQuery<Order[]>({
     queryKey: ["ordersToExport"],
     queryFn: fetchOrdersToExport,
   });
 
+  // Verifica se há pedidos selecionáveis
+  const canSelectAll = orders && orders.some(o => o.delivery_status === "Aguardando Coleta");
+
   const toggleSelectAll = () => {
-    if (orders && selectedIds.size === orders.length) {
+    if (!orders) return;
+    
+    const selectableOrders = orders.filter(o => o.delivery_status === "Aguardando Coleta");
+    const selectableIds = new Set(selectableOrders.map(o => o.id));
+    
+    if (selectedIds.size === selectableIds.size) {
+      // Se todos os selecionáveis estão selecionados, desmarcar todos
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(orders?.map(o => o.id)));
+      // Caso contrário, selecionar todos os selecionáveis
+      setSelectedIds(selectableIds);
     }
   };
 
   const toggleSelectOne = (id: number) => {
+    const order = orders?.find(o => o.id === id);
+    // Só permite selecionar se status for "Aguardando Coleta"
+    if (order && order.delivery_status !== "Aguardando Coleta") {
+      return; // Não faz nada se não for selecionável
+    }
+    
     const next = new Set(selectedIds);
     if (next.has(id)) next.delete(id);
     else next.add(id);
@@ -132,6 +152,24 @@ const SpokeExportPage = () => {
   const cleanDigits = (val: string | null | undefined) => {
     if (!val) return "";
     return val.replace(/\D/g, "");
+  };
+
+  // Função para determinar a cor do badge de status
+  const getStatusBadgeVariant = (status: string): "default" | "secondary" | "outline" => {
+    const statusLower = status.toLowerCase();
+    if (statusLower.includes("aguardando coleta")) return "default";
+    if (statusLower.includes("aguardando entregador")) return "secondary";
+    return "outline";
+  };
+
+  const getStatusBadgeColor = (status: string): string => {
+    const statusLower = status.toLowerCase();
+    if (statusLower.includes("aguardando coleta")) return "bg-green-100 text-green-800 border-green-300";
+    if (statusLower.includes("aguardando entregador")) return "bg-blue-100 text-blue-800 border-blue-300";
+    if (statusLower.includes("pendente")) return "bg-gray-100 text-gray-800 border-gray-300";
+    if (statusLower.includes("despachado")) return "bg-purple-100 text-purple-800 border-purple-300";
+    if (statusLower.includes("entregue")) return "bg-green-100 text-green-800 border-green-300";
+    return "bg-gray-100 text-gray-800 border-gray-300";
   };
 
   const handleExport = async () => {
@@ -186,28 +224,33 @@ const SpokeExportPage = () => {
       XLSX.writeFile(workbook, fileName);
       showSuccess(`${selectedOrders.length} pedidos exportados com sucesso!`);
 
-      // --- NOVO: Atualiza status de entrega dos pedidos exportados para "Pedido separado" ---
-      try {
-        const ids = selectedOrders.map(o => o.id);
-        if (ids.length > 0) {
+      // --- LÓGICA CONDICIONAL DE ATUALIZAÇÃO ---
+      
+      // 1. Atualizar status se marcado
+      if (changeStatus) {
+        try {
+          const ids = selectedOrders.map(o => o.id);
           const { error: updateError } = await supabase
             .from('orders')
-            .update({ delivery_status: 'Pedido separado' })
+            .update({ delivery_status: 'Aguardando Entregador' })
             .in('id', ids);
 
           if (updateError) {
-            console.error('Erro ao atualizar status de entrega:', updateError);
-            showError('Exportado, mas falha ao atualizar status dos pedidos.');
+            console.error('Erro ao atualizar status:', updateError);
+            showError('Exportado, mas falha ao atualizar status.');
           } else {
-            showSuccess('Status de entrega atualizado para "Pedido separado".');
-            // limpa seleção e atualiza lista
-            setSelectedIds(new Set());
+            showSuccess('Status atualizado para "Aguardando Entregador".');
             refetch();
           }
+        } catch (err) {
+          console.error('Erro na atualização de status:', err);
+          showError('Exportado, mas ocorreu um erro ao atualizar status.');
         }
-      } catch (err) {
-        console.error('Erro na atualização de status após export:', err);
-        showError('Exportado, mas ocorreu um erro ao validar os pedidos.');
+      }
+
+      // 2. Limpar seleção se marcado
+      if (clearSelection) {
+        setSelectedIds(new Set());
       }
 
     } catch (err) {
@@ -215,6 +258,7 @@ const SpokeExportPage = () => {
       showError("Erro ao gerar a planilha.");
     } finally {
       setIsExporting(false);
+      setConfirmOpen(false);
     }
   };
 
@@ -246,7 +290,7 @@ const SpokeExportPage = () => {
             <Card className="border-none shadow-md">
                 <CardHeader className="bg-gray-50/50 border-b py-3 flex flex-row items-center justify-between">
                     <CardTitle className="text-base font-bold flex items-center gap-2">
-                        <Truck className="h-4 w-4" /> Pedidos Prontos para Envio
+                        <Truck className="h-4 w-4" /> Todos os Pedidos
                     </CardTitle>
                     <Badge variant="secondary" className="bg-white border">{orders?.length || 0} encontrados</Badge>
                 </CardHeader>
@@ -256,24 +300,36 @@ const SpokeExportPage = () => {
                             <TableHeader className="sticky top-0 bg-white z-10 shadow-sm">
                                 <TableRow>
                                     <TableHead className="w-12 text-center">
-                                        <Checkbox 
-                                            checked={orders && orders.length > 0 && selectedIds.size === orders.length}
-                                            onCheckedChange={toggleSelectAll}
-                                        />
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Checkbox 
+                                                    checked={orders && orders.length > 0 && canSelectAll && selectedIds.size === orders.filter(o => o.delivery_status === "Aguardando Coleta").length}
+                                                    onCheckedChange={toggleSelectAll}
+                                                    disabled={!canSelectAll}
+                                                />
+                                            </TooltipTrigger>
+                                            {!canSelectAll && (
+                                                <TooltipContent>
+                                                    <p>Nenhum pedido com status "Aguardando Coleta" disponível</p>
+                                                </TooltipContent>
+                                            )}
+                                        </Tooltip>
                                     </TableHead>
                                     <TableHead>Pedido & Data</TableHead>
                                     <TableHead>Destinatário</TableHead>
                                     <TableHead>Bairro/Cidade</TableHead>
+                                    <TableHead>Status</TableHead>
                                     <TableHead className="text-right">Valor</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {isLoading ? (
-                                    <TableRow><TableCell colSpan={5} className="h-24 text-center">Carregando pedidos...</TableCell></TableRow>
+                                    <TableRow><TableCell colSpan={6} className="h-24 text-center">Carregando pedidos...</TableCell></TableRow>
                                 ) : orders && orders.length > 0 ? (
                                     orders.map(order => {
                                         const isNextRoute = checkIsNextRoute(order.created_at);
                                         const isSelected = selectedIds.has(order.id);
+                                        const canSelect = order.delivery_status === "Aguardando Coleta";
 
                                         return (
                                             <TableRow 
@@ -286,10 +342,25 @@ const SpokeExportPage = () => {
                                                 onClick={() => toggleSelectOne(order.id)}
                                             >
                                                 <TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
-                                                    <Checkbox 
-                                                        checked={isSelected}
-                                                        onCheckedChange={() => toggleSelectOne(order.id)}
-                                                    />
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <Checkbox 
+                                                                checked={isSelected}
+                                                                onCheckedChange={() => toggleSelectOne(order.id)}
+                                                                disabled={!canSelect}
+                                                                className={cn(
+                                                                    canSelect 
+                                                                        ? "data-[state=checked]:bg-green-500 data-[state=checked]:border-green-500"
+                                                                        : "opacity-50 cursor-not-allowed"
+                                                                )}
+                                                            />
+                                                        </TooltipTrigger>
+                                                        {!canSelect && (
+                                                            <TooltipContent>
+                                                                <p>Apenas pedidos com status "Aguardando Coleta" podem ser exportados</p>
+                                                            </TooltipContent>
+                                                        )}
+                                                    </Tooltip>
                                                 </TableCell>
                                                 <TableCell>
                                                     <div className="flex flex-col">
@@ -316,6 +387,11 @@ const SpokeExportPage = () => {
                                                         <span className="text-xs text-muted-foreground">{order.shipping_address?.city}</span>
                                                     </div>
                                                 </TableCell>
+                                                <TableCell>
+                                                    <Badge variant={getStatusBadgeVariant(order.delivery_status)} className={cn("text-[10px] font-medium", getStatusBadgeColor(order.delivery_status))}>
+                                                        {order.delivery_status}
+                                                    </Badge>
+                                                </TableCell>
                                                 <TableCell className="text-right font-bold text-xs">
                                                     R$ {order.total_price.toFixed(2)}
                                                 </TableCell>
@@ -323,7 +399,7 @@ const SpokeExportPage = () => {
                                         );
                                     })
                                 ) : (
-                                    <TableRow><TableCell colSpan={5} className="h-24 text-center text-muted-foreground">Nenhum pedido pendente encontrado.</TableCell></TableRow>
+                                    <TableRow><TableCell colSpan={6} className="h-24 text-center text-muted-foreground">Nenhum pedido encontrado.</TableCell></TableRow>
                                 )}
                             </TableBody>
                         </Table>
@@ -372,14 +448,67 @@ const SpokeExportPage = () => {
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Confirmar exportação</DialogTitle>
+            <DialogTitle>Confirmar Exportação</DialogTitle>
             <DialogDescription>
-              Ao confirmar, os pedidos selecionados serão removidos da lista, a planilha será enviada para download e o status de entrega dos pedidos será atualizado para "Pedido separado". Deseja continuar?
+              {selectedIds.size} pedidos serão exportados para a planilha de rota.
             </DialogDescription>
           </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="flex items-start space-x-3">
+              <Checkbox 
+                id="change-status"
+                checked={changeStatus}
+                onCheckedChange={(checked) => setChangeStatus(checked as boolean)}
+              />
+              <div className="grid gap-1.5 leading-none">
+                <label
+                  htmlFor="change-status"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                >
+                  Mudar status para "Aguardando Entregador"?
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Ao marcar esta opção, os pedidos mudarão de status e não poderão mais ser selecionados para novas exportações.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start space-x-3">
+              <Checkbox 
+                id="clear-selection"
+                checked={clearSelection}
+                onCheckedChange={(checked) => setClearSelection(checked as boolean)}
+              />
+              <div className="grid gap-1.5 leading-none">
+                <label
+                  htmlFor="clear-selection"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                >
+                  Limpar seleção após exportar?
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Desmarque os pedidos da lista após gerar a planilha.
+                </p>
+              </div>
+            </div>
+          </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmOpen(false)}>Não, cancelar</Button>
-            <Button onClick={handleConfirmExport} disabled={isExporting} className="ml-2">Sim, Exportar e Marcar</Button>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleConfirmExport} 
+              disabled={isExporting}
+              className="ml-2"
+            >
+              {isExporting ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Exportando...</>
+              ) : (
+                <><FileDown className="mr-2 h-4 w-4" /> Confirmar Exportação</>
+              )}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
