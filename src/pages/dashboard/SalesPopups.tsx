@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { SalesPopupForm } from "../../components/dashboard/SalesPopupForm";
 import { showSuccess, showError } from "../../utils/toast";
-import { PlusCircle, MoreHorizontal, ShoppingCart, ImageOff, Timer, Save, Loader2 } from "lucide-react";
+import { PlusCircle, MoreHorizontal, ShoppingCart, ImageOff, Timer, Save, Loader2, RefreshCw, Zap } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -149,6 +149,22 @@ const SalesPopupsPage = () => {
     },
   });
 
+  // Mutation para gerar popups automaticamente a partir das vendas
+  const generatePopupsMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke('generate-sales-popups');
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["sales_popups"] });
+      showSuccess(data.message || `${data.count} popups gerados com sucesso!`);
+    },
+    onError: (error: Error) => {
+      showError(`Erro ao gerar popups: ${error.message}`);
+    },
+  });
+
   const handleFormSubmit = (values: any) => {
     const payload = selectedPopup ? { ...values, id: selectedPopup.id } : values;
     upsertMutation.mutate(payload);
@@ -195,7 +211,22 @@ const SalesPopupsPage = () => {
                 </div>
             </div>
             
-            <div className="border-l pl-4 flex items-center h-full">
+            <div className="border-l pl-4 flex items-center gap-2 h-full">
+                <Button 
+                    variant="secondary" 
+                    className="h-8 bg-green-50 text-green-700 hover:bg-green-100"
+                    onClick={() => generatePopupsMutation.mutate()}
+                    disabled={generatePopupsMutation.isPending}
+                    title="Gerar popups automaticamente a partir das vendas do dia anterior"
+                >
+                    {generatePopupsMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                        <Zap className="h-4 w-4 mr-2" />
+                    )}
+                    <span className="hidden sm:inline">Gerar Automático</span>
+                </Button>
+
                 <Dialog
                 open={isModalOpen}
                 onOpenChange={(isOpen) => {

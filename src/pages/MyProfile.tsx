@@ -22,6 +22,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SalesPopupDisplay } from "@/components/SalesPopupDisplay";
 
 const profileSchema = z.object({
   first_name: z.string().optional(),
@@ -218,6 +219,9 @@ const MyProfilePage = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      
+      {/* Componente de Prova Social - Popups de Venda */}
+      <SalesPopupDisplay />
     </div>
   );
 };

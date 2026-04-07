@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { sortVariantsBySpecification } from '@/utils/variantSort';
+import { SalesPopupDisplay } from '@/components/SalesPopupDisplay';
 
 interface Product {
   id: number;
@@ -184,6 +185,9 @@ const ProductDetailPage = () => {
           </div>
         </div>
       </div>
+      
+      {/* Componente de Prova Social - Popups de Venda */}
+      <SalesPopupDisplay />
     </div>
   );
 };

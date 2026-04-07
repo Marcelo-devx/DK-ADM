@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Star } from 'lucide-react';
 import { formatBRL as formatCurrency } from '@/utils/currency';
+import { SalesPopupDisplay } from '@/components/SalesPopupDisplay';
 
 interface OrderItem {
   id: number;
@@ -181,6 +182,9 @@ const MyOrdersPage = () => {
           ))
         )}
       </div>
+      
+      {/* Componente de Prova Social - Popups de Venda */}
+      <SalesPopupDisplay />
     </div>
   );
 };

@@ -14,6 +14,7 @@ import { useState, useEffect, useRef } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { SalesPopupDisplay } from "@/components/SalesPopupDisplay";
 
 // Interface para os cupons de prêmio
 interface RewardCoupon {
@@ -306,6 +307,9 @@ export default function ClubDKPage() {
             </Card>
         </div>
       </div>
+      
+      {/* Componente de Prova Social - Popups de Venda */}
+      <SalesPopupDisplay />
     </div>
   );
 }
