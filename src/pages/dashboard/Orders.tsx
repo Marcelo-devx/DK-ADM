@@ -152,7 +152,7 @@ const OrdersPage = () => {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   
-  // Filtros de Data (mantidos para compatibilidade, mas podem ser removidos)
+  // Filtros de Data
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   
@@ -541,6 +541,37 @@ const OrdersPage = () => {
               >
                 <X className="w-3 h-3" />
               </button>
+            )}
+          </div>
+
+          {/* Filtros de Data */}
+          <div className="flex items-center gap-2">
+            <Input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="h-9 w-36 text-xs"
+              placeholder="Data Inicial"
+            />
+            <span className="text-muted-foreground text-xs">a</span>
+            <Input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="h-9 w-36 text-xs"
+              placeholder="Data Final"
+            />
+            {(startDate || endDate) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 text-xs"
+                onClick={() => { setStartDate(""); setEndDate(""); }}
+                title="Limpar filtros de data"
+              >
+                <FilterX className="w-3 h-3 mr-1" />
+                Limpar
+              </Button>
             )}
           </div>
 
