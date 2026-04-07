@@ -198,8 +198,13 @@ export const useOrderAdmin = () => {
 
   // Buscar histórico do pedido
   const getOrderHistory = async (orderId: number): Promise<OrderHistoryEntry[]> => {
+    // Include user's access token in headers so the edge function can authenticate
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData?.session?.access_token;
+
     const { data, error } = await supabase.functions.invoke('admin-get-order-history', {
-      body: { orderId }
+      body: { orderId },
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
 
     if (error) throw error;
@@ -211,8 +216,12 @@ export const useOrderAdmin = () => {
   // Atualizar pedido
   const updateOrderMutation = useMutation({
     mutationFn: async ({ orderId, updates, reason }: { orderId: number; updates: any; reason: string }) => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+
       const { data, error } = await supabase.functions.invoke('admin-update-order', {
-        body: { orderId, updates, reason }
+        body: { orderId, updates, reason },
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
       
       if (error) throw new Error(error.message);
@@ -228,8 +237,12 @@ export const useOrderAdmin = () => {
   // Cancelar pedido
   const cancelOrderMutation = useMutation({
     mutationFn: async ({ orderId, reason, returnStock }: { orderId: number; reason: string; returnStock: boolean }) => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+
       const { data, error } = await supabase.functions.invoke('admin-cancel-order', {
-        body: { orderId, reason, returnStock }
+        body: { orderId, reason, returnStock },
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
       
       if (error) throw new Error(error.message);
@@ -245,8 +258,12 @@ export const useOrderAdmin = () => {
   // Excluir pedido
   const deleteOrderMutation = useMutation({
     mutationFn: async ({ orderId, reason }: { orderId: number; reason: string }) => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+
       const { data, error } = await supabase.functions.invoke('admin-delete-order', {
-        body: { orderId, reason }
+        body: { orderId, reason },
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
       
       if (error) throw new Error(error.message);
