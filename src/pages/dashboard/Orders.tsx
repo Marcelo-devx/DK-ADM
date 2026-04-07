@@ -397,6 +397,27 @@ const OrdersPage = () => {
     else showError("Nenhum pedido apto para validação foi processado.");
   };
 
+  const handleBulkPackaged = async () => {
+    setIsProcessingBulk(true);
+    let successCount = 0;
+    
+    for (const id of Array.from(selectedIds)) {
+        const order = orders?.find(o => o.id === id);
+        const isPaid = order && (order.status === "Finalizada" || order.status === "Pago");
+        if (isPaid && order.delivery_status !== 'Despachado' && order.delivery_status !== 'Entregue' && order.delivery_status !== 'Cancelado') {
+            try {
+                await updateDeliveryStatusMutation.mutateAsync({ orderId: id, status: 'Embalado', info: 'Marcado como embalado em massa' });
+                successCount++;
+            } catch (e) {}
+        }
+    }
+    
+    setIsProcessingBulk(false);
+    setSelectedIds(new Set());
+    if (successCount > 0) showSuccess(`${successCount} pedidos marcados como embalados!`);
+    else showError("Nenhum pedido apto para ser marcado como embalado.");
+  };
+
   const handleExportExcel = async () => {
     if (selectedIds.size === 0) {
       showError("Selecione pelo menos um pedido para exportar.");
@@ -684,7 +705,8 @@ const OrdersPage = () => {
                             <Badge variant="secondary" className={cn(
                                 "w-fit",
                                 order.delivery_status === 'Entregue' && "bg-green-100 text-green-800",
-                                order.delivery_status === 'Despachado' && "bg-blue-100 text-blue-800 animate-pulse"
+                                order.delivery_status === 'Despachado' && "bg-blue-100 text-blue-800 animate-pulse",
+                                order.delivery_status === 'Embalado' && "bg-amber-100 text-amber-800"
                             )}>
                                 {order.delivery_status}
                             </Badge>
@@ -855,6 +877,9 @@ const OrdersPage = () => {
                                                 <Printer className="w-4 h-4 mr-2" /> Imprimir Etiqueta
                                             </DropdownMenuItem>
                                             <DropdownMenuSeparator />
+                                            <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: 'Embalado', info: 'Marcado como embalado manualmente' })} disabled={!isPaid || order.delivery_status === 'Despachado' || order.delivery_status === 'Entregue' || order.delivery_status === 'Cancelado'}>
+                                                <Package className="w-4 h-4 mr-2" /> Marcar como Embalado
+                                            </DropdownMenuItem>
                                             <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: 'Despachado', info: 'Despachado manualmente' })} disabled={!isPaid || isInRoute || order.delivery_status === 'Entregue'}>
                                                 <Truck className="w-4 h-4 mr-2" /> Marcar como Despachado
                                             </DropdownMenuItem>
@@ -900,6 +925,15 @@ const OrdersPage = () => {
                     >
                         {isProcessingBulk ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <CheckCircle2 className="w-5 h-5 mr-2" />}
                         Validar Pagamentos
+                    </Button>
+                    
+                    <Button 
+                        onClick={handleBulkPackaged} 
+                        disabled={isProcessingBulk}
+                        className="bg-amber-500 hover:bg-amber-600 font-black h-12 px-6 rounded-xl shadow-lg"
+                    >
+                        {isProcessingBulk ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Package className="w-5 h-5 mr-2" />}
+                        Marcar Embalados
                     </Button>
                     
                     <Button 

@@ -116,6 +116,7 @@ export function OrderEditForm({ order, onSave, onCancel, isLoading }: OrderEditF
               <SelectContent>
                 <SelectItem value="Pendente">Pendente</SelectItem>
                 <SelectItem value="Aguardando Coleta">Aguardando Coleta</SelectItem>
+                <SelectItem value="Embalado">Embalado</SelectItem>
                 <SelectItem value="Despachado">Despachado</SelectItem>
                 <SelectItem value="Entregue">Entregue</SelectItem>
                 <SelectItem value="Cancelado">Cancelado</SelectItem>
