@@ -21,6 +21,7 @@ import { showSuccess, showError } from "@/utils/toast";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ProductCombobox } from "./ProductCombobox";
+import { LowStockPreviewModal } from "./LowStockPreviewModal";
 
 const itemSchema = z.object({
   product_id: z.coerce.number().min(1, "Selecione um produto"),
@@ -47,6 +48,8 @@ interface SelectableItem {
   ohms?: string | null;
   size?: string | null;
   color?: string | null;
+  category: string | null;
+  brand: string | null;
 }
 
 interface SupplierOrderFormProps {
@@ -56,8 +59,8 @@ interface SupplierOrderFormProps {
 }
 
 export const SupplierOrderForm = ({ onSubmit, isSubmitting, products }: SupplierOrderFormProps) => {
-  const [lowStockThreshold, setLowStockThreshold] = useState(10);
   const [filterTypes, setFilterTypes] = useState<Record<number, 'all' | 'products' | 'variants'>>({});
+  const [isLowStockModalOpen, setIsLowStockModalOpen] = useState(false);
 
   const form = useForm<SupplierOrderFormValues>({
     resolver: zodResolver(formSchema),
@@ -75,23 +78,16 @@ export const SupplierOrderForm = ({ onSubmit, isSubmitting, products }: Supplier
 
   const total = form.watch("items").reduce((acc, item) => acc + (Number(item.quantity) * Number(item.unit_cost || 0)), 0);
 
-  const handleFillLowStock = () => {
-    const lowStockItems = products.filter(p => p.stock_quantity <= lowStockThreshold);
+  const handleOpenLowStockModal = () => {
+    setIsLowStockModalOpen(true);
+  };
 
-    if (lowStockItems.length === 0) {
-      showError(`Nenhum item encontrado com estoque menor ou igual a ${lowStockThreshold}.`);
-      return;
-    }
-
-    const itemsToFill = lowStockItems.map(p => ({
-      product_id: p.id,
-      variant_id: p.variant_id,
-      quantity: 1,
-      unit_cost: p.cost_price || 0.01
-    }));
-
-    replace(itemsToFill);
-    showSuccess(`${lowStockItems.length} itens (incluindo variações) adicionados.`);
+  const handleConfirmLowStockItems = (itemsToConfirm: Array<{ product_id: number; variant_id: string | null; quantity: number; unit_cost: number }>) => {
+    // Append new items to the existing form
+    itemsToConfirm.forEach(item => {
+      append(item);
+    });
+    showSuccess(`${itemsToConfirm.length} itens adicionados ao pedido.`);
   };
 
   const handleFilterChange = useCallback((index: number, filter: 'all' | 'products' | 'variants') => {
@@ -106,13 +102,15 @@ export const SupplierOrderForm = ({ onSubmit, isSubmitting, products }: Supplier
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.altKey && (e.key === 'z' || e.key === 'Z')) {
         e.preventDefault();
+        e.stopPropagation();
         append({ product_id: undefined as any, variant_id: null, quantity: 1, unit_cost: 0 });
         showSuccess("Nova linha adicionada (Alt+Z)");
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    // Use capture phase to intercept before Dialog handles the event
+    document.addEventListener('keydown', handleKeyDown, { capture: true });
+    return () => document.removeEventListener('keydown', handleKeyDown, { capture: true } as any);
   }, [append]);
 
   return (
@@ -137,23 +135,15 @@ export const SupplierOrderForm = ({ onSubmit, isSubmitting, products }: Supplier
                 <Label className="text-xs font-semibold text-yellow-700 flex items-center gap-1">
                     <Zap className="w-3 h-3" /> Sugestão de Estoque Baixo
                 </Label>
-                <div className="flex gap-2">
-                    <Input 
-                        type="number" 
-                        value={lowStockThreshold} 
-                        onChange={(e) => setLowStockThreshold(Number(e.target.value))}
-                        className="w-20 h-9"
-                    />
-                    <Button 
-                        type="button" 
-                        variant="outline" 
-                        size="sm" 
-                        className="flex-1 h-9 border-yellow-200 hover:bg-yellow-100 text-yellow-700"
-                        onClick={handleFillLowStock}
-                    >
-                        Puxar Itens
-                    </Button>
-                </div>
+                <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="sm" 
+                    className="w-full h-9 border-yellow-200 hover:bg-yellow-100 text-yellow-700"
+                    onClick={handleOpenLowStockModal}
+                >
+                    <Zap className="h-4 w-4 mr-2" /> Ver Sugestões de Estoque Baixo
+                </Button>
             </div>
         </div>
 
@@ -293,6 +283,13 @@ export const SupplierOrderForm = ({ onSubmit, isSubmitting, products }: Supplier
         <Button type="submit" disabled={isSubmitting} className="w-full">
           {isSubmitting ? "Criando Pedido..." : "Salvar Pedido de Compra"}
         </Button>
+
+        <LowStockPreviewModal
+          isOpen={isLowStockModalOpen}
+          onClose={() => setIsLowStockModalOpen(false)}
+          products={products}
+          onConfirm={handleConfirmLowStockItems}
+        />
       </form>
     </Form>
   );
