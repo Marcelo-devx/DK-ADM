@@ -26,9 +26,6 @@ export function UserDeleteModal({ isOpen, onClose, user, onConfirm }: UserDelete
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async () => {
-    if (!reason.trim()) {
-      return;
-    }
     setIsSubmitting(true);
     try {
       await onConfirm(deleteOrders, reason);
@@ -88,11 +85,11 @@ export function UserDeleteModal({ isOpen, onClose, user, onConfirm }: UserDelete
           </div>
           <div className="space-y-2">
             <Label htmlFor="reason">
-              Motivo da exclusão <span className="text-red-500">*</span>
+              Motivo da exclusão (opcional)
             </Label>
             <Textarea
               id="reason"
-              placeholder="Descreva o motivo desta exclusão..."
+              placeholder="Descreva o motivo desta exclusão (opcional)..."
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={3}
@@ -105,7 +102,7 @@ export function UserDeleteModal({ isOpen, onClose, user, onConfirm }: UserDelete
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={!reason.trim() || isSubmitting}
+            disabled={isSubmitting}
             variant="destructive"
           >
             {isSubmitting ? (
