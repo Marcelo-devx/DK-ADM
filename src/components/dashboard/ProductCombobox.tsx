@@ -1,5 +1,3 @@
-"use client";
-
 import * as React from "react";
 import { Check, Search } from "lucide-react";
 
@@ -27,6 +25,9 @@ interface SelectableItem {
   stock_quantity: number;
   cost_price: number | null;
   is_variant: boolean;
+  ohms?: string | null;
+  size?: string | null;
+  color?: string | null;
 }
 
 interface ProductComboboxProps {
@@ -38,7 +39,7 @@ interface ProductComboboxProps {
   placeholder?: string;
 }
 
-export function ProductCombobox({
+export const ProductCombobox = React.memo(function ProductCombobox({
   products,
   value,
   onChange,
@@ -77,7 +78,7 @@ export function ProductCombobox({
   }, [value, products]);
 
   // Handle item selection
-  const handleSelect = (currentValue: string) => {
+  const handleSelect = React.useCallback((currentValue: string) => {
     const isVariant = String(currentValue).startsWith("var_");
     const idValue = String(currentValue).split("_")[1];
     
@@ -93,7 +94,7 @@ export function ProductCombobox({
       setOpen(false);
       setSearchValue("");
     }
-  };
+  }, [products, onChange]);
 
   // Handle keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -207,4 +208,4 @@ export function ProductCombobox({
       </PopoverContent>
     </Popover>
   );
-}
+});

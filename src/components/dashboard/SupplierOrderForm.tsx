@@ -15,7 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Trash2, Plus, Package, Zap, Keyboard } from "lucide-react";
 import { Textarea } from "../ui/textarea";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Label } from "../ui/label";
 import { showSuccess, showError } from "@/utils/toast";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +44,9 @@ interface SelectableItem {
   stock_quantity: number;
   cost_price: number | null;
   is_variant: boolean;
+  ohms?: string | null;
+  size?: string | null;
+  color?: string | null;
 }
 
 interface SupplierOrderFormProps {
@@ -54,6 +57,7 @@ interface SupplierOrderFormProps {
 
 export const SupplierOrderForm = ({ onSubmit, isSubmitting, products }: SupplierOrderFormProps) => {
   const [lowStockThreshold, setLowStockThreshold] = useState(10);
+  const [filterTypes, setFilterTypes] = useState<Record<number, 'all' | 'products' | 'variants'>>({});
 
   const form = useForm<SupplierOrderFormValues>({
     resolver: zodResolver(formSchema),
@@ -89,6 +93,13 @@ export const SupplierOrderForm = ({ onSubmit, isSubmitting, products }: Supplier
     replace(itemsToFill);
     showSuccess(`${lowStockItems.length} itens (incluindo variações) adicionados.`);
   };
+
+  const handleFilterChange = useCallback((index: number, filter: 'all' | 'products' | 'variants') => {
+    setFilterTypes(prev => ({
+      ...prev,
+      [index]: filter
+    }));
+  }, []);
 
   // Keyboard shortcut for Alt+Z to add new item
   useEffect(() => {
@@ -215,10 +226,8 @@ export const SupplierOrderForm = ({ onSubmit, isSubmitting, products }: Supplier
                               form.setValue(`items.${index}.unit_cost`, cost, { shouldValidate: true });
                             }
                           }}
-                          filterType="all"
-                          onFilterChange={(filter) => {
-                            // Filter is handled internally by ProductCombobox
-                          }}
+                          filterType={filterTypes[index] || 'all'}
+                          onFilterChange={(filter) => handleFilterChange(index, filter)}
                           placeholder="Buscar produto..."
                         />
                         <FormMessage />

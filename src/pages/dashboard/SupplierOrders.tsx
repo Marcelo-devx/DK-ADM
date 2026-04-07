@@ -67,6 +67,9 @@ const fetchProductsWithVariants = async () => {
         price,
         cost_price,
         stock_quantity,
+        ohms,
+        size,
+        color,
         flavors (name)
       )
     `)
@@ -82,16 +85,21 @@ const fetchProductsWithVariants = async () => {
       p.product_variants.forEach((v: any) => {
         const flavorName = v.flavors?.name || "";
         const volumeLabel = v.volume_ml ? `${v.volume_ml}ml` : "";
+        const ohmsLabel = v.ohms ? `${v.ohms}` : "";
+        const sizeLabel = v.size ? `${v.size}` : "";
         flattened.push({
           id: p.id,
           variant_id: v.id,
-          name: `${p.name}${flavorName ? ` - ${flavorName}` : ""}${volumeLabel ? ` (${volumeLabel})` : ""}`,
+          name: `${p.name}${flavorName ? ` - ${flavorName}` : ""}${volumeLabel ? ` (${volumeLabel})` : ""}${ohmsLabel ? ` - ${ohmsLabel}` : ""}${sizeLabel ? ` - ${sizeLabel}` : ""}`,
           stock_quantity: v.stock_quantity,
           cost_price: v.cost_price || p.cost_price,
           is_variant: true,
           brand: p.brand || null,
           category: p.category || null,
           is_visible: p.is_visible ?? true,
+          ohms: v.ohms,
+          size: v.size,
+          color: v.color,
         });
       });
     } else {
@@ -105,6 +113,9 @@ const fetchProductsWithVariants = async () => {
         brand: p.brand || null,
         category: p.category || null,
         is_visible: p.is_visible ?? true,
+        ohms: null,
+        size: null,
+        color: null,
       });
     }
   });
