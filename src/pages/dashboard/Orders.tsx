@@ -22,7 +22,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send, History, FileDown, Calendar, FilterX, ShieldCheck, ShieldX, CheckSquare, Plus } from "lucide-react";
+import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send, History, FileDown, Calendar, FilterX, ShieldCheck, ShieldX, CheckSquare, Plus, Search } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { showSuccess, showError } from "@/utils/toast";
 import { OrderDetailModal } from "@/components/dashboard/OrderDetailModal";
@@ -62,6 +62,7 @@ interface Order {
     first_name: string | null;
     last_name: string | null;
     phone: string | null;
+    cpf_cnpj: string | null;
   } | null;
   order_items: any[];
 }
@@ -81,7 +82,7 @@ const fetchOrders = async (): Promise<Order[]> => {
   if (userIds.length > 0) {
     const { data: profilesData, error: profilesError } = await supabase
       .from("profiles")
-      .select("id, first_name, last_name, phone")
+      .select("id, first_name, last_name, phone, cpf_cnpj")
       .in("id", userIds);
 
     if (profilesError) throw new Error(profilesError.message);
@@ -147,7 +148,11 @@ const OrdersPage = () => {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [readyToShipOnly, setReadyToShipOnly] = useState(false);
   
-  // Filtros de Data
+  // Estado para busca unificada
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  
+  // Filtros de Data (mantidos para compatibilidade, mas podem ser removidos)
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   
@@ -170,6 +175,15 @@ const OrdersPage = () => {
       showError(err?.message || "Erro ao carregar pedidos");
     }
   } as UseQueryOptions<Order[], Error>);
+
+  // Debounce para busca
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setSearch(searchInput.trim());
+    }, 500); // 500ms de delay
+
+    return () => clearTimeout(timeoutId);
+  }, [searchInput]);
 
   // ADDING REALTIME SUBSCRIPTION
   useEffect(() => {
@@ -196,32 +210,64 @@ const OrdersPage = () => {
   }, [queryClient]); // Recria se o queryClient mudar
 
   const filteredOrders = useMemo(() => {
+    // Se não há busca, aplica filtros normais
+    if (!search) {
+      return orders?.filter(order => {
+        // Filtro de "Prontos para Envio"
+        if (readyToShipOnly) {
+            const isPaid = order.status === "Finalizada" || order.status === "Pago";
+            const isPendingDelivery = order.delivery_status === "Pendente" || order.delivery_status === "Aguardando Coleta";
+            if (!(isPaid && isPendingDelivery)) return false;
+        }
+
+        // Filtro de Data
+        if (startDate) {
+          const orderDate = new Date(order.created_at);
+          const start = new Date(startDate);
+          start.setHours(0, 0, 0, 0); // Início do dia
+          if (orderDate < start) return false;
+        }
+
+        if (endDate) {
+          const orderDate = new Date(order.created_at);
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999); // Final do dia
+          if (orderDate > end) return false;
+        }
+
+        return true;
+      }) || [];
+    }
+
+    // Se há busca, filtra por ID, CPF ou Nome do cliente
+    const searchLower = search.toLowerCase();
+    const searchNumber = search.replace(/\D/g, ""); // Remove não-dígitos para busca de CPF
+
     return orders?.filter(order => {
-      // Filtro de "Prontos para Envio"
-      if (readyToShipOnly) {
-          const isPaid = order.status === "Finalizada" || order.status === "Pago";
-          const isPendingDelivery = order.delivery_status === "Pendente" || order.delivery_status === "Aguardando Coleta";
-          if (!(isPaid && isPendingDelivery)) return false;
+      // Busca por ID do pedido (exato ou contém)
+      if (order.id.toString().includes(searchNumber)) {
+        return true;
       }
 
-      // Filtro de Data
-      if (startDate) {
-        const orderDate = new Date(order.created_at);
-        const start = new Date(startDate);
-        start.setHours(0, 0, 0, 0); // Início do dia
-        if (orderDate < start) return false;
+      // Busca por CPF do cliente
+      if (order.profiles?.cpf_cnpj) {
+        const cleanCPF = order.profiles.cpf_cnpj.replace(/\D/g, ""); // Remove formatação
+        if (cleanCPF.includes(searchNumber)) {
+          return true;
+        }
       }
 
-      if (endDate) {
-        const orderDate = new Date(order.created_at);
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999); // Final do dia
-        if (orderDate > end) return false;
+      // Busca por nome do cliente
+      if (order.profiles?.first_name || order.profiles?.last_name) {
+        const fullName = `${order.profiles.first_name || ""} ${order.profiles.last_name || ""}`.toLowerCase();
+        if (fullName.includes(searchLower)) {
+          return true;
+        }
       }
 
-      return true;
+      return false;
     }) || [];
-  }, [orders, readyToShipOnly, startDate, endDate]);
+  }, [orders, readyToShipOnly, startDate, endDate, search]);
 
   const validatePaymentAndSetPendingMutation = useMutation({
     mutationFn: async (orderId: number) => {
@@ -477,34 +523,24 @@ const OrdersPage = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-3 bg-white p-2 rounded-xl border shadow-sm">
-          
-          <div className="flex items-center bg-gray-50 border border-gray-200 rounded-lg h-9 overflow-hidden">
-            <div className="flex items-center px-3 border-r border-gray-200">
-                <Calendar className="w-4 h-4 text-gray-400 mr-2" />
-                <input 
-                    type="date" 
-                    className="bg-transparent border-none text-xs text-gray-700 focus:outline-none w-24 font-medium font-sans"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                />
-            </div>
-            <div className="flex items-center px-3 bg-white">
-                <span className="text-[10px] uppercase font-bold text-gray-400 mr-2">Até</span>
-                <input 
-                    type="date" 
-                    className="bg-transparent border-none text-xs text-gray-700 focus:outline-none w-24 font-medium font-sans"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                />
-            </div>
-            {(startDate || endDate) && (
-                <button 
-                    onClick={() => { setStartDate(""); setEndDate(""); }}
-                    className="h-full px-2 hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors border-l border-gray-200"
-                    title="Limpar datas"
-                >
-                    <X className="w-3 h-3" />
-                </button>
+          {/* Campo de Busca Unificada */}
+          <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-9 overflow-hidden flex-1 min-w-[280px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Buscar por ID, CPF, Nome..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="pl-10 pr-4 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0"
+            />
+            {search && (
+              <button
+                onClick={() => { setSearchInput(""); setSearch(""); }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
+                title="Limpar busca"
+              >
+                <X className="w-3 h-3" />
+              </button>
             )}
           </div>
 
