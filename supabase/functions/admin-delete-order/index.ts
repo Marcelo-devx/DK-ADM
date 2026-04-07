@@ -19,7 +19,7 @@ serve(async (req) => {
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
       {
         global: {
           headers: { Authorization: authHeader }
@@ -31,7 +31,7 @@ serve(async (req) => {
 
     if (!orderId || !reason) {
       return new Response(
-        JSON.stringify({ error: 'orderId and reason are required' }),
+        JSON.stringify({ error: 'ID do pedido e motivo são obrigatórios' }),
         { status: 400, headers: corsHeaders }
       )
     }
@@ -51,7 +51,7 @@ serve(async (req) => {
 
     if (profile?.role !== 'adm') {
       return new Response(
-        JSON.stringify({ error: 'Unauthorized: Admin access required' }),
+        JSON.stringify({ error: 'Não autorizado: Acesso restrito a administradores' }),
         { status: 403, headers: corsHeaders }
       )
     }
@@ -59,13 +59,13 @@ serve(async (req) => {
     // Buscar dados do pedido antes de deletar (para histórico)
     const { data: order, error: orderError } = await supabase
       .from('orders')
-      .select('*, profiles(first_name, last_name, email, phone)')
+      .select('*, profiles(first_name, last_name, phone)')
       .eq('id', orderId)
       .single()
 
     if (orderError || !order) {
       return new Response(
-        JSON.stringify({ error: 'Order not found' }),
+        JSON.stringify({ error: 'Pedido não encontrado' }),
         { status: 404, headers: corsHeaders }
       )
     }
@@ -107,14 +107,14 @@ serve(async (req) => {
     console.log(`[admin-delete-order] Pedido ${orderId} deletado com sucesso`)
 
     return new Response(
-      JSON.stringify({ success: true, message: 'Order deleted successfully' }),
+      JSON.stringify({ success: true, message: 'Pedido excluído com sucesso' }),
       { headers: corsHeaders }
     )
 
   } catch (error) {
     console.error('[admin-delete-order] Erro:', error)
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: `Erro ao excluir pedido: ${error.message}` }),
       { status: 500, headers: corsHeaders }
     )
   }
