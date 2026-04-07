@@ -1,6 +1,7 @@
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -108,6 +109,9 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
           <DialogTitle className="flex items-center gap-2 text-xl">
             <User className="h-6 w-6 text-primary" /> Detalhes do Cliente
           </DialogTitle>
+          <DialogDescription>
+            Visualize e gerencie as informações do cliente, dados pessoais e histórico de pedidos
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-hidden flex flex-col">
