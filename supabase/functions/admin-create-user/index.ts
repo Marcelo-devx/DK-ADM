@@ -73,6 +73,16 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const { email, password, full_name, cpf_cnpj, phone, gender } = body || {};
 
+    // Log sanitized body for debugging (do NOT log password value)
+    console.log('[admin-create-user] Payload received:', {
+      email: email || null,
+      has_password: !!password,
+      full_name: full_name || null,
+      cpf_cnpj: cpf_cnpj || null,
+      phone: phone || null,
+      gender: gender || null,
+    });
+
     if (!email || !password) {
       return new Response(JSON.stringify({ error: "Email e senha são obrigatórios" }), {
         status: 400,
@@ -100,8 +110,20 @@ serve(async (req) => {
     });
 
     if (createError) {
-      console.error("[admin-create-user] Erro ao criar usuário:", createError.message);
-      return new Response(JSON.stringify({ error: createError.message }), {
+      // Log full error object for debugging
+      console.error('[admin-create-user] Erro ao criar usuário (createError):', createError);
+
+      // Return richer error info so the client can display specific reason during debugging
+      const responseBody = {
+        error: 'Database error creating new user',
+        message: createError?.message || null,
+        details: createError?.details || null,
+        hint: createError?.hint || null,
+        code: createError?.code || null,
+      };
+
+      // Use 400 to match previous behavior when createError indicates client-side input issues
+      return new Response(JSON.stringify(responseBody), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -132,7 +154,7 @@ serve(async (req) => {
     );
 
     if (profileError) {
-      console.error("[admin-create-user] Erro ao criar perfil:", profileError.message);
+      console.error("[admin-create-user] Erro ao criar perfil:", profileError.message, profileError);
       return new Response(JSON.stringify({ error: "Erro ao criar perfil: " + profileError.message }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
