@@ -13,13 +13,14 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Trash2, Plus, Package, Zap } from "lucide-react";
+import { Trash2, Plus, Package, Zap, Keyboard } from "lucide-react";
 import { Textarea } from "../ui/textarea";
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Label } from "../ui/label";
 import { showSuccess, showError } from "@/utils/toast";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { ProductCombobox } from "./ProductCombobox";
 
 const itemSchema = z.object({
   product_id: z.coerce.number().min(1, "Selecione um produto"),
@@ -89,31 +90,19 @@ export const SupplierOrderForm = ({ onSubmit, isSubmitting, products }: Supplier
     showSuccess(`${lowStockItems.length} itens (incluindo variações) adicionados.`);
   };
 
-  // per-row search and filter state
-  const [searchMap, setSearchMap] = useState<Record<number, string>>({});
-  const [debouncedSearchMap, setDebouncedSearchMap] = useState<Record<number, string>>({});
-  const [filterMap, setFilterMap] = useState<Record<number, 'all' | 'variants' | 'products'>>({});
-  const debounceTimers = useRef<Record<number, any>>({});
-
-  const setRowSearch = (index: number, value: string) => {
-    setSearchMap(s => ({ ...s, [index]: value }));
-    // debounce
-    if (debounceTimers.current[index]) clearTimeout(debounceTimers.current[index]);
-    debounceTimers.current[index] = setTimeout(() => {
-      setDebouncedSearchMap(s => ({ ...s, [index]: value }));
-      delete debounceTimers.current[index];
-    }, 300);
-  };
-  const setRowFilter = (index: number, value: 'all' | 'variants' | 'products') => {
-    setFilterMap(s => ({ ...s, [index]: value }));
-  };
-
+  // Keyboard shortcut for Alt+Z to add new item
   useEffect(() => {
-    return () => {
-      // cleanup timers on unmount
-      Object.values(debounceTimers.current).forEach((t: any) => clearTimeout(t));
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.altKey && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault();
+        append({ product_id: undefined as any, variant_id: null, quantity: 1, unit_cost: 0 });
+        showSuccess("Nova linha adicionada (Alt+Z)");
+      }
     };
-  }, []);
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [append]);
 
   return (
     <Form {...form}>
@@ -160,29 +149,35 @@ export const SupplierOrderForm = ({ onSubmit, isSubmitting, products }: Supplier
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold flex items-center gap-2"><Package className="h-5 w-5" /> Itens do Pedido</h3>
-            <Button type="button" variant="outline" size="sm" onClick={() => append({ product_id: undefined as any, variant_id: null, quantity: 1, unit_cost: 0 })}>
-              <Plus className="h-4 w-4 mr-2" /> Adicionar Item
-            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => append({ product_id: undefined as any, variant_id: null, quantity: 1, unit_cost: 0 })}
+                  >
+                    <Plus className="h-4 w-4 mr-2" /> Adicionar Item
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="flex items-center gap-2">
+                    <Keyboard className="h-4 w-4" />
+                    <span>Alt+Z</span>
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
 
           {fields.map((field, index) => {
-            const selectedVal = form.watch(`items.${index}.variant_id`) || String(form.watch(`items.${index}.product_id`));
-            
             const currentVariantId = form.watch(`items.${index}.variant_id`);
             const currentProductId = form.watch(`items.${index}.product_id`);
             
             const selectedItem = products.find(p => 
                 currentVariantId ? p.variant_id === currentVariantId : p.id === Number(currentProductId) && !p.variant_id
             );
-
-            const localSearch = (debouncedSearchMap[index] || '').toLowerCase().trim();
-            const localFilter = filterMap[index] || 'all';
-            const filteredProducts = products.filter(p => {
-              if (localSearch && !p.name.toLowerCase().includes(localSearch)) return false;
-              if (localFilter === 'variants' && !p.is_variant) return false;
-              if (localFilter === 'products' && p.is_variant) return false;
-              return true;
-            });
 
             return (
               <div key={field.id} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end border p-4 rounded-lg bg-gray-50 relative">
@@ -200,61 +195,32 @@ export const SupplierOrderForm = ({ onSubmit, isSubmitting, products }: Supplier
                                 </Badge>
                             )}
                         </div>
-                        <Select 
-                          onValueChange={(val) => {
-                              const isVariant = String(val).startsWith("var_");
-                              const idValue = String(val).split("_")[1];
-                              
-                              let item;
-                              if (isVariant) {
-                                  item = products.find(p => p.variant_id === idValue);
-                                  form.setValue(`items.${index}.product_id`, item?.id || 0);
-                                  form.setValue(`items.${index}.variant_id`, idValue);
-                              } else {
-                                  item = products.find(p => p.id === Number(idValue) && !p.variant_id);
-                                  form.setValue(`items.${index}.product_id`, Number(idValue));
-                                  form.setValue(`items.${index}.variant_id`, null);
-                              }
-
-                              if (item) {
-                                  const cost = item.cost_price && item.cost_price > 0 ? item.cost_price : 0.01;
-                                  form.setValue(`items.${index}.unit_cost`, cost, { shouldValidate: true });
-                              }
-                          }} 
+                        <ProductCombobox
+                          products={products}
                           value={currentVariantId ? `var_${currentVariantId}` : currentProductId ? `prod_${currentProductId}` : ""}
-                        >
-                          <FormControl>
-                            <SelectTrigger><SelectValue placeholder="Selecione um item..." /></SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <div className="p-2 border-b">
-                              <Input placeholder="Pesquisar..." value={searchMap[index] || ''} onChange={(e) => setRowSearch(index, e.target.value)} />
-                              <div className="mt-2 flex gap-2">
-                                <div className="inline-flex rounded-md shadow-sm" role="group" aria-label="Filtro de itens">
-                                  <button type="button" onClick={() => setRowFilter(index, 'all')} className={`px-3 py-1 text-sm rounded-l ${ (filterMap[index] || 'all') === 'all' ? 'bg-indigo-600 text-white' : 'bg-white border'} `}>Todos</button>
-                                  <button type="button" onClick={() => setRowFilter(index, 'products')} className={`px-3 py-1 text-sm ${ (filterMap[index] || 'all') === 'products' ? 'bg-indigo-600 text-white' : 'bg-white border'} `}>Produtos</button>
-                                  <button type="button" onClick={() => setRowFilter(index, 'variants')} className={`px-3 py-1 text-sm rounded-r ${ (filterMap[index] || 'all') === 'variants' ? 'bg-indigo-600 text-white' : 'bg-white border'} `}>Variações</button>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="max-h-64 overflow-auto">
-                            {filteredProducts.map((p, idx) => (
-                              <SelectItem key={`${p.id}-${p.variant_id}-${idx}`} value={p.variant_id ? `var_${p.variant_id}` : `prod_${p.id}`}>
-                                  <div className="flex justify-between w-full gap-8 items-center">
-                                      <div className="flex flex-col">
-                                        <span className={p.is_variant ? "pl-2" : "font-bold"}>{p.name}</span>
-                                        <span className="text-xs text-muted-foreground">Estoque: {p.stock_quantity}</span>
-                                      </div>
-                                      <span className="text-muted-foreground text-xs opacity-70">R$ {p.cost_price ? Number(p.cost_price).toFixed(2) : '0.00'}</span>
-                                  </div>
-                              </SelectItem>
-                            ))}
-                            {filteredProducts.length === 0 && (
-                              <div className="p-4 text-center text-sm text-muted-foreground">Nenhum item encontrado.</div>
-                            )}
-                            </div>
-                          </SelectContent>
-                        </Select>
+                          onChange={(val, item) => {
+                            const isVariant = String(val).startsWith("var_");
+                            const idValue = String(val).split("_")[1];
+                            
+                            if (isVariant) {
+                              form.setValue(`items.${index}.product_id`, item?.id || 0);
+                              form.setValue(`items.${index}.variant_id`, idValue);
+                            } else {
+                              form.setValue(`items.${index}.product_id`, Number(idValue));
+                              form.setValue(`items.${index}.variant_id`, null);
+                            }
+
+                            if (item) {
+                              const cost = item.cost_price && item.cost_price > 0 ? item.cost_price : 0.01;
+                              form.setValue(`items.${index}.unit_cost`, cost, { shouldValidate: true });
+                            }
+                          }}
+                          filterType="all"
+                          onFilterChange={(filter) => {
+                            // Filter is handled internally by ProductCombobox
+                          }}
+                          placeholder="Buscar produto..."
+                        />
                         <FormMessage />
                       </FormItem>
                     )}
