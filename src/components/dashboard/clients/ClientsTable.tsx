@@ -21,6 +21,7 @@ export default function ClientsTable({ clients, isLoading, toggleLoading, onTogg
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="text-primary font-bold">CPF/CNPJ</TableHead>
             <TableHead>Email</TableHead>
             <TableHead>Nome</TableHead>
             <TableHead>Status Compra</TableHead>
@@ -33,12 +34,12 @@ export default function ClientsTable({ clients, isLoading, toggleLoading, onTogg
           {isLoading ? (
             Array.from({ length: 10 }).map((_, i) => (
               <TableRow key={i}>
-                <TableCell colSpan={6}><Skeleton className="h-5 w-full" /></TableCell>
+                <TableCell colSpan={7}><Skeleton className="h-5 w-full" /></TableCell>
               </TableRow>
             ))
           ) : clients.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+              <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                 Nenhum cliente encontrado.
               </TableCell>
             </TableRow>

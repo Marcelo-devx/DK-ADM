@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Mail } from "lucide-react";
+import { Search, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -26,7 +26,7 @@ export default function SearchBar({
       <div className="relative flex items-center">
         <input
           type="text"
-          placeholder="Buscar por email..."
+          placeholder="Buscar por CPF ou email..."
           value={searchInput}
           onChange={(e) => onSearchChange(e.target.value)}
           onKeyDown={(e) => {
@@ -37,7 +37,7 @@ export default function SearchBar({
           }}
           className="pl-9 pr-4 py-2 border rounded-md text-sm w-60 focus:outline-none focus:ring-2 focus:ring-primary"
         />
-        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
         {/* Search button */}
         <button
           type="button"

@@ -4,7 +4,7 @@ import React, { memo, useCallback } from "react";
 import { Client } from "@/hooks/useClients";
 import { TableCell } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
-import { CalendarDays, Eye, Lock, Unlock, MoreHorizontal, Mail, KeyRound, RotateCcw, CheckCircle } from "lucide-react";
+import { CalendarDays, Eye, Lock, Unlock, MoreHorizontal, Mail, KeyRound, RotateCcw, CheckCircle, Fingerprint } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
@@ -23,10 +23,37 @@ function RowComponent({ client, onTogglePix, toggleLoading, onOpenDetails, onAct
     [client.id, onTogglePix]
   );
 
+  // Função para formatar CPF
+  const formatCPF = (cpf: string | null) => {
+    if (!cpf) return "-";
+    // Remove caracteres não numéricos
+    const cleanCPF = cpf.replace(/\D/g, "");
+    // Verifica se tem 11 dígitos (CPF) ou 14 (CNPJ)
+    if (cleanCPF.length === 11) {
+      return cleanCPF.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+    } else if (cleanCPF.length === 14) {
+      return cleanCPF.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+    }
+    return cpf; // Retorna original se não for CPF ou CNPJ
+  };
+
   return (
     <>
       <tr>
-        <TableCell className="font-medium text-sm">{client.email}</TableCell>
+        {/* CPF/CNPJ como identificador principal */}
+        <TableCell className="font-medium text-sm text-primary font-bold">
+          <div className="flex items-center gap-2">
+            <Fingerprint className="w-3.5 h-3.5 text-primary" />
+            {formatCPF(client.cpf_cnpj)}
+          </div>
+        </TableCell>
+        {/* Email como secundário */}
+        <TableCell className="text-sm">
+          <div className="flex items-center gap-1">
+            <Mail className="w-3 h-3 text-muted-foreground" />
+            <span className="text-muted-foreground">{client.email}</span>
+          </div>
+        </TableCell>
         <TableCell className="text-sm">{client.first_name || "-"} {client.last_name || ""}</TableCell>
         <TableCell>
           <div className="flex flex-col gap-1">

@@ -15,6 +15,7 @@ export interface Client {
   force_pix_on_next_purchase: boolean;
   order_count: number;
   completed_order_count: number;
+  cpf_cnpj: string | null;
 }
 
 const PAGE_SIZE = 10;
@@ -140,6 +141,7 @@ export function useClients(initialPage = 1) {
         force_pix_on_next_purchase: true,
         order_count: 0,
         completed_order_count: 0,
+        cpf_cnpj: null, // Será preenchido quando o cliente cadastrar ou admin atualizar
       };
 
       // Optimistically update small caches

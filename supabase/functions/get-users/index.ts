@@ -78,9 +78,12 @@ serve(async (req) => {
 
     console.log('[get-users] Params', { requestedLimit, requestedPage, search });
 
-    // If search is provided, we will scan pages of auth users until we collect enough matches.
+    // If search is provided, we will scan pages to find matches.
+    // Detect if search is CPF (digits only) or email (contains @)
+    const isCPF = /^[0-9]+$/.test(search);
+    const isEmail = search.includes('@');
+    
     // For normal listing (no search), we use admin.listUsers with pagination directly.
-
     let usersForPage = [];
 
     if (!search) {
@@ -92,8 +95,62 @@ serve(async (req) => {
       const res = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
       const users = res?.data?.users || [];
       usersForPage = users;
+    } else if (isCPF) {
+      // Search by CPF in profiles table
+      console.log('[get-users] Searching by CPF in profiles table');
+      
+      const { data: profiles, error: cpfSearchError } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .ilike('cpf_cnpj', `%${search}%`);
+      
+      if (cpfSearchError) {
+        console.error('[get-users] Erro ao buscar por CPF:', cpfSearchError);
+        throw cpfSearchError;
+      }
+      
+      // If no profiles found with this CPF, return empty list
+      if (!profiles || profiles.length === 0) {
+        console.log(`[get-users] CPF "${search}" não encontrado`);
+        return new Response(JSON.stringify([]), { status: 200, headers: { ...buildCorsHeaders(req), 'Content-Type': 'application/json' } });
+      }
+      
+      // Get user IDs from profiles
+      const userIdsFromCPF = profiles.map(p => p.id);
+      
+      // Now fetch the actual users from auth.users
+      const perPage = 1000;
+      let page = 1;
+      const matches: any[] = [];
+      let hasMore = true;
+      
+      // Scan all pages of auth.users to find matches by ID
+      while (hasMore) {
+        const res = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
+        const users = res?.data?.users || [];
+        if (!users || users.length === 0) {
+          hasMore = false;
+          break;
+        }
+        
+        // Check if any of these users have an ID in our CPF matches
+        for (const u of users) {
+          if (userIdsFromCPF.includes(u.id)) {
+            matches.push(u);
+          }
+        }
+        
+        hasMore = users.length === perPage;
+        page += 1;
+      }
+      
+      console.log(`[get-users] CPF search "${search}" found ${matches.length} matches`);
+      
+      // Paginate the matches
+      const start = (requestedPage - 1) * requestedLimit;
+      usersForPage = matches.slice(start, start + requestedLimit);
     } else {
-      // Need to search by email (case-insensitive). Scan ALL pages to find matches.
+      // Search by email (case-insensitive). Scan ALL pages to find matches.
       const perPage = 1000; // chunk size for scanning
       let page = 1;
       const matches: any[] = [];
@@ -133,7 +190,7 @@ serve(async (req) => {
     // Fetch only the profiles for these users
     const { data: profiles, error: profilesError } = await supabaseAdmin
       .from('profiles')
-      .select('id, first_name, last_name, role, force_pix_on_next_purchase, updated_at, created_at')
+      .select('id, first_name, last_name, role, force_pix_on_next_purchase, updated_at, created_at, cpf_cnpj')
       .in('id', userIds);
 
     if (profilesError) {
@@ -178,6 +235,7 @@ serve(async (req) => {
         force_pix_on_next_purchase: p.force_pix_on_next_purchase === true,
         order_count: orderCountMap.get(u.id) || 0,
         completed_order_count: completedOrderMap.get(u.id) || 0,
+        cpf_cnpj: p.cpf_cnpj || null,
       };
     });
 
