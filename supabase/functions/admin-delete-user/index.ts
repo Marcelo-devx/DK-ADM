@@ -82,11 +82,18 @@ serve(async (req) => {
       return new Response('Error deleting profile', { status: 500, headers: corsHeaders })
     }
 
-    // Excluir usuário do auth.users (precisa usar admin API)
-    const { error: authError } = await supabase.auth.admin.deleteUser(userId)
+    // Excluir usuário do auth.users permanentemente (hard delete)
+    // Isso libera o email para ser reutilizado em novos cadastros
+    const { error: authError } = await supabase.auth.admin.deleteUser(
+      userId,
+      { shouldSoftDelete: false }
+    )
+    
     if (authError) {
       console.error('[admin-delete-user] Erro ao excluir auth user:', authError)
       // Continuar mesmo se falhar excluir auth.user (profile já foi excluído)
+    } else {
+      console.log(`[admin-delete-user] Usuário ${userId} excluído permanentemente do auth.users. Email liberado para reuso.`)
     }
 
     console.log(`[admin-delete-user] Usuário ${userId} excluído com sucesso`)
