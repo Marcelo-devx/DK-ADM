@@ -363,9 +363,40 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
       }
       return order;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
-      showSuccess("Pedido criado com sucesso!");
+    onSuccess: async (order) => {
+      // Verifica se o método de pagamento é cartão
+      const isCardPayment = paymentMethod?.toLowerCase().includes('cartão') || 
+                           paymentMethod?.toLowerCase().includes('cartao') ||
+                           paymentMethod?.toLowerCase().includes('credit') ||
+                           paymentMethod?.toLowerCase().includes('cartão (mp)');
+      
+      let successMessage = 'Pedido criado com sucesso!';
+      
+      if (isCardPayment && selectedClient) {
+        // Libera o cartão para o cliente
+        try {
+          await supabase
+            .from('profiles')
+            .update({ force_pix_on_next_purchase: false })
+            .eq('id', selectedClient.id);
+          
+          // Invalida queries de clientes para atualizar a UI
+          queryClient.invalidateQueries({ queryKey: ['clients'] });
+          queryClient.invalidateQueries({ queryKey: ['clientsTotal'] });
+          
+          // Mensagem específica indicando que o cartão foi liberado
+          successMessage = 'Pedido criado com sucesso! Cartão liberado para o cliente.';
+        } catch (error) {
+          // Se falhar ao liberar o cartão, mas o pedido foi criado, mostra aviso
+          console.error('Erro ao liberar cartão:', error);
+          successMessage = 'Pedido criado com sucesso! (Aviso: houve um erro ao liberar o cartão automaticamente)';
+        }
+      }
+      
+      // Sempre invalida queries de pedidos e mostra mensagem
+      queryClient.invalidateQueries({ queryKey: ['ordersAdmin'] });
+      showSuccess(successMessage);
+      
       handleClose();
     },
     onError: (error: any) => showError(`Erro ao criar pedido: ${error.message}`),
