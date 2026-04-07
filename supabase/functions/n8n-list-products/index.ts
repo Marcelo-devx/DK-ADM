@@ -31,7 +31,7 @@ serve(async (req) => {
     const { data: products, error } = await supabaseAdmin
         .from('products')
         .select(`
-            id, name, sku, price, stock_quantity, image_url, category, brand,
+            id, name, sku, price, stock_quantity, image_url, category, sub_category, brand,
             product_variants (id, sku, price, stock_quantity, flavors(name), volume_ml, color)
         `)
         .eq('is_visible', true);
@@ -46,6 +46,7 @@ serve(async (req) => {
                 type: 'variations',
                 base_product: p.name,
                 category: p.category,
+                sub_category: p.sub_category,
                 brand: p.brand,
                 options: variants.map(v => ({
                     variant_id: v.id,
@@ -65,6 +66,7 @@ serve(async (req) => {
             stock: p.stock_quantity,
             image: p.image_url,
             category: p.category,
+            sub_category: p.sub_category,
             brand: p.brand
         };
     });
