@@ -118,13 +118,13 @@ export const LowStockPreviewModal = ({ isOpen, onClose, products, onConfirm }: L
   const handleConfirm = () => {
     const itemsToConfirm = Object.entries(selectedItems).map(([key, quantity]) => {
       const [id, variantId] = key.split("-");
-      const item = products.find(p => 
-        String(p.id) === id && 
+      const item = products.find(p =>
+        p.id === Number(id) &&
         (variantId === "base" ? !p.variant_id : p.variant_id === variantId)
       );
-      
+
       if (!item) return null;
-      
+
       return {
         product_id: item.id,
         variant_id: item.variant_id,
