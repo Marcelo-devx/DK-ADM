@@ -17,36 +17,41 @@ export const useUser = () => {
 
   useEffect(() => {
     const fetchUserProfile = async () => {
-      if (user) {
-        setLoading(true);
-        try {
-          const { data, error } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .single();
-
-          if (error) {
-            console.error('Error fetching profile:', error.message);
-            setIsAdmin(false);
-            setProfile(null);
-          } else if (data) {
-            setProfile(data as Profile);
-            setIsAdmin(data.role === 'adm');
-          }
-        } catch (e) {
-            if (e instanceof Error) {
-                console.error('An unexpected error occurred:', e.message);
-            }
-            setIsAdmin(false);
-            setProfile(null);
-        } finally {
-          setLoading(false);
-        }
-      } else {
+      // Se não há usuário, limpa o estado
+      if (!user) {
         setLoading(false);
         setProfile(null);
         setIsAdmin(false);
+        return;
+      }
+
+      // Se há usuário, busca o profile
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+
+        if (error) {
+          console.error('[useUser] Erro ao buscar profile:', error.message);
+          setIsAdmin(false);
+          setProfile(null);
+        } else if (data) {
+          setProfile(data as Profile);
+          setIsAdmin(data.role === 'adm');
+        }
+      } catch (e) {
+        if (e instanceof Error) {
+          console.error('[useUser] Erro inesperado:', e.message);
+        } else {
+          console.error('[useUser] Erro inesperado:', e);
+        }
+        setIsAdmin(false);
+        setProfile(null);
+      } finally {
+        setLoading(false);
       }
     };
 

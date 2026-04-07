@@ -1,5 +1,6 @@
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertTriangle, RefreshCw, LogOut } from "lucide-react";
 import { Button } from "./ui/button";
+import { Card } from "./ui/card";
 
 interface LoadingScreenProps {
   message?: string;
@@ -12,46 +13,71 @@ export const LoadingScreen = ({
   error,
   onRetry 
 }: LoadingScreenProps) => {
+  const isAuthError = error?.message?.includes('Refresh Token') || 
+                      error?.message?.includes('refresh_token') ||
+                      error?.message?.includes('session') ||
+                      error?.message?.includes('auth');
+
+  const handleGoToLogin = () => {
+    window.location.href = '/login';
+  };
+
   return (
     <div className="h-screen w-full flex flex-col items-center justify-center bg-gray-50 p-4">
-      <div className="text-center max-w-md">
+      <div className="text-center max-w-md w-full">
         {error ? (
-          <>
+          <Card className="p-8 shadow-lg">
             <div className="text-red-500 mb-4">
-              <svg
-                className="w-16 h-16 mx-auto"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                />
-              </svg>
+              <AlertTriangle className="h-16 w-16 mx-auto" />
             </div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">
-              Erro ao carregar
+            <h2 className="text-2xl font-semibold text-gray-900 mb-3">
+              {isAuthError ? 'Problema na Sessão' : 'Erro ao Carregar'}
             </h2>
-            <p className="text-gray-600 mb-4">
-              {error.message || "Ocorreu um erro inesperado. Tente novamente."}
+            <p className="text-gray-600 mb-6 leading-relaxed">
+              {isAuthError 
+                ? 'Sua sessão expirou ou houve um problema de autenticação. Por favor, faça login novamente.'
+                : (error.message || "Ocorreu um erro inesperado. Tente novamente.")}
             </p>
-            {onRetry && (
-              <Button onClick={onRetry} variant="default">
-                Tentar novamente
-              </Button>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              {isAuthError ? (
+                <Button onClick={handleGoToLogin} variant="default" className="w-full sm:w-auto">
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Ir para Login
+                </Button>
+              ) : (
+                <>
+                  {onRetry && (
+                    <Button onClick={onRetry} variant="default" className="w-full sm:w-auto">
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Tentar Novamente
+                    </Button>
+                  )}
+                  <Button onClick={handleGoToLogin} variant="outline" className="w-full sm:w-auto">
+                    <LogOut className="w-4 h-4 mr-2" />
+                    Voltar ao Login
+                  </Button>
+                </>
+              )}
+            </div>
+            {error.message && !isAuthError && (
+              <div className="mt-4 p-3 bg-gray-100 rounded-lg">
+                <p className="text-xs text-gray-500 font-mono">
+                  Detalhes do erro: {error.message}
+                </p>
+              </div>
             )}
-          </>
+          </Card>
         ) : (
           <>
-            <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">
+            <Loader2 className="h-16 w-16 animate-spin text-primary mx-auto mb-6" />
+            <h2 className="text-2xl font-semibold text-gray-900 mb-3">
               Carregando
             </h2>
-            <p className="text-gray-600">
+            <p className="text-gray-600 text-lg">
               {message}
+            </p>
+            <p className="text-gray-400 text-sm mt-4">
+              Isso pode levar alguns instantes...
             </p>
           </>
         )}

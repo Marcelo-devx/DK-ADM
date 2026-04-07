@@ -56,8 +56,10 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
         // Se for erro de refresh token, mostrar toast e redirecionar
         if (error.message?.includes('Refresh Token') || error.message?.includes('refresh_token')) {
           toast.error('Sessão expirada. Por favor, faça login novamente.');
-          navigate('/login');
+          // Usa setTimeout para evitar conflitos no rendering
+          setTimeout(() => navigate('/login'), 0);
         }
+        // IMPORTANTE: Sempre definir initializing como false, mesmo com erro
         setInitializing(false);
         return;
       }
@@ -77,6 +79,7 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
     }).catch((error: Error) => {
       console.error('[SessionContext] Erro inesperado ao obter sessão:', error);
       setError(error);
+      // IMPORTANTE: Sempre definir initializing como false, mesmo com erro
       setInitializing(false);
     });
 
@@ -105,13 +108,37 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
         if (error?.message?.includes('Refresh Token') || error?.message?.includes('refresh_token')) {
           toast.error('Sessão expirada. Por favor, faça login novamente.');
           setSession(null);
-          navigate('/login');
+          // Usa setTimeout para evitar conflitos no rendering
+          setTimeout(() => navigate('/login'), 0);
         }
+        // IMPORTANTE: Não definimos initializing aqui pois este listener pode ser chamado
+        // durante a vida da aplicação, não apenas na inicialização
       }
     });
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Handler para quando a aba volta ao foco - tenta recuperar a sessão
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      // Se a aba voltou ao foco e não temos sessão definida, tenta recuperar
+      if (document.visibilityState === 'visible' && !session && !initializing && !error) {
+        console.log('[SessionContext] Aba voltou ao foco, tentando recuperar sessão...');
+        const { data, error } = await supabase.auth.getSession();
+        if (data.session && !error) {
+          console.log('[SessionContext] Sessão recuperada com sucesso');
+          setSession(data.session);
+        } else if (error) {
+          console.error('[SessionContext] Erro ao recuperar sessão:', error);
+          // Não mostra erro automaticamente, apenas loga - pode ser sessão expirada normal
+        }
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [session, initializing, error]);
 
   // Mostra LoadingScreen em vez de null durante inicialização ou erro
   if (initializing || error) {

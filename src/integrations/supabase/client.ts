@@ -7,4 +7,23 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+// Função auxiliar para extrair o project ID da URL
+function extractProjectId(url: string): string {
+  const match = url.match(/https:\/\/([^.]+)\.supabase\.co/);
+  return match ? match[1] : 'default';
+}
+
+export const supabase = createClient(
+  SUPABASE_URL, 
+  SUPABASE_PUBLISHABLE_KEY,
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      storage: window.localStorage,
+      storageKey: `sb-${extractProjectId(SUPABASE_URL)}-auth-token`,
+      flowType: 'pkce',
+    }
+  }
+);
