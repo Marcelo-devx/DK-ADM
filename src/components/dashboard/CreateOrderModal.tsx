@@ -29,9 +29,11 @@ import {
   Search,
   Check,
   Plus,
+  AlertCircle,
 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
+import { Card, CardContent } from "@/components/ui/card";
 
 interface Client {
   id: string;
@@ -46,6 +48,15 @@ interface Client {
   city: string | null;
   state: string | null;
   cep: string | null;
+}
+
+interface ClientData {
+  user_id: string;
+  email: string;
+  first_name: string | null;
+  last_name: string | null;
+  cpf_cnpj: string | null;
+  phone: string | null;
 }
 
 interface ProductVariant {
@@ -93,9 +104,10 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
 
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [clientConfirmed, setClientConfirmed] = useState(false);
-  const [emailInput, setEmailInput] = useState("");
-  const [searchingClient, setSearchingClient] = useState(false);
-  const [clientNotFound, setClientNotFound] = useState(false);
+  
+  // Estados para busca de clientes
+  const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
   const [shippingAddress, setShippingAddress] = useState({
     street: "", number: "", complement: "", neighborhood: "", city: "", state: "", cep: "",
@@ -119,6 +131,31 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
       return data || [];
     },
     enabled: isOpen,
+  });
+
+  // Debounce para busca de clientes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Busca clientes por email, nome ou CPF
+  const { data: clientSearchResults, isLoading: searchingClients } = useQuery({
+    queryKey: ["searchClients", debouncedSearch],
+    queryFn: async () => {
+      if (!debouncedSearch || debouncedSearch.length < 2) return [];
+      
+      const { data, error } = await supabase.rpc("search_user_by_name_or_cpf", {
+        p_search_term: debouncedSearch,
+      });
+      
+      if (error) throw error;
+      return data as ClientData[];
+    },
+    enabled: debouncedSearch.length >= 2,
+    refetchOnWindowFocus: false,
   });
 
   // Preenche endereço ao selecionar cliente
@@ -162,39 +199,24 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
   const computedTotal = itemsTotal + finalShippingCost;
   const finalTotal = manualTotal && manualTotal.trim() !== "" ? Number(manualTotal) : computedTotal;
 
-  // Busca cliente por email via RPC
-  const findClientByEmail = async (email: string) => {
-    if (!email) return;
-    setSearchingClient(true);
-    setClientNotFound(false);
-    setClientConfirmed(false);
-    setSelectedClient(null);
+  // Selecionar cliente da lista de busca
+  const handleSelectClient = async (clientData: ClientData) => {
     try {
-      const { data: uidData, error: uidError } = await supabase.rpc("get_user_id_by_email", { user_email: email });
-      if (uidError) throw uidError;
-
-      let userId: string | null = null;
-      if (typeof uidData === "string") userId = uidData;
-      else if (Array.isArray(uidData) && uidData.length > 0) {
-        const first = uidData[0];
-        userId = typeof first === "string" ? first : (Object.values(first)[0] as string);
-      } else if (uidData && typeof uidData === "object") {
-        userId = Object.values(uidData)[0] as string;
-      }
-
-      if (!userId) { setClientNotFound(true); return; }
-
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles").select("*").eq("id", userId).maybeSingle();
-      if (profileError) throw profileError;
-      if (!profile) { setClientNotFound(true); return; }
-
+      // Buscar perfil completo incluindo endereço
+      const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", clientData.user_id)
+        .maybeSingle();
+      
+      if (error) throw error;
+      if (!profile) throw new Error("Perfil não encontrado");
+      
       setSelectedClient(profile as Client);
+      setClientConfirmed(false); // Requer confirmação do usuário
+      setSearchTerm(""); // Limpar busca
     } catch (err: any) {
-      showError(err.message || "Erro ao buscar cliente");
-      setClientNotFound(true);
-    } finally {
-      setSearchingClient(false);
+      showError(err.message || "Erro ao carregar dados do cliente");
     }
   };
 
@@ -352,8 +374,8 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
   const handleClose = () => {
     setSelectedClient(null);
     setClientConfirmed(false);
-    setEmailInput("");
-    setClientNotFound(false);
+    setSearchTerm("");
+    setDebouncedSearch("");
     setOrderItems([]);
     setChargeFreight(true);
     setGenerateLoyaltyPoints(true);
@@ -387,21 +409,57 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
               <User className="w-4 h-4 text-primary" />
               <Label className="font-semibold">Cliente</Label>
             </div>
-            <div className="flex gap-2">
-              <Input
-                placeholder="Digite o email do cliente..."
-                value={emailInput}
-                onChange={(e) => setEmailInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && findClientByEmail(emailInput.trim())}
-              />
-              <Button variant="outline" onClick={() => findClientByEmail(emailInput.trim())} disabled={searchingClient}>
-                {searchingClient ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-              </Button>
-            </div>
+            <div className="relative">
+              <div className="flex items-center border rounded-lg px-3 gap-2 bg-white">
+                <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+                <input
+                  type="text"
+                  className="flex-1 py-2 text-sm outline-none bg-transparent placeholder:text-muted-foreground"
+                  placeholder="Digite email, nome ou CPF do cliente..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                {searchingClients && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground shrink-0" />}
+              </div>
 
-            {clientNotFound && (
-              <p className="text-sm text-rose-600">Cliente não encontrado. Só é possível criar pedido para clientes cadastrados.</p>
-            )}
+              {/* Lista de resultados da busca de clientes */}
+              {clientSearchResults && clientSearchResults.length > 0 && (
+                <div className="border rounded-lg mt-2 bg-white shadow-lg max-h-60 overflow-y-auto">
+                  {clientSearchResults.map((client) => (
+                    <Card
+                      key={client.user_id}
+                      className="cursor-pointer hover:bg-gray-50 border-none rounded-none first:rounded-t-lg last:rounded-b-lg"
+                      onClick={() => handleSelectClient(client)}
+                    >
+                      <CardContent className="p-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm">
+                              {client.first_name} {client.last_name}
+                            </p>
+                            <p className="text-xs text-gray-600 truncate">{client.email}</p>
+                            {client.cpf_cnpj && (
+                              <Badge variant="outline" className="text-[10px] mt-1">
+                                CPF: {client.cpf_cnpj}
+                              </Badge>
+                            )}
+                          </div>
+                          <User className="h-4 w-4 text-gray-400 shrink-0 ml-2" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+
+              {/* Mensagem de nenhum resultado */}
+              {!searchingClients && debouncedSearch.length >= 2 && clientSearchResults && clientSearchResults.length === 0 && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2 p-3 border rounded-lg bg-white">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>Nenhum cliente encontrado para "{debouncedSearch}"</span>
+                </div>
+              )}
+            </div>
 
             {selectedClient && (
               <div className="flex items-center justify-between p-3 border rounded-lg bg-green-50 border-green-200">
