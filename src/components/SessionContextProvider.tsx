@@ -12,13 +12,11 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
   const [initializing, setInitializing] = useState(true);
   const navigate = useNavigate();
 
-  // Usar ref para evitar stale closure do navigate dentro dos useEffects
   const navigateRef = useRef(navigate);
   useEffect(() => {
     navigateRef.current = navigate;
   }, [navigate]);
 
-  // Função utilitária com timeout para evitar deadlock no getSession
   const getSessionWithTimeout = async (timeoutMs: number = 5000) => {
     return Promise.race([
       supabase.auth.getSession(),
@@ -28,7 +26,6 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
     ]);
   };
 
-  // Versão não-bloqueante do checkIfBlocked - executa em background
   const checkIfBlockedNonBlocking = async (userId: string) => {
     try {
       const { data: profile, error } = await supabase
@@ -43,11 +40,9 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
       }
 
       if (profile?.is_blocked) {
-        // Fazer signOut se usuário bloqueado
         await supabase.auth.signOut();
         setSession(null);
         toast.error('Sua conta foi bloqueada. Entre em contato com o suporte.');
-        // Redirecionar para login
         setTimeout(() => navigateRef.current('/login'), 100);
       }
     } catch (error) {
@@ -77,7 +72,6 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
         }
 
         if (session?.user) {
-          // Executar check de bloqueio em background (não-bloqueante)
           checkIfBlockedNonBlocking(session.user.id);
           setSession(session);
         } else {
@@ -102,13 +96,15 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      // IMPORTANTE: Removido 'async' e 'await' para evitar deadlock no navigator.locks
-      // O callback agora é síncrono, liberando o lock imediatamente
-      
       try {
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (event === 'TOKEN_REFRESHED') {
+          // Só atualiza se o access_token realmente mudou — evita re-render desnecessário ao trocar de aba
+          setSession(prev => {
+            if (prev?.access_token === session?.access_token) return prev;
+            return session;
+          });
+        } else if (event === 'SIGNED_IN') {
           if (session?.user) {
-            // Executar check de bloqueio em background (fire-and-forget)
             checkIfBlockedNonBlocking(session.user.id);
           }
           setSession(session);
@@ -133,41 +129,6 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
       subscription.unsubscribe();
     };
   }, []);
-
-  // Quando a aba volta ao foco, tenta recuperar a sessão se não houver uma ativa
-  // Adicionado flag para evitar múltiplas chamadas concorrentes
-  useEffect(() => {
-    let isRecoveringSession = false;
-
-    const handleVisibilityChange = async () => {
-      if (document.visibilityState === 'visible' && !session && !initializing && !isRecoveringSession) {
-        console.log('[SessionContext] Aba voltou ao foco, tentando recuperar sessão...');
-        
-        isRecoveringSession = true;
-        
-        try {
-          const { data, error } = await getSessionWithTimeout();
-          
-          if (data.session && !error) {
-            console.log('[SessionContext] Sessão recuperada com sucesso');
-            setSession(data.session);
-          } else if (error?.message?.includes('timeout')) {
-            console.error('[SessionContext] Timeout ao recuperar sessão na visibilidade');
-          }
-        } catch (e) {
-          console.error('[SessionContext] Erro ao recuperar sessão na visibilidade:', e);
-        } finally {
-          isRecoveringSession = false;
-        }
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      isRecoveringSession = false;
-    };
-  }, [session, initializing]);
 
   if (initializing) {
     return <LoadingScreen message="Carregando sua sessão..." />;
