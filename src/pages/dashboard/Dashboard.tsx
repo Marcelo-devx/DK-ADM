@@ -7,7 +7,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DollarSign, Package, TrendingUp, ShoppingBag, Truck, Wallet, AlertTriangle, Calendar, X, Ticket, QrCode, CreditCard, FileDown, Settings2, Coins, Info, Award } from "lucide-react";
+import { DollarSign, Package, TrendingUp, ShoppingBag, Truck, Wallet, AlertTriangle, Calendar, X, Ticket, QrCode, CreditCard, FileDown, Settings2, Coins, Info, Award, ChevronRight, ChevronDown, Package2 } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -78,7 +78,12 @@ const fetchFinancialSummary = async (startDate?: string, endDate?: string) => {
       variants:product_variants(
         price, 
         cost_price, 
-        stock_quantity
+        stock_quantity,
+        flavors(name),
+        color,
+        size,
+        ohms,
+        volume_ml
       )
     `);
   const { data: promos } = await supabase.from("promotions").select("stock_quantity, price, name");
@@ -151,10 +156,21 @@ const fetchFinancialSummary = async (startDate?: string, endDate?: string) => {
   };
 };
 
+const formatVariantSpec = (variant: any) => {
+  const parts = [];
+  if (variant.flavors?.name) parts.push(variant.flavors.name);
+  if (variant.volume_ml) parts.push(`${variant.volume_ml}ml`);
+  if (variant.size) parts.push(variant.size);
+  if (variant.color) parts.push(variant.color);
+  if (variant.ohms) parts.push(variant.ohms);
+  return parts.join(' | ') || 'Sem especificação';
+};
+
 const DashboardPage = () => {
   const [startDate, setStartDate] = useState(format(startOfMonth(new Date()), "yyyy-MM-dd"));
   const [endDate, setEndDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [stockThreshold, setStockThreshold] = useState(10);
+  const [expandedProducts, setExpandedProducts] = useState<Record<number, boolean>>({});
 
   const { data: stats, isLoading, error } = useQuery({
     queryKey: ["dashboardFinancialStats", startDate, endDate],
@@ -164,11 +180,65 @@ const DashboardPage = () => {
 
   const criticalItems = useMemo(() => {
     if (!stats) return [];
-    return [
-      ...stats.rawProducts.filter(p => p.stock_quantity <= stockThreshold).map(p => ({ name: p.name, stock: p.stock_quantity, type: 'Produto', brand: p.brand })),
-      ...stats.rawPromos.filter(p => p.stock_quantity <= stockThreshold).map(p => ({ name: `[KIT] ${p.name}`, stock: p.stock_quantity, type: 'Promoção', brand: '-' }))
-    ].sort((a, b) => a.stock - b.stock);
+    
+    const items: any[] = [];
+    
+    // Processar produtos com variações
+    stats.rawProducts.forEach(product => {
+      const variants = Array.isArray(product.variants) ? product.variants : [];
+      
+      if (variants.length > 0) {
+        // Produto tem variações - buscar variações com estoque baixo
+        const lowStockVariants = variants.filter(v => v.stock_quantity <= stockThreshold);
+        
+        if (lowStockVariants.length > 0) {
+          items.push({
+            id: product.id,
+            name: product.name,
+            stock: product.stock_quantity,
+            type: 'Produto',
+            brand: product.brand,
+            hasVariants: true,
+            variants: lowStockVariants
+          });
+        }
+      } else {
+        // Produto sem variações - usar estoque total
+        if (product.stock_quantity <= stockThreshold) {
+          items.push({
+            id: product.id,
+            name: product.name,
+            stock: product.stock_quantity,
+            type: 'Produto',
+            brand: product.brand,
+            hasVariants: false,
+            variants: []
+          });
+        }
+      }
+    });
+    
+    // Adicionar promoções (sem alterações)
+    stats.rawPromos.filter(p => p.stock_quantity <= stockThreshold).forEach(p => {
+      items.push({
+        name: `[KIT] ${p.name}`,
+        stock: p.stock_quantity,
+        type: 'Promoção',
+        brand: '-',
+        hasVariants: false,
+        variants: []
+      });
+    });
+    
+    return items.sort((a, b) => a.stock - b.stock);
   }, [stats, stockThreshold]);
+
+  const toggleProductExpansion = (productId: number) => {
+    setExpandedProducts(prev => ({
+      ...prev,
+      [productId]: !prev[productId]
+    }));
+  };
 
   const formatCurrency = (val: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
 
@@ -329,15 +399,78 @@ const DashboardPage = () => {
           {criticalItems.length > 0 ? (
             <div className="border rounded-xl overflow-hidden shadow-sm">
                 <Table>
-                    <TableHeader className="bg-gray-50"><TableRow><TableHead>Nome do Item</TableHead><TableHead>Tipo</TableHead><TableHead className="text-center">Qtd. Estoque</TableHead><TableHead className="text-right">Ação Sugerida</TableHead></TableRow></TableHeader>
+                    <TableHeader className="bg-gray-50"><TableRow><TableHead className="w-10"></TableHead><TableHead>Nome do Item</TableHead><TableHead>Tipo</TableHead><TableHead className="text-center">Qtd. Estoque</TableHead><TableHead className="text-right">Ação Sugerida</TableHead></TableRow></TableHeader>
                     <TableBody>
                     {criticalItems.map((item, i) => (
-                        <TableRow key={i} className={cn(item.stock === 0 && "bg-red-50/50")}>
-                        <TableCell className="font-medium">{item.name}<p className="text-[10px] text-muted-foreground uppercase">{item.brand}</p></TableCell>
-                        <TableCell><Badge variant="outline" className="text-[10px]">{item.type}</Badge></TableCell>
-                        <TableCell className="text-center"><Badge variant={item.stock === 0 ? "destructive" : item.stock <= 5 ? "destructive" : "secondary"}>{item.stock} un</Badge></TableCell>
-                        <TableCell className="text-right"><span className="text-xs font-bold text-orange-600">{item.stock === 0 ? "COMPRA URGENTE" : "REPOR ESTOQUE"}</span></TableCell>
-                        </TableRow>
+                        <>
+                          {/* Linha do produto */}
+                          <TableRow 
+                            className={cn(
+                              item.stock === 0 && "bg-red-50/50",
+                              item.hasVariants && expandedProducts[item.id] && "bg-blue-50/30"
+                            )}
+                          >
+                            {/* Coluna de expansão (apenas para produtos com variações) */}
+                            <TableCell className="w-10">
+                              {item.hasVariants ? (
+                                <button 
+                                  onClick={() => toggleProductExpansion(item.id)}
+                                  className="p-1 hover:bg-gray-200 rounded transition"
+                                >
+                                  {expandedProducts[item.id] ? (
+                                    <ChevronDown className="h-4 w-4" />
+                                  ) : (
+                                    <ChevronRight className="h-4 w-4" />
+                                  )}
+                                </button>
+                              ) : null}
+                            </TableCell>
+                            
+                            <TableCell className="font-medium">
+                              {item.name}
+                              <p className="text-[10px] text-muted-foreground uppercase">{item.brand}</p>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="text-[10px]">{item.type}</Badge>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Badge variant={item.stock === 0 ? "destructive" : item.stock <= 5 ? "destructive" : "secondary"}>
+                                {item.stock} un
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <span className="text-xs font-bold text-orange-600">
+                                {item.stock === 0 ? "COMPRA URGENTE" : "REPOR ESTOQUE"}
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                          
+                          {/* Linhas de variações expandidas */}
+                          {item.hasVariants && expandedProducts[item.id] && item.variants.map((variant: any, vIdx: number) => (
+                            <TableRow key={`${i}-variant-${vIdx}`} className="bg-gray-50/50 hover:bg-gray-100/50">
+                              <TableCell></TableCell> {/* Espaço vazio */}
+                              <TableCell className="font-medium pl-4">
+                                <div className="flex items-center gap-2">
+                                  <Package2 className="h-3 w-3 text-primary" />
+                                  <span className="text-xs">{formatVariantSpec(variant)}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="secondary" className="text-[10px]">Variação</Badge>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Badge variant={variant.stock_quantity === 0 ? "destructive" : "secondary"} className="text-[10px]">
+                                  {variant.stock_quantity} un
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <span className="text-xs font-bold text-orange-600">
+                                  {variant.stock_quantity === 0 ? "COMPRA URGENTE" : "REPOR ESTOQUE"}
+                                </span>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </>
                     ))}
                     </TableBody>
                 </Table>
