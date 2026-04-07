@@ -38,7 +38,19 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // Wrap getSession in try-catch to handle auth errors gracefully
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        console.error('[SessionContext] Erro ao obter sessão:', error);
+        
+        // Se for erro de refresh token, mostrar toast e redirecionar
+        if (error.message?.includes('Refresh Token') || error.message?.includes('refresh_token')) {
+          toast.error('Sessão expirada. Por favor, faça login novamente.');
+          navigate('/login');
+          return;
+        }
+      }
+      
       if (session?.user) {
         // Verificar se está bloqueado ao carregar sessão
         checkIfBlocked(session.user.id).then((isBlocked) => {
@@ -49,23 +61,36 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
       } else {
         setSession(session);
       }
+    }).catch((error) => {
+      console.error('[SessionContext] Erro inesperado ao obter sessão:', error);
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
-        // Verificar se está bloqueado ao fazer login ou refresh de token
-        const isBlocked = await checkIfBlocked(session.user.id);
-        if (!isBlocked) {
-          setSession(session);
-        } else {
+      try {
+        if (session?.user && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
+          // Verificar se está bloqueado ao fazer login ou refresh de token
+          const isBlocked = await checkIfBlocked(session.user.id);
+          if (!isBlocked) {
+            setSession(session);
+          } else {
+            setSession(null);
+          }
+        } else if (event === 'SIGNED_OUT') {
           setSession(null);
+        } else {
+          setSession(session);
         }
-      } else if (event === 'SIGNED_OUT') {
-        setSession(null);
-      } else {
-        setSession(session);
+      } catch (error: any) {
+        console.error('[SessionContext] Erro no tratamento de estado de autenticação:', error);
+        
+        // Se for erro de refresh token, mostrar toast e limpar sessão
+        if (error?.message?.includes('Refresh Token') || error?.message?.includes('refresh_token')) {
+          toast.error('Sessão expirada. Por favor, faça login novamente.');
+          setSession(null);
+          navigate('/login');
+        }
       }
     });
 
