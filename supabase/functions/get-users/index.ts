@@ -2,24 +2,15 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.51.0'
 
-// Build CORS headers per-request so we can echo the request origin when credentials are used.
-// Browsers reject Access-Control-Allow-Origin: '*' together with Access-Control-Allow-Credentials: 'true',
-// so we must return the exact origin that made the request.
-function buildCorsHeaders(req: Request) {
-  const origin = req.headers.get('origin') || '*';
-  return {
-    'Access-Control-Allow-Origin': origin,
-    'Vary': 'Origin',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Credentials': 'true',
-  };
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 }
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    // Respond to preflight with OK status and required CORS headers
-    return new Response(null, { status: 204, headers: buildCorsHeaders(req) })
+    return new Response(null, { status: 204, headers: corsHeaders })
   }
 
   try {
@@ -47,7 +38,7 @@ serve(async (req) => {
 
     if (!user) {
       console.log('[get-users] Usuário não autenticado');
-      return new Response(JSON.stringify({ error: 'Não autenticado' }), { status: 401, headers: { ...buildCorsHeaders(req), 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: 'Não autenticado' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     console.log('[get-users] Usuário autenticado:', user.id);
@@ -65,7 +56,7 @@ serve(async (req) => {
 
     if (!profile || profile.role !== 'adm') {
       console.log('[get-users] Usuário não é admin');
-      return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 403, headers: { ...buildCorsHeaders(req), 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     console.log('[get-users] Usuário autorizado como admin');
@@ -82,12 +73,12 @@ serve(async (req) => {
     // Detect if search is CPF (digits only) or email (contains @)
     const isCPF = /^[0-9]+$/.test(search);
     const isEmail = search.includes('@');
-    
+
     // For normal listing (no search), we use admin.listUsers with pagination directly.
     let usersForPage = [];
 
     if (!search) {
-      // Directly request the page from admin.listUsers
+      // Directly request page from admin.listUsers
       const perPage = requestedLimit;
       const page = requestedPage;
       console.log('[get-users] Listing users page', page, 'perPage', perPage);
@@ -98,32 +89,32 @@ serve(async (req) => {
     } else if (isCPF) {
       // Search by CPF in profiles table
       console.log('[get-users] Searching by CPF in profiles table');
-      
+
       const { data: profiles, error: cpfSearchError } = await supabaseAdmin
         .from('profiles')
         .select('id')
         .ilike('cpf_cnpj', `%${search}%`);
-      
+
       if (cpfSearchError) {
         console.error('[get-users] Erro ao buscar por CPF:', cpfSearchError);
         throw cpfSearchError;
       }
-      
+
       // If no profiles found with this CPF, return empty list
       if (!profiles || profiles.length === 0) {
         console.log(`[get-users] CPF "${search}" não encontrado`);
-        return new Response(JSON.stringify([]), { status: 200, headers: { ...buildCorsHeaders(req), 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify([]), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
-      
+
       // Get user IDs from profiles
       const userIdsFromCPF = profiles.map(p => p.id);
-      
+
       // Now fetch the actual users from auth.users
       const perPage = 1000;
       let page = 1;
       const matches: any[] = [];
       let hasMore = true;
-      
+
       // Scan all pages of auth.users to find matches by ID
       while (hasMore) {
         const res = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
@@ -132,21 +123,21 @@ serve(async (req) => {
           hasMore = false;
           break;
         }
-        
+
         // Check if any of these users have an ID in our CPF matches
         for (const u of users) {
           if (userIdsFromCPF.includes(u.id)) {
             matches.push(u);
           }
         }
-        
+
         hasMore = users.length === perPage;
         page += 1;
       }
-      
+
       console.log(`[get-users] CPF search "${search}" found ${matches.length} matches`);
-      
-      // Paginate the matches
+
+      // Paginate matches
       const start = (requestedPage - 1) * requestedLimit;
       usersForPage = matches.slice(start, start + requestedLimit);
     } else {
@@ -175,19 +166,19 @@ serve(async (req) => {
 
       console.log(`[get-users] Search "${search}" found ${matches.length} matches after scanning ${page - 1} pages`);
 
-      // slice the matches to the requested page
+      // slice matches to requested page
       const start = (requestedPage - 1) * requestedLimit;
       usersForPage = matches.slice(start, start + requestedLimit);
     }
 
     // If no users for the requested page, return empty list
     if (!usersForPage || usersForPage.length === 0) {
-      return new Response(JSON.stringify([]), { status: 200, headers: { ...buildCorsHeaders(req), 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify([]), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const userIds = usersForPage.map(u => u.id);
 
-    // Fetch only the profiles for these users
+    // Fetch only profiles for these users
     const { data: profiles, error: profilesError } = await supabaseAdmin
       .from('profiles')
       .select('id, first_name, last_name, role, force_pix_on_next_purchase, updated_at, created_at, cpf_cnpj')
@@ -242,14 +233,14 @@ serve(async (req) => {
     console.log(`[get-users] Retornando ${clients.length} clientes`);
 
     return new Response(JSON.stringify(clients), {
-      headers: { ...buildCorsHeaders(req), 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     })
   } catch (error) {
     console.error('[get-users] Erro geral:', error);
     return new Response(
       JSON.stringify({ error: 'Falha ao buscar dados dos clientes.', details: error.message }),
-      { headers: { ...buildCorsHeaders(req), 'Content-Type': 'application/json' }, status: 500 }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     )
   }
 })
