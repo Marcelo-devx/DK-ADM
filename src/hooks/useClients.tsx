@@ -113,7 +113,6 @@ export function useClients(initialPage = 1) {
         // If supabase returned an error object, include details
         if (error) {
           console.error("[useClients] Edge function returned error:", error);
-          // Try to include status or message if available
           const statusPart = (error?.status ? `status=${error.status} ` : "");
           throw new Error(`${statusPart}${error?.message || 'Edge Function error'}`);
         }
@@ -130,6 +129,47 @@ export function useClients(initialPage = 1) {
         // Provide clearer message when network-level failure occurs
         console.error('[useClients] Error calling admin-create-user:', e);
         const msg = String(e?.message || e);
+
+        // If Supabase Functions client returned non-2xx, attempt a direct fetch to capture body/status
+        const isFunctionsHttpError = e?.name === 'FunctionsHttpError' || msg.includes('non-2xx');
+        if (isFunctionsHttpError) {
+          try {
+            const fallbackRes = await fetch(
+              'https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1/admin-create-user',
+              {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  apikey: ANON_KEY,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(values),
+              }
+            );
+
+            const text = await fallbackRes.text();
+            // Try parse JSON when possible
+            let parsed: any = text;
+            try { parsed = JSON.parse(text); } catch (_) { /* keep as text */ }
+
+            const detailMsg = `Status ${fallbackRes.status}: ${
+              typeof parsed === 'string' ? parsed : JSON.stringify(parsed)
+            }`;
+            console.error('[useClients] Fallback fetch details:', detailMsg);
+            throw new Error(detailMsg);
+          } catch (fallbackErr: any) {
+            console.error('[useClients] Fallback fetch also failed:', fallbackErr);
+            // If fallback failed due to network, surface that; otherwise, surface original message
+            const fbMsg = String(fallbackErr?.message || fallbackErr);
+            if (fbMsg.includes('Failed to fetch') || fbMsg.includes('NetworkError')) {
+              throw new Error(
+                'Erro de rede: não foi possível conectar às Edge Functions do Supabase. Verifique sua conexão, bloqueadores (adblock/privacidade) ou se o serviço de Functions está ativo.'
+              );
+            }
+            throw new Error(fbMsg);
+          }
+        }
+
         if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
           throw new Error(
             "Erro de rede: não foi possível conectar às Edge Functions do Supabase. Verifique sua conexão, bloqueadores (adblock/privacidade) ou se o serviço de Functions está ativo."
