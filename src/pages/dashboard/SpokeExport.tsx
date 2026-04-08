@@ -122,14 +122,14 @@ const SpokeExportPage = () => {
   });
 
   // Verifica se há pedidos selecionáveis
-  const canSelectAll = orders && orders.some(o => o.delivery_status === "Aguardando Coleta");
+  const canSelectAll = orders && orders.some(o => o.delivery_status === "Aguardando Coleta" || o.delivery_status === "Embalado");
 
   const toggleSelectAll = () => {
     if (!orders) return;
-    
-    const selectableOrders = orders.filter(o => o.delivery_status === "Aguardando Coleta");
+
+    const selectableOrders = orders.filter(o => o.delivery_status === "Aguardando Coleta" || o.delivery_status === "Embalado");
     const selectableIds = new Set(selectableOrders.map(o => o.id));
-    
+
     if (selectedIds.size === selectableIds.size) {
       // Se todos os selecionáveis estão selecionados, desmarcar todos
       setSelectedIds(new Set());
@@ -141,11 +141,11 @@ const SpokeExportPage = () => {
 
   const toggleSelectOne = (id: number) => {
     const order = orders?.find(o => o.id === id);
-    // Só permite selecionar se status for "Aguardando Coleta"
-    if (order && order.delivery_status !== "Aguardando Coleta") {
+    // Só permite selecionar se status for "Aguardando Coleta" ou "Embalado"
+    if (order && order.delivery_status !== "Aguardando Coleta" && order.delivery_status !== "Embalado") {
       return; // Não faz nada se não for selecionável
     }
-    
+
     const next = new Set(selectedIds);
     if (next.has(id)) next.delete(id);
     else next.add(id);
@@ -161,6 +161,7 @@ const SpokeExportPage = () => {
   const getStatusBadgeVariant = (status: string): "default" | "secondary" | "outline" => {
     const statusLower = status.toLowerCase();
     if (statusLower.includes("aguardando coleta")) return "default";
+    if (statusLower.includes("embalado")) return "default";
     if (statusLower.includes("aguardando entregador")) return "secondary";
     return "outline";
   };
@@ -170,6 +171,7 @@ const SpokeExportPage = () => {
     if (statusLower.includes("aguardando coleta")) return "bg-green-100 text-green-800 border-green-300";
     if (statusLower.includes("aguardando entregador")) return "bg-blue-100 text-blue-800 border-blue-300";
     if (statusLower.includes("pendente")) return "bg-gray-100 text-gray-800 border-gray-300";
+    if (statusLower.includes("embalado")) return "bg-orange-100 text-orange-800 border-orange-300";
     if (statusLower.includes("despachado")) return "bg-purple-100 text-purple-800 border-purple-300";
     if (statusLower.includes("entregue")) return "bg-green-100 text-green-800 border-green-300";
     return "bg-gray-100 text-gray-800 border-gray-300";
@@ -305,15 +307,15 @@ const SpokeExportPage = () => {
                                     <TableHead className="w-12 text-center">
                                         <Tooltip>
                                             <TooltipTrigger asChild>
-                                                <Checkbox 
-                                                    checked={orders && orders.length > 0 && canSelectAll && selectedIds.size === orders.filter(o => o.delivery_status === "Aguardando Coleta").length}
+                                                <Checkbox
+                                                    checked={orders && orders.length > 0 && canSelectAll && selectedIds.size === orders.filter(o => (o.delivery_status === "Aguardando Coleta" || o.delivery_status === "Embalado")).length}
                                                     onCheckedChange={toggleSelectAll}
                                                     disabled={!canSelectAll}
                                                 />
                                             </TooltipTrigger>
                                             {!canSelectAll && (
                                                 <TooltipContent>
-                                                    <p>Nenhum pedido com status "Aguardando Coleta" disponível</p>
+                                                    <p>Nenhum pedido com status "Aguardando Coleta" ou "Embalado" disponível</p>
                                                 </TooltipContent>
                                             )}
                                         </Tooltip>
@@ -332,7 +334,7 @@ const SpokeExportPage = () => {
                                     orders.map(order => {
                                         const isNextRoute = checkIsNextRoute(order.created_at);
                                         const isSelected = selectedIds.has(order.id);
-                                        const canSelect = order.delivery_status === "Aguardando Coleta";
+                                        const canSelect = order.delivery_status === "Aguardando Coleta" || order.delivery_status === "Embalado";
 
                                         return (
                                             <TableRow 
@@ -360,7 +362,7 @@ const SpokeExportPage = () => {
                                                         </TooltipTrigger>
                                                         {!canSelect && (
                                                             <TooltipContent>
-                                                                <p>Apenas pedidos com status "Aguardando Coleta" podem ser exportados</p>
+                                                                <p>Apenas pedidos com status "Aguardando Coleta" ou "Embalado" podem ser exportados</p>
                                                             </TooltipContent>
                                                         )}
                                                     </Tooltip>
