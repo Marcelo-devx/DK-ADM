@@ -11,6 +11,8 @@ const DashboardLayout = () => {
   const location = useLocation();
   const session = useSession();
 
+  const sessionAccessToken = session?.access_token; // string estável
+
   const checkAuth = useCallback(() => {
     if (!loading && session !== undefined) {
       if (!user) {
@@ -20,7 +22,7 @@ const DashboardLayout = () => {
         navigate("/", { replace: true });
       }
     }
-  }, [loading, isAdmin, user, navigate, session]);
+  }, [loading, isAdmin, user?.id, navigate, sessionAccessToken]);
 
   useEffect(() => {
     checkAuth();

@@ -104,10 +104,14 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
             return session;
           });
         } else if (event === 'SIGNED_IN') {
-          if (session?.user) {
-            checkIfBlockedNonBlocking(session.user.id);
-          }
-          setSession(session);
+          // Também evita re-render se a sessão não mudou de verdade
+          setSession(prev => {
+            if (prev?.access_token === session?.access_token) return prev;
+            if (session?.user) {
+              checkIfBlockedNonBlocking(session.user.id);
+            }
+            return session;
+          });
         } else if (event === 'SIGNED_OUT') {
           setSession(null);
         } else if (event === 'INITIAL_SESSION') {

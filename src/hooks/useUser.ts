@@ -15,10 +15,13 @@ export const useUser = () => {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
 
+  // Usa o user.id como referência estável em vez do objeto user inteiro
+  const userId = user?.id;
+
   useEffect(() => {
     const fetchUserProfile = async () => {
       // Se não há usuário, limpa o estado
-      if (!user) {
+      if (!userId) {
         setLoading(false);
         setProfile(null);
         setIsAdmin(false);
@@ -31,7 +34,7 @@ export const useUser = () => {
         const { data, error } = await supabase
           .from('profiles')
           .select('role')
-          .eq('id', user.id)
+          .eq('id', userId)
           .single();
 
         if (error) {
@@ -56,7 +59,7 @@ export const useUser = () => {
     };
 
     fetchUserProfile();
-  }, [user]);
+  }, [userId]);
 
   return { user, profile, loading, isAdmin };
 };
