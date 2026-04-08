@@ -80,7 +80,7 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
   const [quantity, setQuantity] = useState<number>(1);
   const [openProductSearch, setOpenProductSearch] = useState(false);
 
-  // 1. Buscar Produtos Disponíveis (Apenas com estoque > 0)
+  // 1. Buscar Produtos Disponíveis (Todos os produtos ativos)
   const { data: products } = useQuery({
     queryKey: ["productsForComposition"],
     queryFn: async () => {
@@ -90,7 +90,7 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
           id, name, stock_quantity,
           variants:product_variants(id, flavor_id, volume_ml, flavors(name), stock_quantity)
         `)
-        .gt("stock_quantity", 0) // Filtra produtos sem estoque
+        .eq("is_active", true) // Filtra apenas produtos ativos
         .order("name");
       if (error) throw error;
       return data as unknown as ProductOption[];
@@ -247,7 +247,7 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
               <Command>
                 <CommandInput placeholder="Digite para buscar..." />
                 <CommandList>
-                  <CommandEmpty>Nenhum produto com estoque encontrado.</CommandEmpty>
+                  <CommandEmpty>Nenhum produto ativo encontrado.</CommandEmpty>
                   <CommandGroup>
                     {products?.map((p) => (
                       <CommandItem
@@ -276,24 +276,25 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
         </div>
 
         <div className="md:col-span-4 space-y-1">
-          <Label className="text-xs">Variação (Sabor/Tam)</Label>
+          <Label className="text-xs">Variação {selectedProduct?.variants?.length ? "(Obrigatória)" : ""}</Label>
           <Select 
             value={selectedVariantId} 
             onValueChange={setSelectedVariantId}
-            disabled={!hasVariants && !selectedProduct?.variants?.length} // Desabilita se não tiver variações ou se todas estiverem sem estoque
+            disabled={!selectedProductId || (!hasVariants && selectedProduct?.variants?.length > 0)}
           >
             <SelectTrigger className="h-8 text-xs">
-              <SelectValue placeholder={!selectedProductId ? "Selecione prod..." : hasVariants ? "Escolha a opção..." : selectedProduct?.variants?.length ? "Sem estoque nas variações" : "Sem variações"} />
+              <SelectValue placeholder={!selectedProductId ? "Selecione prod..." : hasVariants ? "Selecione uma variação..." : selectedProduct?.variants?.length ? "Sem estoque disponível" : "Produto sem variações"} />
             </SelectTrigger>
             <SelectContent>
-              {/* Só mostra opção "Padrão" se não tiver variações configuradas no produto */}
-              {!selectedProduct?.variants?.length && (
+              {/* Só mostra opção "Padrão" se NÃO tiver variações configuradas no produto */}
+              {!selectedProduct?.variants?.length && selectedProduct && (
                 <SelectItem value="none">Padrão</SelectItem>
               )}
               
+              {/* Só mostra variações se tiver estoque > 0 */}
               {hasVariants && availableVariants.map(v => (
                 <SelectItem key={v.id} value={v.id}>
-                  {v.flavors?.name || "Padrão"} {v.volume_ml ? `(${v.volume_ml}ml)` : ""}
+                  {v.flavors?.name || "Padrão"} {v.volume_ml ? `(${v.volume_ml}ml)` : ""} (Estoque: {v.stock_quantity})
                 </SelectItem>
               ))}
             </SelectContent>
@@ -316,7 +317,12 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
             type="button"
             size="sm" 
             className="w-full h-8 bg-blue-600 hover:bg-blue-700"
-            disabled={!selectedProductId || addItemMutation.isPending}
+            disabled={
+              !selectedProductId || 
+              addItemMutation.isPending ||
+              (selectedProduct?.variants?.length > 0 && selectedVariantId === "none") ||
+              (!selectedProduct?.variants?.length && selectedProduct?.stock_quantity <= 0)
+            }
             onClick={() => addItemMutation.mutate()}
           >
             {addItemMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
