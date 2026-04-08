@@ -16,6 +16,16 @@ serve(async (req) => {
   try {
     console.log('[get-users] Iniciando requisição');
 
+    // Validate Authorization header exists
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      console.log('[get-users] Authorization header missing');
+      return new Response(JSON.stringify({ error: 'Missing Authorization header' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -27,36 +37,70 @@ serve(async (req) => {
     const supabaseClient = createClient(
         Deno.env.get('SUPABASE_URL') ?? '',
         Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-        { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
+        { global: { headers: { Authorization: authHeader } } }
     )
 
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-    if (userError) {
-      console.error('[get-users] Erro ao buscar usuário:', userError);
-      throw userError;
+    // Verify user authentication with proper error handling
+    let user;
+    try {
+      const result = await supabaseClient.auth.getUser();
+      if (result.error) {
+        console.error('[get-users] Erro ao buscar usuário:', result.error);
+        return new Response(JSON.stringify({ error: 'Erro de autenticação', details: result.error.message }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      user = result.data?.user;
+    } catch (authError) {
+      console.error('[get-users] Exceção ao buscar usuário:', authError);
+      return new Response(JSON.stringify({ error: 'Erro de autenticação', details: String(authError) }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
     if (!user) {
       console.log('[get-users] Usuário não autenticado');
-      return new Response(JSON.stringify({ error: 'Não autenticado' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: 'Não autenticado' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
     console.log('[get-users] Usuário autenticado:', user.id);
 
-    const { data: profile, error: profileError } = await supabaseAdmin
+    // Verify admin role with proper error handling
+    let profile;
+    try {
+      const result = await supabaseAdmin
         .from('profiles')
         .select('role')
         .eq('id', user.id)
         .single();
-
-    if (profileError) {
-      console.error('[get-users] Erro ao buscar perfil:', profileError);
-      throw profileError;
+      
+      if (result.error) {
+        console.error('[get-users] Erro ao buscar perfil:', result.error);
+        return new Response(JSON.stringify({ error: 'Erro ao verificar permissões', details: result.error.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      profile = result.data;
+    } catch (profileError) {
+      console.error('[get-users] Exceção ao buscar perfil:', profileError);
+      return new Response(JSON.stringify({ error: 'Erro ao verificar permissões', details: String(profileError) }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
     if (!profile || profile.role !== 'adm') {
-      console.log('[get-users] Usuário não é admin');
-      return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      console.log('[get-users] Usuário não é admin', profile?.role);
+      return new Response(JSON.stringify({ error: 'Não autorizado' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
     console.log('[get-users] Usuário autorizado como admin');
@@ -77,98 +121,106 @@ serve(async (req) => {
     // For normal listing (no search), we use admin.listUsers with pagination directly.
     let usersForPage = [];
 
-    if (!search) {
-      // Directly request page from admin.listUsers
-      const perPage = requestedLimit;
-      const page = requestedPage;
-      console.log('[get-users] Listing users page', page, 'perPage', perPage);
+    try {
+      if (!search) {
+        // Directly request page from admin.listUsers
+        const perPage = requestedLimit;
+        const page = requestedPage;
+        console.log('[get-users] Listing users page', page, 'perPage', perPage);
 
-      const res = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
-      const users = res?.data?.users || [];
-      usersForPage = users;
-    } else if (isCPF) {
-      // Search by CPF in profiles table
-      console.log('[get-users] Searching by CPF in profiles table');
-
-      const { data: profiles, error: cpfSearchError } = await supabaseAdmin
-        .from('profiles')
-        .select('id')
-        .ilike('cpf_cnpj', `%${search}%`);
-
-      if (cpfSearchError) {
-        console.error('[get-users] Erro ao buscar por CPF:', cpfSearchError);
-        throw cpfSearchError;
-      }
-
-      // If no profiles found with this CPF, return empty list
-      if (!profiles || profiles.length === 0) {
-        console.log(`[get-users] CPF "${search}" não encontrado`);
-        return new Response(JSON.stringify([]), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-
-      // Get user IDs from profiles
-      const userIdsFromCPF = profiles.map(p => p.id);
-
-      // Now fetch the actual users from auth.users
-      const perPage = 1000;
-      let page = 1;
-      const matches: any[] = [];
-      let hasMore = true;
-
-      // Scan all pages of auth.users to find matches by ID
-      while (hasMore) {
         const res = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
         const users = res?.data?.users || [];
-        if (!users || users.length === 0) {
-          hasMore = false;
-          break;
+        usersForPage = users;
+      } else if (isCPF) {
+        // Search by CPF in profiles table
+        console.log('[get-users] Searching by CPF in profiles table');
+
+        const { data: profiles, error: cpfSearchError } = await supabaseAdmin
+          .from('profiles')
+          .select('id')
+          .ilike('cpf_cnpj', `%${search}%`);
+
+        if (cpfSearchError) {
+          console.error('[get-users] Erro ao buscar por CPF:', cpfSearchError);
+          throw new Error(`Erro ao buscar CPF: ${cpfSearchError.message}`);
         }
 
-        // Check if any of these users have an ID in our CPF matches
-        for (const u of users) {
-          if (userIdsFromCPF.includes(u.id)) {
-            matches.push(u);
+        // If no profiles found with this CPF, return empty list
+        if (!profiles || profiles.length === 0) {
+          console.log(`[get-users] CPF "${search}" não encontrado`);
+          return new Response(JSON.stringify([]), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        // Get user IDs from profiles
+        const userIdsFromCPF = profiles.map(p => p.id);
+
+        // Now fetch the actual users from auth.users
+        const perPage = 1000;
+        let page = 1;
+        const matches: any[] = [];
+        let hasMore = true;
+
+        // Scan all pages of auth.users to find matches by ID
+        while (hasMore) {
+          const res = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
+          const users = res?.data?.users || [];
+          if (!users || users.length === 0) {
+            hasMore = false;
+            break;
           }
+
+          // Check if any of these users have an ID in our CPF matches
+          for (const u of users) {
+            if (userIdsFromCPF.includes(u.id)) {
+              matches.push(u);
+            }
+          }
+
+          hasMore = users.length === perPage;
+          page += 1;
         }
 
-        hasMore = users.length === perPage;
-        page += 1;
+        console.log(`[get-users] CPF search "${search}" found ${matches.length} matches`);
+
+        // Paginate matches
+        const start = (requestedPage - 1) * requestedLimit;
+        usersForPage = matches.slice(start, start + requestedLimit);
+      } else {
+        // Search by email (case-insensitive). Scan ALL pages to find matches.
+        const perPage = 1000; // chunk size for scanning
+        let page = 1;
+        const matches: any[] = [];
+        let hasMore = true;
+
+        while (hasMore) {
+          const res = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
+          const users = res?.data?.users || [];
+          if (!users || users.length === 0) {
+            hasMore = false;
+            break;
+          }
+
+          for (const u of users) {
+            const email = (u.email || '').toString().toLowerCase();
+            if (email.includes(search)) matches.push(u);
+          }
+
+          hasMore = users.length === perPage;
+          page += 1;
+        }
+
+        console.log(`[get-users] Search "${search}" found ${matches.length} matches after scanning ${page - 1} pages`);
+
+        // slice matches to requested page
+        const start = (requestedPage - 1) * requestedLimit;
+        usersForPage = matches.slice(start, start + requestedLimit);
       }
-
-      console.log(`[get-users] CPF search "${search}" found ${matches.length} matches`);
-
-      // Paginate matches
-      const start = (requestedPage - 1) * requestedLimit;
-      usersForPage = matches.slice(start, start + requestedLimit);
-    } else {
-      // Search by email (case-insensitive). Scan ALL pages to find matches.
-      const perPage = 1000; // chunk size for scanning
-      let page = 1;
-      const matches: any[] = [];
-      let hasMore = true;
-
-      while (hasMore) {
-        const res = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
-        const users = res?.data?.users || [];
-        if (!users || users.length === 0) {
-          hasMore = false;
-          break;
-        }
-
-        for (const u of users) {
-          const email = (u.email || '').toString().toLowerCase();
-          if (email.includes(search)) matches.push(u);
-        }
-
-        hasMore = users.length === perPage;
-        page += 1;
-      }
-
-      console.log(`[get-users] Search "${search}" found ${matches.length} matches after scanning ${page - 1} pages`);
-
-      // slice matches to requested page
-      const start = (requestedPage - 1) * requestedLimit;
-      usersForPage = matches.slice(start, start + requestedLimit);
+    } catch (listError) {
+      console.error('[get-users] Erro ao listar usuários:', listError);
+      return new Response(
+        JSON.stringify({ error: 'Erro ao listar usuários', details: String(listError) }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      );
     }
 
     // If no users for the requested page, return empty list
@@ -178,26 +230,45 @@ serve(async (req) => {
 
     const userIds = usersForPage.map(u => u.id);
 
-    // Fetch only profiles for these users
-    const { data: profiles, error: profilesError } = await supabaseAdmin
-      .from('profiles')
-      .select('id, first_name, last_name, role, force_pix_on_next_purchase, updated_at, created_at, cpf_cnpj')
-      .in('id', userIds);
+    // Fetch only profiles for these users with error handling
+    let profiles;
+    let orders;
+    
+    try {
+      const result = await supabaseAdmin
+        .from('profiles')
+        .select('id, first_name, last_name, role, force_pix_on_next_purchase, updated_at, created_at, cpf_cnpj')
+        .in('id', userIds);
 
-    if (profilesError) {
+      if (result.error) {
+        console.error('[get-users] Erro ao buscar perfis:', result.error);
+        throw new Error(`Erro ao buscar perfis: ${result.error.message}`);
+      }
+      profiles = result.data;
+    } catch (profilesError) {
       console.error('[get-users] Erro ao buscar perfis:', profilesError);
-      throw profilesError;
+      return new Response(
+        JSON.stringify({ error: 'Erro ao buscar dados de perfil', details: String(profilesError) }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      );
     }
 
-    // Fetch orders only for these userIds to compute counts
-    const { data: orders, error: ordersError } = await supabaseAdmin
-      .from('orders')
-      .select('user_id, status')
-      .in('user_id', userIds);
+    // Fetch orders only for these userIds to compute counts with error handling
+    try {
+      const result = await supabaseAdmin
+        .from('orders')
+        .select('user_id, status')
+        .in('user_id', userIds);
 
-    if (ordersError) {
+      if (result.error) {
+        console.error('[get-users] Erro ao buscar pedidos:', result.error);
+        throw new Error(`Erro ao buscar pedidos: ${result.error.message}`);
+      }
+      orders = result.data;
+    } catch (ordersError) {
       console.error('[get-users] Erro ao buscar pedidos:', ordersError);
-      throw ordersError;
+      // Don't fail the whole request if orders fail, just return empty orders
+      orders = [];
     }
 
     const orderCountMap = new Map();
@@ -232,14 +303,22 @@ serve(async (req) => {
 
     console.log(`[get-users] Retornando ${clients.length} clientes`);
 
-    return new Response(JSON.stringify(clients), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200,
-    })
+    try {
+      return new Response(JSON.stringify(clients), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      });
+    } catch (jsonError) {
+      console.error('[get-users] Erro ao serializar JSON:', jsonError);
+      return new Response(
+        JSON.stringify({ error: 'Erro ao formatar dados dos clientes', details: String(jsonError) }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      );
+    }
   } catch (error) {
-    console.error('[get-users] Erro geral:', error);
+    console.error('[get-users] Erro geral não tratado:', error);
     return new Response(
-      JSON.stringify({ error: 'Falha ao buscar dados dos clientes.', details: error.message }),
+      JSON.stringify({ error: 'Falha ao buscar dados dos clientes.', details: error?.message || String(error) }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     )
   }
