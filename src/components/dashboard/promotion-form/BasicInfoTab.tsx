@@ -36,8 +36,7 @@ export const BasicInfoTab = ({
     },
   });
 
-  const handleSubmit = () => {
-    const values = form.getValues();
+  const handleSubmit = (values: { name: string; description: string; image_url: string }) => {
     if (!values.name || values.name.trim().length < 2) {
       form.setError("name", {
         type: "manual",
@@ -50,77 +49,78 @@ export const BasicInfoTab = ({
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-2 mb-2 pb-2 border-b">
-        <Tag className="w-4 h-4 text-gray-500" />
-        <h3 className="text-sm font-bold text-gray-700 uppercase">1. Dados Básicos</h3>
-      </div>
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+        <div className="flex items-center gap-2 mb-2 pb-2 border-b">
+          <Tag className="w-4 h-4 text-gray-500" />
+          <h3 className="text-sm font-bold text-gray-700 uppercase">1. Dados Básicos</h3>
+        </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="space-y-4">
-          <FormField
-            control={form.control}
-            name="name"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Nome do Kit/Promoção</FormLabel>
-                <FormControl>
-                  <Input placeholder="Ex: Combo Iniciante Zomo" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="space-y-4">
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nome do Kit/Promoção</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Ex: Combo Iniciante Zomo" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-          <FormField
-            control={form.control}
-            name="description"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Descrição Comercial</FormLabel>
-                <FormControl>
-                  <Textarea
-                    placeholder="Descreva os benefícios deste kit..."
-                    className="min-h-[100px]"
-                    {...field}
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Descrição Comercial</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Descreva os benefícios deste kit..."
+                      className="min-h-[100px]"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
+          <div className="space-y-4">
+            <FormField
+              control={form.control}
+              name="image_url"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Imagem Exclusiva do Kit</FormLabel>
+                  <ImageUploader
+                    onUploadSuccess={(url) => field.onChange(url)}
+                    initialUrl={field.value}
+                    label="Capa da Promoção"
+                    className="h-[240px] max-w-full"
                   />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
         </div>
 
-        <div className="space-y-4">
-          <FormField
-            control={form.control}
-            name="image_url"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Imagem Exclusiva do Kit</FormLabel>
-                <ImageUploader
-                  onUploadSuccess={(url) => field.onChange(url)}
-                  initialUrl={field.value}
-                  label="Capa da Promoção"
-                  className="h-[240px] max-w-full"
-                />
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+        <div className="flex justify-end pt-4">
+          <Button
+            type="submit"
+            disabled={isSubmitting}
+            className="bg-blue-600 hover:bg-blue-700"
+          >
+            {isSubmitting ? "Criando..." : "Avançar →"}
+          </Button>
         </div>
-      </div>
-
-      <div className="flex justify-end pt-4">
-        <Button
-          type="button"
-          onClick={handleSubmit}
-          disabled={isSubmitting}
-          className="bg-blue-600 hover:bg-blue-700"
-        >
-          {isSubmitting ? "Criando..." : "Avançar →"}
-        </Button>
-      </div>
-    </div>
+      </form>
+    </Form>
   );
 };
