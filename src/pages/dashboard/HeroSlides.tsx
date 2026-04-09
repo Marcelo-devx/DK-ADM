@@ -239,42 +239,117 @@ const HeroSlidesPage = () => {
     reorderMutation.mutate(updates);
   };
 
+  // Bulk save all editable orders at once.
+  const handleSaveAllOrders = () => {
+    if (!slides) return;
+
+    const N = slides.length;
+    const desiredPositions: Record<number, number> = {};
+
+    // parse and validate all inputs (they are user-facing 1-based numbers)
+    for (const slide of slides) {
+      const valStr = editableSortOrders[slide.id];
+      if (valStr === undefined) {
+        showError('Existem valores ausentes. Recarregue a página e tente novamente.');
+        return;
+      }
+      const v = parseInt(valStr, 10);
+      if (isNaN(v) || v < 1 || v > N) {
+        showError(`Por favor, insira números válidos entre 1 e ${N} para todas as ordens.`);
+        return;
+      }
+      desiredPositions[slide.id] = v; // 1-based
+    }
+
+    // Check uniqueness
+    const used = new Set<number>();
+    for (const id in desiredPositions) {
+      const pos = desiredPositions[Number(id)];
+      if (used.has(pos)) {
+        showError('Existem posições duplicadas. Garanta números únicos antes de salvar.');
+        return;
+      }
+      used.add(pos);
+    }
+
+    // Build final positions array (index 0..N-1 => slide id)
+    const positions: Array<number | null> = Array(N).fill(null);
+    const assigned = new Set<number>();
+
+    // assign requested positions
+    for (const slide of slides) {
+      const desired = desiredPositions[slide.id];
+      positions[desired - 1] = slide.id;
+      assigned.add(slide.id);
+    }
+
+    // NOTE: Since editableSortOrders was initialized with all slides' current positions,
+    // the above will fill all slots (no nulls). But keep fallback logic in case of missing values.
+    const remainingSlides = slides.filter(s => !assigned.has(s.id));
+    let insertIdx = 0;
+    for (let i = 0; i < N; i++) {
+      if (positions[i] === null) {
+        if (insertIdx >= remainingSlides.length) break;
+        positions[i] = remainingSlides[insertIdx].id;
+        insertIdx++;
+      }
+    }
+
+    // Build updates payload
+    const updates: { id: number; sort_order: number }[] = [];
+    for (let i = 0; i < N; i++) {
+      const id = positions[i];
+      if (id === null) {
+        showError('Erro ao construir nova ordem. Recarregue e tente novamente.');
+        return;
+      }
+      updates.push({ id, sort_order: i });
+    }
+
+    reorderMutation.mutate(updates);
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold">Hero Slides</h1>
-        <Dialog
-          open={isModalOpen}
-          onOpenChange={(isOpen) => {
-            setIsModalOpen(isOpen);
-            if (!isOpen) setSelectedSlide(null);
-          }}
-        >
-          <DialogTrigger asChild>
-            <Button>
-              <PlusCircle className="w-4 h-4 mr-2" />
-              Adicionar Slide
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>
-                {selectedSlide ? "Editar Slide" : "Adicionar Novo Slide"}
-              </DialogTitle>
-            </DialogHeader>
-            <HeroSlideForm
-              onSubmit={handleFormSubmit}
-              isSubmitting={addMutation.isPending || updateMutation.isPending}
-              initialData={selectedSlide ? {
-                ...selectedSlide,
-                title: selectedSlide.title || '',
-                subtitle: selectedSlide.subtitle || '',
-                button_url: selectedSlide.button_url || '',
-                image_url: selectedSlide.image_url || '',
-              } : undefined}
-            />
-          </DialogContent>
-        </Dialog>
+        <div className="flex items-center gap-3">
+          <Button onClick={handleSaveAllOrders} disabled={reorderMutation.isPending}>
+            Salvar Ordem
+          </Button>
+          <Dialog
+            open={isModalOpen}
+            onOpenChange={(isOpen) => {
+              setIsModalOpen(isOpen);
+              if (!isOpen) setSelectedSlide(null);
+            }}
+          >
+            <DialogTrigger asChild>
+              <Button>
+                <PlusCircle className="w-4 h-4 mr-2" />
+                Adicionar Slide
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>
+                  {selectedSlide ? "Editar Slide" : "Adicionar Novo Slide"}
+                </DialogTitle>
+              </DialogHeader>
+              <HeroSlideForm
+                onSubmit={handleFormSubmit}
+                isSubmitting={addMutation.isPending || updateMutation.isPending}
+                initialData={selectedSlide ? {
+                  ...selectedSlide,
+                  title: selectedSlide.title || '',
+                  subtitle: selectedSlide.subtitle || '',
+                  button_url: selectedSlide.button_url || '',
+                  image_url: selectedSlide.image_url || '',
+                } : undefined}
+              />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <div className="bg-white rounded-lg shadow">
