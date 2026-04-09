@@ -44,6 +44,8 @@ interface ProductOption {
   id: number;
   name: string;
   stock_quantity: number;
+  price: number;
+  pix_price: number | null;
   variants?: {
     id: string;
     flavor_id: number | null;
@@ -87,10 +89,10 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
       const { data, error } = await supabase
         .from("products")
         .select(`
-          id, name, stock_quantity,
+          id, name, stock_quantity, price, pix_price,
           variants:product_variants(id, flavor_id, volume_ml, flavors(name), stock_quantity)
         `)
-        .eq("is_active", true) // Filtra apenas produtos ativos
+        .eq("is_visible", true) // Filtra apenas produtos visíveis (não is_active, que não existe)
         .order("name");
       if (error) throw error;
       return data as unknown as ProductOption[];
