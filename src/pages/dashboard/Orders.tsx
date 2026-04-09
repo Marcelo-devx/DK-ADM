@@ -160,6 +160,18 @@ const OrdersPage = () => {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   
+  // Estados para busca por campos específicos
+  const [searchOrderId, setSearchOrderId] = useState("");
+  const [searchCPF, setSearchCPF] = useState("");
+  const [searchClientName, setSearchClientName] = useState("");
+  const [searchEmail, setSearchEmail] = useState("");
+  
+  // Estados de debounce para cada campo
+  const [debouncedOrderId, setDebouncedOrderId] = useState("");
+  const [debouncedCPF, setDebouncedCPF] = useState("");
+  const [debouncedClientName, setDebouncedClientName] = useState("");
+  const [debouncedEmail, setDebouncedEmail] = useState("");
+  
   // Filtros de Data
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -197,6 +209,35 @@ const OrdersPage = () => {
     return () => clearTimeout(timeoutId);
   }, [searchInput]);
 
+  // Debounces para campos de busca específicos
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setDebouncedOrderId(searchOrderId.trim());
+    }, 300);
+    return () => clearTimeout(timeoutId);
+  }, [searchOrderId]);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setDebouncedCPF(searchCPF.trim());
+    }, 300);
+    return () => clearTimeout(timeoutId);
+  }, [searchCPF]);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setDebouncedClientName(searchClientName.trim());
+    }, 300);
+    return () => clearTimeout(timeoutId);
+  }, [searchClientName]);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setDebouncedEmail(searchEmail.trim());
+    }, 300);
+    return () => clearTimeout(timeoutId);
+  }, [searchEmail]);
+
   // ADDING REALTIME SUBSCRIPTION
   useEffect(() => {
     const channel = supabase
@@ -222,94 +263,75 @@ const OrdersPage = () => {
   }, [queryClient]); // Recria se o queryClient mudar
 
   const filteredOrders = useMemo(() => {
-    // Se não há busca, aplica filtros normais
-    if (!search) {
-      return orders?.filter(order => {
-        // Filtro de "Prontos para Envio"
-        if (readyToShipOnly) {
-            const isPaid = order.status === "Finalizada" || order.status === "Pago";
-            const isPendingDelivery = order.delivery_status === "Pendente" || order.delivery_status === "Aguardando Coleta";
-            if (!(isPaid && isPendingDelivery)) return false;
-        }
-
-        // Filtro de Status do Pedido (NOVO)
-        if (statusFilter && statusFilter !== "all") {
-            if (order.status !== statusFilter) return false;
-        }
-
-        // Filtro de Status de Entrega (NOVO)
-        if (deliveryStatusFilter && deliveryStatusFilter !== "all") {
-            if (order.delivery_status !== deliveryStatusFilter) return false;
-        }
-
-        // Filtro de Data
-        if (startDate) {
-          const orderDate = new Date(order.created_at);
-          const start = new Date(startDate);
-          start.setHours(0, 0, 0, 0); // Início do dia
-          if (orderDate < start) return false;
-        }
-
-        if (endDate) {
-          const orderDate = new Date(order.created_at);
-          const end = new Date(endDate);
-          end.setHours(23, 59, 59, 999); // Final do dia
-          if (orderDate > end) return false;
-        }
-
-        return true;
-      }) || [];
-    }
-
-    // Se há busca, filtra por ID, CPF ou Nome do cliente
-    const searchLower = search.toLowerCase();
-    const searchNumber = search.replace(/\D/g, ""); // Remove não-dígitos para busca de CPF
-
     return orders?.filter(order => {
-      // Busca por ID do pedido (exato ou contém)
-      if (order.id.toString().includes(searchNumber)) {
-        // Aplica filtros de status mesmo na busca
-        if (statusFilter && statusFilter !== "all" && order.status !== statusFilter) return false;
-        if (deliveryStatusFilter && deliveryStatusFilter !== "all" && order.delivery_status !== deliveryStatusFilter) return false;
-        return true;
+      // Filtro de "Prontos para Envio"
+      if (readyToShipOnly) {
+          const isPaid = order.status === "Finalizada" || order.status === "Pago";
+          const isPendingDelivery = order.delivery_status === "Pendente" || order.delivery_status === "Aguardando Coleta";
+          if (!(isPaid && isPendingDelivery)) return false;
       }
 
-      // Busca por CPF do cliente
-      if (order.profiles?.cpf_cnpj) {
-        const cleanCPF = order.profiles.cpf_cnpj.replace(/\D/g, ""); // Remove formatação
-        if (cleanCPF.includes(searchNumber)) {
-            // Aplica filtros de status mesmo na busca
-            if (statusFilter && statusFilter !== "all" && order.status !== statusFilter) return false;
-            if (deliveryStatusFilter && deliveryStatusFilter !== "all" && order.delivery_status !== deliveryStatusFilter) return false;
-            return true;
+      // Filtro de Status do Pedido
+      if (statusFilter && statusFilter !== "all") {
+          if (order.status !== statusFilter) return false;
+      }
+
+      // Filtro de Status de Entrega
+      if (deliveryStatusFilter && deliveryStatusFilter !== "all") {
+          if (order.delivery_status !== deliveryStatusFilter) return false;
+      }
+
+      // Filtro de Data
+      if (startDate) {
+        const orderDate = new Date(order.created_at);
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0); // Início do dia
+        if (orderDate < start) return false;
+      }
+
+      if (endDate) {
+        const orderDate = new Date(order.created_at);
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999); // Final do dia
+        if (orderDate > end) return false;
+      }
+
+      // Filtro por ID do Pedido (busca exata)
+      if (debouncedOrderId) {
+        if (order.id.toString() !== debouncedOrderId) return false;
+      }
+
+      // Filtro por CPF (busca parcial, remove formatação)
+      if (debouncedCPF) {
+        if (!order.profiles?.cpf_cnpj) return false;
+        const cleanCPF = order.profiles.cpf_cnpj.replace(/\D/g, "");
+        const cleanSearch = debouncedCPF.replace(/\D/g, "");
+        if (!cleanCPF.includes(cleanSearch)) return false;
+      }
+
+      // Filtro por Nome do Cliente (busca parcial, case-insensitive)
+      if (debouncedClientName) {
+        if (!order.profiles?.first_name && !order.profiles?.last_name) return false;
+        const searchTerm = debouncedClientName.toLowerCase();
+        const firstName = (order.profiles.first_name || "").toLowerCase();
+        const lastName = (order.profiles.last_name || "").toLowerCase();
+        const fullName = `${firstName} ${lastName}`;
+        if (!firstName.includes(searchTerm) && !lastName.includes(searchTerm) && !fullName.includes(searchTerm)) {
+          return false;
         }
       }
 
-      // Busca por nome do cliente
-      if (order.profiles?.first_name || order.profiles?.last_name) {
-        const fullName = `${order.profiles.first_name || ""} ${order.profiles.last_name || ""}`.toLowerCase();
-        if (fullName.includes(searchLower)) {
-            // Aplica filtros de status mesmo na busca
-            if (statusFilter && statusFilter !== "all" && order.status !== statusFilter) return false;
-            if (deliveryStatusFilter && deliveryStatusFilter !== "all" && order.delivery_status !== deliveryStatusFilter) return false;
-            return true;
-        }
-      }
-
-      // Busca por email do cliente
-      if (order.profiles?.email) {
+      // Filtro por Email do Cliente (busca parcial, case-insensitive)
+      if (debouncedEmail) {
+        if (!order.profiles?.email) return false;
         const emailLower = order.profiles.email.toLowerCase();
-        if (emailLower.includes(searchLower)) {
-            // Aplica filtros de status mesmo na busca
-            if (statusFilter && statusFilter !== "all" && order.status !== statusFilter) return false;
-            if (deliveryStatusFilter && deliveryStatusFilter !== "all" && order.delivery_status !== deliveryStatusFilter) return false;
-            return true;
-        }
+        const searchTerm = debouncedEmail.toLowerCase();
+        if (!emailLower.includes(searchTerm)) return false;
       }
 
-      return false;
+      return true;
     }) || [];
-  }, [orders, readyToShipOnly, startDate, endDate, search, statusFilter, deliveryStatusFilter]);
+  }, [orders, readyToShipOnly, startDate, endDate, debouncedOrderId, debouncedCPF, debouncedClientName, debouncedEmail, statusFilter, deliveryStatusFilter]);
 
   const validatePaymentAndSetPendingMutation = useMutation({
     mutationFn: async (orderId: number) => {
@@ -586,25 +608,89 @@ const OrdersPage = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-3 bg-white p-2 rounded-xl border shadow-sm">
-          {/* Campo de Busca Unificada */}
-          <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-9 overflow-hidden flex-1 min-w-[280px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Buscar por ID, CPF, Nome, Email..."
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              className="pl-10 pr-4 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0"
-            />
-            {search && (
-              <button
-                onClick={() => { setSearchInput(""); setSearch(""); }}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
-                title="Limpar busca"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            )}
+          {/* Campos de Busca Específicos */}
+          <div className="flex flex-wrap items-center gap-2 flex-1">
+            {/* ID do Pedido */}
+            <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-9 overflow-hidden w-28">
+              <span className="absolute left-3 text-xs text-gray-400 font-medium">#</span>
+              <input
+                type="text"
+                placeholder="ID"
+                value={searchOrderId}
+                onChange={(e) => setSearchOrderId(e.target.value.replace(/\D/g, ""))}
+                className="pl-6 pr-3 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0 font-mono"
+              />
+              {searchOrderId && (
+                <button
+                  onClick={() => setSearchOrderId("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
+                  title="Limpar"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+
+            {/* CPF */}
+            <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-9 overflow-hidden w-32">
+              <input
+                type="text"
+                placeholder="CPF"
+                value={searchCPF}
+                onChange={(e) => setSearchCPF(e.target.value.replace(/\D/g, ""))}
+                className="pl-3 pr-8 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0"
+              />
+              {searchCPF && (
+                <button
+                  onClick={() => setSearchCPF("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
+                  title="Limpar"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+
+            {/* Nome do Cliente */}
+            <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-9 overflow-hidden flex-1 min-w-[200px]">
+              <input
+                type="text"
+                placeholder="Nome do cliente"
+                value={searchClientName}
+                onChange={(e) => setSearchClientName(e.target.value)}
+                className="pl-3 pr-8 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0"
+              />
+              {searchClientName && (
+                <button
+                  onClick={() => setSearchClientName("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
+                  title="Limpar"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+
+            {/* Email */}
+            <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-9 overflow-hidden flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Email do cliente"
+                value={searchEmail}
+                onChange={(e) => setSearchEmail(e.target.value)}
+                className="pl-10 pr-8 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0"
+              />
+              {searchEmail && (
+                <button
+                  onClick={() => setSearchEmail("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
+                  title="Limpar"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Filtros de Data */}
@@ -657,16 +743,20 @@ const OrdersPage = () => {
             </SelectContent>
           </Select>
 
-          {(startDate || endDate || statusFilter !== "all" || deliveryStatusFilter !== "all") && (
+          {(startDate || endDate || statusFilter !== "all" || deliveryStatusFilter !== "all" || searchOrderId || searchCPF || searchClientName || searchEmail) && (
             <Button
               variant="ghost"
               size="sm"
               className="h-9 text-xs"
-              onClick={() => { 
-                setStartDate(""); 
-                setEndDate(""); 
+              onClick={() => {
+                setStartDate("");
+                setEndDate("");
                 setStatusFilter("all");
                 setDeliveryStatusFilter("all");
+                setSearchOrderId("");
+                setSearchCPF("");
+                setSearchClientName("");
+                setSearchEmail("");
               }}
               title="Limpar todos os filtros"
             >
