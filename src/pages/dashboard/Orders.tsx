@@ -164,8 +164,8 @@ const OrdersPage = () => {
   const [endDate, setEndDate] = useState("");
   
   // Filtros de Status (NOVOS)
-  const [statusFilter, setStatusFilter] = useState("");
-  const [deliveryStatusFilter, setDeliveryStatusFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [deliveryStatusFilter, setDeliveryStatusFilter] = useState("all");
   
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [isProcessingBulk, setIsProcessingBulk] = useState(false);
@@ -232,12 +232,12 @@ const OrdersPage = () => {
         }
 
         // Filtro de Status do Pedido (NOVO)
-        if (statusFilter) {
+        if (statusFilter && statusFilter !== "all") {
             if (order.status !== statusFilter) return false;
         }
 
         // Filtro de Status de Entrega (NOVO)
-        if (deliveryStatusFilter) {
+        if (deliveryStatusFilter && deliveryStatusFilter !== "all") {
             if (order.delivery_status !== deliveryStatusFilter) return false;
         }
 
@@ -268,8 +268,8 @@ const OrdersPage = () => {
       // Busca por ID do pedido (exato ou contém)
       if (order.id.toString().includes(searchNumber)) {
         // Aplica filtros de status mesmo na busca
-        if (statusFilter && order.status !== statusFilter) return false;
-        if (deliveryStatusFilter && order.delivery_status !== deliveryStatusFilter) return false;
+        if (statusFilter && statusFilter !== "all" && order.status !== statusFilter) return false;
+        if (deliveryStatusFilter && deliveryStatusFilter !== "all" && order.delivery_status !== deliveryStatusFilter) return false;
         return true;
       }
 
@@ -278,8 +278,8 @@ const OrdersPage = () => {
         const cleanCPF = order.profiles.cpf_cnpj.replace(/\D/g, ""); // Remove formatação
         if (cleanCPF.includes(searchNumber)) {
             // Aplica filtros de status mesmo na busca
-            if (statusFilter && order.status !== statusFilter) return false;
-            if (deliveryStatusFilter && order.delivery_status !== deliveryStatusFilter) return false;
+            if (statusFilter && statusFilter !== "all" && order.status !== statusFilter) return false;
+            if (deliveryStatusFilter && deliveryStatusFilter !== "all" && order.delivery_status !== deliveryStatusFilter) return false;
             return true;
         }
       }
@@ -289,8 +289,8 @@ const OrdersPage = () => {
         const fullName = `${order.profiles.first_name || ""} ${order.profiles.last_name || ""}`.toLowerCase();
         if (fullName.includes(searchLower)) {
             // Aplica filtros de status mesmo na busca
-            if (statusFilter && order.status !== statusFilter) return false;
-            if (deliveryStatusFilter && order.delivery_status !== deliveryStatusFilter) return false;
+            if (statusFilter && statusFilter !== "all" && order.status !== statusFilter) return false;
+            if (deliveryStatusFilter && deliveryStatusFilter !== "all" && order.delivery_status !== deliveryStatusFilter) return false;
             return true;
         }
       }
@@ -620,7 +620,7 @@ const OrdersPage = () => {
               <SelectValue placeholder="Status Pedido" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Todos</SelectItem>
+              <SelectItem value="all">Todos</SelectItem>
               <SelectItem value="Pendente">Pendente</SelectItem>
               <SelectItem value="Pago">Pago</SelectItem>
               <SelectItem value="Em preparo">Em preparo</SelectItem>
@@ -635,7 +635,7 @@ const OrdersPage = () => {
               <SelectValue placeholder="Status Entrega" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Todos</SelectItem>
+              <SelectItem value="all">Todos</SelectItem>
               <SelectItem value="Pendente">Pendente</SelectItem>
               <SelectItem value="Aguardando Coleta">Aguardando Coleta</SelectItem>
               <SelectItem value="Aguardando Validação">Aguardando Validação</SelectItem>
@@ -645,7 +645,7 @@ const OrdersPage = () => {
             </SelectContent>
           </Select>
 
-          {(startDate || endDate || statusFilter || deliveryStatusFilter) && (
+          {(startDate || endDate || statusFilter !== "all" || deliveryStatusFilter !== "all") && (
             <Button
               variant="ghost"
               size="sm"
@@ -653,8 +653,8 @@ const OrdersPage = () => {
               onClick={() => { 
                 setStartDate(""); 
                 setEndDate(""); 
-                setStatusFilter("");
-                setDeliveryStatusFilter("");
+                setStatusFilter("all");
+                setDeliveryStatusFilter("all");
               }}
               title="Limpar todos os filtros"
             >
