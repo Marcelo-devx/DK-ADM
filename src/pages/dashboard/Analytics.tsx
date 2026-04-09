@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell, Legend, LineChart, Line, AreaChart, Area
@@ -19,6 +20,22 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#64748b"];
+
+// Períodos disponíveis
+const PERIODS = [
+  { value: "7d", label: "Últimos 7 dias" },
+  { value: "30d", label: "Últimos 30 dias" },
+  { value: "90d", label: "Últimos 90 dias" },
+  { value: "6m", label: "Últimos 6 meses" },
+  { value: "12m", label: "Últimos 12 meses" },
+  { value: "24m", label: "Últimos 24 meses" },
+];
+
+// Função auxiliar para formatar o período exibido
+const formatPeriodLabel = (period: string) => {
+  const periodData = PERIODS.find(p => p.value === period);
+  return periodData ? periodData.label : period;
+};
 
 // --- Componentes de UI Auxiliares ---
 const BenchmarkCard = ({ title, value, benchmark, label, icon: Icon, format = "currency" }: any) => {
@@ -56,10 +73,14 @@ const BenchmarkCard = ({ title, value, benchmark, label, icon: Icon, format = "c
 };
 
 const AnalyticsPage = () => {
+  const [selectedPeriod, setSelectedPeriod] = useState("12m");
+
   const { data: bi, isLoading } = useQuery({
-    queryKey: ["bi-data-premium"],
+    queryKey: ["bi-data-premium", selectedPeriod],
     queryFn: async () => {
-        const { data, error } = await supabase.functions.invoke("analytics-bi");
+        const { data, error } = await supabase.functions.invoke("analytics-bi", {
+          body: { period: selectedPeriod }
+        });
         if (error) throw error;
         return data;
     },
@@ -78,11 +99,22 @@ const AnalyticsPage = () => {
           <h1 className="text-3xl font-black text-gray-900 tracking-tight flex items-center gap-3">
             <BarChart3 className="w-8 h-8 text-blue-600" /> Inteligência de Negócio
           </h1>
-          <p className="text-muted-foreground mt-1 font-medium">Dados reais processados nos últimos 12 meses.</p>
+          <p className="text-muted-foreground mt-1 font-medium">Dados reais processados no período selecionado.</p>
         </div>
         <div className="flex items-center gap-3 bg-white p-2 rounded-xl border shadow-sm px-4">
             <Calendar className="w-4 h-4 text-gray-400" />
-            <span className="text-sm font-bold text-gray-600">Jan/2025 - Dez/2025</span>
+            <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+              <SelectTrigger className="w-[200px] border-0 focus:ring-0 text-sm font-bold text-gray-600 bg-transparent p-0 h-auto">
+                <SelectValue placeholder="Selecione o período" />
+              </SelectTrigger>
+              <SelectContent>
+                {PERIODS.map((period) => (
+                  <SelectItem key={period.value} value={period.value}>
+                    {period.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
         </div>
       </div>
 
@@ -123,8 +155,8 @@ const AnalyticsPage = () => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <Card className="lg:col-span-2 shadow-md border-none">
                     <CardHeader>
-                        <CardTitle className="text-lg">Faturamento 12 Meses</CardTitle>
-                        <CardDescription>Evolução mensal da receita bruta.</CardDescription>
+                        <CardTitle className="text-lg">Faturamento - {formatPeriodLabel(selectedPeriod)}</CardTitle>
+                        <CardDescription>Evolução no período selecionado.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="h-[350px] w-full">
