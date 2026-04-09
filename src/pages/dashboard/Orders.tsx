@@ -68,6 +68,7 @@ interface Order {
   profiles: {
     first_name: string | null;
     last_name: string | null;
+    email: string | null;
     phone: string | null;
     cpf_cnpj: string | null;
   } | null;
@@ -89,7 +90,7 @@ const fetchOrders = async (): Promise<Order[]> => {
   if (userIds.length > 0) {
     const { data: profilesData, error: profilesError } = await supabase
       .from("profiles")
-      .select("id, first_name, last_name, phone, cpf_cnpj")
+      .select("id, first_name, last_name, email, phone, cpf_cnpj")
       .in("id", userIds);
 
     if (profilesError) throw new Error(profilesError.message);
@@ -288,6 +289,17 @@ const OrdersPage = () => {
       if (order.profiles?.first_name || order.profiles?.last_name) {
         const fullName = `${order.profiles.first_name || ""} ${order.profiles.last_name || ""}`.toLowerCase();
         if (fullName.includes(searchLower)) {
+            // Aplica filtros de status mesmo na busca
+            if (statusFilter && statusFilter !== "all" && order.status !== statusFilter) return false;
+            if (deliveryStatusFilter && deliveryStatusFilter !== "all" && order.delivery_status !== deliveryStatusFilter) return false;
+            return true;
+        }
+      }
+
+      // Busca por email do cliente
+      if (order.profiles?.email) {
+        const emailLower = order.profiles.email.toLowerCase();
+        if (emailLower.includes(searchLower)) {
             // Aplica filtros de status mesmo na busca
             if (statusFilter && statusFilter !== "all" && order.status !== statusFilter) return false;
             if (deliveryStatusFilter && deliveryStatusFilter !== "all" && order.delivery_status !== deliveryStatusFilter) return false;
@@ -579,7 +591,7 @@ const OrdersPage = () => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="Buscar por ID, CPF, Nome..."
+              placeholder="Buscar por ID, CPF, Nome, Email..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               className="pl-10 pr-4 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0"
@@ -839,7 +851,7 @@ const OrdersPage = () => {
                                                         id: order.user_id,
                                                         first_name: order.profiles?.first_name,
                                                         last_name: order.profiles?.last_name,
-                                                        email: "", // Será carregado pelo modal
+                                                        email: order.profiles?.email || "", // Será carregado pelo modal
                                                         created_at: null,
                                                         force_pix_on_next_purchase: false,
                                                         order_count: 0, 
