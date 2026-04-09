@@ -152,30 +152,80 @@ const ProductsPage = () => {
         };
 
         // Exporta todos os produtos (não apenas os filtrados)
-        const headers = ["SKU", "Nome", "Sabores", "Descrição", "Preço de Custo", "Preço de Venda", "Preço Pix", "Estoque", "Categoria", "Sub-categoria", "Marca", "Imagem", "Publicado (Sim/Não)"];
-        const data = products.map(p => [
-            sanitizeCell(p.sku || ''), 
-            sanitizeCell(p.name), 
-            sanitizeCell(p.flavor_names ?? ''), // tenta pegar sabores importados
-            sanitizeCell(p.description || ''), 
-            // Preços continuam numéricos (não truncamos números)
-            p.cost_price ?? 0, 
-            p.price ?? 0, 
-            p.pix_price ?? 0,
-            p.stock_quantity ?? 0, 
-            sanitizeCell(p.category || ''), 
-            sanitizeCell(p.sub_category || ''), 
-            sanitizeCell(p.brand || ''), 
-            sanitizeCell(p.image_url || ''), 
-            p.is_visible ? 'Sim' : 'Não'
-        ]);
+        const headers = [
+          "SKU Produto",
+          "Nome Produto",
+          "SKU Variação",
+          "Nome Variação",
+          "Preço Variação",
+          "Preço de Custo Variação",
+          "Estoque Variação",
+          "Preço Produto",
+          "Preço de Custo Produto",
+          "Estoque Produto",
+          "Categoria",
+          "Sub-categoria",
+          "Marca",
+          "Imagem",
+          "Publicado (Sim/Não)"
+        ];
 
-        const worksheet = XLSX.utils.aoa_to_sheet([headers, ...data]);
+        const rows: any[] = [];
+
+        products.forEach((p: any) => {
+          const variants = Array.isArray((p as any).variants) ? (p as any).variants : [];
+
+          if (variants.length > 0) {
+            variants.forEach((v: any) => {
+              const flavor = v.flavors ? (Array.isArray(v.flavors) ? v.flavors[0]?.name : v.flavors?.name) : '';
+              const variationName = `${flavor ? flavor : ''}${v.volume_ml ? ` (${v.volume_ml}ml)` : ''}`.trim();
+
+              rows.push([
+                sanitizeCell(p.sku || ''),
+                sanitizeCell(p.name || ''),
+                sanitizeCell(v.sku || ''),
+                sanitizeCell(variationName || ''),
+                v.price ?? p.price ?? 0,
+                v.cost_price ?? p.cost_price ?? 0,
+                v.stock_quantity ?? 0,
+                p.price ?? 0,
+                p.cost_price ?? 0,
+                p.stock_quantity ?? 0,
+                sanitizeCell(p.category || ''),
+                sanitizeCell(p.sub_category || ''),
+                sanitizeCell(p.brand || ''),
+                sanitizeCell(p.image_url || ''),
+                p.is_visible ? 'Sim' : 'Não'
+              ]);
+            });
+          } else {
+            // product without variants
+            rows.push([
+              sanitizeCell(p.sku || ''),
+              sanitizeCell(p.name || ''),
+              '',
+              '',
+              p.price ?? 0,
+              p.cost_price ?? 0,
+              p.stock_quantity ?? 0,
+              p.price ?? 0,
+              p.cost_price ?? 0,
+              p.stock_quantity ?? 0,
+              sanitizeCell(p.category || ''),
+              sanitizeCell(p.sub_category || ''),
+              sanitizeCell(p.brand || ''),
+              sanitizeCell(p.image_url || ''),
+              p.is_visible ? 'Sim' : 'Não'
+            ]);
+          }
+        });
+
+        const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Produtos");
         XLSX.writeFile(workbook, "produtos_tabacaria.xlsx");
 
-        const succMsg = `Exportação concluída! ${products.length} produtos exportados.` + (truncatedCount > 0 ? ` ${truncatedCount} campos longos foram truncados.` : '');
+        const succMsg = `Exportação concluída! ${rows.length} linhas exportadas.` + (truncatedCount > 0 ? ` ${truncatedCount} campos longos foram truncados.` : '');
         showSuccess(succMsg);
     } catch (error: any) {
         console.error("Erro ao exportar:", error);

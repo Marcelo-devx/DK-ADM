@@ -34,7 +34,19 @@ export const useProductData = () => {
       .from("products")
       .select(`
           *, 
-          variants:product_variants(price, cost_price, stock_quantity),
+          variants:product_variants(
+              id,
+              sku,
+              price,
+              cost_price,
+              stock_quantity,
+              flavor_id,
+              volume_ml,
+              ohms,
+              size,
+              color,
+              flavors (name)
+          ),
           promotion_items (
               quantity,
               promotions (
@@ -68,7 +80,9 @@ export const useProductData = () => {
           variant_prices: variantsList.map((v: any) => v.price),
           variant_costs: variantsList.map((v: any) => v.cost_price),
           variant_stock_total: variantStockTotal,
-          allocated_in_kits: allocated
+          allocated_in_kits: allocated,
+          // ensure variants always present for consumers
+          variants: variantsList
       };
     }) as ExtendedProduct[];
   };
