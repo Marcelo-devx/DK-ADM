@@ -6,12 +6,14 @@ import {
   FormField,
   FormItem,
   FormLabel,
+  FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { DollarSign, Calculator, QrCode, CreditCard, TrendingDown, Package } from "lucide-react";
+import { DollarSign, Calculator, QrCode, CreditCard, TrendingDown, Package, AlertCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export interface BreakdownItem {
   name: string;
@@ -40,6 +42,14 @@ interface PricingTabProps {
   onSubmit: (values: any) => void;
   isSubmitting?: boolean;
 }
+
+// Componente auxiliar para label com asterisco obrigatório
+const RequiredLabel = ({ children }: { children: React.ReactNode }) => (
+  <FormLabel>
+    {children}
+    <span className="text-red-500 ml-1">*</span>
+  </FormLabel>
+);
 
 export const PricingTab = ({
   initialData,
@@ -72,13 +82,53 @@ export const PricingTab = ({
 
   const currentSavings = calculateSavings();
 
+  const handleFormSubmit = (values: any) => {
+    // Validações adicionais
+    const errors = [];
+    
+    if (!values.price || values.price < 0) {
+      errors.push("Preço Cartão deve ser maior ou igual a 0");
+    }
+    
+    if (!values.pix_price || values.pix_price < 0) {
+      errors.push("Preço PIX deve ser maior ou igual a 0");
+    }
+    
+    if (values.stock_quantity === undefined || values.stock_quantity === null || values.stock_quantity < 0) {
+      errors.push("Quantidade de Kits deve ser maior ou igual a 0");
+    }
+    
+    if (values.stock_quantity > stats.maxPossibleStock) {
+      errors.push(`Quantidade de Kits não pode exceder o máximo possível (${stats.maxPossibleStock})`);
+    }
+
+    if (errors.length > 0) {
+      alert(`⚠️ Erro de validação:\n\n${errors.join('\n')}`);
+      return;
+    }
+
+    onSubmit(values);
+  };
+
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <div className="flex items-center gap-2 mb-2 pb-2 border-b">
-          <DollarSign className="w-4 h-4 text-gray-500" />
-          <h3 className="text-sm font-bold text-gray-700 uppercase">3. Precificação e Estoque</h3>
+      <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-6">
+        <div className="flex items-center justify-between mb-2 pb-2 border-b">
+          <div className="flex items-center gap-2">
+            <DollarSign className="w-4 h-4 text-gray-500" />
+            <h3 className="text-sm font-bold text-gray-700 uppercase">3. Precificação e Estoque</h3>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            <span className="text-red-500">*</span> Campos obrigatórios
+          </div>
         </div>
+
+        <Alert className="bg-blue-50 border-blue-200">
+          <AlertCircle className="h-4 w-4 text-blue-600" />
+          <AlertDescription className="text-sm text-blue-800">
+            Todos os campos marcados com <span className="text-red-500 font-bold">*</span> são obrigatórios para salvar o kit.
+          </AlertDescription>
+        </Alert>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Coluna Esquerda - Precificação */}
@@ -94,12 +144,14 @@ export const PricingTab = ({
                 name="discount_percent"
                 render={({ field }) => (
                   <FormItem>
+                    <FormLabel className="text-sm">Percentual de Desconto (Opcional)</FormLabel>
                     <FormControl>
                       <div className="flex items-center gap-2">
                         <Input
                           type="number"
                           min="0"
                           max="100"
+                          step="0.01"
                           placeholder="0"
                           {...field}
                           onChange={(e) => {
@@ -115,6 +167,7 @@ export const PricingTab = ({
                         <span className="text-sm font-medium">%</span>
                       </div>
                     </FormControl>
+                    <FormMessage />
                   </FormItem>
                 )}
               />
@@ -138,17 +191,20 @@ export const PricingTab = ({
                 <FormField
                   control={form.control}
                   name="price"
+                  rules={{ required: "Preço Cartão é obrigatório", min: { value: 0, message: "Preço não pode ser negativo" } }}
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm">Preço Final</FormLabel>
+                      <RequiredLabel>Preço Final</RequiredLabel>
                       <FormControl>
                         <Input
                           type="number"
                           step="0.01"
+                          min="0"
                           {...field}
                           className="font-bold text-lg h-11"
                         />
                       </FormControl>
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
@@ -180,17 +236,20 @@ export const PricingTab = ({
                 <FormField
                   control={form.control}
                   name="pix_price"
+                  rules={{ required: "Preço PIX é obrigatório", min: { value: 0, message: "Preço não pode ser negativo" } }}
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm text-green-700">Preço Final</FormLabel>
+                      <RequiredLabel>Preço Final</RequiredLabel>
                       <FormControl>
                         <Input
                           type="number"
                           step="0.01"
+                          min="0"
                           {...field}
                           className="font-bold text-lg h-11 text-green-700 bg-green-50 border-green-200"
                         />
                       </FormControl>
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
@@ -253,9 +312,14 @@ export const PricingTab = ({
                 <FormField
                   control={form.control}
                   name="stock_quantity"
+                  rules={{ 
+                    required: "Quantidade de Kits é obrigatória",
+                    min: { value: 0, message: "Quantidade não pode ser negativa" },
+                    max: { value: stats.maxPossibleStock, message: `Máximo possível: ${stats.maxPossibleStock}` }
+                  }}
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm">Kits Disponíveis para Venda</FormLabel>
+                      <RequiredLabel>Kits Disponíveis para Venda</RequiredLabel>
                       <FormControl>
                         <Input
                           type="number"
@@ -265,12 +329,13 @@ export const PricingTab = ({
                           className="font-bold text-xl h-12 text-center"
                         />
                       </FormControl>
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
 
                 <p className="text-xs text-muted-foreground text-center">
-                  Você não pode definir um valor maior que {stats.maxPossibleStock}
+                  Você não pode definir um valor maior que <span className="font-bold text-blue-700">{stats.maxPossibleStock}</span>
                 </p>
               </div>
             </div>

@@ -23,6 +23,14 @@ interface BasicInfoTabProps {
   };
 }
 
+// Componente auxiliar para label com asterisco obrigatório
+const RequiredLabel = ({ children }: { children: React.ReactNode }) => (
+  <FormLabel>
+    {children}
+    <span className="text-red-500 ml-1">*</span>
+  </FormLabel>
+);
+
 export const BasicInfoTab = ({
   onSubmit,
   isSubmitting = false,
@@ -40,7 +48,7 @@ export const BasicInfoTab = ({
     if (!values.name || values.name.trim().length < 2) {
       form.setError("name", {
         type: "manual",
-        message: "O nome é obrigatório.",
+        message: "O nome é obrigatório e deve ter pelo menos 2 caracteres.",
       });
       return false;
     }
@@ -51,9 +59,14 @@ export const BasicInfoTab = ({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
-        <div className="flex items-center gap-2 mb-2 pb-2 border-b">
-          <Tag className="w-4 h-4 text-gray-500" />
-          <h3 className="text-sm font-bold text-gray-700 uppercase">1. Dados Básicos</h3>
+        <div className="flex items-center justify-between mb-2 pb-2 border-b">
+          <div className="flex items-center gap-2">
+            <Tag className="w-4 h-4 text-gray-500" />
+            <h3 className="text-sm font-bold text-gray-700 uppercase">1. Dados Básicos</h3>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            <span className="text-red-500">*</span> Campos obrigatórios
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -63,7 +76,7 @@ export const BasicInfoTab = ({
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Nome do Kit/Promoção</FormLabel>
+                  <RequiredLabel>Nome do Kit/Promoção</RequiredLabel>
                   <FormControl>
                     <Input placeholder="Ex: Combo Iniciante Zomo" {...field} />
                   </FormControl>

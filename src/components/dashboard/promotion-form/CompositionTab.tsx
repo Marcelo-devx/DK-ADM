@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Package, Loader2, Check, ChevronsUpDown } from "lucide-react";
+import { Plus, Trash2, Package, Loader2, Check, ChevronsUpDown, AlertCircle } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -25,6 +25,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export interface BreakdownItem {
   name: string;
@@ -220,7 +221,7 @@ export const CompositionTab = ({ promotionId, onNext }: CompositionTabProps) => 
 
   const handleNext = () => {
     if (!items || items.length === 0) {
-      showError("Adicione pelo menos um produto ao kit.");
+      showError("⚠️ Erro de validação: Você precisa adicionar pelo menos um produto ao kit antes de continuar.");
       return;
     }
 
@@ -299,10 +300,22 @@ export const CompositionTab = ({ promotionId, onNext }: CompositionTabProps) => 
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2 mb-2 pb-2 border-b">
-        <Package className="w-4 h-4 text-gray-500" />
-        <h3 className="text-sm font-bold text-gray-700 uppercase">2. Composição do Kit</h3>
+      <div className="flex items-center justify-between mb-2 pb-2 border-b">
+        <div className="flex items-center gap-2">
+          <Package className="w-4 h-4 text-gray-500" />
+          <h3 className="text-sm font-bold text-gray-700 uppercase">2. Composição do Kit</h3>
+        </div>
+        <div className="text-xs text-muted-foreground">
+          <span className="text-red-500">*</span> Pelo menos 1 produto
+        </div>
       </div>
+
+      <Alert className="bg-blue-50 border-blue-200">
+        <AlertCircle className="h-4 w-4 text-blue-600" />
+        <AlertDescription className="text-sm text-blue-800">
+          Você precisa adicionar pelo menos um produto à composição do kit antes de continuar para a etapa de precificação.
+        </AlertDescription>
+      </Alert>
 
       {/* Formulário para adicionar itens */}
       <div className="bg-gray-50 p-4 rounded-lg border">

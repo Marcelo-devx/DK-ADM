@@ -49,22 +49,34 @@ export const PromotionForm = ({ onSubmit, isSubmitting, initialData }: Promotion
       discount_percent: 0,
     };
 
-    // Se já tem ID, apenas avança para a próxima aba
+    // Se já tem ID (editando), apenas avança para a próxima aba
     if (promotionId) {
       setActiveTab("composition");
       return;
     }
 
     // Se não tem ID, precisa criar o kit primeiro
-    const { data, error } = await supabase.from("promotions").insert(kitValues).select().single();
+    try {
+      const { data, error } = await supabase.from("promotions").insert(kitValues).select().single();
 
-    if (error) {
-      alert(`Erro ao criar kit: ${error.message}`);
-      return;
+      if (error) {
+        console.error("Erro ao criar kit:", error);
+        alert(`Erro ao criar kit: ${error.message}`);
+        return;
+      }
+
+      if (!data) {
+        alert("Erro ao criar kit: Não foi possível obter o ID da promoção criada.");
+        return;
+      }
+
+      // Chama o onSubmit com o novo ID para atualizar o estado no componente pai
+      // Isso garante que o initialData seja atualizado com o ID correto
+      onSubmit({ ...kitValues, id: data.id } as PromotionFormValues);
+    } catch (error: any) {
+      console.error("Erro ao criar kit:", error);
+      alert(`Erro ao criar kit: ${error.message || "Erro desconhecido"}`);
     }
-
-    // Chama o onSubmit com o novo ID
-    onSubmit({ ...kitValues, id: data.id });
   };
 
   // Recebe os dados da composição (Passo 2)
@@ -82,8 +94,12 @@ export const PromotionForm = ({ onSubmit, isSubmitting, initialData }: Promotion
 
   // Salvar alterações finais (Passo 3)
   const handleFinalSubmit = async (values: PromotionFormValues) => {
+    console.log("handleFinalSubmit chamado com values:", values);
+    console.log("promotionId:", promotionId);
+    
     if (!promotionId) {
-      onSubmit(values);
+      console.error("Tentativa de salvar sem promotionId");
+      alert("Erro: ID da promoção não encontrado. Por favor, recarregue a página e tente novamente.");
       return;
     }
 
@@ -93,31 +109,59 @@ export const PromotionForm = ({ onSubmit, isSubmitting, initialData }: Promotion
       return;
     }
 
-    // Atualiza estoque se necessário
-    if (values.stock_quantity !== initialData?.stock_quantity) {
-      try {
+    try {
+      // Atualiza estoque se necessário
+      if (values.stock_quantity !== initialData?.stock_quantity) {
         const { stock_quantity, discount_percent, ...basicData } = values;
+        
+        console.log("Atualizando dados básicos da promoção:", basicData);
+        
         const { error: basicError } = await supabase
           .from("promotions")
           .update(basicData)
           .eq("id", promotionId);
 
-        if (basicError) throw basicError;
+        if (basicError) {
+          console.error("Erro ao atualizar dados básicos:", basicError);
+          throw basicError;
+        }
 
+        console.log("Atualizando estoque para:", values.stock_quantity);
+        
         const { error: stockError } = await supabase.rpc("update_kit_stock_level", {
           p_promotion_id: promotionId,
           p_new_stock: values.stock_quantity,
         });
 
-        if (stockError) throw stockError;
+        if (stockError) {
+          console.error("Erro ao atualizar estoque:", stockError);
+          throw stockError;
+        }
 
+        console.log("Estoque atualizado com sucesso");
         onSubmit(values);
-      } catch (error: any) {
-        console.error("Erro ao atualizar kit:", error);
-        alert(`Erro ao atualizar estoque do kit: ${error.message}`);
+      } else {
+        // Se o estoque não mudou, apenas atualiza os dados básicos
+        const { stock_quantity, discount_percent, ...basicData } = values;
+        
+        console.log("Atualizando dados básicos (sem mudança de estoque):", basicData);
+        
+        const { error } = await supabase
+          .from("promotions")
+          .update(basicData)
+          .eq("id", promotionId);
+
+        if (error) {
+          console.error("Erro ao atualizar dados básicos:", error);
+          throw error;
+        }
+
+        console.log("Dados atualizados com sucesso");
+        onSubmit(values);
       }
-    } else {
-      onSubmit(values);
+    } catch (error: any) {
+      console.error("Erro ao atualizar kit:", error);
+      alert(`Erro ao atualizar kit: ${error.message || "Erro desconhecido"}`);
     }
   };
 
