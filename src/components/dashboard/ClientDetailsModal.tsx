@@ -185,42 +185,42 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                             ) : (
                                 <>
                                     {/* DADOS PESSOAIS */}
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div className="space-y-3 p-4 border rounded-lg bg-white shadow-sm">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 min-w-0">
+                                        <div className="space-y-3 p-4 border rounded-lg bg-white shadow-sm min-w-0">
                                             <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2 border-b pb-2 mb-2">
                                                 <Fingerprint className="w-4 h-4 text-slate-400" /> Dados Pessoais
                                             </h4>
 
                                             <div className="grid grid-cols-2 gap-y-3 text-sm">
-                                                <div>
+                                                <div className="min-w-0">
                                                     <p className="text-[10px] text-muted-foreground uppercase">Email</p>
                                                     <div className="flex items-center gap-1 font-medium">
                                                         {isLoadingEmail ? (
                                                             <Skeleton className="h-4 w-32" />
                                                         ) : (
                                                             <>
-                                                                <Mail className="w-3 h-3 text-slate-400" /> <span className="break-words max-w-[28rem] block">{client.email || userEmailData?.email || "-"}</span>
+                                                                <Mail className="w-3 h-3 text-slate-400" /> <span className="break-words max-w-full block">{client.email || userEmailData?.email || "-"}</span>
                                                             </>
                                                         )}
                                                     </div>
                                                 </div>
-                                                <div>
+                                                <div className="min-w-0">
                                                     <p className="text-[10px] text-muted-foreground uppercase">CPF / CNPJ</p>
                                                     <p className="font-medium">{profile?.cpf_cnpj || "-"}</p>
                                                 </div>
-                                                <div>
+                                                <div className="min-w-0">
                                                     <p className="text-[10px] text-muted-foreground uppercase">Telefone</p>
                                                     <div className="flex items-center gap-1 font-medium">
                                                         <Phone className="w-3 h-3 text-slate-400" /> {profile?.phone || "-"}
                                                     </div>
                                                 </div>
-                                                <div>
+                                                <div className="min-w-0">
                                                     <p className="text-[10px] text-muted-foreground uppercase">Nascimento</p>
                                                     <div className="flex items-center gap-1 font-medium">
                                                         <Calendar className="w-3 h-3 text-slate-400" /> {formatDate(profile?.date_of_birth)}
                                                     </div>
                                                 </div>
-                                                <div>
+                                                <div className="min-w-0">
                                                     <p className="text-[10px] text-muted-foreground uppercase">Gênero</p>
                                                     <p className="font-medium">{profile?.gender || "-"}</p>
                                                 </div>
@@ -228,7 +228,7 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                                         </div>
 
                                         {/* ENDEREÇO */}
-                                        <div className="space-y-3 p-4 border rounded-lg bg-white shadow-sm">
+                                        <div className="space-y-3 p-4 border rounded-lg bg-white shadow-sm min-w-0">
                                             <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2 border-b pb-2 mb-2">
                                                 <MapPin className="w-4 h-4 text-slate-400" /> Endereço Principal
                                             </h4>
