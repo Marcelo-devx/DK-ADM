@@ -22,6 +22,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send, History, FileDown, Calendar, FilterX, ShieldCheck, ShieldX, CheckSquare, Plus, Search } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { showSuccess, showError } from "@/utils/toast";
@@ -156,6 +163,10 @@ const OrdersPage = () => {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   
+  // Filtros de Status (NOVOS)
+  const [statusFilter, setStatusFilter] = useState("");
+  const [deliveryStatusFilter, setDeliveryStatusFilter] = useState("");
+  
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [isProcessingBulk, setIsProcessingBulk] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -220,6 +231,16 @@ const OrdersPage = () => {
             if (!(isPaid && isPendingDelivery)) return false;
         }
 
+        // Filtro de Status do Pedido (NOVO)
+        if (statusFilter) {
+            if (order.status !== statusFilter) return false;
+        }
+
+        // Filtro de Status de Entrega (NOVO)
+        if (deliveryStatusFilter) {
+            if (order.delivery_status !== deliveryStatusFilter) return false;
+        }
+
         // Filtro de Data
         if (startDate) {
           const orderDate = new Date(order.created_at);
@@ -246,6 +267,9 @@ const OrdersPage = () => {
     return orders?.filter(order => {
       // Busca por ID do pedido (exato ou contém)
       if (order.id.toString().includes(searchNumber)) {
+        // Aplica filtros de status mesmo na busca
+        if (statusFilter && order.status !== statusFilter) return false;
+        if (deliveryStatusFilter && order.delivery_status !== deliveryStatusFilter) return false;
         return true;
       }
 
@@ -253,7 +277,10 @@ const OrdersPage = () => {
       if (order.profiles?.cpf_cnpj) {
         const cleanCPF = order.profiles.cpf_cnpj.replace(/\D/g, ""); // Remove formatação
         if (cleanCPF.includes(searchNumber)) {
-          return true;
+            // Aplica filtros de status mesmo na busca
+            if (statusFilter && order.status !== statusFilter) return false;
+            if (deliveryStatusFilter && order.delivery_status !== deliveryStatusFilter) return false;
+            return true;
         }
       }
 
@@ -261,13 +288,16 @@ const OrdersPage = () => {
       if (order.profiles?.first_name || order.profiles?.last_name) {
         const fullName = `${order.profiles.first_name || ""} ${order.profiles.last_name || ""}`.toLowerCase();
         if (fullName.includes(searchLower)) {
-          return true;
+            // Aplica filtros de status mesmo na busca
+            if (statusFilter && order.status !== statusFilter) return false;
+            if (deliveryStatusFilter && order.delivery_status !== deliveryStatusFilter) return false;
+            return true;
         }
       }
 
       return false;
     }) || [];
-  }, [orders, readyToShipOnly, startDate, endDate, search]);
+  }, [orders, readyToShipOnly, startDate, endDate, search, statusFilter, deliveryStatusFilter]);
 
   const validatePaymentAndSetPendingMutation = useMutation({
     mutationFn: async (orderId: number) => {
@@ -582,19 +612,56 @@ const OrdersPage = () => {
               className="h-9 w-36 text-xs"
               placeholder="Data Final"
             />
-            {(startDate || endDate) && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-9 text-xs"
-                onClick={() => { setStartDate(""); setEndDate(""); }}
-                title="Limpar filtros de data"
-              >
-                <FilterX className="w-3 h-3 mr-1" />
-                Limpar
-              </Button>
-            )}
           </div>
+
+          {/* Filtro de Status do Pedido (NOVO) */}
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="h-9 w-40 text-xs">
+              <SelectValue placeholder="Status Pedido" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">Todos</SelectItem>
+              <SelectItem value="Pendente">Pendente</SelectItem>
+              <SelectItem value="Pago">Pago</SelectItem>
+              <SelectItem value="Em preparo">Em preparo</SelectItem>
+              <SelectItem value="Finalizada">Finalizada</SelectItem>
+              <SelectItem value="Cancelado">Cancelado</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Filtro de Status de Entrega (NOVO) */}
+          <Select value={deliveryStatusFilter} onValueChange={setDeliveryStatusFilter}>
+            <SelectTrigger className="h-9 w-40 text-xs">
+              <SelectValue placeholder="Status Entrega" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">Todos</SelectItem>
+              <SelectItem value="Pendente">Pendente</SelectItem>
+              <SelectItem value="Aguardando Coleta">Aguardando Coleta</SelectItem>
+              <SelectItem value="Aguardando Validação">Aguardando Validação</SelectItem>
+              <SelectItem value="Embalado">Embalado</SelectItem>
+              <SelectItem value="Despachado">Despachado</SelectItem>
+              <SelectItem value="Entregue">Entregue</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {(startDate || endDate || statusFilter || deliveryStatusFilter) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9 text-xs"
+              onClick={() => { 
+                setStartDate(""); 
+                setEndDate(""); 
+                setStatusFilter("");
+                setDeliveryStatusFilter("");
+              }}
+              title="Limpar todos os filtros"
+            >
+              <FilterX className="w-3 h-3 mr-1" />
+              Limpar
+            </Button>
+          )}
 
           <Button 
             onClick={() => setIsCreateOrderOpen(true)}
