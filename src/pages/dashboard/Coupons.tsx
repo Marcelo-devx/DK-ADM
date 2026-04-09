@@ -52,6 +52,7 @@ type Coupon = {
   minimum_order_value: number;
   stock_quantity: number;
   is_active: boolean;
+  discount_type?: string;
 };
 
 const fetchCoupons = async () => {
@@ -206,13 +207,17 @@ const CouponsPage = () => {
                     </p>
                   </TableCell>
                   <TableCell>
-                    {new Intl.NumberFormat("pt-BR", {
-                      style: "currency",
-                      currency: "BRL",
-                    }).format(coupon.discount_value)}
+                    {coupon.discount_type === "shipping" ? (
+                      <span className="font-bold text-green-600">Frete Grátis</span>
+                    ) : (
+                      new Intl.NumberFormat("pt-BR", {
+                        style: "currency",
+                        currency: "BRL",
+                      }).format(coupon.discount_value)
+                    )}
                   </TableCell>
                   <TableCell>{coupon.points_cost}</TableCell>
-                  <TableCell>{coupon.stock_quantity}</TableCell>
+                  <TableCell>{coupon.stock_quantity === -1 ? "Ilimitado" : coupon.stock_quantity}</TableCell>
                   <TableCell>
                     <Switch
                       checked={coupon.is_active}
