@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { showError, showSuccess } from "@/utils/toast";
-import { Loader2, UploadCloud, X } from "lucide-react";
+import { Loader2, UploadCloud, X, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ImageUploaderProps {
@@ -28,9 +28,11 @@ export const ImageUploader = ({
 }: ImageUploaderProps) => {
   const [uploading, setUploading] = useState(false);
   const [mediaUrl, setMediaUrl] = useState(initialUrl || null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   useEffect(() => {
     setMediaUrl(initialUrl || null);
+    setUploadError(null);
   }, [initialUrl]);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -38,6 +40,7 @@ export const ImageUploader = ({
     if (!file) return;
 
     setUploading(true);
+    setUploadError(null);
 
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -58,20 +61,31 @@ export const ImageUploader = ({
         onUploadSuccess(secure_url);
         showSuccess("Arquivo enviado com sucesso!");
       } catch (err: any) {
-        console.error("Cloudinary upload failed, attempting Supabase Storage fallback:", err);
+        console.error("[ImageUploader] Cloudinary upload failed, attempting Supabase Storage fallback:", err);
+        
+        // Check if it's a Cloudinary configuration error
+        if (err?.message?.includes('credentials') || err?.message?.includes('configured')) {
+          setUploadError("Serviço de Cloudinary não configurado. Tentando upload local...");
+        }
+        
         // Fallback: upload directly to Supabase Storage public bucket
         try {
-          // Try common bucket names in order
           const bucketCandidates = ['public', 'images', 'uploads'];
           let uploadedUrl: string | null = null;
+          let lastError: string | null = null;
 
           for (const bucket of bucketCandidates) {
             try {
               const filePath = `${Date.now()}_${file.name}`;
-              const { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, file, { upsert: true });
+              const { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, file, { 
+                upsert: true,
+                contentType: file.type
+              });
+              
               if (uploadError) {
-                console.warn(`Upload to bucket ${bucket} failed:`, uploadError.message);
-                continue; // try next bucket
+                console.warn(`[ImageUploader] Upload to bucket ${bucket} failed:`, uploadError.message);
+                lastError = uploadError.message;
+                continue;
               }
 
               const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(filePath);
@@ -79,22 +93,26 @@ export const ImageUploader = ({
                 uploadedUrl = publicData.publicUrl;
                 break;
               }
-            } catch (innerErr) {
-              console.warn('Fallback upload attempt error:', innerErr);
+            } catch (innerErr: any) {
+              console.warn('[ImageUploader] Fallback upload attempt error:', innerErr);
+              lastError = innerErr.message;
               continue;
             }
           }
 
           if (!uploadedUrl) {
-            throw new Error('Fallback upload failed: no bucket available or permission denied');
+            throw new Error(`Upload falhou em todos os buckets: ${lastError || 'Permissão negada ou bucket não encontrado'}`);
           }
 
           setMediaUrl(uploadedUrl);
           onUploadSuccess(uploadedUrl);
-          showSuccess('Arquivo enviado via Supabase Storage!');
+          setUploadError(null);
+          showSuccess('Arquivo enviado com sucesso via Supabase Storage!');
         } catch (fallbackErr: any) {
-          console.error('Both upload methods failed:', fallbackErr);
-          showError(fallbackErr.message || 'Falha no upload do arquivo.');
+          console.error('[ImageUploader] Both upload methods failed:', fallbackErr);
+          const errorMsg = fallbackErr.message || 'Falha no upload do arquivo.';
+          setUploadError(errorMsg);
+          showError(errorMsg);
         }
       } finally {
         setUploading(false);
@@ -104,6 +122,7 @@ export const ImageUploader = ({
   
   const handleRemoveMedia = () => {
     setMediaUrl(null);
+    setUploadError(null);
     onUploadSuccess(""); // Limpa a URL no formulário pai
   };
 
@@ -145,6 +164,7 @@ export const ImageUploader = ({
           "relative flex flex-col items-center justify-center border-2 border-dashed rounded-md bg-gray-50/50 hover:bg-gray-50 transition-colors",
           "aspect-square w-full max-w-[300px]", // Define como quadrado e limita o tamanho máximo
           uploading && "cursor-not-allowed opacity-60",
+          uploadError && "border-red-300 bg-red-50/50",
           className
         )}>
           {uploading ? (
@@ -154,7 +174,7 @@ export const ImageUploader = ({
             </>
           ) : (
             <>
-              <UploadCloud className="h-8 w-8 text-muted-foreground" />
+              <UploadCloud className={cn("h-8 w-8", uploadError ? "text-red-400" : "text-muted-foreground")} />
               <p className="mt-2 text-xs text-muted-foreground font-medium text-center px-4">
                 Arraste ou clique para enviar
               </p>
@@ -167,6 +187,14 @@ export const ImageUploader = ({
               />
             </>
           )}
+        </div>
+      )}
+      
+      {/* Error message display */}
+      {uploadError && (
+        <div className="flex items-start gap-2 text-xs text-red-600 mt-1 px-1">
+          <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
+          <span>{uploadError}</span>
         </div>
       )}
     </div>
