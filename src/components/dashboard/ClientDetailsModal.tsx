@@ -161,9 +161,9 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                 </div>
             </div>
 
-            <Tabs defaultValue="orders" className="flex-1 flex flex-col overflow-hidden bg-white">
+            <Tabs defaultValue="orders" className="flex-1 flex flex-col overflow-hidden bg-white pt-2">
                 <div className="px-6 border-b">
-                    <TabsList className="w-full justify-start h-12 bg-transparent p-0 gap-6">
+                    <TabsList className="w-full justify-start h-12 bg-white z-10 p-0 gap-6">
                         <TabsTrigger value="orders" className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none rounded-none px-0 pb-2 h-full font-bold text-slate-500 data-[state=active]:text-primary bg-transparent">
                             Histórico de Pedidos ({orders?.length || 0})
                         </TabsTrigger>
@@ -199,7 +199,7 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                                                             <Skeleton className="h-4 w-32" />
                                                         ) : (
                                                             <>
-                                                                <Mail className="w-3 h-3 text-slate-400" /> {client.email || userEmailData?.email || "-"}
+                                                                <Mail className="w-3 h-3 text-slate-400" /> <span className="break-words max-w-[28rem] block">{client.email || userEmailData?.email || "-"}</span>
                                                             </>
                                                         )}
                                                     </div>
