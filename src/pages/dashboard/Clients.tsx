@@ -2,9 +2,14 @@ import { useState } from "react";
 import { useClients } from "@/hooks/useClients";
 import { showSuccess, showError } from "@/utils/toast";
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel,
-  AlertDialogContent, AlertDialogDescription,
-  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 // Use relative imports so TS reliably finds these files
 import SearchBar from "../../components/dashboard/clients/SearchBar";
@@ -31,11 +36,17 @@ export default function ClientsPage() {
     action,
     actionStatus,
     refetch,
+    pageSize,
+    error,
   } = useClients(1);
 
   const [selectedClient, setSelectedClient] = useState<any | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [actionToConfirm, setActionToConfirm] = useState<any | null>(null);
+
+  const effectivePageSize = pageSize ?? 20;
+
+  const showDebug = total > 0 && (!clients || clients.length === 0) && !search;
 
   return (
     <div>
@@ -44,13 +55,10 @@ export default function ClientsPage() {
         <div>
           <h1 className="text-3xl font-bold">Clientes</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Total:{" "}
-            <span className="font-semibold text-primary">
-              {total.toLocaleString("pt-BR")}
-            </span>
+            Total: <span className="font-semibold text-primary">{total.toLocaleString("pt-BR")}</span>
             {!search && (
               <span className="ml-2 text-xs text-muted-foreground">
-                — Página {page} de {Math.max(1, Math.ceil(total / 10))}
+                — Página {page} de {Math.max(1, Math.ceil(total / effectivePageSize))}
               </span>
             )}
           </p>
@@ -66,6 +74,41 @@ export default function ClientsPage() {
           />
         </div>
       </div>
+
+      {/* Debug panel when total exists but no clients fetched */}
+      {showDebug && (
+        <div className="mb-4 p-4 rounded-lg bg-yellow-50 border border-yellow-200">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm text-yellow-800 font-medium">Detectado: total de clientes presente mas nenhum cliente retornado nesta página.</p>
+              <p className="text-xs text-muted-foreground mt-1">Isso indica um problema na consulta (Edge Function indisponível ou RLS bloqueando as linhas).</p>
+              <ul className="text-xs mt-2 text-muted-foreground">
+                <li>page: <span className="font-medium">{page}</span></li>
+                <li>pageSize: <span className="font-medium">{effectivePageSize}</span></li>
+                <li>clients.length: <span className="font-medium">{clients?.length ?? 0}</span></li>
+                <li>isLoading: <span className="font-medium">{String(isLoading)}</span></li>
+                <li>isFetching: <span className="font-medium">{String(isFetching)}</span></li>
+                <li>search: <span className="font-medium">{search || '(vazio)'}</span></li>
+                <li>error: <span className="font-medium">{(error as any)?.message ?? String(error) ?? 'nenhum'}</span></li>
+              </ul>
+            </div>
+            <div className="flex gap-2">
+              <button
+                className="px-3 py-2 bg-primary text-white rounded"
+                onClick={() => refetch()}
+              >
+                Recarregar lista
+              </button>
+              <button
+                className="px-3 py-2 border rounded"
+                onClick={() => window.location.reload()}
+              >
+                Recarregar página
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* If user is actively searching, show a focused preview for the matched client */}
       {search ? (

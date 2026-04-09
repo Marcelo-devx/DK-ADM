@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useSession } from "@/components/SessionContextProvider";
 
 export interface Client {
   id: string;
@@ -26,10 +27,119 @@ const ANON_KEY =
 async function fetchClients(page: number, search: string): Promise<Client[]> {
   const body: Record<string, unknown> = { limit: PAGE_SIZE, page };
   if (search) body.search = search;
-  const { data, error } = await supabase.functions.invoke("get-users", { body });
-  if (error) throw new Error(error.message);
-  if (!Array.isArray(data)) throw new Error("Resposta inválida da Edge Function.");
-  return data as Client[];
+
+  // Try to include the current access token so the Edge Function can verify admin
+  try {
+    const { data: sd } = await supabase.auth.getSession();
+    const token = sd?.session?.access_token;
+    const invokeOptions: any = { body };
+    if (token) {
+      invokeOptions.headers = {
+        Authorization: `Bearer ${token}`,
+        apikey: ANON_KEY,
+      };
+    }
+
+    const { data, error } = await supabase.functions.invoke("get-users", invokeOptions);
+    if (error) throw new Error(error.message || 'Erro na Edge Function');
+    if (!Array.isArray(data)) throw new Error("Resposta inválida da Edge Function.");
+    return data as Client[];
+  } catch (e: any) {
+    // If edge function fails (network or other), fallback to direct Supabase queries from the client
+    console.warn('[useClients] get-users Edge Function failed, falling back to direct DB query:', e.message || e);
+
+    // Build fallback query against profiles table
+    try {
+      const start = (page - 1) * PAGE_SIZE;
+      const end = start + PAGE_SIZE - 1;
+
+      const searchTrim = (search || '').toString().trim();
+      const isCPF = /^[0-9]+$/.test(searchTrim);
+      const isEmail = searchTrim.includes('@');
+
+      let query = supabase
+        .from('profiles')
+        .select('id, email, first_name, last_name, role, force_pix_on_next_purchase, updated_at, created_at, cpf_cnpj')
+        .eq('role', 'user')
+        .range(start, end);
+
+      if (searchTrim) {
+        if (isCPF) {
+          query = supabase
+            .from('profiles')
+            .select('id, email, first_name, last_name, role, force_pix_on_next_purchase, updated_at, created_at, cpf_cnpj')
+            .ilike('cpf_cnpj', `%${searchTrim}%`)
+            .range(start, end);
+        } else if (isEmail) {
+          query = supabase
+            .from('profiles')
+            .select('id, email, first_name, last_name, role, force_pix_on_next_purchase, updated_at, created_at, cpf_cnpj')
+            .ilike('email', `%${searchTrim}%`)
+            .range(start, end);
+        } else {
+          // generic search across email and cpf_cnpj
+          query = supabase
+            .from('profiles')
+            .select('id, email, first_name, last_name, role, force_pix_on_next_purchase, updated_at, created_at, cpf_cnpj')
+            .or(`ilike(email,%${searchTrim}%),ilike(cpf_cnpj,%${searchTrim}%)`)
+            .range(start, end);
+        }
+      }
+
+      const { data: profiles, error: profilesError } = await query;
+      if (profilesError) {
+        console.error('[useClients] profiles fallback query error:', profilesError.message || profilesError);
+        throw profilesError;
+      }
+
+      const userIds = (profiles || []).map((p: any) => p.id);
+
+      // Fetch orders to compute counts
+      let orders: any[] = [];
+      if (userIds.length > 0) {
+        const { data: ordersData, error: ordersError } = await supabase
+          .from('orders')
+          .select('user_id, status')
+          .in('user_id', userIds as string[]);
+        if (ordersError) {
+          console.error('[useClients] orders fallback query error:', ordersError.message || ordersError);
+          orders = [];
+        } else {
+          orders = ordersData || [];
+        }
+      }
+
+      const orderCountMap = new Map();
+      const completedOrderMap = new Map();
+      const completedStatuses = ['Finalizada', 'Pago', 'Entregue', 'Concluída'];
+
+      for (const order of orders || []) {
+        orderCountMap.set(order.user_id, (orderCountMap.get(order.user_id) || 0) + 1);
+        if (completedStatuses.includes(order.status)) {
+          completedOrderMap.set(order.user_id, (completedOrderMap.get(order.user_id) || 0) + 1);
+        }
+      }
+
+      const clients = (profiles || []).map((p: any) => ({
+        id: p.id,
+        email: p.email || '',
+        created_at: p.created_at || new Date().toISOString(),
+        updated_at: p.updated_at || null,
+        first_name: p.first_name || null,
+        last_name: p.last_name || null,
+        role: p.role || 'user',
+        force_pix_on_next_purchase: p.force_pix_on_next_purchase === true,
+        order_count: orderCountMap.get(p.id) || 0,
+        completed_order_count: completedOrderMap.get(p.id) || 0,
+        cpf_cnpj: p.cpf_cnpj || null,
+      })) as Client[];
+
+      return clients;
+    } catch (fallbackErr: any) {
+      console.error('[useClients] Fallback failed too:', fallbackErr);
+      throw fallbackErr;
+    }
+  }
 }
 
 async function fetchTotal(): Promise<number> {
@@ -43,6 +153,7 @@ async function fetchTotal(): Promise<number> {
 
 export function useClients(initialPage = 1) {
   const qc = useQueryClient();
+  const session = useSession();
 
   const [page, setPage] = useState<number>(initialPage);
   const [searchInput, setSearchInput] = useState<string>("");
@@ -74,10 +185,14 @@ export function useClients(initialPage = 1) {
     };
   }, []);
 
+  const sessionReady = session !== undefined; // SessionContextProvider only renders children after init
+  const hasSessionUser = !!session?.user?.id;
+
   const { data: total = 0, isLoading: isLoadingTotal } = useQuery<number>({
     queryKey: ["clientsTotal"],
     queryFn: fetchTotal,
     staleTime: 60_000,
+    enabled: sessionReady && hasSessionUser,
   });
 
   const {
@@ -90,6 +205,7 @@ export function useClients(initialPage = 1) {
     queryKey: ["clients", page, search],
     queryFn: () => fetchClients(page, search),
     staleTime: 30_000,
+    enabled: sessionReady && hasSessionUser,
   });
 
   // Create client
@@ -280,5 +396,8 @@ export function useClients(initialPage = 1) {
     actionStatus: {
       isPending: actionMutation.isPending,
     },
+
+    // pagination config
+    pageSize: PAGE_SIZE,
   };
 }
