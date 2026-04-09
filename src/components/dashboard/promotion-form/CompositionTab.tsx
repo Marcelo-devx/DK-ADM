@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -79,6 +79,7 @@ export const CompositionTab = ({ promotionId, onNext }: CompositionTabProps) => 
   const [selectedVariantId, setSelectedVariantId] = useState<string>("none");
   const [quantity, setQuantity] = useState<number>(1);
   const [openProductSearch, setOpenProductSearch] = useState(false);
+  const [productSearch, setProductSearch] = useState<string>("");
 
   // 1. Buscar Produtos Disponíveis
   const { data: products } = useQuery({
@@ -205,6 +206,18 @@ export const CompositionTab = ({ promotionId, onNext }: CompositionTabProps) => 
 
   if (!promotionId) return null;
 
+  // Filter products based on search input
+  const filteredProducts = products?.filter((p) => {
+    const term = productSearch.trim().toLowerCase();
+    if (!term) return true;
+    return p.name.toLowerCase().includes(term);
+  });
+
+  // Clear product search when popover closes
+  useEffect(() => {
+    if (!openProductSearch) setProductSearch("");
+  }, [openProductSearch]);
+
   const selectedProduct = products?.find((p) => String(p.id) === selectedProductId);
   const availableVariants = selectedProduct?.variants?.filter((v) => v.stock_quantity > 0) || [];
   const hasVariants = availableVariants.length > 0;
@@ -238,11 +251,15 @@ export const CompositionTab = ({ promotionId, onNext }: CompositionTabProps) => 
               </PopoverTrigger>
               <PopoverContent className="w-[300px] p-0" align="start">
                 <Command>
-                  <CommandInput placeholder="Digite para buscar..." />
+                  <CommandInput
+                    placeholder="Digite para buscar..."
+                    value={productSearch}
+                    onValueChange={setProductSearch}
+                  />
                   <CommandList>
                     <CommandEmpty>Nenhum produto ativo encontrado.</CommandEmpty>
                     <CommandGroup>
-                      {products?.map((p) => (
+                      {filteredProducts?.map((p) => (
                         <CommandItem
                           key={p.id}
                           value={p.name}
@@ -250,6 +267,7 @@ export const CompositionTab = ({ promotionId, onNext }: CompositionTabProps) => 
                             setSelectedProductId(String(p.id));
                             setSelectedVariantId("none");
                             setOpenProductSearch(false);
+                            setProductSearch("");
                           }}
                         >
                           <Check
