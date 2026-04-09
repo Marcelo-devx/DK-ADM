@@ -49,6 +49,8 @@ type PromotionItem = {
     flavors: { name: string } | null;
     volume_ml: number | null;
     color: string | null;
+    ohms: string | null;
+    size: string | null;
   } | null;
 };
 
@@ -65,6 +67,23 @@ type Promotion = {
   promotion_items: PromotionItem[];
 };
 
+/** Monta o label completo de uma variação combinando todos os campos disponíveis */
+function getVariantLabel(variant: {
+  flavors?: { name: string } | null;
+  volume_ml?: number | null;
+  color?: string | null;
+  ohms?: string | null;
+  size?: string | null;
+}): string {
+  const parts: string[] = [];
+  if (variant.flavors?.name) parts.push(variant.flavors.name);
+  if (variant.color) parts.push(variant.color);
+  if (variant.ohms) parts.push(variant.ohms);
+  if (variant.size) parts.push(variant.size);
+  if (variant.volume_ml) parts.push(`${variant.volume_ml}ml`);
+  return parts.length > 0 ? parts.join(" / ") : "Padrão";
+}
+
 const fetchPromotions = async () => {
   const { data, error } = await supabase
     .from("promotions")
@@ -76,6 +95,8 @@ const fetchPromotions = async () => {
         product_variants (
           volume_ml,
           color,
+          ohms,
+          size,
           flavors (name)
         )
       )
@@ -264,22 +285,22 @@ const PromotionsPage = () => {
                   </TableCell>
                   <TableCell className="font-medium">{promo.name}</TableCell>
                   
-                  {/* COLUNA COMPOSIÇÃO - NOVA */}
+                  {/* COLUNA COMPOSIÇÃO */}
                   <TableCell>
                     <div className="flex flex-col gap-1">
                       {promo.promotion_items && promo.promotion_items.length > 0 ? (
                         promo.promotion_items.map((item, idx) => {
-                          const hasVariant = !!item.product_variants;
-                          const flavorName = item.product_variants?.flavors?.name;
-                          const variantInfo = hasVariant 
-                            ? `${flavorName || "Sabor Padrão"}` 
-                            : "";
-                          
+                          const variantInfo = item.product_variants
+                            ? getVariantLabel(item.product_variants)
+                            : null;
+
                           return (
                             <Badge key={idx} variant="secondary" className="w-fit text-[10px] font-normal px-2 py-0.5 bg-gray-100 hover:bg-gray-200 border-gray-200 text-gray-700">
-                              <span className="font-bold mr-1">{item.quantity}x</span> 
+                              <span className="font-bold mr-1">{item.quantity}x</span>
                               {item.products?.name}
-                              {variantInfo && <span className="text-gray-500 ml-1">({variantInfo})</span>}
+                              {variantInfo && variantInfo !== "Padrão" && (
+                                <span className="text-gray-500 ml-1">({variantInfo})</span>
+                              )}
                             </Badge>
                           );
                         })

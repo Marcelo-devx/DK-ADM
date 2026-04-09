@@ -40,19 +40,26 @@ interface PromotionCompositionProps {
   onStatsChange?: (maxStock: number, totalBasePrice: number, totalBasePixPrice: number, breakdown: BreakdownItem[]) => void;
 }
 
+interface VariantRow {
+  id: string;
+  flavor_id: number | null;
+  flavors?: { name: string } | { name: string }[] | null;
+  volume_ml: number | null;
+  stock_quantity: number;
+  price: number;
+  pix_price: number | null;
+  color?: string | null;
+  ohms?: string | null;
+  size?: string | null;
+}
+
 interface ProductOption {
   id: number;
   name: string;
   stock_quantity: number;
   price: number;
   pix_price: number | null;
-  variants?: {
-    id: string;
-    flavor_id: number | null;
-    flavors?: { name: string } | null;
-    volume_ml: number | null;
-    stock_quantity: number;
-  }[];
+  variants?: VariantRow[];
 }
 
 interface PromotionItem {
@@ -60,19 +67,45 @@ interface PromotionItem {
   product_id: number;
   variant_id: string | null;
   quantity: number;
-  products: { 
-    name: string; 
+  products: {
+    name: string;
     price: number;
-    pix_price: number | null; 
+    pix_price: number | null;
     stock_quantity: number;
   };
   product_variants?: {
-    flavors?: { name: string } | null;
+    flavors?: { name: string } | { name: string }[] | null;
     volume_ml: number | null;
     price: number;
     pix_price: number | null;
     stock_quantity: number;
+    color?: string | null;
+    ohms?: string | null;
+    size?: string | null;
   } | null;
+}
+
+/** Monta o label completo de uma variação combinando todos os campos disponíveis */
+function getVariantLabel(variant: {
+  flavors?: { name: string } | { name: string }[] | null;
+  volume_ml?: number | null;
+  color?: string | null;
+  ohms?: string | null;
+  size?: string | null;
+}): string {
+  const parts: string[] = [];
+
+  const flavorName = Array.isArray(variant.flavors)
+    ? variant.flavors[0]?.name
+    : variant.flavors?.name;
+
+  if (flavorName) parts.push(flavorName);
+  if (variant.color) parts.push(variant.color);
+  if (variant.ohms) parts.push(variant.ohms);
+  if (variant.size) parts.push(variant.size);
+  if (variant.volume_ml) parts.push(`${variant.volume_ml}ml`);
+
+  return parts.length > 0 ? parts.join(" / ") : "Padrão";
 }
 
 export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCompositionProps) => {
@@ -82,7 +115,7 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
   const [quantity, setQuantity] = useState<number>(1);
   const [openProductSearch, setOpenProductSearch] = useState(false);
 
-  // 1. Buscar Produtos Disponíveis (Todos os produtos ativos)
+  // 1. Buscar Produtos Disponíveis
   const { data: products } = useQuery({
     queryKey: ["productsForComposition"],
     queryFn: async () => {
@@ -90,16 +123,20 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
         .from("products")
         .select(`
           id, name, stock_quantity, price, pix_price,
-          variants:product_variants(id, flavor_id, volume_ml, flavors(name), stock_quantity)
+          variants:product_variants(
+            id, flavor_id, volume_ml, stock_quantity, price, pix_price,
+            color, ohms, size,
+            flavors(name)
+          )
         `)
-        .eq("is_visible", true) // Filtra apenas produtos visíveis (não is_active, que não existe)
+        .eq("is_visible", true)
         .order("name");
       if (error) throw error;
       return data as unknown as ProductOption[];
     },
   });
 
-  // 2. Buscar Itens já no Kit com Preços e Estoques
+  // 2. Buscar Itens já no Kit
   const { data: items, isLoading } = useQuery({
     queryKey: ["promotionItems", promotionId],
     queryFn: async () => {
@@ -109,7 +146,11 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
         .select(`
           id, product_id, variant_id, quantity,
           products(name, price, pix_price, stock_quantity),
-          product_variants(volume_ml, flavors(name), price, pix_price, stock_quantity)
+          product_variants(
+            volume_ml, price, pix_price, stock_quantity,
+            color, ohms, size,
+            flavors(name)
+          )
         `)
         .eq("promotion_id", promotionId);
       if (error) throw error;
@@ -118,7 +159,7 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
     enabled: !!promotionId,
   });
 
-  // Calcular Estatísticas (Preço Base e Estoque Máximo Possível)
+  // Calcular Estatísticas
   useEffect(() => {
     if (!items || !onStatsChange) return;
 
@@ -128,64 +169,60 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
     let hasItems = false;
     const currentBreakdown: BreakdownItem[] = [];
 
-    items.forEach(item => {
-        hasItems = true;
-        
-        // Determina qual entidade usar (Variação ou Produto Pai)
-        const entity = item.product_variants || item.products;
-        
-        const price = entity.price || 0;
-        // Se não tiver preço pix específico, usa o preço normal como base
-        const pixPrice = entity.pix_price || price; 
-        const currentStock = entity.stock_quantity;
-        
-        const itemName = item.product_variants 
-            ? `${item.products.name} - ${item.product_variants.flavors?.name || "Padrão"}`
-            : item.products.name;
+    items.forEach((item) => {
+      hasItems = true;
+      const entity = item.product_variants || item.products;
+      const price = entity.price || 0;
+      const pixPrice = entity.pix_price || price;
+      const currentStock = entity.stock_quantity;
 
-        // Custo total dos itens
-        totalBase += (price * item.quantity);
-        totalBasePix += (pixPrice * item.quantity);
+      const variantLabel = item.product_variants
+        ? getVariantLabel(item.product_variants)
+        : null;
 
-        currentBreakdown.push({
-            name: itemName,
-            quantity: item.quantity,
-            unitPrice: price,
-            totalPrice: price * item.quantity,
-            unitPixPrice: pixPrice,
-            totalPixPrice: pixPrice * item.quantity
-        });
+      const itemName = variantLabel
+        ? `${item.products.name} - ${variantLabel}`
+        : item.products.name;
 
-        // Cálculo de estoque máximo possível
-        const possibleKitsWithThisItem = Math.floor(currentStock / item.quantity);
-        if (possibleKitsWithThisItem < minStockLimit) {
-            minStockLimit = possibleKitsWithThisItem;
-        }
+      totalBase += price * item.quantity;
+      totalBasePix += pixPrice * item.quantity;
+
+      currentBreakdown.push({
+        name: itemName,
+        quantity: item.quantity,
+        unitPrice: price,
+        totalPrice: price * item.quantity,
+        unitPixPrice: pixPrice,
+        totalPixPrice: pixPrice * item.quantity,
+      });
+
+      const possibleKitsWithThisItem = Math.floor(currentStock / item.quantity);
+      if (possibleKitsWithThisItem < minStockLimit) {
+        minStockLimit = possibleKitsWithThisItem;
+      }
     });
 
     if (!hasItems) minStockLimit = 0;
-    
     onStatsChange(minStockLimit, totalBase, totalBasePix, currentBreakdown);
-
   }, [items, onStatsChange]);
 
   // Mutations
   const addItemMutation = useMutation({
     mutationFn: async () => {
       if (!promotionId) throw new Error("Salve a promoção antes de adicionar itens.");
-      
+
       const { error } = await supabase.rpc("add_item_to_kit_and_lock_stock", {
         p_promotion_id: promotionId,
         p_product_id: Number(selectedProductId),
         p_variant_id: selectedVariantId === "none" ? null : selectedVariantId,
-        p_quantity_per_kit: quantity
+        p_quantity_per_kit: quantity,
       });
 
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["promotionItems", promotionId] });
-      queryClient.invalidateQueries({ queryKey: ["productsForComposition"] }); // Atualiza lista para remover sem estoque se acabar
+      queryClient.invalidateQueries({ queryKey: ["productsForComposition"] });
       showSuccess("Item adicionado e estoque reservado!");
       setQuantity(1);
     },
@@ -195,7 +232,7 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
   const removeItemMutation = useMutation({
     mutationFn: async (id: number) => {
       const { error } = await supabase.rpc("remove_item_from_kit_and_unlock_stock", {
-        p_item_id: id
+        p_item_id: id,
       });
       if (error) throw error;
     },
@@ -207,30 +244,30 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
     onError: (err: any) => showError(err.message),
   });
 
-  const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+  const formatCurrency = (val: number) =>
+    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
 
   if (!promotionId) return null;
 
-  const selectedProduct = products?.find(p => String(p.id) === selectedProductId);
-  // Filtra apenas variações com estoque > 0
-  const availableVariants = selectedProduct?.variants?.filter(v => v.stock_quantity > 0) || [];
+  const selectedProduct = products?.find((p) => String(p.id) === selectedProductId);
+  const availableVariants = selectedProduct?.variants || [];
   const hasVariants = availableVariants.length > 0;
 
   return (
     <div className="space-y-4 border rounded-lg p-4 bg-blue-50/30 border-blue-100 my-6">
       <div className="flex justify-between items-center">
         <h3 className="text-sm font-bold uppercase flex items-center gap-2 text-blue-800">
-            <Package className="w-4 h-4" /> 2. Composição do Kit
+          <Package className="w-4 h-4" /> 2. Composição do Kit
         </h3>
         <Badge variant="outline" className="text-[10px] border-blue-200 text-blue-700 bg-white">
-            <Lock className="w-3 h-3 mr-1" /> Reserva Automática
+          <Lock className="w-3 h-3 mr-1" /> Reserva Automática
         </Badge>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-white p-3 rounded-md border shadow-sm">
         <div className="md:col-span-5 space-y-1">
           <Label className="text-xs">Produto</Label>
-          
+
           <Popover open={openProductSearch} onOpenChange={setOpenProductSearch}>
             <PopoverTrigger asChild>
               <Button
@@ -278,52 +315,73 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
         </div>
 
         <div className="md:col-span-4 space-y-1">
-          <Label className="text-xs">Variação {selectedProduct?.variants?.length ? "(Obrigatória)" : ""}</Label>
-          <Select 
-            value={selectedVariantId} 
+          <Label className="text-xs">Variação {hasVariants ? "(Obrigatória)" : ""}</Label>
+          <Select
+            value={selectedVariantId}
             onValueChange={setSelectedVariantId}
-            disabled={!selectedProductId || (!hasVariants && selectedProduct?.variants?.length > 0)}
+            disabled={!selectedProductId}
           >
             <SelectTrigger className="h-8 text-xs">
-              <SelectValue placeholder={!selectedProductId ? "Selecione prod..." : hasVariants ? "Selecione uma variação..." : selectedProduct?.variants?.length ? "Sem estoque disponível" : "Produto sem variações"} />
+              <SelectValue
+                placeholder={
+                  !selectedProductId
+                    ? "Selecione prod..."
+                    : hasVariants
+                    ? "Selecione uma variação..."
+                    : "Produto sem variações"
+                }
+              />
             </SelectTrigger>
             <SelectContent>
-              {/* Só mostra opção "Padrão" se NÃO tiver variações configuradas no produto */}
-              {!selectedProduct?.variants?.length && selectedProduct && (
+              {!hasVariants && selectedProduct && (
                 <SelectItem value="none">Padrão</SelectItem>
               )}
-              
-              {/* Só mostra variações se tiver estoque > 0 */}
-              {hasVariants && availableVariants.map(v => (
-                <SelectItem key={v.id} value={v.id}>
-                  {v.flavors?.name || "Padrão"} {v.volume_ml ? `(${v.volume_ml}ml)` : ""} (Estoque: {v.stock_quantity})
-                </SelectItem>
-              ))}
+
+              {hasVariants &&
+                availableVariants.map((v) => {
+                  const hasStock = v.stock_quantity > 0;
+                  const label = getVariantLabel(v);
+                  return (
+                    <SelectItem key={v.id} value={v.id}>
+                      <div className="flex items-center gap-2">
+                        <span className="flex-1">{label}</span>
+                        <Badge
+                          variant={hasStock ? "outline" : "secondary"}
+                          className={cn(
+                            "text-[10px] h-5 px-1.5",
+                            !hasStock && "bg-red-50 text-red-600 border-red-200"
+                          )}
+                        >
+                          {hasStock ? `${v.stock_quantity} un.` : "Sem estoque"}
+                        </Badge>
+                      </div>
+                    </SelectItem>
+                  );
+                })}
             </SelectContent>
           </Select>
         </div>
 
         <div className="md:col-span-2 space-y-1">
           <Label className="text-xs">Qtd p/ Kit</Label>
-          <Input 
-            type="number" 
-            min={1} 
-            className="h-8 text-xs" 
-            value={quantity} 
-            onChange={(e) => setQuantity(Number(e.target.value))} 
+          <Input
+            type="number"
+            min={1}
+            className="h-8 text-xs"
+            value={quantity}
+            onChange={(e) => setQuantity(Number(e.target.value))}
           />
         </div>
 
         <div className="md:col-span-1">
-          <Button 
+          <Button
             type="button"
-            size="sm" 
+            size="sm"
             className="w-full h-8 bg-blue-600 hover:bg-blue-700"
             disabled={
-              !selectedProductId || 
+              !selectedProductId ||
               addItemMutation.isPending ||
-              (selectedProduct?.variants?.length > 0 && selectedVariantId === "none") ||
-              (!selectedProduct?.variants?.length && selectedProduct?.stock_quantity <= 0)
+              (hasVariants && selectedVariantId === "none")
             }
             onClick={() => addItemMutation.mutate()}
           >
@@ -337,7 +395,7 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
           <TableHeader className="bg-gray-100">
             <TableRow className="h-8">
               <TableHead className="h-8 text-xs">Produto</TableHead>
-              <TableHead className="h-8 text-xs">Detalhe</TableHead>
+              <TableHead className="h-8 text-xs">Variação</TableHead>
               <TableHead className="h-8 text-xs text-center">Qtd</TableHead>
               <TableHead className="h-8 text-xs text-center">Valor Unit.</TableHead>
               <TableHead className="h-8 text-xs text-right"></TableHead>
@@ -345,42 +403,51 @@ export const PromotionComposition = ({ promotionId, onStatsChange }: PromotionCo
           </TableHeader>
           <TableBody>
             {isLoading ? (
-               <TableRow><TableCell colSpan={5} className="text-center text-xs py-4">Carregando...</TableCell></TableRow>
+              <TableRow>
+                <TableCell colSpan={5} className="text-center text-xs py-4">Carregando...</TableCell>
+              </TableRow>
             ) : items?.length === 0 ? (
-               <TableRow><TableCell colSpan={5} className="text-center text-xs text-muted-foreground py-4">Adicione produtos para compor este kit.</TableCell></TableRow>
+              <TableRow>
+                <TableCell colSpan={5} className="text-center text-xs text-muted-foreground py-4">
+                  Adicione produtos para compor este kit.
+                </TableCell>
+              </TableRow>
             ) : (
-              items?.map(item => {
+              items?.map((item) => {
                 const entity = item.product_variants || item.products;
                 const unitPrice = entity.price || 0;
+                const variantLabel = item.product_variants
+                  ? getVariantLabel(item.product_variants)
+                  : null;
 
                 return (
                   <TableRow key={item.id} className="h-10">
                     <TableCell className="text-xs font-medium py-1">{item.products.name}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground py-1">
-                      {item.product_variants ? (
-                        <span>{item.product_variants.flavors?.name} {item.product_variants.volume_ml ? `(${item.product_variants.volume_ml}ml)` : ""}</span>
+                    <TableCell className="text-xs py-1">
+                      {variantLabel ? (
+                        <span className="font-medium text-gray-700">{variantLabel}</span>
                       ) : (
                         <Badge variant="outline" className="text-[9px] h-4 px-1">Produto Base</Badge>
                       )}
                     </TableCell>
                     <TableCell className="text-center font-bold text-xs py-1">{item.quantity}</TableCell>
                     <TableCell className="text-center text-xs py-1 text-muted-foreground">
-                        {formatCurrency(unitPrice)}
+                      {formatCurrency(unitPrice)}
                     </TableCell>
                     <TableCell className="text-right py-1">
-                      <Button 
-                          type="button"
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-6 w-6 text-red-500"
-                          onClick={() => removeItemMutation.mutate(item.id)}
-                          disabled={removeItemMutation.isPending}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-red-500"
+                        onClick={() => removeItemMutation.mutate(item.id)}
+                        disabled={removeItemMutation.isPending}
                       >
-                          <Trash2 className="w-3 h-3" />
+                        <Trash2 className="w-3 h-3" />
                       </Button>
                     </TableCell>
                   </TableRow>
-                )
+                );
               })
             )}
           </TableBody>
