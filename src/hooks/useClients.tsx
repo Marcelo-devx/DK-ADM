@@ -102,7 +102,7 @@ export function useClients(initialPage = 1) {
 
       try {
         // Call edge function and forward Authorization header + anon key
-        const { data, error } = await supabase.functions.invoke("admin-create-user", {
+        const { data, error } = await supabase.functions.invoke("create-client-by-admin", {
           body: values,
           headers: {
             Authorization: `Bearer ${token}`,
@@ -127,7 +127,7 @@ export function useClients(initialPage = 1) {
         return { data, values };
       } catch (e: any) {
         // Provide clearer message when network-level failure occurs
-        console.error('[useClients] Error calling admin-create-user:', e);
+        console.error('[useClients] Error calling create-client-by-admin:', e);
         const msg = String(e?.message || e);
 
         // If Supabase Functions client returned non-2xx, attempt a direct fetch to capture body/status
@@ -135,7 +135,7 @@ export function useClients(initialPage = 1) {
         if (isFunctionsHttpError) {
           try {
             const fallbackRes = await fetch(
-              'https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1/admin-create-user',
+              'https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1/create-client-by-admin',
               {
                 method: 'POST',
                 headers: {
