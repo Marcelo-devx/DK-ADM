@@ -56,20 +56,30 @@ interface SupplierOrderFormProps {
   onSubmit: (values: SupplierOrderFormValues) => void;
   isSubmitting: boolean;
   products: SelectableItem[];
+  // Optional initial values for editing an existing order
+  initialValues?: SupplierOrderFormValues | null;
 }
 
-export const SupplierOrderForm = ({ onSubmit, isSubmitting, products }: SupplierOrderFormProps) => {
+export const SupplierOrderForm = ({ onSubmit, isSubmitting, products, initialValues = null }: SupplierOrderFormProps) => {
   const [filterTypes, setFilterTypes] = useState<Record<number, 'all' | 'products' | 'variants'>>({});
   const [isLowStockModalOpen, setIsLowStockModalOpen] = useState(false);
 
   const form = useForm<SupplierOrderFormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
+    defaultValues: initialValues || {
       supplier_name: "",
       notes: "",
       items: [{ product_id: undefined as any, variant_id: null, quantity: 1, unit_cost: 0 }],
     },
   });
+
+  // If initialValues change (when opening form for edit), reset form values
+  useEffect(() => {
+    if (initialValues) {
+      form.reset(initialValues);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialValues]);
 
   const { fields, append, remove, replace } = useFieldArray({
     control: form.control,
@@ -281,7 +291,7 @@ export const SupplierOrderForm = ({ onSubmit, isSubmitting, products }: Supplier
         </div>
 
         <Button type="submit" disabled={isSubmitting} className="w-full">
-          {isSubmitting ? "Criando Pedido..." : "Salvar Pedido de Compra"}
+          {isSubmitting ? (initialValues ? "Atualizando Pedido..." : "Criando Pedido...") : (initialValues ? "Atualizar Pedido" : "Salvar Pedido de Compra")}
         </Button>
 
         <LowStockPreviewModal

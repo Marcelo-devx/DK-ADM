@@ -19,7 +19,7 @@ import {
   DialogTitle,
 } from "../../components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { PlusCircle, Truck, CheckCircle2, Loader2, Eye, FileDown, AlertTriangle, Trash2 } from "lucide-react";
+import { PlusCircle, Truck, CheckCircle2, Loader2, Eye, FileDown, AlertTriangle, Trash2, Pencil } from "lucide-react";
 import { SupplierOrderForm } from "@/components/dashboard/SupplierOrderForm";
 import { SupplierOrderDetailModal } from "@/components/dashboard/SupplierOrderDetailModal";
 import { SupplierOrderReceiveModal } from "@/components/dashboard/SupplierOrderReceiveModal";
@@ -131,6 +131,8 @@ const SupplierOrdersPage = () => {
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
+  const [editingOrderId, setEditingOrderId] = useState<number | null>(null);
+  const [editingInitialValues, setEditingInitialValues] = useState<any | null>(null);
 
   const { data: orders, isLoading: isLoadingOrders } = useQuery({ 
     queryKey: ["supplierOrders"], 
@@ -152,9 +154,43 @@ const SupplierOrdersPage = () => {
       // ensure freshest data
       await queryClient.invalidateQueries({ queryKey: ["selectableItemsForSupplierOrder"] });
       await queryClient.fetchQuery({ queryKey: ["selectableItemsForSupplierOrder"], queryFn: fetchProductsWithVariants });
+      setEditingOrderId(null);
+      setEditingInitialValues(null);
       setIsOrderModalOpen(true);
     } catch (err: any) {
       showError(`Erro ao buscar itens: ${err.message}`);
+    }
+  };
+
+  // Open edit modal with values loaded from the order and its items
+  const openEditOrder = async (order: any) => {
+    try {
+      const { data: itemsData, error: itemsError } = await supabase
+        .from('supplier_order_items')
+        .select('product_id, variant_id, quantity, unit_cost')
+        .eq('supplier_order_id', order.id);
+      if (itemsError) throw itemsError;
+
+      const initial = {
+        supplier_name: order.supplier_name || '',
+        notes: order.notes || '',
+        items: (itemsData || []).map((it: any) => ({
+          product_id: Number(it.product_id),
+          variant_id: it.variant_id || null,
+          quantity: it.quantity,
+          unit_cost: it.unit_cost,
+        }))
+      };
+
+      // ensure we have fresh selectable items before opening
+      await queryClient.invalidateQueries({ queryKey: ["selectableItemsForSupplierOrder"] });
+      await queryClient.fetchQuery({ queryKey: ["selectableItemsForSupplierOrder"], queryFn: fetchProductsWithVariants });
+
+      setEditingOrderId(order.id);
+      setEditingInitialValues(initial);
+      setIsOrderModalOpen(true);
+    } catch (err: any) {
+      showError(`Erro ao carregar pedido para edição: ${err.message}`);
     }
   };
 
@@ -239,6 +275,85 @@ const SupplierOrdersPage = () => {
       showSuccess("Pedido de compra registrado!");
     },
     onError: (err: any) => showError(`Erro ao criar pedido: ${err.message}`),
+  });
+
+  // New mutation to update an existing order
+  const updateOrderMutation = useMutation({
+    mutationFn: async ({ id, values }: { id: number; values: any }) => {
+      const total = values.items.reduce((acc: number, item: any) => acc + (Number(item.quantity) * Number(item.unit_cost)), 0);
+
+      const { error: updateError } = await supabase.from('supplier_orders').update({
+        supplier_name: values.supplier_name,
+        notes: values.notes,
+        total_cost: total,
+      }).eq('id', id);
+
+      if (updateError) throw updateError;
+
+      // Remove existing items and re-insert the new set (simpler than diffing)
+      const { error: deleteError } = await supabase.from('supplier_order_items').delete().eq('supplier_order_id', id);
+      if (deleteError) throw deleteError;
+
+      // Build metadata maps for products, variants and flavors to persist readable names (same as create)
+      const productIds = Array.from(new Set(values.items.map((i: any) => Number(i.product_id)).filter(Boolean)));
+      const variantIds = Array.from(new Set(values.items.map((i: any) => i.variant_id).filter(Boolean)));
+
+      const productsMap: Record<number, any> = {};
+      if (productIds.length > 0) {
+        const { data: productsData } = await supabase.from('products').select('id, name').in('id', productIds as any);
+        (productsData || []).forEach((p: any) => { productsMap[p.id] = p; });
+      }
+
+      const variantsMap: Record<string, any> = {};
+      if (variantIds.length > 0) {
+        const { data: variantsData } = await supabase.from('product_variants').select('id, volume_ml, flavor_id').in('id', variantIds as any);
+        (variantsData || []).forEach((v: any) => { variantsMap[v.id] = v; });
+      }
+
+      const flavorIds = Array.from(new Set(Object.values(variantsMap).map((v: any) => v.flavor_id).filter(Boolean)));
+      const flavorsMap: Record<number, any> = {};
+      if (flavorIds.length > 0) {
+        const { data: flavorsData } = await supabase.from('flavors').select('id, name').in('id', flavorIds as any);
+        (flavorsData || []).forEach((f: any) => { flavorsMap[f.id] = f; });
+      }
+
+      const itemsToInsert = values.items.map((item: any) => {
+        const productName = productsMap[Number(item.product_id)]?.name || null;
+        const variant = item.variant_id ? variantsMap[item.variant_id] : null;
+        const flavor = variant?.flavor_id ? flavorsMap[variant.flavor_id] : null;
+
+        const variant_name_parts: string[] = [];
+        if (productName) variant_name_parts.push(productName);
+        if (flavor?.name) variant_name_parts.push(flavor.name);
+        const variant_name_suffix = variant?.volume_ml ? ` (${variant.volume_ml}ml)` : '';
+        const variant_name = variant_name_parts.length > 0 ? `${variant_name_parts.join(' - ')}${variant_name_suffix}` : null;
+
+        return ({
+          supplier_order_id: id,
+          product_id: item.product_id,
+          variant_id: item.variant_id || null,
+          quantity: item.quantity,
+          unit_cost: item.unit_cost,
+          variant_name: variant_name,
+          flavor_name: flavor?.name || null,
+          volume_ml: variant?.volume_ml || null,
+        });
+      });
+
+      const { error: itemsError } = await supabase.from('supplier_order_items').insert(itemsToInsert);
+      if (itemsError) throw itemsError;
+
+      return true;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["supplierOrders"] });
+      queryClient.invalidateQueries({ queryKey: ["selectableItemsForSupplierOrder"] });
+      setIsOrderModalOpen(false);
+      setEditingOrderId(null);
+      setEditingInitialValues(null);
+      showSuccess("Pedido atualizado com sucesso!");
+    },
+    onError: (err: any) => showError(`Erro ao atualizar pedido: ${err.message}`),
   });
 
   const deleteOrderMutation = useMutation({
@@ -419,8 +534,13 @@ const SupplierOrdersPage = () => {
           <Button onClick={openCreateOrder}><PlusCircle className="mr-2 h-4 w-4" /> Novo Pedido de Compra</Button>
           <Dialog open={isOrderModalOpen} onOpenChange={(open) => setIsOrderModalOpen(open)}>
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader><DialogTitle>Criar Pedido para Fornecedor</DialogTitle></DialogHeader>
-              <SupplierOrderForm onSubmit={(v) => createOrderMutation.mutate(v)} isSubmitting={createOrderMutation.isPending} products={selectableItems || []} />
+              <DialogHeader><DialogTitle>{editingOrderId ? `Editar Pedido #${editingOrderId}` : "Criar Pedido para Fornecedor"}</DialogTitle></DialogHeader>
+              <SupplierOrderForm
+                onSubmit={(v) => editingOrderId ? updateOrderMutation.mutate({ id: editingOrderId, values: v }) : createOrderMutation.mutate(v)}
+                isSubmitting={createOrderMutation.isPending || updateOrderMutation?.isPending}
+                products={selectableItems || []}
+                initialValues={editingInitialValues}
+              />
             </DialogContent>
           </Dialog>
         </div>
@@ -463,9 +583,14 @@ const SupplierOrdersPage = () => {
                               {downloadingId === order.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4 text-muted-foreground" />}
                           </Button>
                           {order.status === 'Pendente' && (
-                              <Button size="sm" variant="outline" className="text-green-600 border-green-200 hover:bg-green-50" onClick={() => { setSelectedOrder(order); setIsReceiveModalOpen(true); }}>
-                                  <CheckCircle2 className="h-4 w-4 mr-1" /> Conferir
-                              </Button>
+                              <>
+                                <Button size="sm" variant="outline" className="text-green-600 border-green-200 hover:bg-green-50" onClick={() => { setSelectedOrder(order); setIsReceiveModalOpen(true); }}>
+                                    <CheckCircle2 className="h-4 w-4 mr-1" /> Conferir
+                                </Button>
+                                <Button size="sm" variant="outline" className="text-primary border-primary/20 hover:bg-primary/5" onClick={() => openEditOrder(order)}>
+                                    <Pencil className="h-4 w-4 mr-1" /> Editar
+                                </Button>
+                              </>
                           )}
                           <Button variant="ghost" size="icon" className="text-red-500 hover:bg-red-50" onClick={() => { setSelectedOrder(order); setIsDeleteAlertOpen(true); }} title="Excluir Pedido">
                               <Trash2 className="h-4 w-4" />
