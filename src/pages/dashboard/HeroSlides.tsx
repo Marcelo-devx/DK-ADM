@@ -76,7 +76,7 @@ const HeroSlidesPage = () => {
   useEffect(() => {
     if (slides) {
       const initialOrders = slides.reduce((acc, slide) => {
-        acc[slide.id] = String(slide.sort_order);
+        acc[slide.id] = String(slide.sort_order + 1);
         return acc;
       }, {} as Record<number, string>);
       setEditableSortOrders(initialOrders);
@@ -207,21 +207,24 @@ const HeroSlidesPage = () => {
     const originalSlide = slides.find(s => s.id === slideId);
 
     if (!originalSlide) return;
-    const originalOrder = originalSlide.sort_order;
+    const originalOrder = originalSlide.sort_order; // internal 0-based
 
     if (newOrderStr === undefined) return;
     
-    const newOrder = parseInt(newOrderStr, 10);
+    const newOrder = parseInt(newOrderStr, 10); // user-facing 1-based
 
-    if (isNaN(newOrder) || newOrder < 0 || newOrder >= slides.length) {
-      showError(`Por favor, insira um número de ordem entre 0 e ${slides.length - 1}.`);
-      setEditableSortOrders(prev => ({ ...prev, [slideId]: String(originalOrder) }));
+    // Validate as 1..N (user-facing)
+    if (isNaN(newOrder) || newOrder < 1 || newOrder > slides.length) {
+      showError(`Por favor, insira um número de ordem entre 1 e ${slides.length}.`);
+      setEditableSortOrders(prev => ({ ...prev, [slideId]: String(originalOrder + 1) }));
       return;
     }
     
-    if (newOrder === originalOrder) return;
+    const newOrderInternal = newOrder - 1; // convert to internal 0-based
 
-    const otherItem = slides.find(s => s.sort_order === newOrder);
+    if (newOrderInternal === originalOrder) return;
+
+    const otherItem = slides.find(s => s.sort_order === newOrderInternal);
     if (!otherItem) {
       showError("Ocorreu um erro: a ordem de destino não foi encontrada. A lista será recarregada.");
       queryClient.invalidateQueries({ queryKey: ["hero_slides"] });
@@ -229,7 +232,7 @@ const HeroSlidesPage = () => {
     }
 
     const updates = [
-      { id: slideId, sort_order: newOrder },
+      { id: slideId, sort_order: newOrderInternal },
       { id: otherItem.id, sort_order: originalOrder }
     ];
 
@@ -312,6 +315,8 @@ const HeroSlidesPage = () => {
                       onChange={(e) => handleSortOrderChange(slide.id, e.target.value)}
                       onBlur={() => handleSortOrderSave(slide.id)}
                       className="w-20"
+                      min={1}
+                      max={slides ? slides.length : undefined}
                       disabled={reorderMutation.isPending}
                     />
                   </TableCell>
