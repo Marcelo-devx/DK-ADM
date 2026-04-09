@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -38,10 +38,20 @@ export const PromotionForm = ({ onSubmit, isSubmitting, initialData }: Promotion
 
   const promotionId = initialData?.id;
 
+  console.log("[PromotionForm] Estado atual:", {
+    activeTab,
+    promotionId,
+    hasInitialData: !!initialData,
+    initialData
+  });
+
   // Criar kit básico (Passo 1)
   const handleCreateBasic = async (values: { name: string; description: string; image_url: string }) => {
+    // Preservar os valores recebidos do formulário, incluindo a imagem
     const kitValues: Partial<PromotionFormValues> = {
-      ...values,
+      name: values.name,
+      description: values.description,
+      image_url: values.image_url || "", // Preservar a imagem carregada
       price: 0,
       pix_price: 0,
       stock_quantity: 0,
@@ -49,14 +59,18 @@ export const PromotionForm = ({ onSubmit, isSubmitting, initialData }: Promotion
       discount_percent: 0,
     };
 
+    console.log("[PromotionForm.handleCreateBasic] Valores para criar/atualizar kit:", kitValues);
+
     // Se já tem ID (editando), apenas avança para a próxima aba
     if (promotionId) {
+      console.log("[PromotionForm.handleCreateBasic] Editando kit existente, avançando para composição");
       setActiveTab("composition");
       return;
     }
 
     // Se não tem ID, precisa criar o kit primeiro
     try {
+      console.log("[PromotionForm.handleCreateBasic] Criando novo kit no banco...");
       const { data, error } = await supabase.from("promotions").insert(kitValues).select().single();
 
       if (error) {
@@ -70,6 +84,8 @@ export const PromotionForm = ({ onSubmit, isSubmitting, initialData }: Promotion
         return;
       }
 
+      console.log("[PromotionForm.handleCreateBasic] Kit criado com sucesso:", data);
+
       // Chama o onSubmit com o novo ID para atualizar o estado no componente pai
       // Isso garante que o initialData seja atualizado com o ID correto
       onSubmit({ ...kitValues, id: data.id } as PromotionFormValues);
@@ -78,6 +94,27 @@ export const PromotionForm = ({ onSubmit, isSubmitting, initialData }: Promotion
       alert(`Erro ao criar kit: ${error.message || "Erro desconhecido"}`);
     }
   };
+
+  // Auto-navegar para composição quando um novo kit é criado
+  useEffect(() => {
+    console.log("[PromotionForm.useEffect.autoNav] Verificando auto-navegação:", {
+      initialDataId: initialData?.id,
+      activeTab,
+      promotionId,
+      shouldNavigate: initialData?.id && activeTab === "basic" && !promotionId
+    });
+
+    // Quando initialData é atualizado com um ID novo (após criar o kit),
+    // e estamos ainda na aba básica, navegar automaticamente para composição
+    if (initialData?.id && activeTab === "basic" && !promotionId) {
+      console.log("[PromotionForm.useEffect.autoNav] Condições atendidas! Navegando para composição...");
+      // Pequeno delay para garantir que o estado foi atualizado
+      setTimeout(() => {
+        setActiveTab("composition");
+        console.log("[PromotionForm.useEffect.autoNav] Navegação para composição concluída");
+      }, 100);
+    }
+  }, [initialData?.id, activeTab, promotionId]);
 
   // Recebe os dados da composição (Passo 2)
   const handleCompositionComplete = (surplus: number, totalBase: number, totalBasePix: number, itemsBreakdown: BreakdownItem[]) => {

@@ -59,6 +59,7 @@ export const ImageUploader = ({
         const { secure_url } = data;
         setMediaUrl(secure_url);
         onUploadSuccess(secure_url);
+        console.log("[ImageUploader] Upload Cloudinary bem-sucedido:", secure_url);
         showSuccess("Arquivo enviado com sucesso!");
       } catch (err: any) {
         console.error("[ImageUploader] Cloudinary upload failed, attempting Supabase Storage fallback:", err);
@@ -107,6 +108,7 @@ export const ImageUploader = ({
           setMediaUrl(uploadedUrl);
           onUploadSuccess(uploadedUrl);
           setUploadError(null);
+          console.log("[ImageUploader] Upload Supabase Storage bem-sucedido:", uploadedUrl);
           showSuccess('Arquivo enviado com sucesso via Supabase Storage!');
         } catch (fallbackErr: any) {
           console.error('[ImageUploader] Both upload methods failed:', fallbackErr);

@@ -142,15 +142,18 @@ const PromotionsPage = () => {
 
   const upsertMutation = useMutation({
     mutationFn: async (values: Omit<Promotion, 'id' | 'promotion_items'> & { id?: number }) => {
+      console.log("[PromotionsPage.upsertMutation] Valores recebidos:", values);
       const { data, error } = await supabase.from('promotions').upsert(values).select().single();
       if (error) throw error;
       return data;
     },
     onSuccess: async (data) => {
+      console.log("[PromotionsPage.upsertMutation.onSuccess] Dados salvos no banco:", data);
+      
       queryClient.invalidateQueries({ queryKey: ["promotions"] });
       
       if (!selectedPromotion) {
-        // Se estava criando um novo (ou sugestão)
+        console.log("[PromotionsPage.upsertMutation.onSuccess] Criando novo kit");
         
         // Verifica se há IDs de produtos sugeridos para inserir automaticamente
         if (suggestedData?.suggestedProductIds && suggestedData.suggestedProductIds.length > 0) {
@@ -173,10 +176,12 @@ const PromotionsPage = () => {
             }
         }
 
+        console.log("[PromotionsPage.upsertMutation.onSuccess] Atualizando selectedPromotion com:", data);
         setSelectedPromotion(data as any);
         setSuggestedData(null);
         showSuccess("Kit criado! Composição iniciada.");
       } else {
+        console.log("[PromotionsPage.upsertMutation.onSuccess] Editando kit existente, fechando modal");
         // Se estava editando, fecha
         setIsModalOpen(false);
         setSelectedPromotion(null);

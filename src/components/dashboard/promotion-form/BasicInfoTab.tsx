@@ -52,6 +52,14 @@ export const BasicInfoTab = ({
       });
       return false;
     }
+    
+    console.log("[BasicInfoTab] Enviando dados básicos:", {
+      name: values.name,
+      description: values.description,
+      image_url: values.image_url,
+      hasImage: !!values.image_url
+    });
+    
     onSubmit(values);
     return true;
   };

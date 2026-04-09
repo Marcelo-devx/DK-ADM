@@ -68,6 +68,12 @@ export const PricingTab = ({
     },
   });
 
+  console.log("[PricingTab] Initial data:", {
+    initialData,
+    stats,
+    hasBreakdown: breakdown.length > 0
+  });
+
   const currentDiscount = form.watch("discount_percent");
   const stockQuantity = form.watch("stock_quantity");
 
@@ -144,7 +150,7 @@ export const PricingTab = ({
                 name="discount_percent"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-sm">Percentual de Desconto (Opcional)</FormLabel>
+                    <FormLabel className="text-sm font-semibold">Percentual de Desconto</FormLabel>
                     <FormControl>
                       <div className="flex items-center gap-2">
                         <Input
@@ -157,16 +163,23 @@ export const PricingTab = ({
                           onChange={(e) => {
                             const val = parseFloat(e.target.value) || 0;
                             field.onChange(val);
+                            
                             // Auto-calcular preços
                             const factor = 1 - val / 100;
-                            form.setValue("price", parseFloat((stats.itemsTotalBasePrice * factor).toFixed(2)));
-                            form.setValue("pix_price", parseFloat((stats.itemsTotalBasePixPrice * factor).toFixed(2)));
+                            const newPrice = parseFloat((stats.itemsTotalBasePrice * factor).toFixed(2));
+                            const newPixPrice = parseFloat((stats.itemsTotalBasePixPrice * factor).toFixed(2));
+                            
+                            form.setValue("price", newPrice);
+                            form.setValue("pix_price", newPixPrice);
                           }}
-                          className="bg-blue-50 border-blue-200"
+                          className="bg-blue-50 border-blue-200 font-bold text-base"
                         />
-                        <span className="text-sm font-medium">%</span>
+                        <span className="text-lg font-bold text-blue-700">%</span>
                       </div>
                     </FormControl>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Digite o percentual para calcular automaticamente os preços
+                    </p>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -182,9 +195,18 @@ export const PricingTab = ({
 
               <div className="space-y-3">
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-muted-foreground">Soma Itens</span>
+                  <span className="text-muted-foreground">Soma dos Itens</span>
                   <span className="font-medium">{formatCurrency(stats.itemsTotalBasePrice)}</span>
                 </div>
+
+                {currentDiscount > 0 && (
+                  <div className="flex justify-between items-center text-sm bg-green-50 p-2 rounded border border-green-100">
+                    <span className="text-green-700 font-medium">Desconto ({currentDiscount}%)</span>
+                    <span className="text-green-700 font-bold">
+                      -{formatCurrency(stats.itemsTotalBasePrice - form.getValues("price"))}
+                    </span>
+                  </div>
+                )}
 
                 <Separator className="my-2" />
 
@@ -210,9 +232,10 @@ export const PricingTab = ({
                 />
 
                 {currentSavings > 0 && (
-                  <div className="flex items-center gap-1 text-green-600 text-sm bg-green-50 p-2 rounded border border-green-100">
-                    <TrendingDown className="w-3 h-3" />
-                    <span>Economia de {formatCurrency(currentSavings)}</span>
+                  <div className="flex items-center gap-2 text-green-600 text-sm bg-green-50 p-3 rounded-lg border border-green-100">
+                    <TrendingDown className="w-4 h-4" />
+                    <span className="font-semibold">Economia Total:</span>
+                    <span className="font-bold">{formatCurrency(currentSavings)}</span>
                   </div>
                 )}
               </div>
@@ -227,9 +250,18 @@ export const PricingTab = ({
 
               <div className="space-y-3">
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-muted-foreground">Soma Itens</span>
+                  <span className="text-muted-foreground">Soma dos Itens</span>
                   <span className="font-medium text-green-700">{formatCurrency(stats.itemsTotalBasePixPrice)}</span>
                 </div>
+
+                {currentDiscount > 0 && (
+                  <div className="flex justify-between items-center text-sm bg-green-50 p-2 rounded border border-green-100">
+                    <span className="text-green-700 font-medium">Desconto ({currentDiscount}%)</span>
+                    <span className="text-green-700 font-bold">
+                      -{formatCurrency(stats.itemsTotalBasePixPrice - form.getValues("pix_price"))}
+                    </span>
+                  </div>
+                )}
 
                 <Separator className="my-2" />
 
@@ -253,6 +285,15 @@ export const PricingTab = ({
                     </FormItem>
                   )}
                 />
+
+                {currentDiscount > 0 && (
+                  <div className="flex justify-between items-center text-sm text-green-600 bg-green-50 p-2 rounded border border-green-100">
+                    <span>Economia no PIX</span>
+                    <span className="font-bold">
+                      {formatCurrency(stats.itemsTotalBasePixPrice - form.getValues("pix_price"))}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
