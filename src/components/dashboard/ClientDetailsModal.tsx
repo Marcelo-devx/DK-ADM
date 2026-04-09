@@ -45,6 +45,21 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
     enabled: !!client?.id && isOpen,
   });
 
+  // Query para buscar email do auth.users quando não disponível no client
+  const { data: userEmailData, isLoading: isLoadingEmail } = useQuery({
+    queryKey: ["userEmail", client?.id],
+    queryFn: async () => {
+      if (!client?.id) return null;
+      const { data, error } = await supabase.functions.invoke("get-user-email", {
+        body: { userId: client.id }
+      });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!client?.id && isOpen && !client.email, // Só busca se client.email estiver vazio
+    retry: 1, // Tentar apenas uma vez
+  });
+
   // Query dos Pedidos (Histórico)
   const { data: orders, isLoading: isLoadingOrders } = useQuery({
     queryKey: ["clientOrdersHistory", client?.id],
@@ -127,7 +142,7 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                                 {client.first_name} {client.last_name}
                             </h3>
                             <div className="flex items-center gap-2 text-sm text-slate-500 mt-1">
-                                <Mail className="w-3 h-3" /> {client.email || profile?.email || "..."}
+                                <Mail className="w-3 h-3" /> {client.email || userEmailData?.email || profile?.email || (isLoadingEmail ? "..." : "...")}
                             </div>
                             <div className="flex gap-2 mt-2">
                                 {profile?.role === 'adm' && <Badge className="bg-red-500">Administrador</Badge>}
@@ -180,7 +195,13 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                                                 <div>
                                                     <p className="text-[10px] text-muted-foreground uppercase">Email</p>
                                                     <div className="flex items-center gap-1 font-medium">
-                                                        <Mail className="w-3 h-3 text-slate-400" /> {client.email || "-"}
+                                                        {isLoadingEmail ? (
+                                                            <Skeleton className="h-4 w-32" />
+                                                        ) : (
+                                                            <>
+                                                                <Mail className="w-3 h-3 text-slate-400" /> {client.email || userEmailData?.email || "-"}
+                                                            </>
+                                                        )}
                                                     </div>
                                                 </div>
                                                 <div>
