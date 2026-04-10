@@ -101,10 +101,10 @@ export const ProductCombobox = React.memo(function ProductCombobox({
   const copyToClipboard = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      showSuccess('Nome copiado!');
+      showSuccess(`Copiado: ${text}`);
     } catch (err: any) {
       console.error(err);
-      showError?.(err?.message || 'Erro ao copiar');
+      showError(err?.message || 'Erro ao copiar');
     }
   };
 
