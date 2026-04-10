@@ -112,13 +112,14 @@ export const ProductCombobox = React.memo(function ProductCombobox({
           role="combobox"
           aria-expanded={open}
           className="w-full justify-between h-10 px-3 font-normal"
+          title={selectedItem ? selectedItem.name : placeholder}
         >
           <div className="flex items-center justify-between w-full gap-2">
-            <span className="truncate">
+            <span className="truncate" title={selectedItem ? selectedItem.name : placeholder}>
               {selectedItem ? selectedItem.name : placeholder}
             </span>
             {selectedItem && (
-              <Badge variant="outline" className="text-[10px] h-5 bg-white shrink-0">
+              <Badge variant="outline" className="text-[10px] h-5 bg-white shrink-0" title={`Estoque: ${selectedItem.stock_quantity}`}>
                 Estoque: {selectedItem.stock_quantity}
               </Badge>
             )}
@@ -182,6 +183,7 @@ export const ProductCombobox = React.memo(function ProductCombobox({
                   value={itemValue}
                   onSelect={handleSelect}
                   className="cursor-pointer"
+                  title={p.name}
                 >
                   <Check
                     className={cn(
@@ -190,7 +192,7 @@ export const ProductCombobox = React.memo(function ProductCombobox({
                     )}
                   />
                   <div className="flex flex-col flex-1">
-                    <span className={cn(p.is_variant ? "pl-2" : "font-medium")}>
+                    <span className={cn(p.is_variant ? "pl-2" : "font-medium")} title={p.name}>
                       {p.name}
                     </span>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
