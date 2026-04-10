@@ -92,11 +92,11 @@ export const PricingTab = ({
     // Validações adicionais
     const errors = [];
     
-    if (!values.price || values.price < 0) {
+    if (values.price === undefined || values.price === null || values.price < 0) {
       errors.push("Preço Cartão deve ser maior ou igual a 0");
     }
     
-    if (!values.pix_price || values.pix_price < 0) {
+    if (values.pix_price === undefined || values.pix_price === null || values.pix_price < 0) {
       errors.push("Preço PIX deve ser maior ou igual a 0");
     }
     

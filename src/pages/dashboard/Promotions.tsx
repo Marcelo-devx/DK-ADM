@@ -142,51 +142,12 @@ const PromotionsPage = () => {
 
   const upsertMutation = useMutation({
     mutationFn: async (values: Omit<Promotion, 'id' | 'promotion_items'> & { id?: number }) => {
-      console.log("[PromotionsPage.upsertMutation] Valores recebidos:", values);
       const { data, error } = await supabase.from('promotions').upsert(values).select().single();
       if (error) throw error;
       return data;
     },
-    onSuccess: async (data) => {
-      console.log("[PromotionsPage.upsertMutation.onSuccess] Dados salvos no banco:", data);
-      
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["promotions"] });
-      
-      if (!selectedPromotion) {
-        console.log("[PromotionsPage.upsertMutation.onSuccess] Criando novo kit");
-        
-        // Verifica se há IDs de produtos sugeridos para inserir automaticamente
-        if (suggestedData?.suggestedProductIds && suggestedData.suggestedProductIds.length > 0) {
-            try {
-                for (const pid of suggestedData.suggestedProductIds) {
-                    // Adiciona ao kit com quantidade 1 (não suporta variantes ainda na auto-sugestão)
-                    await supabase.rpc("add_item_to_kit_and_lock_stock", {
-                        p_promotion_id: data.id,
-                        p_product_id: pid,
-                        p_variant_id: null,
-                        p_quantity_per_kit: 1
-                    });
-                }
-                showSuccess(`Produtos adicionados automaticamente ao kit!`);
-                
-                // Invalida para atualizar a lista de itens dentro do modal (Composition)
-                queryClient.invalidateQueries({ queryKey: ["promotionItems", data.id] });
-            } catch (err) {
-                console.error("Erro ao adicionar produtos sugeridos:", err);
-            }
-        }
-
-        console.log("[PromotionsPage.upsertMutation.onSuccess] Atualizando selectedPromotion com:", data);
-        setSelectedPromotion(data as any);
-        setSuggestedData(null);
-        showSuccess("Kit criado! Composição iniciada.");
-      } else {
-        console.log("[PromotionsPage.upsertMutation.onSuccess] Editando kit existente, fechando modal");
-        // Se estava editando, fecha
-        setIsModalOpen(false);
-        setSelectedPromotion(null);
-        showSuccess("Kit atualizado com sucesso!");
-      }
     },
     onError: (error: Error) => {
       showError(`Erro ao salvar kit: ${error.message}`);
@@ -208,17 +169,13 @@ const PromotionsPage = () => {
     },
   });
 
-  const handleFormSubmit = (values: any) => {
-    // Se o kit já tem ID e veio do passo 3 (handleFinalSubmit já salvou no banco),
-    // apenas fecha o modal e atualiza o cache sem fazer outro upsert
-    if (values.id && selectedPromotion) {
-      queryClient.invalidateQueries({ queryKey: ["promotions"] });
-      setIsModalOpen(false);
-      setSelectedPromotion(null);
-      showSuccess("Kit salvo com sucesso!");
-      return;
-    }
-    upsertMutation.mutate(values);
+  // Chamado pelo PromotionForm quando tudo foi salvo com sucesso
+  const handleFormSubmit = (_values: { id: number; saved: true }) => {
+    queryClient.invalidateQueries({ queryKey: ["promotions"] });
+    setIsModalOpen(false);
+    setSelectedPromotion(null);
+    setSuggestedData(null);
+    showSuccess("Kit salvo com sucesso!");
   };
 
   const handleDeleteConfirm = () => {
@@ -258,7 +215,7 @@ const PromotionsPage = () => {
             </DialogHeader>
             <PromotionForm
               onSubmit={handleFormSubmit}
-              isSubmitting={upsertMutation.isPending}
+              isSubmitting={false}
               initialData={selectedPromotion || suggestedData || undefined}
             />
           </DialogContent>

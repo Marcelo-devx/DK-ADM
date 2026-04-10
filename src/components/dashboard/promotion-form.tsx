@@ -1,123 +1,111 @@
-import { useState, useEffect } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
+import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BasicInfoTab } from "./promotion-form/BasicInfoTab";
 import { CompositionTab, BreakdownItem } from "./promotion-form/CompositionTab";
 import { PricingTab } from "./promotion-form/PricingTab";
 import { supabase } from "@/integrations/supabase/client";
-
-const formSchema = z.object({
-  id: z.number().optional(),
-  name: z.string().min(2, "O nome é obrigatório."),
-  description: z.string().optional(),
-  image_url: z.string().url("URL da imagem inválida.").optional().or(z.literal("")),
-  price: z.coerce.number().min(0, "O preço não pode ser negativo."),
-  pix_price: z.coerce.number().min(0, "O preço pix não pode ser negativo."),
-  stock_quantity: z.coerce.number().int().min(0, "O estoque não pode ser negativo."),
-  is_active: z.boolean().default(false),
-  discount_percent: z.coerce.number().min(0).max(100).optional(),
-});
-
-type PromotionFormValues = z.infer<typeof formSchema>;
+import { showError } from "@/utils/toast";
 
 interface PromotionFormProps {
-  onSubmit: (values: PromotionFormValues) => void;
+  onSubmit: (values: { id: number; saved: true }) => void;
   isSubmitting: boolean;
-  initialData?: Partial<PromotionFormValues>;
+  initialData?: {
+    id?: number;
+    name?: string;
+    description?: string;
+    image_url?: string;
+    price?: number;
+    pix_price?: number;
+    stock_quantity?: number;
+    is_active?: boolean;
+    discount_percent?: number;
+  };
 }
 
 export const PromotionForm = ({ onSubmit, isSubmitting, initialData }: PromotionFormProps) => {
   const [activeTab, setActiveTab] = useState("basic");
+
+  // ID gerenciado localmente — inicializa com o ID existente (edição) ou undefined (criação)
+  const [currentPromotionId, setCurrentPromotionId] = useState<number | undefined>(
+    initialData?.id
+  );
+
+  // Dados de precificação vindos da composição
   const [maxPossibleStock, setMaxPossibleStock] = useState(0);
   const [itemsTotalBasePrice, setItemsTotalBasePrice] = useState(0);
   const [itemsTotalBasePixPrice, setItemsTotalBasePixPrice] = useState(0);
   const [stockSurplus, setStockSurplus] = useState(0);
   const [breakdown, setBreakdown] = useState<BreakdownItem[]>([]);
 
-  const promotionId = initialData?.id;
+  // ─── Passo 1: Criar ou atualizar dados básicos ───────────────────────────────
+  const handleCreateBasic = async (values: {
+    name: string;
+    description: string;
+    image_url: string;
+  }) => {
+    // Se já tem ID (editando), apenas avança para composição
+    if (currentPromotionId) {
+      // Atualiza os dados básicos no banco sem mudar o fluxo
+      const { error } = await supabase
+        .from("promotions")
+        .update({
+          name: values.name,
+          description: values.description || null,
+          image_url: values.image_url || null,
+        })
+        .eq("id", currentPromotionId);
 
-  console.log("[PromotionForm] Estado atual:", {
-    activeTab,
-    promotionId,
-    hasInitialData: !!initialData,
-    initialData
-  });
+      if (error) {
+        showError(`Erro ao atualizar dados básicos: ${error.message}`);
+        return;
+      }
 
-  // Criar kit básico (Passo 1)
-  const handleCreateBasic = async (values: { name: string; description: string; image_url: string }) => {
-    // Preservar os valores recebidos do formulário, incluindo a imagem
-    const kitValues: Partial<PromotionFormValues> = {
-      name: values.name,
-      description: values.description,
-      image_url: values.image_url || "", // Preservar a imagem carregada
-      price: 0,
-      pix_price: 0,
-      stock_quantity: 0,
-      is_active: false,
-      discount_percent: 0,
-    };
-
-    console.log("[PromotionForm.handleCreateBasic] Valores para criar/atualizar kit:", kitValues);
-
-    // Se já tem ID (editando), apenas avança para a próxima aba
-    if (promotionId) {
-      console.log("[PromotionForm.handleCreateBasic] Editando kit existente, avançando para composição");
       setActiveTab("composition");
       return;
     }
 
-    // Se não tem ID, precisa criar o kit primeiro
+    // Criação nova: insere no banco e guarda o ID localmente
     try {
-      console.log("[PromotionForm.handleCreateBasic] Criando novo kit no banco...");
-      const { data, error } = await supabase.from("promotions").insert(kitValues).select().single();
+      const { data, error } = await supabase
+        .from("promotions")
+        .insert({
+          name: values.name,
+          description: values.description || null,
+          image_url: values.image_url || null,
+          price: 0,
+          pix_price: 0,
+          stock_quantity: 0,
+          is_active: false,
+          discount_percent: 0,
+        })
+        .select()
+        .single();
 
       if (error) {
-        console.error("Erro ao criar kit:", error);
-        alert(`Erro ao criar kit: ${error.message}`);
+        showError(`Erro ao criar kit: ${error.message}`);
         return;
       }
 
       if (!data) {
-        alert("Erro ao criar kit: Não foi possível obter o ID da promoção criada.");
+        showError("Erro ao criar kit: resposta vazia do servidor.");
         return;
       }
 
-      console.log("[PromotionForm.handleCreateBasic] Kit criado com sucesso:", data);
-
-      // Chama o onSubmit com o novo ID para atualizar o estado no componente pai
-      // Isso garante que o initialData seja atualizado com o ID correto
-      onSubmit({ ...kitValues, id: data.id } as PromotionFormValues);
-    } catch (error: any) {
-      console.error("Erro ao criar kit:", error);
-      alert(`Erro ao criar kit: ${error.message || "Erro desconhecido"}`);
+      console.log("[PromotionForm] Kit criado com ID:", data.id);
+      setCurrentPromotionId(data.id);
+      setActiveTab("composition");
+    } catch (err: any) {
+      showError(`Erro inesperado: ${err.message || "Erro desconhecido"}`);
     }
   };
 
-  // Auto-navegar para composição quando um novo kit é criado
-  useEffect(() => {
-    console.log("[PromotionForm.useEffect.autoNav] Verificando auto-navegação:", {
-      initialDataId: initialData?.id,
-      activeTab,
-      promotionId,
-      shouldNavigate: initialData?.id && activeTab === "basic" && !promotionId
-    });
-
-    // Quando initialData é atualizado com um ID novo (após criar o kit),
-    // e estamos ainda na aba básica, navegar automaticamente para composição
-    if (initialData?.id && activeTab === "basic" && !promotionId) {
-      console.log("[PromotionForm.useEffect.autoNav] Condições atendidas! Navegando para composição...");
-      // Pequeno delay para garantir que o estado foi atualizado
-      setTimeout(() => {
-        setActiveTab("composition");
-        console.log("[PromotionForm.useEffect.autoNav] Navegação para composição concluída");
-      }, 100);
-    }
-  }, [initialData?.id, activeTab, promotionId]);
-
-  // Recebe os dados da composição (Passo 2)
-  const handleCompositionComplete = (surplus: number, totalBase: number, totalBasePix: number, itemsBreakdown: BreakdownItem[]) => {
+  // ─── Passo 2: Composição concluída ───────────────────────────────────────────
+  const handleCompositionComplete = (
+    surplus: number,
+    totalBase: number,
+    totalBasePix: number,
+    itemsBreakdown: BreakdownItem[]
+  ) => {
     setStockSurplus(surplus);
     setItemsTotalBasePrice(totalBase);
     setItemsTotalBasePixPrice(totalBasePix);
@@ -129,57 +117,54 @@ export const PromotionForm = ({ onSubmit, isSubmitting, initialData }: Promotion
     setActiveTab("pricing");
   };
 
-  // Salvar alterações finais (Passo 3)
-  const handleFinalSubmit = async (values: PromotionFormValues) => {
-    console.log("handleFinalSubmit chamado com values:", values);
-    console.log("promotionId:", promotionId);
-    
-    if (!promotionId) {
-      console.error("Tentativa de salvar sem promotionId");
-      alert("Erro: ID da promoção não encontrado. Por favor, recarregue a página e tente novamente.");
+  // ─── Passo 3: Salvar precificação e estoque ───────────────────────────────────
+  const handleFinalSubmit = async (values: {
+    price: number;
+    pix_price: number;
+    stock_quantity: number;
+    is_active: boolean;
+    discount_percent: number;
+  }) => {
+    if (!currentPromotionId) {
+      showError("Erro: ID do kit não encontrado. Recarregue e tente novamente.");
       return;
     }
 
-    // Validação de estoque
     if (values.stock_quantity > maxPossibleStock) {
-      alert(`Erro: Você só tem produtos suficientes para montar ${maxPossibleStock} kits no total.`);
+      showError(
+        `Quantidade máxima possível é ${maxPossibleStock} kits com o estoque atual.`
+      );
       return;
     }
 
     try {
-      const { stock_quantity, ...basicData } = values;
-
-      // Sempre atualiza os dados básicos (incluindo discount_percent, price, pix_price, is_active)
-      console.log("Atualizando dados básicos da promoção:", basicData);
-      const { error: basicError } = await supabase
+      // 1. Atualiza dados de precificação
+      const { error: updateError } = await supabase
         .from("promotions")
-        .update(basicData)
-        .eq("id", promotionId);
+        .update({
+          price: values.price,
+          pix_price: values.pix_price,
+          is_active: values.is_active,
+          discount_percent: values.discount_percent,
+        })
+        .eq("id", currentPromotionId);
 
-      if (basicError) {
-        console.error("Erro ao atualizar dados básicos:", basicError);
-        throw basicError;
-      }
+      if (updateError) throw updateError;
 
-      // Atualiza o estoque via RPC (que gerencia reserva/devolução de produtos)
-      if (stock_quantity !== initialData?.stock_quantity) {
-        console.log("Atualizando estoque para:", stock_quantity);
+      // 2. Atualiza estoque via RPC (gerencia reserva/devolução de produtos)
+      const oldStock = initialData?.stock_quantity ?? 0;
+      if (values.stock_quantity !== oldStock) {
         const { error: stockError } = await supabase.rpc("update_kit_stock_level", {
-          p_promotion_id: promotionId,
-          p_new_stock: stock_quantity,
+          p_promotion_id: currentPromotionId,
+          p_new_stock: values.stock_quantity,
         });
-
-        if (stockError) {
-          console.error("Erro ao atualizar estoque:", stockError);
-          throw stockError;
-        }
-        console.log("Estoque atualizado com sucesso");
+        if (stockError) throw stockError;
       }
 
-      onSubmit({ ...values, id: promotionId });
-    } catch (error: any) {
-      console.error("Erro ao atualizar kit:", error);
-      alert(`Erro ao atualizar kit: ${error.message || "Erro desconhecido"}`);
+      // 3. Notifica o pai que tudo foi salvo
+      onSubmit({ id: currentPromotionId, saved: true });
+    } catch (err: any) {
+      showError(`Erro ao salvar kit: ${err.message || "Erro desconhecido"}`);
     }
   };
 
@@ -195,14 +180,14 @@ export const PromotionForm = ({ onSubmit, isSubmitting, initialData }: Promotion
           </TabsTrigger>
           <TabsTrigger
             value="composition"
-            disabled={!promotionId}
+            disabled={!currentPromotionId}
             className="rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm font-semibold disabled:opacity-50"
           >
             2. Composição
           </TabsTrigger>
           <TabsTrigger
             value="pricing"
-            disabled={!promotionId}
+            disabled={!currentPromotionId}
             className="rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm font-semibold disabled:opacity-50"
           >
             3. Precificação
@@ -212,13 +197,16 @@ export const PromotionForm = ({ onSubmit, isSubmitting, initialData }: Promotion
         <TabsContent value="basic" className="mt-0">
           <BasicInfoTab
             onSubmit={handleCreateBasic}
-            isSubmitting={isSubmitting && !promotionId}
+            isSubmitting={isSubmitting && !currentPromotionId}
             initialData={initialData}
           />
         </TabsContent>
 
         <TabsContent value="composition" className="mt-0">
-          <CompositionTab promotionId={promotionId} onNext={handleCompositionComplete} />
+          <CompositionTab
+            promotionId={currentPromotionId}
+            onNext={handleCompositionComplete}
+          />
         </TabsContent>
 
         <TabsContent value="pricing" className="mt-0">
