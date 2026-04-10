@@ -104,6 +104,18 @@ const fetchProductsWithVariants = async () => {
   return flattened;
 };
 
+// ─── Função auxiliar: Custo Médio Ponderado (CMP) ─────────────────────────────
+const calcularCMP = (
+  estoqueAtual: number,
+  custoAtual: number,
+  qtdChegando: number,
+  custoNovo: number
+): number => {
+  if (estoqueAtual <= 0) return custoNovo; // estoque zerado: entra o preço novo direto
+  const media = (estoqueAtual * custoAtual + qtdChegando * custoNovo) / (estoqueAtual + qtdChegando);
+  return Math.ceil(media * 100) / 100; // arredonda para cima no centavo
+};
+
 const SupplierOrdersPage = () => {
   const queryClient = useQueryClient();
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
@@ -210,9 +222,12 @@ const SupplierOrdersPage = () => {
             if (variant) {
               const newQuantity = (variant.stock_quantity || 0) + item.quantity;
               const updateData: any = { stock_quantity: newQuantity };
-              if (item.unit_cost > (variant.cost_price || 0)) {
-                  updateData.cost_price = item.unit_cost;
-              }
+              updateData.cost_price = calcularCMP(
+                variant.stock_quantity || 0,
+                variant.cost_price || 0,
+                item.quantity,
+                item.unit_cost
+              );
               await supabase.from("product_variants").update(updateData).eq("id", item.variant_id);
             }
           } else {
@@ -226,9 +241,12 @@ const SupplierOrdersPage = () => {
             if (product) {
               const newQuantity = (product.stock_quantity || 0) + item.quantity;
               const updateData: any = { stock_quantity: newQuantity };
-              if (item.unit_cost > (product.cost_price || 0)) {
-                  updateData.cost_price = item.unit_cost;
-              }
+              updateData.cost_price = calcularCMP(
+                product.stock_quantity || 0,
+                product.cost_price || 0,
+                item.quantity,
+                item.unit_cost
+              );
               await supabase.from("products").update(updateData).eq("id", item.product_id);
             }
           }
