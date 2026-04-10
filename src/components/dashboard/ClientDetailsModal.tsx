@@ -43,6 +43,7 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
       return data;
     },
     enabled: !!client?.id && isOpen,
+    staleTime: 60_000,
   });
 
   // Query para buscar email do auth.users quando não disponível no client
@@ -56,11 +57,12 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
       if (error) throw error;
       return data;
     },
-    enabled: !!client?.id && isOpen && !client.email, // Só busca se client.email estiver vazio
-    retry: 1, // Tentar apenas uma vez
+    enabled: !!client?.id && isOpen && !client.email,
+    retry: 1,
+    staleTime: 300_000, // 5 minutos — email não muda
   });
 
-  // Query dos Pedidos (Histórico)
+  // Query dos Pedidos — limitada a 50 mais recentes para não travar
   const { data: orders, isLoading: isLoadingOrders } = useQuery({
     queryKey: ["clientOrdersHistory", client?.id],
     queryFn: async () => {
@@ -84,12 +86,14 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
           )
         `)
         .eq("user_id", client.id)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(50);
       
       if (error) throw error;
       return data;
     },
     enabled: !!client?.id && isOpen,
+    staleTime: 60_000,
   });
 
   if (!client) return null;
@@ -292,6 +296,12 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                                     <p className="text-muted-foreground">Nenhum pedido encontrado para este cliente.</p>
                                 </div>
                             ) : (
+                                <>
+                                {orders.length === 50 && (
+                                    <div className="mb-3 px-3 py-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-700">
+                                        Exibindo os 50 pedidos mais recentes.
+                                    </div>
+                                )}
                                 <Accordion type="single" collapsible className="w-full space-y-2">
                                     {orders.map((order: any) => (
                                         // switched to block body so we can compute subtotal and totals
@@ -383,6 +393,7 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                                         </AccordionItem>
                                     ))}
                                 </Accordion>
+                                </>
                             )}
                         </TabsContent>
                     </div>
