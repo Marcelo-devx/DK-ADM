@@ -131,7 +131,8 @@ const fetchProductsWithVariants = async () => {
     }
   });
 
-  return flattened;
+  // Ordenar tudo alfabeticamente pelo nome completo
+  return flattened.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
 };
 
 const SupplierOrdersPage = () => {
