@@ -15,7 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Trash2, Plus, Package, Zap, Keyboard } from "lucide-react";
 import { Textarea } from "../ui/textarea";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, memo } from "react";
 import { Label } from "../ui/label";
 import { showSuccess, showError } from "@/utils/toast";
 import { Badge } from "@/components/ui/badge";
@@ -60,6 +60,104 @@ interface SupplierOrderFormProps {
   initialValues?: SupplierOrderFormValues | null;
 }
 
+// Componente memoizado para renderização eficiente de cada item
+const OrderItemRow = memo(function OrderItemRow({
+  index,
+  products,
+  currentProductId,
+  currentVariantId,
+  filterType,
+  onProductChange,
+  onFilterChange,
+  onRemove,
+  formControl,
+}: {
+  index: number;
+  products: SelectableItem[];
+  currentProductId: number;
+  currentVariantId: string | null;
+  filterType: 'all' | 'products' | 'variants';
+  onProductChange: (index: number, val: string, item: SelectableItem) => void;
+  onFilterChange: (index: number, filter: 'all' | 'products' | 'variants') => void;
+  onRemove: () => void;
+  formControl: any;
+}) {
+  const selectedItem = products.find(p => 
+    currentVariantId ? p.variant_id === currentVariantId : p.id === Number(currentProductId) && !p.variant_id
+  );
+
+  const handleValueChange = (val: string, item: SelectableItem) => {
+    onProductChange(index, val, item);
+  };
+
+  const handleFilterTypeChange = (filter: 'all' | 'products' | 'variants') => {
+    onFilterChange(index, filter);
+  };
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end border p-4 rounded-lg bg-gray-50 relative">
+      <div className="md:col-span-5">
+        <FormField
+          control={formControl}
+          name={`items.${index}.product_id`}
+          render={({ field: productField }) => (
+            <FormItem>
+              <div className="flex justify-between items-center mb-2">
+                  <FormLabel>Produto / Sabor / Tamanho</FormLabel>
+                  {selectedItem && (
+                      <Badge variant="outline" className="text-[10px] h-5 bg-white">
+                          Estoque: {selectedItem.stock_quantity}
+                      </Badge>
+                  )}
+              </div>
+              <ProductCombobox
+                products={products}
+                value={currentVariantId ? `var_${currentVariantId}` : currentProductId ? `prod_${currentProductId}` : ""}
+                onChange={handleValueChange}
+                filterType={filterType}
+                onFilterChange={handleFilterTypeChange}
+                placeholder="Buscar produto..."
+              />
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      </div>
+      <div className="md:col-span-3">
+        <FormField
+          control={formControl}
+          name={`items.${index}.quantity`}
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Qtd a Comprar</FormLabel>
+              <FormControl><Input type="number" {...field} /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      </div>
+      <div className="md:col-span-3">
+        <FormField
+          control={formControl}
+          name={`items.${index}.unit_cost`}
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Custo Unit. (R$)</FormLabel>
+              <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      </div>
+      <div className="md:col-span-1 pb-1">
+        <Button type="button" variant="ghost" size="icon" onClick={onRemove} className="text-red-500">
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+});
+
 export const SupplierOrderForm = ({ onSubmit, isSubmitting, products, initialValues = null }: SupplierOrderFormProps) => {
   const [filterTypes, setFilterTypes] = useState<Record<number, 'all' | 'products' | 'variants'>>({});
   const [isLowStockModalOpen, setIsLowStockModalOpen] = useState(false);
@@ -93,12 +191,30 @@ export const SupplierOrderForm = ({ onSubmit, isSubmitting, products, initialVal
   };
 
   const handleConfirmLowStockItems = (itemsToConfirm: Array<{ product_id: number; variant_id: string | null; quantity: number; unit_cost: number }>) => {
-    // Append new items to the existing form
+    // Append new items to existing form
     itemsToConfirm.forEach(item => {
       append(item);
     });
     showSuccess(`${itemsToConfirm.length} itens adicionados ao pedido.`);
   };
+
+  const handleProductChange = useCallback((index: number, val: string, item: SelectableItem) => {
+    const isVariant = String(val).startsWith("var_");
+    const idValue = String(val).split("_")[1];
+    
+    if (isVariant) {
+      form.setValue(`items.${index}.product_id`, item?.id || 0);
+      form.setValue(`items.${index}.variant_id`, idValue);
+    } else {
+      form.setValue(`items.${index}.product_id`, Number(idValue));
+      form.setValue(`items.${index}.variant_id`, null);
+    }
+
+    if (item) {
+      const cost = item.cost_price && item.cost_price > 0 ? item.cost_price : 0.01;
+      form.setValue(`items.${index}.unit_cost`, cost, { shouldValidate: true });
+    }
+  }, [form]);
 
   const handleFilterChange = useCallback((index: number, filter: 'all' | 'products' | 'variants') => {
     setFilterTypes(prev => ({
@@ -186,87 +302,19 @@ export const SupplierOrderForm = ({ onSubmit, isSubmitting, products, initialVal
             const currentVariantId = form.watch(`items.${index}.variant_id`);
             const currentProductId = form.watch(`items.${index}.product_id`);
             
-            const selectedItem = products.find(p => 
-                currentVariantId ? p.variant_id === currentVariantId : p.id === Number(currentProductId) && !p.variant_id
-            );
-
             return (
-              <div key={field.id} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end border p-4 rounded-lg bg-gray-50 relative">
-                <div className="md:col-span-5">
-                  <FormField
-                    control={form.control}
-                    name={`items.${index}.product_id`}
-                    render={({ field: productField }) => (
-                      <FormItem>
-                        <div className="flex justify-between items-center mb-2">
-                            <FormLabel>Produto / Sabor / Tamanho</FormLabel>
-                            {selectedItem && (
-                                <Badge variant="outline" className="text-[10px] h-5 bg-white">
-                                    Estoque: {selectedItem.stock_quantity}
-                                </Badge>
-                            )}
-                        </div>
-                        <ProductCombobox
-                          products={products}
-                          value={currentVariantId ? `var_${currentVariantId}` : currentProductId ? `prod_${currentProductId}` : ""}
-                          onChange={(val, item) => {
-                            const isVariant = String(val).startsWith("var_");
-                            const idValue = String(val).split("_")[1];
-                            
-                            if (isVariant) {
-                              form.setValue(`items.${index}.product_id`, item?.id || 0);
-                              form.setValue(`items.${index}.variant_id`, idValue);
-                            } else {
-                              form.setValue(`items.${index}.product_id`, Number(idValue));
-                              form.setValue(`items.${index}.variant_id`, null);
-                            }
-
-                            if (item) {
-                              const cost = item.cost_price && item.cost_price > 0 ? item.cost_price : 0.01;
-                              form.setValue(`items.${index}.unit_cost`, cost, { shouldValidate: true });
-                            }
-                          }}
-                          filterType={filterTypes[index] || 'all'}
-                          onFilterChange={(filter) => handleFilterChange(index, filter)}
-                          placeholder="Buscar produto..."
-                        />
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <div className="md:col-span-3">
-                  <FormField
-                    control={form.control}
-                    name={`items.${index}.quantity`}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Qtd a Comprar</FormLabel>
-                        <FormControl><Input type="number" {...field} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <div className="md:col-span-3">
-                  <FormField
-                    control={form.control}
-                    name={`items.${index}.unit_cost`}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Custo Unit. (R$)</FormLabel>
-                        <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <div className="md:col-span-1 pb-1">
-                  <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="text-red-500">
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
+              <OrderItemRow
+                key={field.id}
+                index={index}
+                products={products}
+                currentProductId={currentProductId}
+                currentVariantId={currentVariantId}
+                filterType={filterTypes[index] || 'all'}
+                onProductChange={handleProductChange}
+                onFilterChange={handleFilterChange}
+                onRemove={() => remove(index)}
+                formControl={form.control}
+              />
             );
           })}
         </div>
