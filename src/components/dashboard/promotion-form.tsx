@@ -147,55 +147,36 @@ export const PromotionForm = ({ onSubmit, isSubmitting, initialData }: Promotion
     }
 
     try {
-      // Atualiza estoque se necessário
-      if (values.stock_quantity !== initialData?.stock_quantity) {
-        const { stock_quantity, discount_percent, ...basicData } = values;
-        
-        console.log("Atualizando dados básicos da promoção:", basicData);
-        
-        const { error: basicError } = await supabase
-          .from("promotions")
-          .update(basicData)
-          .eq("id", promotionId);
+      const { stock_quantity, ...basicData } = values;
 
-        if (basicError) {
-          console.error("Erro ao atualizar dados básicos:", basicError);
-          throw basicError;
-        }
+      // Sempre atualiza os dados básicos (incluindo discount_percent, price, pix_price, is_active)
+      console.log("Atualizando dados básicos da promoção:", basicData);
+      const { error: basicError } = await supabase
+        .from("promotions")
+        .update(basicData)
+        .eq("id", promotionId);
 
-        console.log("Atualizando estoque para:", values.stock_quantity);
-        
+      if (basicError) {
+        console.error("Erro ao atualizar dados básicos:", basicError);
+        throw basicError;
+      }
+
+      // Atualiza o estoque via RPC (que gerencia reserva/devolução de produtos)
+      if (stock_quantity !== initialData?.stock_quantity) {
+        console.log("Atualizando estoque para:", stock_quantity);
         const { error: stockError } = await supabase.rpc("update_kit_stock_level", {
           p_promotion_id: promotionId,
-          p_new_stock: values.stock_quantity,
+          p_new_stock: stock_quantity,
         });
 
         if (stockError) {
           console.error("Erro ao atualizar estoque:", stockError);
           throw stockError;
         }
-
         console.log("Estoque atualizado com sucesso");
-        onSubmit(values);
-      } else {
-        // Se o estoque não mudou, apenas atualiza os dados básicos
-        const { stock_quantity, discount_percent, ...basicData } = values;
-        
-        console.log("Atualizando dados básicos (sem mudança de estoque):", basicData);
-        
-        const { error } = await supabase
-          .from("promotions")
-          .update(basicData)
-          .eq("id", promotionId);
-
-        if (error) {
-          console.error("Erro ao atualizar dados básicos:", error);
-          throw error;
-        }
-
-        console.log("Dados atualizados com sucesso");
-        onSubmit(values);
       }
+
+      onSubmit({ ...values, id: promotionId });
     } catch (error: any) {
       console.error("Erro ao atualizar kit:", error);
       alert(`Erro ao atualizar kit: ${error.message || "Erro desconhecido"}`);

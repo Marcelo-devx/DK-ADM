@@ -209,6 +209,15 @@ const PromotionsPage = () => {
   });
 
   const handleFormSubmit = (values: any) => {
+    // Se o kit já tem ID e veio do passo 3 (handleFinalSubmit já salvou no banco),
+    // apenas fecha o modal e atualiza o cache sem fazer outro upsert
+    if (values.id && selectedPromotion) {
+      queryClient.invalidateQueries({ queryKey: ["promotions"] });
+      setIsModalOpen(false);
+      setSelectedPromotion(null);
+      showSuccess("Kit salvo com sucesso!");
+      return;
+    }
     upsertMutation.mutate(values);
   };
 
