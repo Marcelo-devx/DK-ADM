@@ -15,8 +15,8 @@ interface ImageUploaderProps {
 }
 
 const isVideo = (url: string) => {
-    if (!url) return false;
-    return /\.(mp4|webm|ogg)$/i.test(url);
+  if (!url) return false;
+  return /\.(mp4|webm|ogg)$/i.test(url);
 }
 
 export const ImageUploader = ({ 
@@ -47,13 +47,20 @@ export const ImageUploader = ({
     reader.onloadend = async () => {
       const base64data = reader.result as string;
       try {
-        // First attempt: use the Cloudinary edge function (preferred)
+        console.log('[ImageUploader] Iniciando upload via Cloudinary...');
+
         const { data, error } = await supabase.functions.invoke("cloudinary-upload", {
           body: { image: base64data },
         });
 
-        if (error || !data?.secure_url) {
-          throw error || new Error('Cloudinary upload did not return a secure_url');
+        if (error) {
+          // Tentar extrair mensagem de erro detalhada do corpo da resposta
+          const detail = data?.details || data?.error || error.message || JSON.stringify(error);
+          throw new Error(detail);
+        }
+
+        if (!data?.secure_url) {
+          throw new Error('Cloudinary não retornou uma URL válida.');
         }
 
         const { secure_url } = data;
@@ -62,60 +69,10 @@ export const ImageUploader = ({
         console.log("[ImageUploader] Upload Cloudinary bem-sucedido:", secure_url);
         showSuccess("Arquivo enviado com sucesso!");
       } catch (err: any) {
-        console.error("[ImageUploader] Cloudinary upload failed, attempting Supabase Storage fallback:", err);
-        
-        // Check if it's a Cloudinary configuration error
-        if (err?.message?.includes('credentials') || err?.message?.includes('configured')) {
-          setUploadError("Serviço de Cloudinary não configurado. Tentando upload local...");
-        }
-        
-        // Fallback: upload directly to Supabase Storage public bucket
-        try {
-          const bucketCandidates = ['public', 'images', 'uploads'];
-          let uploadedUrl: string | null = null;
-          let lastError: string | null = null;
-
-          for (const bucket of bucketCandidates) {
-            try {
-              const filePath = `${Date.now()}_${file.name}`;
-              const { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, file, { 
-                upsert: true,
-                contentType: file.type
-              });
-              
-              if (uploadError) {
-                console.warn(`[ImageUploader] Upload to bucket ${bucket} failed:`, uploadError.message);
-                lastError = uploadError.message;
-                continue;
-              }
-
-              const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(filePath);
-              if (publicData?.publicUrl) {
-                uploadedUrl = publicData.publicUrl;
-                break;
-              }
-            } catch (innerErr: any) {
-              console.warn('[ImageUploader] Fallback upload attempt error:', innerErr);
-              lastError = innerErr.message;
-              continue;
-            }
-          }
-
-          if (!uploadedUrl) {
-            throw new Error(`Upload falhou em todos os buckets: ${lastError || 'Permissão negada ou bucket não encontrado'}`);
-          }
-
-          setMediaUrl(uploadedUrl);
-          onUploadSuccess(uploadedUrl);
-          setUploadError(null);
-          console.log("[ImageUploader] Upload Supabase Storage bem-sucedido:", uploadedUrl);
-          showSuccess('Arquivo enviado com sucesso via Supabase Storage!');
-        } catch (fallbackErr: any) {
-          console.error('[ImageUploader] Both upload methods failed:', fallbackErr);
-          const errorMsg = fallbackErr.message || 'Falha no upload do arquivo.';
-          setUploadError(errorMsg);
-          showError(errorMsg);
-        }
+        console.error("[ImageUploader] Falha no upload:", err);
+        const errorMsg = err?.message || 'Falha no upload do arquivo.';
+        setUploadError(errorMsg);
+        showError(errorMsg);
       } finally {
         setUploading(false);
       }
@@ -125,7 +82,7 @@ export const ImageUploader = ({
   const handleRemoveMedia = () => {
     setMediaUrl(null);
     setUploadError(null);
-    onUploadSuccess(""); // Limpa a URL no formulário pai
+    onUploadSuccess("");
   };
 
   return (
@@ -134,7 +91,7 @@ export const ImageUploader = ({
       {mediaUrl ? (
         <div className={cn(
           "relative border rounded-md overflow-hidden bg-gray-50 flex items-center justify-center",
-          "aspect-square w-full max-w-[300px]", // Define como quadrado e limita o tamanho máximo
+          "aspect-square w-full max-w-[300px]",
           className
         )}>
           {isVideo(mediaUrl) ? (
@@ -164,7 +121,7 @@ export const ImageUploader = ({
       ) : (
         <div className={cn(
           "relative flex flex-col items-center justify-center border-2 border-dashed rounded-md bg-gray-50/50 hover:bg-gray-50 transition-colors",
-          "aspect-square w-full max-w-[300px]", // Define como quadrado e limita o tamanho máximo
+          "aspect-square w-full max-w-[300px]",
           uploading && "cursor-not-allowed opacity-60",
           uploadError && "border-red-300 bg-red-50/50",
           className
@@ -192,7 +149,6 @@ export const ImageUploader = ({
         </div>
       )}
       
-      {/* Error message display */}
       {uploadError && (
         <div className="flex items-start gap-2 text-xs text-red-600 mt-1 px-1">
           <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
