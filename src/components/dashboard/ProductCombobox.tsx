@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Check, Search } from "lucide-react";
+import { Check, Search, Copy } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
+import { showSuccess, showError } from "@/utils/toast";
 
 interface SelectableItem {
   id: number;
@@ -96,6 +97,17 @@ export const ProductCombobox = React.memo(function ProductCombobox({
     }
   }, [products, onChange]);
 
+  // copy helper
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      showSuccess('Nome copiado!');
+    } catch (err: any) {
+      console.error(err);
+      showError?.(err?.message || 'Erro ao copiar');
+    }
+  };
+
   // Handle keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !open) {
@@ -115,16 +127,38 @@ export const ProductCombobox = React.memo(function ProductCombobox({
           title={selectedItem ? selectedItem.name : placeholder}
         >
           <div className="flex items-center justify-between w-full gap-2">
-            <span className="truncate" title={selectedItem ? selectedItem.name : placeholder}>
+            <span className="truncate flex-1" title={selectedItem ? selectedItem.name : placeholder}>
               {selectedItem ? selectedItem.name : placeholder}
             </span>
+
             {selectedItem && (
-              <Badge variant="outline" className="text-[10px] h-5 bg-white shrink-0" title={`Estoque: ${selectedItem.stock_quantity}`}>
-                Estoque: {selectedItem.stock_quantity}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="p-1"
+                  onClick={(e) => {
+                    // prevent popover toggle
+                    e.stopPropagation();
+                    e.preventDefault();
+                    copyToClipboard(selectedItem.name);
+                  }}
+                  aria-label="Copiar nome do produto"
+                  title="Copiar nome"
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+
+                <Badge variant="outline" className="text-[10px] h-5 bg-white shrink-0" title={`Estoque: ${selectedItem.stock_quantity}`}>
+                  Estoque: {selectedItem.stock_quantity}
+                </Badge>
+              </div>
             )}
+
+            {!selectedItem && <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />}
+            {selectedItem && <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />}
           </div>
-          <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[400px] p-0" align="start">
@@ -191,16 +225,35 @@ export const ProductCombobox = React.memo(function ProductCombobox({
                       isSelected ? "opacity-100" : "opacity-0"
                     )}
                   />
-                  <div className="flex flex-col flex-1">
-                    <span className={cn(p.is_variant ? "pl-2" : "font-medium")} title={p.name}>
-                      {p.name}
-                    </span>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>Estoque: {p.stock_quantity}</span>
-                      {p.cost_price && (
-                        <span>• R$ {Number(p.cost_price).toFixed(2)}</span>
-                      )}
+                  <div className="flex items-center w-full gap-2">
+                    <div className="flex-1 flex flex-col">
+                      <span className={cn(p.is_variant ? "pl-2" : "font-medium")} title={p.name}>
+                        {p.name}
+                      </span>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>Estoque: {p.stock_quantity}</span>
+                        {p.cost_price && (
+                          <span>• R$ {Number(p.cost_price).toFixed(2)}</span>
+                        )}
+                      </div>
                     </div>
+
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="p-1"
+                      onClick={(e) => {
+                        // prevent selecting the item when copying
+                        e.stopPropagation();
+                        e.preventDefault();
+                        copyToClipboard(p.name);
+                      }}
+                      aria-label={`Copiar nome ${p.name}`}
+                      title="Copiar nome"
+                    >
+                      <Copy className="h-4 w-4 opacity-60" />
+                    </Button>
                   </div>
                 </CommandItem>
               );
