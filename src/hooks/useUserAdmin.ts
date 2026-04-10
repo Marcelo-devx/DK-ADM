@@ -43,25 +43,54 @@ export interface UpdateUserPayload {
   is_credit_card_enabled?: boolean;
 }
 
-export const useUserAdmin = (searchTerm: string = '') => {
+export const PAGE_SIZE = 50;
+
+const SELECTED_FIELDS =
+  'id, first_name, last_name, cpf_cnpj, email, phone, date_of_birth, gender, ' +
+  'cep, street, number, complement, neighborhood, city, state, ' +
+  'force_pix_on_next_purchase, is_credit_card_enabled, ' +
+  'is_blocked, created_at, role';
+
+export const useUserAdmin = (searchTerm: string = '', page: number = 0) => {
   const queryClient = useQueryClient();
 
-  // Buscar usuários — por nome, email ou CPF/CNPJ
-  const searchUsers = useQuery<AdminUser[], Error>({
-    queryKey: ['adminUsers', searchTerm],
+  const from = page * PAGE_SIZE;
+  const to = from + PAGE_SIZE - 1;
+
+  // ── Contagem total (para calcular número de páginas) ──
+  const countQuery = useQuery<number, Error>({
+    queryKey: ['adminUsersCount', searchTerm],
     queryFn: async () => {
       let query = supabase
         .from('profiles')
-        .select(
-          'id, first_name, last_name, cpf_cnpj, email, phone, date_of_birth, gender, ' +
-          'cep, street, number, complement, neighborhood, city, state, ' +
-          'force_pix_on_next_purchase, is_credit_card_enabled, ' +
-          'is_blocked, created_at, role'
-        )
-        .order('created_at', { ascending: false });
+        .select('id', { count: 'exact', head: true });
 
-      if (searchTerm && searchTerm.trim()) {
-        const term = searchTerm.trim().toLowerCase();
+      if (searchTerm.trim()) {
+        const term = searchTerm.trim();
+        query = query.or(
+          `cpf_cnpj.ilike.%${term}%,email.ilike.%${term}%,first_name.ilike.%${term}%,last_name.ilike.%${term}%`
+        );
+      }
+
+      const { count, error } = await query;
+      if (error) throw error;
+      return count ?? 0;
+    },
+    refetchOnWindowFocus: false,
+  });
+
+  // ── Página atual de usuários ──
+  const searchUsers = useQuery<AdminUser[], Error>({
+    queryKey: ['adminUsers', searchTerm, page],
+    queryFn: async () => {
+      let query = supabase
+        .from('profiles')
+        .select(SELECTED_FIELDS)
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (searchTerm.trim()) {
+        const term = searchTerm.trim();
         query = query.or(
           `cpf_cnpj.ilike.%${term}%,email.ilike.%${term}%,first_name.ilike.%${term}%,last_name.ilike.%${term}%`
         );
@@ -72,10 +101,10 @@ export const useUserAdmin = (searchTerm: string = '') => {
       return (data ?? []) as unknown as AdminUser[];
     },
     refetchOnWindowFocus: false,
-    enabled: true,
+    placeholderData: (prev) => prev, // mantém dados anteriores enquanto carrega próxima página
   });
 
-  // Bloquear/Desbloquear usuário
+  // ── Bloquear / Desbloquear ──
   const blockUserMutation = useMutation({
     mutationFn: async ({ userId, isBlocked, reason }: { userId: string; isBlocked: boolean; reason: string }) => {
       const { data, error } = await supabase.functions.invoke('admin-block-user', {
@@ -87,11 +116,12 @@ export const useUserAdmin = (searchTerm: string = '') => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['adminUsers'] });
+      queryClient.invalidateQueries({ queryKey: ['adminUsersCount'] });
       queryClient.invalidateQueries({ queryKey: ['clients'] });
     },
   });
 
-  // Excluir usuário
+  // ── Excluir ──
   const deleteUserMutation = useMutation({
     mutationFn: async ({ userId, deleteOrders, reason }: { userId: string; deleteOrders: boolean; reason: string }) => {
       const { data, error } = await supabase.functions.invoke('admin-delete-user', {
@@ -103,11 +133,12 @@ export const useUserAdmin = (searchTerm: string = '') => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['adminUsers'] });
+      queryClient.invalidateQueries({ queryKey: ['adminUsersCount'] });
       queryClient.invalidateQueries({ queryKey: ['clients'] });
     },
   });
 
-  // Editar dados do usuário (admin pode atualizar qualquer perfil via RLS policy "Admins can update any profile")
+  // ── Editar dados (RLS: "Admins can update any profile") ──
   const updateUserMutation = useMutation({
     mutationFn: async ({ userId, payload }: { userId: string; payload: UpdateUserPayload }) => {
       const { data, error } = await supabase
@@ -125,8 +156,12 @@ export const useUserAdmin = (searchTerm: string = '') => {
     },
   });
 
+  const totalPages = Math.ceil((countQuery.data ?? 0) / PAGE_SIZE);
+
   return {
     searchUsers,
+    countQuery,
+    totalPages,
     blockUserMutation,
     deleteUserMutation,
     updateUserMutation,

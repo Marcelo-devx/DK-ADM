@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useUserAdmin } from "@/hooks/useUserAdmin";
+import { useUserAdmin, PAGE_SIZE } from "@/hooks/useUserAdmin";
 import { showSuccess, showError } from "@/utils/toast";
 import {
   Table,
@@ -23,29 +23,56 @@ import {
   Calendar,
   Pencil,
   Mail,
+  ChevronLeft,
+  ChevronRight,
+  Users,
 } from "lucide-react";
 import { UserBlockModal } from "@/components/dashboard/UserBlockModal";
 import { UserDeleteModal } from "@/components/dashboard/UserDeleteModal";
 import { UserEditModal } from "@/components/dashboard/UserEditModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { AdminUser, UpdateUserPayload } from "@/hooks/useUserAdmin";
+import { useEffect, useRef } from "react";
+
+function useDebounceValue<T>(value: T, delay = 400): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
+}
 
 export default function UserAdminPage() {
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [page, setPage] = useState(0);
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const [isBlockModalOpen, setIsBlockModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [actionType, setActionType] = useState<"block" | "unblock">("block");
 
+  // Debounce da busca para não disparar query a cada tecla
+  const searchTerm = useDebounceValue(searchInput, 400);
+
+  // Volta para página 0 quando a busca muda
+  const prevSearch = useRef(searchTerm);
+  if (prevSearch.current !== searchTerm) {
+    prevSearch.current = searchTerm;
+    if (page !== 0) setPage(0);
+  }
+
   const {
     searchUsers,
+    countQuery,
+    totalPages,
     blockUserMutation,
     deleteUserMutation,
     updateUserMutation,
-  } = useUserAdmin(searchTerm);
+  } = useUserAdmin(searchTerm, page);
 
-  const filteredUsers = searchUsers.data || [];
+  const users = searchUsers.data || [];
+  const total = countQuery.data ?? 0;
 
   // ── Block ──
   const handleBlockClick = (user: AdminUser) => {
@@ -99,10 +126,10 @@ export default function UserAdminPage() {
   const handleEditConfirm = async (userId: string, payload: UpdateUserPayload) => {
     try {
       await updateUserMutation.mutateAsync({ userId, payload });
-      showSuccess("Dados do usuário atualizados com sucesso");
+      showSuccess("Dados atualizados com sucesso");
     } catch (error: any) {
       showError(error.message || "Erro ao atualizar dados");
-      throw error; // re-throw para o modal não fechar em caso de erro
+      throw error;
     }
   };
 
@@ -124,6 +151,9 @@ export default function UserAdminPage() {
     return cpf;
   };
 
+  const startItem = total === 0 ? 0 : page * PAGE_SIZE + 1;
+  const endItem = Math.min((page + 1) * PAGE_SIZE, total);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -137,21 +167,26 @@ export default function UserAdminPage() {
         </p>
       </div>
 
-      {/* Busca */}
-      <div className="flex items-center gap-3">
+      {/* Busca + contador */}
+      <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Buscar por nome, email ou CPF..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             className="pl-9"
           />
         </div>
-        {searchUsers.data && (
-          <span className="text-sm text-muted-foreground whitespace-nowrap">
-            {filteredUsers.length} usuário{filteredUsers.length !== 1 ? "s" : ""}
-          </span>
+
+        {/* Contador total */}
+        {!countQuery.isLoading && (
+          <div className="flex items-center gap-1.5 text-sm text-muted-foreground bg-slate-100 px-3 py-1.5 rounded-full">
+            <Users className="h-3.5 w-3.5" />
+            <span>
+              {total.toLocaleString("pt-BR")} usuário{total !== 1 ? "s" : ""}
+            </span>
+          </div>
         )}
       </div>
 
@@ -170,26 +205,23 @@ export default function UserAdminPage() {
           </TableHeader>
           <TableBody>
             {searchUsers.isLoading ? (
-              Array.from({ length: 5 }).map((_, i) => (
+              Array.from({ length: 10 }).map((_, i) => (
                 <TableRow key={i}>
                   <TableCell colSpan={6}>
                     <Skeleton className="h-10 w-full" />
                   </TableCell>
                 </TableRow>
               ))
-            ) : filteredUsers.length === 0 ? (
+            ) : users.length === 0 ? (
               <TableRow>
-                <TableCell
-                  colSpan={6}
-                  className="text-center py-10 text-muted-foreground"
-                >
+                <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
                   {searchTerm
                     ? "Nenhum usuário encontrado para essa busca"
                     : "Nenhum usuário cadastrado"}
                 </TableCell>
               </TableRow>
             ) : (
-              filteredUsers.map((user) => (
+              users.map((user) => (
                 <TableRow
                   key={user.id}
                   className={user.is_blocked ? "bg-red-50/50" : ""}
@@ -262,7 +294,6 @@ export default function UserAdminPage() {
                   {/* Ações */}
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
-                      {/* Editar */}
                       <Button
                         variant="ghost"
                         size="icon"
@@ -272,17 +303,11 @@ export default function UserAdminPage() {
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
-
-                      {/* Bloquear / Desbloquear */}
                       <Button
                         variant="ghost"
                         size="icon"
                         onClick={() => handleBlockClick(user)}
-                        title={
-                          user.is_blocked
-                            ? "Desbloquear usuário"
-                            : "Bloquear usuário"
-                        }
+                        title={user.is_blocked ? "Desbloquear usuário" : "Bloquear usuário"}
                       >
                         {user.is_blocked ? (
                           <Shield className="h-4 w-4 text-green-600" />
@@ -290,8 +315,6 @@ export default function UserAdminPage() {
                           <ShieldX className="h-4 w-4 text-red-600" />
                         )}
                       </Button>
-
-                      {/* Excluir */}
                       <Button
                         variant="ghost"
                         size="icon"
@@ -308,15 +331,48 @@ export default function UserAdminPage() {
             )}
           </TableBody>
         </Table>
+
+        {/* ── Paginação ── */}
+        {total > PAGE_SIZE && (
+          <div className="flex items-center justify-between px-4 py-3 border-t bg-slate-50/50">
+            <p className="text-sm text-muted-foreground">
+              Exibindo <span className="font-medium">{startItem}–{endItem}</span> de{" "}
+              <span className="font-medium">{total.toLocaleString("pt-BR")}</span> usuários
+            </p>
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0 || searchUsers.isLoading}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Anterior
+              </Button>
+
+              <span className="text-sm font-medium px-2">
+                {page + 1} / {totalPages}
+              </span>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                disabled={page >= totalPages - 1 || searchUsers.isLoading}
+              >
+                Próxima
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Modals */}
       <UserBlockModal
         isOpen={isBlockModalOpen}
-        onClose={() => {
-          setIsBlockModalOpen(false);
-          setSelectedUser(null);
-        }}
+        onClose={() => { setIsBlockModalOpen(false); setSelectedUser(null); }}
         user={selectedUser}
         isBlocking={actionType === "block"}
         onConfirm={handleBlockConfirm}
@@ -324,20 +380,14 @@ export default function UserAdminPage() {
 
       <UserDeleteModal
         isOpen={isDeleteModalOpen}
-        onClose={() => {
-          setIsDeleteModalOpen(false);
-          setSelectedUser(null);
-        }}
+        onClose={() => { setIsDeleteModalOpen(false); setSelectedUser(null); }}
         user={selectedUser}
         onConfirm={handleDeleteConfirm}
       />
 
       <UserEditModal
         isOpen={isEditModalOpen}
-        onClose={() => {
-          setIsEditModalOpen(false);
-          setSelectedUser(null);
-        }}
+        onClose={() => { setIsEditModalOpen(false); setSelectedUser(null); }}
         user={selectedUser}
         onConfirm={handleEditConfirm}
       />
