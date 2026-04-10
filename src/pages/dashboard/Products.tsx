@@ -7,6 +7,12 @@ import { useProductData } from "@/hooks/useProductData";
 import { ProductTable } from "@/components/dashboard/products/ProductTable";
 import { ProductToolbar } from "@/components/dashboard/products/ProductToolbar";
 import { ProductDialogs } from "@/components/dashboard/products/ProductDialogs";
+import { ExtendedProduct } from "@/hooks/useProductData";
+
+interface SortState {
+  column: string | null;
+  direction: 'asc' | 'desc' | null;
+}
 
 // Helper para limpeza de dados do Excel
 const cleanAndParseFloat = (value: any): number => {
@@ -27,6 +33,7 @@ const ProductsPage = () => {
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [brandFilter, setBrandFilter] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [sortState, setSortState] = useState<SortState>({ column: null, direction: null });
 
   // States for Import Flow (needs to pass data to modal)
   const [productsToConfirm, setProductsToConfirm] = useState<any[]>([]);
@@ -44,18 +51,111 @@ const ProductsPage = () => {
 
   const filteredProducts = useMemo(() => {
     if (!products) return [];
-    return products.filter(product => {
+    
+    // Primeiro aplica os filtros existentes
+    let result = products.filter(product => {
       const matchesCategory = categoryFilter === 'all' || product.category === categoryFilter;
       const matchesBrand = brandFilter === 'all' || product.brand === brandFilter;
       const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                             (product.sku?.toLowerCase().includes(searchTerm.toLowerCase()));
       return matchesCategory && matchesBrand && matchesSearch;
     });
-  }, [products, categoryFilter, brandFilter, searchTerm]);
+    
+    // Depois aplica a ordenação
+    return sortProducts(result);
+  }, [products, categoryFilter, brandFilter, searchTerm, sortState]);
 
   // Handlers
   const handleToggleVisibility = (productId: number, isVisible: boolean) => {
     updateProductMutation.mutate({ productId, values: { is_visible: isVisible } });
+  };
+
+  const handleSortChange = (column: string, direction: 'asc' | 'desc' | null) => {
+    setSortState({ column, direction });
+  };
+
+  const sortProducts = (productsToSort: ExtendedProduct[]) => {
+    if (!sortState.column || !sortState.direction) {
+      return productsToSort;
+    }
+
+    const { column, direction } = sortState;
+    const multiplier = direction === 'asc' ? 1 : -1;
+
+    return [...productsToSort].sort((a, b) => {
+      switch (column) {
+        case 'sku':
+          // Ordenação alfabética de SKU, com nulos no final
+          const skuA = a.sku || '';
+          const skuB = b.sku || '';
+          return multiplier * skuA.localeCompare(skuB, 'pt-BR');
+
+        case 'status':
+          // Ordenação booleana de visibilidade
+          const statusA = a.is_visible ? 1 : 0;
+          const statusB = b.is_visible ? 1 : 0;
+          return multiplier * (statusA - statusB);
+
+        case 'name':
+          // Ordenação alfabética de nome (case-insensitive)
+          const nameA = (a.name || '').toLowerCase();
+          const nameB = (b.name || '').toLowerCase();
+          return multiplier * nameA.localeCompare(nameB, 'pt-BR');
+
+        case 'category':
+          // Ordenação alfabética de categoria, com nulas no final
+          const categoryA = a.category || '';
+          const categoryB = b.category || '';
+          return multiplier * categoryA.localeCompare(categoryB, 'pt-BR');
+
+        case 'cost':
+          // Ordenação numérica de custo médio
+          const costsArrayA = Array.isArray(a.variant_costs) ? a.variant_costs : [];
+          const costValuesA = costsArrayA.filter(v => v != null && Number(v) > 0) as number[];
+          const costA = costValuesA.length > 0 
+            ? (costValuesA.reduce((sum, val) => sum + Number(val), 0) / costValuesA.length)
+            : (a.cost_price ?? 0);
+
+          const costsArrayB = Array.isArray(b.variant_costs) ? b.variant_costs : [];
+          const costValuesB = costsArrayB.filter(v => v != null && Number(v) > 0) as number[];
+          const costB = costValuesB.length > 0
+            ? (costValuesB.reduce((sum, val) => sum + Number(val), 0) / costValuesB.length)
+            : (b.cost_price ?? 0);
+
+          return multiplier * (costA - costB);
+
+        case 'price':
+          // Ordenação numérica de preço de venda (máximo das variações ou base)
+          const pricesArrayA = Array.isArray(a.variant_prices) ? a.variant_prices : [];
+          const priceValuesA = pricesArrayA.filter(v => v !== null) as number[];
+          const priceA = priceValuesA.length > 0 
+            ? Math.max(...priceValuesA)
+            : (a.price ?? 0);
+
+          const pricesArrayB = Array.isArray(b.variant_prices) ? b.variant_prices : [];
+          const priceValuesB = pricesArrayB.filter(v => v !== null) as number[];
+          const priceB = priceValuesB.length > 0
+            ? Math.max(...priceValuesB)
+            : (b.price ?? 0);
+
+          return multiplier * (priceA - priceB);
+
+        case 'pix_price':
+          // Ordenação numérica de preço pix
+          const pixA = a.pix_price ?? 0;
+          const pixB = b.pix_price ?? 0;
+          return multiplier * (pixA - pixB);
+
+        case 'stock':
+          // Ordenação numérica de estoque total
+          const stockA = Number(a.variant_stock_total || 0) || (a.stock_quantity || 0);
+          const stockB = Number(b.variant_stock_total || 0) || (b.stock_quantity || 0);
+          return multiplier * (stockA - stockB);
+
+        default:
+          return 0;
+      }
+    });
   };
 
   const handleActivateAll = () => {
@@ -283,6 +383,8 @@ const ProductsPage = () => {
         onDelete={(p) => openModal("delete", p.id)}
         onViewVariants={(p) => openModal("variants", p.id)}
         onToggleVisibility={handleToggleVisibility}
+        sortState={sortState}
+        onSortChange={handleSortChange}
       />
 
       <ProductDialogs 

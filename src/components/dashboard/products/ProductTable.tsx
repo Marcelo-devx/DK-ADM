@@ -13,6 +13,12 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ExtendedProduct } from "@/hooks/useProductData";
 import { Switch } from "@/components/ui/switch";
+import { SortDropdown } from "./SortDropdown";
+
+interface SortState {
+  column: string | null;
+  direction: 'asc' | 'desc' | null;
+}
 
 interface ProductTableProps {
   isLoading: boolean;
@@ -21,6 +27,8 @@ interface ProductTableProps {
   onDelete: (product: ExtendedProduct) => void;
   onViewVariants: (product: { id: number; name: string }) => void;
   onToggleVisibility?: (productId: number, isVisible: boolean) => void;
+  sortState: SortState;
+  onSortChange: (column: string, direction: 'asc' | 'desc' | null) => void;
 }
 
 const formatCurrency = (val: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
@@ -31,7 +39,9 @@ export const ProductTable = ({
   onEdit, 
   onDelete, 
   onViewVariants,
-  onToggleVisibility 
+  onToggleVisibility,
+  sortState,
+  onSortChange
 }: ProductTableProps) => {
   const getPriceDisplay = (product: ExtendedProduct, isCost: boolean = false) => {
     if (!product) return "-";
@@ -81,14 +91,78 @@ export const ProductTable = ({
         <TableHeader className="bg-gray-50/50">
           <TableRow>
             <TableHead className="w-[64px]">Imagem</TableHead>
-            <TableHead className="w-[120px]">SKU</TableHead>
-            <TableHead className="w-[80px]">Status</TableHead>
-            <TableHead>Nome</TableHead>
-            <TableHead>Categoria</TableHead>
-            <TableHead>Custo</TableHead>
-            <TableHead>Venda (Cartão de Crédito)</TableHead>
-            <TableHead className="text-green-600">Pix</TableHead>
-            <TableHead>Estoque Disponível</TableHead>
+            <TableHead className="w-[120px]">
+              <div className="flex items-center gap-2">
+                SKU
+                <SortDropdown 
+                  direction={sortState.column === 'sku' ? sortState.direction : null}
+                  onSortChange={(dir) => onSortChange('sku', dir)}
+                />
+              </div>
+            </TableHead>
+            <TableHead className="w-[80px]">
+              <div className="flex items-center gap-2">
+                Status
+                <SortDropdown 
+                  direction={sortState.column === 'status' ? sortState.direction : null}
+                  onSortChange={(dir) => onSortChange('status', dir)}
+                />
+              </div>
+            </TableHead>
+            <TableHead>
+              <div className="flex items-center gap-2">
+                Nome
+                <SortDropdown 
+                  direction={sortState.column === 'name' ? sortState.direction : null}
+                  onSortChange={(dir) => onSortChange('name', dir)}
+                />
+              </div>
+            </TableHead>
+            <TableHead>
+              <div className="flex items-center gap-2">
+                Categoria
+                <SortDropdown 
+                  direction={sortState.column === 'category' ? sortState.direction : null}
+                  onSortChange={(dir) => onSortChange('category', dir)}
+                />
+              </div>
+            </TableHead>
+            <TableHead>
+              <div className="flex items-center gap-2">
+                Custo
+                <SortDropdown 
+                  direction={sortState.column === 'cost' ? sortState.direction : null}
+                  onSortChange={(dir) => onSortChange('cost', dir)}
+                />
+              </div>
+            </TableHead>
+            <TableHead>
+              <div className="flex items-center gap-2">
+                Venda (Cartão de Crédito)
+                <SortDropdown 
+                  direction={sortState.column === 'price' ? sortState.direction : null}
+                  onSortChange={(dir) => onSortChange('price', dir)}
+                />
+              </div>
+            </TableHead>
+            <TableHead className="text-green-600">
+              <div className="flex items-center gap-2">
+                Pix
+                <SortDropdown 
+                  direction={sortState.column === 'pix_price' ? sortState.direction : null}
+                  onSortChange={(dir) => onSortChange('pix_price', dir)}
+                />
+              </div>
+            </TableHead>
+            <TableHead>
+              <div className="flex items-center gap-2">
+                Estoque Disponível
+                <SortDropdown 
+                  direction={sortState.column === 'stock' ? sortState.direction : null}
+                  onSortChange={(dir) => onSortChange('stock', dir)}
+                />
+              </div>
+            </TableHead>
             <TableHead className="text-right">Ações</TableHead>
           </TableRow>
         </TableHeader>
