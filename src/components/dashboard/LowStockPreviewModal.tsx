@@ -23,16 +23,7 @@ import {
 import { Package, Zap, Package2, Check, X } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-interface SelectableItem {
-  id: number;
-  variant_id: string | null;
-  name: string;
-  stock_quantity: number;
-  cost_price: number | null;
-  is_variant: boolean;
-  category: string | null;
-  brand: string | null;
-}
+import { SelectableItem } from "./ProductCombobox";
 
 interface LowStockPreviewModalProps {
   isOpen: boolean;

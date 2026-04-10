@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Check, Search, Copy, Loader2 } from "lucide-react";
+import { Check, Search, Copy, Loader2, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,6 @@ import {
   Command,
   CommandEmpty,
   CommandGroup,
-  CommandInput,
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
@@ -19,7 +18,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { showSuccess, showError } from "@/utils/toast";
 
-interface SelectableItem {
+export interface SelectableItem {
   id: number;
   variant_id: string | null;
   name: string;
@@ -29,123 +28,93 @@ interface SelectableItem {
   ohms?: string | null;
   size?: string | null;
   color?: string | null;
+  category?: string | null;
+  brand?: string | null;
 }
 
 interface ProductComboboxProps {
-  products: SelectableItem[];
-  value: string;
+  value: string; // "var_<uuid>" | "prod_<id>" | ""
+  selectedItem: SelectableItem | null;
+  onSearch: (term: string) => Promise<SelectableItem[]>;
   onChange: (value: string, item: SelectableItem) => void;
-  filterType: 'all' | 'products' | 'variants';
-  onFilterChange: (filter: 'all' | 'products' | 'variants') => void;
+  onClear?: () => void;
   placeholder?: string;
 }
 
-// Debounce hook customizado
-function useDebounce<T>(value: T, delay: number): T {
-  const [debouncedValue, setDebouncedValue] = React.useState<T>(value);
-
-  React.useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
-
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [value, delay]);
-
-  return debouncedValue;
-}
-
 export const ProductCombobox = React.memo(function ProductCombobox({
-  products,
   value,
+  selectedItem,
+  onSearch,
   onChange,
-  filterType,
-  onFilterChange,
-  placeholder = "Selecione um item...",
+  onClear,
+  placeholder = "Buscar produto...",
 }: ProductComboboxProps) {
   const [open, setOpen] = React.useState(false);
   const [searchValue, setSearchValue] = React.useState("");
-  const debouncedSearch = useDebounce(searchValue, 300);
+  const [results, setResults] = React.useState<SelectableItem[]>([]);
+  const [isLoading, setIsLoading] = React.useState(false);
+  const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Filter products based on search and filter type - otimizado
-  const filteredProducts = React.useMemo(() => {
-    if (!products || products.length === 0) return [];
-    
-    const searchLower = debouncedSearch.toLowerCase().trim();
-    
-    // Se não tem busca, aplica apenas o filtro de tipo
-    if (!searchLower) {
-      if (filterType === 'all') return products;
-      if (filterType === 'variants') return products.filter(p => p.is_variant);
-      if (filterType === 'products') return products.filter(p => !p.is_variant);
-      return products;
-    }
-
-    // Com busca, aplica ambos os filtros
-    return products.filter((p) => {
-      // Apply type filter
-      if (filterType === 'variants' && !p.is_variant) return false;
-      if (filterType === 'products' && p.is_variant) return false;
-
-      // Apply search filter
-      return p.name.toLowerCase().includes(searchLower);
-    });
-  }, [products, debouncedSearch, filterType]);
-
-  // Check if search is in progress (debounced value differs from current)
-  const isSearching = React.useMemo(() => {
-    return searchValue.trim() !== "" && searchValue !== debouncedSearch;
-  }, [searchValue, debouncedSearch]);
-
-  // Find selected item for display
-  const selectedItem = React.useMemo(() => {
-    if (!value) return null;
-    const isVariant = String(value).startsWith("var_");
-    const idValue = String(value).split("_")[1];
-    
-    if (isVariant) {
-      return products.find(p => p.variant_id === idValue);
-    }
-    return products.find(p => p.id === Number(idValue) && !p.variant_id);
-  }, [value, products]);
-
-  // Handle item selection
-  const handleSelect = React.useCallback((currentValue: string) => {
-    const isVariant = String(currentValue).startsWith("var_");
-    const idValue = String(currentValue).split("_")[1];
-    
-    let item;
-    if (isVariant) {
-      item = products.find(p => p.variant_id === idValue);
-    } else {
-      item = products.find(p => p.id === Number(idValue) && !p.variant_id);
-    }
-
-    if (item) {
-      onChange(currentValue, item);
-      setOpen(false);
+  // Quando o popover abre, busca os primeiros resultados (sem termo)
+  React.useEffect(() => {
+    if (!open) {
       setSearchValue("");
+      setResults([]);
+      return;
     }
-  }, [products, onChange]);
+    // Busca inicial ao abrir
+    triggerSearch("");
+  }, [open]);
 
-  // copy helper
-  const copyToClipboard = async (text: string) => {
+  const triggerSearch = React.useCallback(
+    async (term: string) => {
+      setIsLoading(true);
+      try {
+        const data = await onSearch(term);
+        setResults(data);
+      } catch {
+        setResults([]);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [onSearch]
+  );
+
+  const handleSearchChange = React.useCallback(
+    (val: string) => {
+      setSearchValue(val);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
+        triggerSearch(val);
+      }, 350);
+    },
+    [triggerSearch]
+  );
+
+  const handleSelect = React.useCallback(
+    (itemValue: string) => {
+      const isVariant = itemValue.startsWith("var_");
+      const idPart = itemValue.split("_")[1];
+      const item = results.find((p) =>
+        isVariant ? p.variant_id === idPart : p.id === Number(idPart) && !p.variant_id
+      );
+      if (item) {
+        onChange(itemValue, item);
+        setOpen(false);
+      }
+    },
+    [results, onChange]
+  );
+
+  const copyToClipboard = async (text: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
     try {
       await navigator.clipboard.writeText(text);
       showSuccess(`Copiado: ${text}`);
     } catch (err: any) {
-      console.error(err);
-      showError(err?.message || 'Erro ao copiar');
-    }
-  };
-
-  // Handle keyboard navigation
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && !open) {
-      e.preventDefault();
-      setOpen(true);
+      showError(err?.message || "Erro ao copiar");
     }
   };
 
@@ -159,148 +128,130 @@ export const ProductCombobox = React.memo(function ProductCombobox({
           className="w-full justify-between h-10 px-3 font-normal"
           title={selectedItem ? selectedItem.name : placeholder}
         >
-          <div className="flex items-center justify-between w-full gap-2">
-            <span className="truncate flex-1" title={selectedItem ? selectedItem.name : placeholder}>
-              {selectedItem ? selectedItem.name : placeholder}
+          <div className="flex items-center justify-between w-full gap-2 min-w-0">
+            <span className="truncate flex-1 text-left" title={selectedItem?.name ?? placeholder}>
+              {selectedItem ? selectedItem.name : (
+                <span className="text-muted-foreground">{placeholder}</span>
+              )}
             </span>
-
-            {selectedItem && (
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="p-1"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    copyToClipboard(selectedItem.name);
-                  }}
-                  aria-label="Copiar nome do produto"
-                  title="Copiar nome"
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
-
-                <Badge variant="outline" className="text-[10px] h-5 bg-white shrink-0" title={`Estoque: ${selectedItem.stock_quantity}`}>
-                  Estoque: {selectedItem.stock_quantity}
-                </Badge>
-              </div>
-            )}
-
-            {!selectedItem && <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />}
-            {selectedItem && <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />}
+            <div className="flex items-center gap-1 shrink-0">
+              {selectedItem && (
+                <>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 p-0"
+                    onClick={(e) => copyToClipboard(selectedItem.name, e)}
+                    title="Copiar nome"
+                  >
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                  <Badge variant="outline" className="text-[10px] h-5 bg-white">
+                    Est: {selectedItem.stock_quantity}
+                  </Badge>
+                  {onClear && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 p-0 text-muted-foreground hover:text-red-500"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        onClear();
+                      }}
+                      title="Limpar seleção"
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  )}
+                </>
+              )}
+              {!selectedItem && <Search className="h-4 w-4 opacity-40" />}
+            </div>
           </div>
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[400px] p-0" align="start">
+
+      <PopoverContent className="w-[420px] p-0" align="start">
         <Command shouldFilter={false}>
+          {/* Campo de busca */}
           <div className="flex items-center border-b px-3">
             <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-            <CommandInput
-              placeholder="Buscar produto..."
+            <input
+              autoFocus
+              placeholder="Digite para buscar..."
               value={searchValue}
-              onValueChange={setSearchValue}
-              onKeyDown={handleKeyDown}
-              className="flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 border-0 focus-visible:ring-0"
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="flex h-10 w-full bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground"
             />
-            {isSearching && (
-              <Loader2 className="h-4 w-4 animate-spin opacity-50" />
-            )}
-          </div>
-          
-          {/* Filter buttons */}
-          <div className="flex border-b">
-            <Button
-              type="button"
-              variant={filterType === 'all' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => onFilterChange('all')}
-              className="flex-1 rounded-none h-9 text-sm"
-            >
-              Todos
-            </Button>
-            <Button
-              type="button"
-              variant={filterType === 'products' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => onFilterChange('products')}
-              className="flex-1 rounded-none h-9 text-sm"
-            >
-              Produtos
-            </Button>
-            <Button
-              type="button"
-              variant={filterType === 'variants' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => onFilterChange('variants')}
-              className="flex-1 rounded-none h-9 text-sm"
-            >
-              Variações
-            </Button>
+            {isLoading && <Loader2 className="h-4 w-4 animate-spin opacity-50 shrink-0" />}
           </div>
 
-          <CommandList>
-            {isSearching ? (
+          <CommandList className="max-h-[300px]">
+            {isLoading && results.length === 0 ? (
               <div className="py-6 flex flex-col items-center justify-center text-sm text-muted-foreground">
-                <Loader2 className="h-6 w-6 animate-spin mb-2" />
+                <Loader2 className="h-5 w-5 animate-spin mb-2" />
                 <p>Buscando...</p>
               </div>
-            ) : filteredProducts.length === 0 ? (
-              <CommandEmpty>Nenhum item encontrado.</CommandEmpty>
+            ) : results.length === 0 ? (
+              <CommandEmpty>
+                {searchValue ? "Nenhum produto encontrado." : "Digite para buscar produtos."}
+              </CommandEmpty>
             ) : (
-              filteredProducts.map((p, idx) => {
-                const itemValue = p.variant_id ? `var_${p.variant_id}` : `prod_${p.id}`;
-                const isSelected = value === itemValue;
-                
-                return (
-                  <CommandItem
-                    key={`${p.id}-${p.variant_id}-${idx}`}
-                    value={itemValue}
-                    onSelect={handleSelect}
-                    className="cursor-pointer"
-                    title={p.name}
-                  >
-                    <Check
-                      className={cn(
-                        "mr-2 h-4 w-4",
-                        isSelected ? "opacity-100" : "opacity-0"
-                      )}
-                    />
-                    <div className="flex items-center w-full gap-2">
-                      <div className="flex-1 flex flex-col">
-                        <span className={cn(p.is_variant ? "pl-2" : "font-medium")} title={p.name}>
-                          {p.name}
-                        </span>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <span>Estoque: {p.stock_quantity}</span>
-                          {p.cost_price && (
-                            <span>• R$ {Number(p.cost_price).toFixed(2)}</span>
-                          )}
+              <CommandGroup>
+                {results.map((p, idx) => {
+                  const itemValue = p.variant_id ? `var_${p.variant_id}` : `prod_${p.id}`;
+                  const isSelected = value === itemValue;
+                  return (
+                    <CommandItem
+                      key={`${p.id}-${p.variant_id ?? "base"}-${idx}`}
+                      value={itemValue}
+                      onSelect={handleSelect}
+                      className="cursor-pointer"
+                    >
+                      <Check
+                        className={cn("mr-2 h-4 w-4 shrink-0", isSelected ? "opacity-100" : "opacity-0")}
+                      />
+                      <div className="flex items-center w-full gap-2 min-w-0">
+                        <div className="flex-1 flex flex-col min-w-0">
+                          <span
+                            className={cn("truncate", p.is_variant ? "pl-1 text-sm" : "font-medium")}
+                            title={p.name}
+                          >
+                            {p.name}
+                          </span>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>Estoque: {p.stock_quantity}</span>
+                            {p.cost_price != null && p.cost_price > 0 && (
+                              <span>• R$ {Number(p.cost_price).toFixed(2)}</span>
+                            )}
+                          </div>
                         </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 p-0 shrink-0"
+                          onClick={(e) => copyToClipboard(p.name, e)}
+                          title="Copiar nome"
+                        >
+                          <Copy className="h-3 w-3 opacity-60" />
+                        </Button>
                       </div>
-
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="p-1"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          copyToClipboard(p.name);
-                        }}
-                        aria-label={`Copiar nome ${p.name}`}
-                        title="Copiar nome"
-                      >
-                        <Copy className="h-4 w-4 opacity-60" />
-                      </Button>
-                    </div>
-                  </CommandItem>
-                );
-              })
+                    </CommandItem>
+                  );
+                })}
+              </CommandGroup>
             )}
           </CommandList>
+
+          {results.length > 0 && (
+            <div className="border-t px-3 py-2 text-xs text-muted-foreground text-center">
+              {results.length} resultado(s) — refine a busca para encontrar mais
+            </div>
+          )}
         </Command>
       </PopoverContent>
     </Popover>
