@@ -475,36 +475,62 @@ const SupplierOrdersPage = () => {
   const handleDownloadOrder = async (order: any) => {
     setDownloadingId(order.id);
     try {
+      // Busca com variant_name (já salvo) + variantes completas para fallback
       const { data: items, error } = await supabase
         .from("supplier_order_items")
-        .select(`quantity, received_quantity, unit_cost, variant_id, products(name), product_variants(volume_ml, flavors(name))`)
+        .select(`id, quantity, received_quantity, unit_cost, variant_id, variant_name, 
+                 products(name), 
+                 product_variants(volume_ml, color, ohms, size, flavors(name))`)
         .eq("supplier_order_id", order.id);
 
       if (error) throw error;
 
       const isProcessed =
         order.status === "Recebido" || order.status === "Recebido com Divergência";
-      const doc = new jsPDF();
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
-      doc.setFontSize(20);
-      doc.text(`RELATÓRIO PEDIDO #${order.id}`, 14, 22);
-      doc.setFontSize(11);
-      doc.setTextColor(100);
-      doc.text(`Fornecedor: ${order.supplier_name}`, 14, 32);
-      doc.text(`Status: ${order.status}`, 14, 38);
-      doc.text(`Data: ${new Date(order.created_at).toLocaleDateString("pt-BR")}`, 14, 44);
+      // Header
+      doc.setFontSize(22);
+      doc.setFont("helvetica", "bold");
+      doc.text(`PEDIDO AO FORNECEDOR #${order.id}`, 14, 20);
+      
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(80);
+      doc.text(`Fornecedor: ${order.supplier_name}`, 14, 28);
+      doc.text(`Status: ${order.status}`, 14, 34);
+      doc.text(`Data: ${new Date(order.created_at).toLocaleDateString("pt-BR")}`, 14, 40);
+
+      // Função auxiliar para montar nome completo da variação
+      const buildVariantLabel = (v: any): string => {
+        if (!v) return '';
+        const parts: string[] = [];
+        if (v.color)   parts.push(v.color);
+        if (v.size)    parts.push(v.size);
+        if (v.ohms)    parts.push(`${v.ohms}Ω`);
+        const flavor = Array.isArray(v.flavors) ? v.flavors[0]?.name : v.flavors?.name;
+        if (flavor)    parts.push(flavor);
+        const suffix = v.volume_ml ? ` ${v.volume_ml}ml` : '';
+        return parts.length > 0 ? ` - ${parts.join(' / ')}${suffix}` : suffix;
+      };
 
       const tableRows = items.map((item: any) => {
         let displayName = item.products?.name || "Produto Removido";
-        if (item.product_variants) {
-          const v = item.product_variants;
-          const flavor = Array.isArray(v.flavors) ? v.flavors[0]?.name : v.flavors?.name;
-          displayName += `${flavor ? ` - ${flavor}` : ""}${v.volume_ml ? ` (${v.volume_ml}ml)` : ""}`;
+        
+        // Se já tem variant_name salvo (mais confiável), usa-o
+        if (item.variant_name && item.variant_name.trim() !== '') {
+          displayName += ` - ${item.variant_name}`;
         }
+        // Caso contrário, monta usando os dados da variação
+        else if (item.product_variants) {
+          const v = item.product_variants;
+          displayName += buildVariantLabel(v);
+        }
+        
         return [
           displayName,
-          item.quantity,
-          isProcessed ? item.received_quantity : "-",
+          item.quantity.toString(),
+          isProcessed ? item.received_quantity.toString() : "-",
           formatCurrency(item.unit_cost),
           formatCurrency(
             isProcessed
@@ -517,9 +543,17 @@ const SupplierOrdersPage = () => {
       autoTable(doc, {
         head: [["Produto / Variação", "Qtd. Pedida", "Qtd. Recebida", "Custo Unit.", "Subtotal"]],
         body: tableRows,
-        startY: 52,
+        startY: 48,
         theme: "striped",
-        headStyles: { fillColor: [41, 128, 185], textColor: 255 },
+        headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+        bodyStyles: { fontSize: 8 },
+        columnStyles: {
+          0: { cellWidth: 120 }, // Produto - mais largo
+          1: { cellWidth: 25, halign: 'center' },
+          2: { cellWidth: 25, halign: 'center' },
+          3: { cellWidth: 40, halign: 'right' },
+          4: { cellWidth: 40, halign: 'right' }
+        },
         foot: [
           [
             "",
@@ -529,10 +563,11 @@ const SupplierOrdersPage = () => {
             formatCurrency(isProcessed ? order.received_total_cost : order.total_cost),
           ],
         ],
-        footStyles: { fillColor: [240, 240, 240], textColor: 0, fontStyle: "bold" },
+        footStyles: { fillColor: [241, 245, 249], textColor: [51, 65, 85], fontStyle: 'bold', fontSize: 9 },
+        margin: { top: 50, left: 14, right: 14, bottom: 20 }
       });
 
-      doc.save(`pedido_compra_${order.id}.pdf`);
+      doc.save(`pedido_fornecedor_${order.id}.pdf`);
       showSuccess("PDF gerado com sucesso!");
     } catch (err: any) {
       showError(`Erro ao gerar PDF: ${err.message}`);
