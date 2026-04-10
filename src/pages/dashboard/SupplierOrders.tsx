@@ -49,7 +49,7 @@ const fetchSupplierOrders = async () => {
 };
 
 const fetchProductsWithVariants = async () => {
-  // Busca produtos e suas variações com os nomes dos sabores
+  // Busca produtos e suas variações com os nomes dos sabores e todos os atributos
   const { data, error } = await supabase
     .from("products")
     .select(`
@@ -87,10 +87,21 @@ const fetchProductsWithVariants = async () => {
         const volumeLabel = v.volume_ml ? `${v.volume_ml}ml` : "";
         const ohmsLabel = v.ohms ? `${v.ohms}` : "";
         const sizeLabel = v.size ? `${v.size}` : "";
+        const colorLabel = v.color ? v.color : "";
+        
+        // Montar partes do nome na ordem: Cor → Tamanho → Ohms → Sabor
+        // Apenas inclui atributos que existirem
+        const nameParts = [colorLabel, sizeLabel, ohmsLabel, flavorName]
+          .filter(Boolean);
+        
+        // Construir nome completo
+        const variationName = nameParts.length > 0 ? ` - ${nameParts.join(" - ")}` : "";
+        const volumeSuffix = volumeLabel ? ` (${volumeLabel})` : "";
+        
         flattened.push({
           id: p.id,
           variant_id: v.id,
-          name: `${p.name}${flavorName ? ` - ${flavorName}` : ""}${volumeLabel ? ` (${volumeLabel})` : ""}${ohmsLabel ? ` - ${ohmsLabel}` : ""}${sizeLabel ? ` - ${sizeLabel}` : ""}`,
+          name: `${p.name}${variationName}${volumeSuffix}`,
           stock_quantity: v.stock_quantity,
           cost_price: v.cost_price || p.cost_price,
           is_variant: true,
