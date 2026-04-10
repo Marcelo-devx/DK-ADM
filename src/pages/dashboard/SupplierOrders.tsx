@@ -515,18 +515,30 @@ const SupplierOrdersPage = () => {
       };
 
       const tableRows = items.map((item: any) => {
-        let displayName = item.products?.name || "Produto Removido";
-        
-        // Se já tem variant_name salvo (mais confiável), usa-o
+        let displayName: string;
+
+        // variant_name já contém o nome completo (produto + variação)
         if (item.variant_name && item.variant_name.trim() !== '') {
-          displayName += ` - ${item.variant_name}`;
+          displayName = item.variant_name;
         }
-        // Caso contrário, monta usando os dados da variação
-        else if (item.product_variants) {
-          const v = item.product_variants;
-          displayName += buildVariantLabel(v);
+        // Fallback: monta manualmente para itens antigos sem variant_name
+        else {
+          displayName = item.products?.name || "Produto Removido";
+          if (item.product_variants) {
+            const v = item.product_variants;
+            const parts: string[] = [];
+            if (v.color)  parts.push(v.color);
+            if (v.size)   parts.push(v.size);
+            if (v.ohms)   parts.push(`${v.ohms}Ω`);
+            const flavor = Array.isArray(v.flavors) ? v.flavors[0]?.name : v.flavors?.name;
+            if (flavor)   parts.push(flavor);
+            const suffix = v.volume_ml ? ` ${v.volume_ml}ml` : '';
+            if (parts.length > 0 || suffix) {
+              displayName += ` - ${parts.join(' / ')}${suffix}`;
+            }
+          }
         }
-        
+
         return [
           displayName,
           item.quantity.toString(),
