@@ -51,6 +51,7 @@ import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import * as XLSX from 'xlsx';
+import { Card } from "@/components/ui/card";
 
 interface Order {
   id: number;
@@ -582,6 +583,7 @@ const OrdersPage = () => {
   };
 
   const formatCurrency = (val: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
+  const filteredOrdersCount = filteredOrders.length;
 
   const getPaymentMethodDetails = (method: string | null | undefined) => {
     if (!method) return { label: 'Pix', icon: QrCode, style: "bg-cyan-50 text-cyan-700 border-cyan-200" };
@@ -608,6 +610,11 @@ const OrdersPage = () => {
             <RefreshCw className="h-4 w-4" />
           </Button>
         </div>
+
+        <Card className="px-4 py-3 bg-white shadow-sm border flex items-center gap-2">
+          <span className="text-sm text-muted-foreground font-medium">Pedidos</span>
+          <span className="text-2xl font-bold text-slate-900">{filteredOrdersCount}</span>
+        </Card>
 
         <div className="flex flex-wrap items-center gap-3 bg-white p-2 rounded-xl border shadow-sm">
           {/* Campos de Busca Específicos */}
