@@ -70,6 +70,7 @@ export const FreeShippingCoupon = ({ client }: FreeShippingCouponProps) => {
           p_user_id: client.user_id,
           p_coupon_id: couponData.id,
           p_expires_days: 90,
+          p_expires_at: new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(),
         });
         if (error) {
           console.error('[FreeShippingCoupon] Erro ao atribuir ao cliente:', error);
@@ -185,7 +186,7 @@ export const FreeShippingCoupon = ({ client }: FreeShippingCouponProps) => {
         {/* Informações do cupom */}
         <div className="text-xs text-gray-600 space-y-1">
           <p>• O cupom descontará o valor total do frete do pedido</p>
-          <p>• Valido por 90 dias após a atribuição</p>
+          <p>• Valido por 3 horas após a atribuição</p>
           <p>• Estoque atual: 1000 cupons</p>
         </div>
       </CardContent>
