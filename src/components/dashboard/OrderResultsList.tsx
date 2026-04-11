@@ -77,10 +77,20 @@ export function OrderResultsList({ orders, onSelectOrder }: OrderResultsListProp
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1 space-y-2">
                 <div className="flex items-center gap-3 flex-wrap">
-                  <h3 className="font-semibold text-lg">Pedido #{order.id}</h3>
-                  <Badge className={getStatusColor(order.status)}>
-                    {order.status}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-lg">Pedido #{order.id}</h3>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => onSelectOrder(order)}
+                      className="h-8 w-8 md:hidden"
+                      title="Ver Detalhes"
+                      aria-label="Ver detalhes do pedido"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <Badge className={getStatusColor(order.status)}>{order.status}</Badge>
                   <Badge variant="outline">{order.delivery_status}</Badge>
                 </div>
 
@@ -107,7 +117,7 @@ export function OrderResultsList({ orders, onSelectOrder }: OrderResultsListProp
                 <Button
                   size="sm"
                   onClick={() => onSelectOrder(order)}
-                  className="gap-2"
+                  className="gap-2 hidden md:inline-flex"
                 >
                   <Eye className="h-4 w-4" />
                   Ver Detalhes
