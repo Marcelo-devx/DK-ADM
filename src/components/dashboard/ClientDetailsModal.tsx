@@ -8,10 +8,10 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
-import { 
-  User, MapPin, Phone, Calendar, Shield, Star, 
-  Mail, Award, CreditCard, History, Fingerprint, 
-  ShoppingBag, Package, Palette, Ruler, Zap, Wind
+import {
+  User, MapPin, Phone, Calendar, Shield, Star,
+  Mail, Award, CreditCard, History, Fingerprint,
+  ShoppingBag, Package, Wind, Palette, Ruler, Zap, AlertCircle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -29,7 +29,8 @@ interface ClientDetailsModalProps {
 }
 
 export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsModalProps) => {
-  // Query do Perfil (Dados Pessoais)
+
+  // ── Perfil ────────────────────────────────────────────────────────────────
   const { data: profile, isLoading: isLoadingProfile } = useQuery({
     queryKey: ["clientProfileFull", client?.id],
     queryFn: async () => {
@@ -46,13 +47,13 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
     staleTime: 60_000,
   });
 
-  // Query para buscar email do auth.users quando não disponível no client
+  // ── Email (fallback via edge function) ───────────────────────────────────
   const { data: userEmailData, isLoading: isLoadingEmail } = useQuery({
     queryKey: ["userEmail", client?.id],
     queryFn: async () => {
       if (!client?.id) return null;
       const { data, error } = await supabase.functions.invoke("get-user-email", {
-        body: { userId: client.id }
+        body: { userId: client.id },
       });
       if (error) throw error;
       return data;
@@ -62,27 +63,17 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
     staleTime: 300_000,
   });
 
-  // ─── QUERY 1: Busca os pedidos SEM join de itens ───────────────────────────
+  // ── QUERY 1: Pedidos (sem join) ───────────────────────────────────────────
   const { data: rawOrders, isLoading: isLoadingOrders } = useQuery({
     queryKey: ["clientOrdersHistory", client?.id],
     queryFn: async () => {
       if (!client?.id) return [];
       const { data, error } = await supabase
         .from("orders")
-        .select(`
-          id,
-          created_at,
-          total_price,
-          shipping_cost,
-          donation_amount,
-          coupon_discount,
-          status,
-          payment_method
-        `)
+        .select("id, created_at, total_price, shipping_cost, donation_amount, coupon_discount, status, payment_method")
         .eq("user_id", client.id)
         .order("created_at", { ascending: false })
         .limit(50);
-
       if (error) throw error;
       return data ?? [];
     },
@@ -90,9 +81,7 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
     staleTime: 60_000,
   });
 
-  // ─── QUERY 2: Busca os itens de TODOS os pedidos encontrados ──────────────
-  // Query separada garante que a política gerente/logistica_can_view_all_order_items
-  // seja avaliada corretamente no contexto do usuário.
+  // ── QUERY 2: Itens dos pedidos (sem join) ────────────────────────────────
   const orderIds = rawOrders?.map((o: any) => o.id) ?? [];
 
   const { data: rawItems, isLoading: isLoadingItems } = useQuery({
@@ -101,9 +90,8 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
       if (!orderIds.length) return [];
       const { data, error } = await supabase
         .from("order_items")
-        .select("order_id, name_at_purchase, quantity, price_at_purchase, image_url_at_purchase, variant_id")
+        .select("order_id, name_at_purchase, quantity, price_at_purchase, image_url_at_purchase, variant_id, item_id")
         .in("order_id", orderIds);
-
       if (error) throw error;
       return data ?? [];
     },
@@ -111,115 +99,154 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
     staleTime: 60_000,
   });
 
-  // ─── QUERY 3: Busca as variantes dos itens separadamente ──────────────────
-  // Separar o join de product_variants evita problemas de RLS no contexto do join.
-  const variantIds = [...new Set(
+  // ── QUERY 3: Variantes específicas (quando variant_id está preenchido) ───
+  const specificVariantIds = [...new Set(
     (rawItems ?? []).map((i: any) => i.variant_id).filter(Boolean)
   )];
 
-  const { data: variantsData } = useQuery({
-    queryKey: ["orderItemVariants", variantIds.join(",")],
+  const { data: specificVariants } = useQuery({
+    queryKey: ["specificVariants", specificVariantIds.join(",")],
     queryFn: async () => {
-      if (!variantIds.length) return [];
+      if (!specificVariantIds.length) return [];
       const { data, error } = await supabase
         .from("product_variants")
-        .select("id, color, size, ohms, volume_ml, sku, flavor_id, flavors(name)")
-        .in("id", variantIds);
-
+        .select("id, color, size, ohms, volume_ml, flavor_id, flavors(name)")
+        .in("id", specificVariantIds);
       if (error) throw error;
       return data ?? [];
     },
-    enabled: !!client?.id && isOpen && variantIds.length > 0,
+    enabled: specificVariantIds.length > 0,
     staleTime: 60_000,
   });
 
-  // ─── Combina pedidos + itens + variantes ──────────────────────────────────
-  const variantsMap = new Map((variantsData ?? []).map((v: any) => [v.id, v]));
+  // ── QUERY 4: Todas as variantes dos produtos (para itens sem variant_id) ─
+  // Quando o variant_id não foi salvo, buscamos TODAS as variantes do produto
+  // para mostrar ao logista quais opções existem (ele precisa saber o que separar).
+  const productIdsWithoutVariant = [...new Set(
+    (rawItems ?? [])
+      .filter((i: any) => !i.variant_id && i.item_id)
+      .map((i: any) => i.item_id)
+  )];
 
-  const allItems = (rawItems ?? []).map((item: any) => ({
+  const { data: allProductVariants } = useQuery({
+    queryKey: ["allProductVariants", productIdsWithoutVariant.join(",")],
+    queryFn: async () => {
+      if (!productIdsWithoutVariant.length) return [];
+      const { data, error } = await supabase
+        .from("product_variants")
+        .select("id, product_id, color, size, ohms, volume_ml, flavor_id, flavors(name), stock_quantity")
+        .in("product_id", productIdsWithoutVariant)
+        .order("flavor_id");
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: productIdsWithoutVariant.length > 0,
+    staleTime: 60_000,
+  });
+
+  // ── Mapas de lookup ───────────────────────────────────────────────────────
+  const specificVariantsMap = new Map((specificVariants ?? []).map((v: any) => [v.id, v]));
+
+  // product_id → variantes[]
+  const productVariantsMap = new Map<number, any[]>();
+  (allProductVariants ?? []).forEach((v: any) => {
+    const arr = productVariantsMap.get(v.product_id) ?? [];
+    arr.push(v);
+    productVariantsMap.set(v.product_id, arr);
+  });
+
+  // ── Combina tudo ──────────────────────────────────────────────────────────
+  const enrichedItems = (rawItems ?? []).map((item: any) => ({
     ...item,
-    product_variants: item.variant_id ? variantsMap.get(item.variant_id) ?? null : null,
+    // Variante específica (pedidos novos com variant_id)
+    specificVariant: item.variant_id ? specificVariantsMap.get(item.variant_id) ?? null : null,
+    // Todas as variantes do produto (pedidos antigos sem variant_id)
+    allVariants: (!item.variant_id && item.item_id)
+      ? (productVariantsMap.get(item.item_id) ?? [])
+      : [],
   }));
 
   const orders = rawOrders?.map((order: any) => ({
     ...order,
-    order_items: allItems.filter((item: any) => item.order_id === order.id),
+    order_items: enrichedItems.filter((item: any) => item.order_id === order.id),
   }));
 
   const isLoadingAll = isLoadingOrders || isLoadingItems;
 
   if (!client) return null;
 
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return "-";
-    return new Date(dateString).toLocaleDateString("pt-BR");
-  };
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  const formatDate = (d: string | null) =>
+    d ? new Date(d).toLocaleDateString("pt-BR") : "-";
 
-  const formatDateTime = (dateString: string) => {
-    return new Date(dateString).toLocaleString("pt-BR", {
-      day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit'
+  const formatDateTime = (d: string) =>
+    new Date(d).toLocaleString("pt-BR", {
+      day: "2-digit", month: "2-digit", year: "2-digit",
+      hour: "2-digit", minute: "2-digit",
     });
-  };
 
   const formatCurrency = (val: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'Finalizada': return <Badge className="bg-green-600">Finalizada</Badge>;
-      case 'Pago':       return <Badge className="bg-green-600">Pago</Badge>;
-      case 'Cancelado':  return <Badge variant="destructive">Cancelado</Badge>;
-      case 'Pendente':   return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Pendente</Badge>;
+      case "Finalizada": return <Badge className="bg-green-600">Finalizada</Badge>;
+      case "Pago":       return <Badge className="bg-green-600">Pago</Badge>;
+      case "Cancelado":  return <Badge variant="destructive">Cancelado</Badge>;
+      case "Pendente":   return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Pendente</Badge>;
       default:           return <Badge variant="secondary">{status}</Badge>;
     }
   };
 
-  // Renderiza os badges de variação de um item
-  const renderVariantBadges = (item: any) => {
-    const pv = item.product_variants;
-    if (!pv) return null;
+  // Monta os atributos de uma variante como array de strings
+  const getVariantAttrs = (v: any): string[] => {
+    const attrs: string[] = [];
+    const flavor = v.flavors?.name ?? v.flavor_name;
+    if (flavor)       attrs.push(flavor);
+    if (v.color?.trim())  attrs.push(v.color.trim());
+    if (v.size?.trim())   attrs.push(v.size.trim());
+    if (v.ohms?.trim())   attrs.push(`${v.ohms.trim()}Ω`);
+    if (v.volume_ml)      attrs.push(`${v.volume_ml}ml`);
+    return attrs;
+  };
 
-    const badges: React.ReactNode[] = [];
+  // Badge de uma variante específica (comprada — pedidos novos)
+  const renderSpecificVariant = (v: any) => {
+    const attrs = getVariantAttrs(v);
+    if (!attrs.length) return null;
+    return (
+      <div className="flex flex-wrap gap-1 mt-1">
+        {attrs.map((a, i) => (
+          <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-800 text-[10px] font-bold border border-green-200">
+            ✓ {a}
+          </span>
+        ))}
+      </div>
+    );
+  };
 
-    const flavorName = pv.flavors?.name;
-    if (flavorName) {
-      badges.push(
-        <span key="flavor" className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 text-[10px] font-bold">
-          <Wind className="w-2.5 h-2.5" /> {flavorName}
-        </span>
-      );
-    }
-    if (pv.color && pv.color.trim()) {
-      badges.push(
-        <span key="color" className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-pink-100 text-pink-700 text-[10px] font-bold">
-          <Palette className="w-2.5 h-2.5" /> {pv.color}
-        </span>
-      );
-    }
-    if (pv.size && pv.size.trim()) {
-      badges.push(
-        <span key="size" className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold">
-          <Ruler className="w-2.5 h-2.5" /> {pv.size}
-        </span>
-      );
-    }
-    if (pv.ohms && pv.ohms.trim()) {
-      badges.push(
-        <span key="ohms" className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold">
-          <Zap className="w-2.5 h-2.5" /> {pv.ohms}Ω
-        </span>
-      );
-    }
-    if (pv.volume_ml) {
-      badges.push(
-        <span key="volume" className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-700 text-[10px] font-bold">
-          {pv.volume_ml}ml
-        </span>
-      );
-    }
-
-    if (badges.length === 0) return null;
-    return <div className="flex flex-wrap gap-1 mt-1">{badges}</div>;
+  // Lista de TODAS as variantes do produto (pedidos antigos sem variant_id)
+  const renderAllVariants = (variants: any[]) => {
+    if (!variants.length) return null;
+    return (
+      <div className="mt-2 space-y-1">
+        <div className="flex items-center gap-1 text-[10px] font-bold text-amber-700 uppercase">
+          <AlertCircle className="w-3 h-3" />
+          Variação não registrada — opções disponíveis do produto:
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {variants.map((v: any, i: number) => {
+            const attrs = getVariantAttrs(v);
+            if (!attrs.length) return null;
+            return (
+              <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-semibold border border-slate-200">
+                {attrs.join(" · ")}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -235,8 +262,8 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
         </DialogHeader>
 
         <div className="flex-1 overflow-hidden flex flex-col">
+          {/* ── CABEÇALHO DO PERFIL ── */}
           <div className="p-6 pb-0 bg-white">
-            {/* CABEÇALHO DO PERFIL */}
             <div className="flex items-start justify-between bg-slate-50 p-4 rounded-xl border border-slate-100 mb-6">
               <div className="flex gap-4">
                 <div className="h-16 w-16 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-2xl border-4 border-white shadow-sm">
@@ -251,7 +278,7 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                     {client.email || userEmailData?.email || profile?.email || (isLoadingEmail ? "..." : "...")}
                   </div>
                   <div className="flex gap-2 mt-2">
-                    {profile?.role === 'adm' && <Badge className="bg-red-500">Administrador</Badge>}
+                    {profile?.role === "adm" && <Badge className="bg-red-500">Administrador</Badge>}
                     {client.force_pix_on_next_purchase ? (
                       <Badge variant="destructive" className="flex gap-1 items-center">
                         <Shield className="w-3 h-3" /> Restrito (Pix)
@@ -274,16 +301,10 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
           <Tabs defaultValue="orders" className="flex-1 flex flex-col overflow-hidden bg-white pt-2">
             <div className="px-6 border-b">
               <TabsList className="w-full justify-start h-12 bg-white z-10 p-0 gap-6">
-                <TabsTrigger
-                  value="orders"
-                  className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none rounded-none px-0 pb-2 h-full font-bold text-slate-500 data-[state=active]:text-primary bg-transparent"
-                >
+                <TabsTrigger value="orders" className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none rounded-none px-0 pb-2 h-full font-bold text-slate-500 data-[state=active]:text-primary bg-transparent">
                   Histórico de Pedidos ({rawOrders?.length || 0})
                 </TabsTrigger>
-                <TabsTrigger
-                  value="details"
-                  className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none rounded-none px-0 pb-2 h-full font-bold text-slate-500 data-[state=active]:text-primary bg-transparent"
-                >
+                <TabsTrigger value="details" className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none rounded-none px-0 pb-2 h-full font-bold text-slate-500 data-[state=active]:text-primary bg-transparent">
                   Dados Pessoais
                 </TabsTrigger>
               </TabsList>
@@ -310,13 +331,8 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                             <div className="min-w-0">
                               <p className="text-[10px] text-muted-foreground uppercase">Email</p>
                               <div className="flex items-center gap-1 font-medium">
-                                {isLoadingEmail ? (
-                                  <Skeleton className="h-4 w-32" />
-                                ) : (
-                                  <>
-                                    <Mail className="w-3 h-3 text-slate-400" />
-                                    <span className="break-words max-w-full block">{client.email || userEmailData?.email || "-"}</span>
-                                  </>
+                                {isLoadingEmail ? <Skeleton className="h-4 w-32" /> : (
+                                  <><Mail className="w-3 h-3 text-slate-400" /><span className="break-words max-w-full block">{client.email || userEmailData?.email || "-"}</span></>
                                 )}
                               </div>
                             </div>
@@ -343,7 +359,6 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                           </div>
                         </div>
 
-                        {/* ENDEREÇO */}
                         <div className="space-y-3 p-4 border rounded-lg bg-white shadow-sm min-w-0">
                           <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2 border-b pb-2 mb-2">
                             <MapPin className="w-4 h-4 text-slate-400" /> Endereço Principal
@@ -354,16 +369,13 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                             </p>
                             {profile?.complement && <p className="text-slate-500">{profile.complement}</p>}
                             {profile?.neighborhood && (
-                              <p className="text-slate-600">
-                                {profile.neighborhood} - {profile.city}/{profile.state}
-                              </p>
+                              <p className="text-slate-600">{profile.neighborhood} - {profile.city}/{profile.state}</p>
                             )}
                             {profile?.cep && <p className="text-slate-500 text-xs">CEP: {profile.cep}</p>}
                           </div>
                         </div>
                       </div>
 
-                      {/* FIDELIDADE E STATS */}
                       <div className="p-4 bg-yellow-50/50 border border-yellow-100 rounded-lg">
                         <h4 className="text-sm font-bold text-yellow-800 flex items-center gap-2 mb-4">
                           <Award className="w-4 h-4" /> Club DK & Estatísticas
@@ -419,31 +431,22 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                         {orders.map((order: any) => {
                           const items = order.order_items ?? [];
                           const itemsSubtotal = items.reduce(
-                            (acc: number, it: any) =>
-                              acc + (Number(it.price_at_purchase) || 0) * (Number(it.quantity) || 0),
-                            0
+                            (acc: number, it: any) => acc + (Number(it.price_at_purchase) || 0) * (Number(it.quantity) || 0), 0
                           );
-                          const shipping  = Number(order.shipping_cost)   || 0;
-                          const donation  = Number(order.donation_amount)  || 0;
-                          const coupon    = Number(order.coupon_discount)  || 0;
-
-                          // Usa total_price do banco como fallback quando itens ainda não carregaram
+                          const shipping = Number(order.shipping_cost) || 0;
+                          const donation = Number(order.donation_amount) || 0;
+                          const coupon   = Number(order.coupon_discount) || 0;
                           const orderTotal = items.length > 0
                             ? itemsSubtotal + shipping + donation - coupon
                             : Number(order.total_price) || 0;
 
                           return (
-                            <AccordionItem
-                              key={order.id}
-                              value={String(order.id)}
-                              className="border rounded-lg bg-white overflow-hidden shadow-sm"
-                            >
+                            <AccordionItem key={order.id} value={String(order.id)} className="border rounded-lg bg-white overflow-hidden shadow-sm">
                               <AccordionTrigger className="px-4 py-3 hover:bg-slate-50 hover:no-underline">
                                 <div className="flex items-center justify-between w-full pr-4">
                                   <div className="flex flex-col items-start gap-1">
                                     <span className="font-bold text-sm flex items-center gap-2">
-                                      Pedido #{order.id}
-                                      {getStatusBadge(order.status)}
+                                      Pedido #{order.id} {getStatusBadge(order.status)}
                                     </span>
                                     <span className="text-xs text-muted-foreground flex items-center gap-1">
                                       <Calendar className="w-3 h-3" /> {formatDateTime(order.created_at)}
@@ -451,9 +454,7 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                                   </div>
                                   <div className="text-right">
                                     <span className="font-black text-slate-800">{formatCurrency(orderTotal)}</span>
-                                    <p className="text-[10px] text-muted-foreground uppercase">
-                                      {order.payment_method || 'Pix'}
-                                    </p>
+                                    <p className="text-[10px] text-muted-foreground uppercase">{order.payment_method || "Pix"}</p>
                                   </div>
                                 </div>
                               </AccordionTrigger>
@@ -461,7 +462,7 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                               <AccordionContent className="px-4 pb-4 bg-slate-50/50 border-t">
                                 <div className="pt-3 space-y-3">
 
-                                  {/* ── RESUMO FINANCEIRO ── */}
+                                  {/* Resumo financeiro */}
                                   <div className="flex justify-end mb-2">
                                     <div className="text-sm text-slate-700 bg-white p-3 rounded-lg shadow-sm border min-w-[220px] space-y-1">
                                       {items.length > 0 && (
@@ -493,7 +494,7 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                                     </div>
                                   </div>
 
-                                  {/* ── LISTA DE PRODUTOS ── */}
+                                  {/* Lista de produtos */}
                                   {isLoadingItems ? (
                                     <div className="space-y-2">
                                       <Skeleton className="h-16 w-full" />
@@ -511,10 +512,7 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                                       </p>
                                       <div className="space-y-2">
                                         {items.map((item: any, idx: number) => (
-                                          <div
-                                            key={idx}
-                                            className="flex items-start gap-3 bg-white p-3 rounded-lg border border-slate-100 shadow-sm"
-                                          >
+                                          <div key={idx} className="flex items-start gap-3 bg-white p-3 rounded-lg border border-slate-100 shadow-sm">
                                             {item.image_url_at_purchase ? (
                                               <img
                                                 src={item.image_url_at_purchase}
@@ -527,14 +525,16 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                                               </div>
                                             )}
                                             <div className="flex-1 min-w-0">
-                                              <p
-                                                className="text-sm font-semibold text-slate-800 leading-snug"
-                                                title={item.name_at_purchase}
-                                              >
+                                              <p className="text-sm font-semibold text-slate-800 leading-snug" title={item.name_at_purchase}>
                                                 {item.name_at_purchase}
                                               </p>
-                                              {/* Badges de variação */}
-                                              {renderVariantBadges(item)}
+
+                                              {/* Variante específica (pedidos novos com variant_id salvo) */}
+                                              {item.specificVariant && renderSpecificVariant(item.specificVariant)}
+
+                                              {/* Todas as variantes do produto (pedidos antigos sem variant_id) */}
+                                              {!item.specificVariant && item.allVariants.length > 0 && renderAllVariants(item.allVariants)}
+
                                               <p className="text-xs text-slate-500 mt-1">
                                                 {item.quantity} un. × {formatCurrency(item.price_at_purchase)}
                                               </p>
