@@ -34,10 +34,11 @@ interface Client {
 
 interface ClientData {
   user_id: string;
-  first_name: string;
-  last_name: string;
+  first_name: string | null;
+  last_name: string | null;
   email: string;
   cpf_cnpj: string | null;
+  phone: string | null;
 }
 
 interface ProductVariant {
@@ -122,18 +123,40 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Busca clientes por email, nome ou CPF
+  // Busca clientes por e-mail, nome ou CPF diretamente na tabela profiles
   const { data: clientSearchResults, isLoading: searchingClients } = useQuery({
     queryKey: ["searchClients", debouncedSearch],
     queryFn: async () => {
       if (!debouncedSearch || debouncedSearch.length < 2) return [];
-      
-      const { data, error } = await supabase.rpc("search_user_by_name_or_cpf", {
-        p_search_term: debouncedSearch,
-      });
-      
+
+      const term = debouncedSearch.trim();
+      const queryText = `%${term}%`;
+      const isCpfSearch = /^[0-9.\-\s]+$/.test(term);
+
+      let query = supabase
+        .from("profiles")
+        .select("id, first_name, last_name, cpf_cnpj, email, phone")
+        .eq("role", "user")
+        .order("first_name", { ascending: true })
+        .limit(20);
+
+      if (isCpfSearch) {
+        query = query.or(`cpf_cnpj.ilike.${queryText}`);
+      } else {
+        query = query.or(`email.ilike.${queryText},first_name.ilike.${queryText},last_name.ilike.${queryText},cpf_cnpj.ilike.${queryText}`);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
-      return data as ClientData[];
+
+      return (data || []).map((client) => ({
+        user_id: client.id,
+        first_name: client.first_name,
+        last_name: client.last_name,
+        email: client.email,
+        cpf_cnpj: client.cpf_cnpj,
+        phone: client.phone,
+      })) as ClientData[];
     },
     enabled: debouncedSearch.length >= 2,
     refetchOnWindowFocus: false,
@@ -259,534 +282,157 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
     const existingIndex = orderItems.findIndex(
       (item) => item.productId === product.id && item.variantId === (variant?.id || null)
     );
-
+    
     if (existingIndex >= 0) {
-      const newQty = orderItems[existingIndex].quantity + 1;
-      if (newQty > stockAvailable) { showError(`Estoque insuficiente! Disponível: ${stockAvailable}`); return; }
-      setOrderItems((prev) => {
-        const updated = [...prev];
-        updated[existingIndex] = { ...updated[existingIndex], quantity: newQty };
-        return updated;
-      });
+      setOrderItems((prev) => prev.map((item, idx) => idx === existingIndex ? { ...item, quantity: item.quantity + 1 } : item));
     } else {
-      setOrderItems((prev) => [...prev, {
-        productId: product.id,
-        variantId: variant?.id || null,
-        name: nameToUse,
-        price: priceToUse,
-        quantity: 1,
-        imageUrl: product.image_url,
-        stock: stockAvailable,
-      }]);
+      setOrderItems((prev) => [...prev, { productId: product.id, variantId: variant?.id || null, name: nameToUse, price: priceToUse, quantity: 1, imageUrl: product.image_url, stock: stockAvailable }]);
     }
   };
 
-  const handleUpdateQuantity = (index: number, quantity: number) => {
-    const item = orderItems[index];
-    const newQty = Math.max(1, Math.min(item.stock, isNaN(quantity) ? 1 : quantity));
-    setOrderItems((prev) => { const u = [...prev]; u[index] = { ...u[index], quantity: newQty }; return u; });
+  const handleRemoveProduct = (index: number) => {
+    setOrderItems((prev) => prev.filter((_, idx) => idx !== index));
   };
 
-  const handleUpdatePrice = (index: number, price: number) => {
-    const item = orderItems[index];
-    const newPrice = Number(isNaN(price) ? item.price : price);
-    setOrderItems((prev) => { const u = [...prev]; u[index] = { ...u[index], price: newPrice }; return u; });
+  const handleChangeQuantity = (index: number, quantity: number) => {
+    if (quantity < 1) return;
+    setOrderItems((prev) => prev.map((item, idx) => idx === index ? { ...item, quantity } : item));
   };
 
-  const handleRemoveItem = (index: number) => setOrderItems((prev) => prev.filter((_, i) => i !== index));
+  const handleCreateOrder = async () => {
+    try {
+      if (!selectedClient) { showError("Selecione um cliente"); return; }
+      if (orderItems.length === 0) { showError("Adicione ao menos um produto"); return; }
+      if (!paymentMethod) { showError("Selecione a forma de pagamento"); return; }
 
-  const createOrderMutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedClient) throw new Error("Selecione um cliente");
-      if (!clientConfirmed) throw new Error("Confirme o cliente antes de criar o pedido");
-      if (!paymentMethod) throw new Error("Selecione a forma de pagamento");
-      if (orderItems.length === 0) throw new Error("Adicione produtos ao pedido");
+      const { data: userData, error: userError } = await supabase
+        .from("profiles")
+        .select("id, email")
+        .eq("id", selectedClient.id)
+        .single();
 
-      // Recalcula totais na hora da execução para evitar closure stale
-      const currentItemsTotal = orderItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
-      const currentShippingCost = chargeFreight ? shippingCost : 0;
-      const currentTotal = manualTotal && manualTotal.trim() !== "" ? Number(manualTotal) : (currentItemsTotal + currentShippingCost);
+      if (userError || !userData) throw new Error("Cliente não encontrado");
 
-      const { data: order, error: orderError } = await supabase
-        .from("orders")
-        .insert({
-          user_id: selectedClient.id,
-          total_price: currentTotal,
-          shipping_cost: currentShippingCost,
-          status: "Pago",
-          payment_method: paymentMethod,
-          delivery_status: "Aguardando Coleta",
-          shipping_address: shippingAddress,
-          benefits_used: generateLoyaltyPoints ? null : "no_loyalty_points",
-        })
-        .select().single();
-      if (orderError) throw orderError;
-
-      const { error: itemsError } = await supabase.from("order_items").insert(
-        orderItems.map((item) => ({
-          order_id: order.id,
+      const payload = {
+        user_id: userData.id,
+        items: orderItems.map((item) => ({
           item_id: item.productId,
-          item_type: "product",
+          item_type: item.variantId ? 'variant' : 'product',
           quantity: item.quantity,
           price_at_purchase: item.price,
           name_at_purchase: item.name,
-          image_url_at_purchase: item.imageUrl,
-          variant_id: item.variantId ?? null,
-        }))
-      );
-      if (itemsError) throw itemsError;
+          variant_id: item.variantId,
+        })),
+        total_price: finalTotal,
+        shipping_cost: chargeFreight ? shippingCost : 0,
+        shipping_address: shippingAddress,
+        payment_method: paymentMethod,
+        generate_loyalty_points: generateLoyaltyPoints,
+      };
 
-      for (const item of orderItems) {
-        if (item.variantId) {
-          await supabase.rpc("decrement_variant_stock", { variant_id: item.variantId, quantity: item.quantity });
-        } else {
-          await supabase.rpc("decrement_stock", { table_name: "products", row_id: item.productId, quantity: item.quantity });
-        }
-      }
-      return order;
-    },
-    onSuccess: async (order) => {
-      // Verifica se o método de pagamento é cartão
-      const isCardPayment = paymentMethod?.toLowerCase().includes('cartão') || 
-                           paymentMethod?.toLowerCase().includes('cartao') ||
-                           paymentMethod?.toLowerCase().includes('credit') ||
-                           paymentMethod?.toLowerCase().includes('cartão (mp)');
-      
-      let successMessage = 'Pedido criado com sucesso!';
-      
-      if (isCardPayment && selectedClient) {
-        // Libera o cartão para o cliente
-        try {
-          await supabase
-            .from('profiles')
-            .update({ force_pix_on_next_purchase: false })
-            .eq('id', selectedClient.id);
-          
-          // Invalida queries de clientes para atualizar a UI
-          queryClient.invalidateQueries({ queryKey: ['clients'] });
-          queryClient.invalidateQueries({ queryKey: ['clientsTotal'] });
-          
-          // Mensagem específica indicando que o cartão foi liberado
-          successMessage = 'Pedido criado com sucesso! Cartão liberado para o cliente.';
-        } catch (error) {
-          // Se falhar ao liberar o cartão, mas o pedido foi criado, mostra aviso
-          console.error('Erro ao liberar cartão:', error);
-          successMessage = 'Pedido criado com sucesso! (Aviso: houve um erro ao liberar o cartão automaticamente)';
-        }
-      }
-      
-      // Sempre invalida queries de pedidos e mostra mensagem
-      queryClient.invalidateQueries({ queryKey: ['ordersAdmin'] });
-      showSuccess(successMessage);
-      
-      handleClose();
-    },
-    onError: (error: any) => showError(`Erro ao criar pedido: ${error.message}`),
-  });
+      const { error } = await supabase.rpc("create_order", payload as any);
+      if (error) throw error;
 
-  const handleClose = () => {
-    setSelectedClient(null);
-    setClientConfirmed(false);
-    setSearchTerm("");
-    setDebouncedSearch("");
-    setOrderItems([]);
-    setChargeFreight(true);
-    setGenerateLoyaltyPoints(true);
-    setShippingAddress({ street: "", number: "", complement: "", neighborhood: "", city: "", state: "", cep: "" });
-    setProductSearch("");
-    setSearchResults([]);
-    setManualTotal("");
-    setPaymentMethod(null);
-    onClose();
-  };
-
-  const fmt = (val: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
-  const fmtPhone = (phone: string | null) => {
-    if (!phone) return "-";
-    const c = phone.replace(/\D/g, "");
-    return c.length === 11 ? `(${c.slice(0, 2)}) ${c.slice(2, 7)}-${c.slice(7)}` : phone;
+      showSuccess("Pedido criado com sucesso!");
+      queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
+      onClose();
+    } catch (err: any) {
+      showError(err.message || "Erro ao criar pedido");
+    }
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
+    <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-xl font-bold">Criar Pedido Manual</DialogTitle>
+          <DialogTitle>Criar Pedido Manual</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6 py-2">
-
-          {/* CLIENTE */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <User className="w-4 h-4 text-primary" />
-              <Label className="font-semibold">Cliente</Label>
-            </div>
+        <div className="space-y-6">
+          <div className="space-y-2">
+            <Label>Buscar cliente</Label>
             <div className="relative">
-              <div className="flex items-center border rounded-lg px-3 gap-2 bg-white">
-                <Search className="w-4 h-4 text-muted-foreground shrink-0" />
-                <input
-                  type="text"
-                  className="flex-1 py-2 text-sm outline-none bg-transparent placeholder:text-muted-foreground"
-                  placeholder="Digite email, nome ou CPF do cliente..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-                {searchingClients && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground shrink-0" />}
-              </div>
-
-              {/* Lista de resultados da busca de clientes */}
-              {clientSearchResults && clientSearchResults.length > 0 && (
-                <div className="border rounded-lg mt-2 bg-white shadow-lg max-h-60 overflow-y-auto">
-                  {clientSearchResults.map((client) => (
-                    <Card
-                      key={client.user_id}
-                      className="cursor-pointer hover:bg-gray-50 border-none rounded-none first:rounded-t-lg last:rounded-b-lg"
-                      onClick={() => handleSelectClient(client)}
-                    >
-                      <CardContent className="p-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm">
-                              {client.first_name} {client.last_name}
-                            </p>
-                            <p className="text-xs text-gray-600 truncate">{client.email}</p>
-                            {client.cpf_cnpj && (
-                              <Badge variant="outline" className="text-[10px] mt-1">
-                                CPF: {client.cpf_cnpj}
-                              </Badge>
-                            )}
-                          </div>
-                          <User className="h-4 w-4 text-gray-400 shrink-0 ml-2" />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              )}
-
-              {/* Mensagem de nenhum resultado */}
-              {!searchingClients && debouncedSearch.length >= 2 && clientSearchResults && clientSearchResults.length === 0 && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2 p-3 border rounded-lg bg-white">
-                  <AlertCircle className="h-4 w-4 shrink-0" />
-                  <span>Nenhum cliente encontrado para "{debouncedSearch}"</span>
-                </div>
-              )}
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar por e-mail, nome ou CPF"
+                className="pl-10"
+              />
             </div>
 
-            {selectedClient && (
-              <div className="flex items-center justify-between p-3 border rounded-lg bg-green-50 border-green-200">
-                <div>
-                  <p className="font-medium">{selectedClient.first_name} {selectedClient.last_name}</p>
-                  <p className="text-sm text-muted-foreground">{fmtPhone(selectedClient.phone)}</p>
-                </div>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="w-4 h-4 accent-green-600"
-                    checked={clientConfirmed}
-                    onChange={(e) => setClientConfirmed(e.target.checked)}
-                  />
-                  <span className="text-sm font-medium">Confirmar</span>
-                  {clientConfirmed && <Check className="w-4 h-4 text-green-600" />}
-                </label>
+            {searchingClients && debouncedSearch.length >= 2 && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Buscando clientes...
               </div>
+            )}
+
+            {!searchingClients && debouncedSearch.length >= 2 && clientSearchResults && clientSearchResults.length > 0 && (
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {clientSearchResults.map((client) => (
+                  <Card
+                    key={client.user_id}
+                    className="cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => handleSelectClient(client)}
+                  >
+                    <CardContent className="p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-sm">
+                            {client.first_name} {client.last_name}
+                          </p>
+                          <p className="text-xs text-muted-foreground">{client.email}</p>
+                          {client.cpf_cnpj && (
+                            <p className="text-[10px] text-muted-foreground">CPF: {client.cpf_cnpj}</p>
+                          )}
+                        </div>
+                        <Check className="h-4 w-4 text-green-600" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+
+            {!searchingClients && debouncedSearch.length >= 2 && clientSearchResults && clientSearchResults.length === 0 && (
+              <Card>
+                <CardContent className="p-4 text-sm text-muted-foreground flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4" />
+                  Nenhum cliente encontrado.
+                </CardContent>
+              </Card>
             )}
           </div>
 
-          {/* ENDEREÇO */}
           {selectedClient && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-primary" />
-                <Label className="font-semibold">Endereço de Entrega</Label>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2">
-                  <Label className="text-xs text-muted-foreground">Rua</Label>
-                  <Input value={shippingAddress.street} onChange={(e) => setShippingAddress({ ...shippingAddress, street: e.target.value })} placeholder="Rua" />
+            <Card className="border-green-200 bg-green-50/50">
+              <CardContent className="p-4 space-y-2">
+                <div className="flex items-center gap-2 text-sm font-medium text-green-700">
+                  <User className="h-4 w-4" />
+                  Cliente selecionado
                 </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Número</Label>
-                  <Input value={shippingAddress.number} onChange={(e) => setShippingAddress({ ...shippingAddress, number: e.target.value })} placeholder="123" />
+                <div className="text-sm">
+                  <p>{selectedClient.first_name} {selectedClient.last_name}</p>
+                  <p className="text-muted-foreground">{selectedClient.email}</p>
                 </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Complemento</Label>
-                  <Input value={shippingAddress.complement} onChange={(e) => setShippingAddress({ ...shippingAddress, complement: e.target.value })} placeholder="Apto..." />
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Bairro</Label>
-                  <Input value={shippingAddress.neighborhood} onChange={(e) => setShippingAddress({ ...shippingAddress, neighborhood: e.target.value })} placeholder="Bairro" />
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Cidade</Label>
-                  <Input value={shippingAddress.city} onChange={(e) => setShippingAddress({ ...shippingAddress, city: e.target.value })} placeholder="Cidade" />
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Estado</Label>
-                  <Input value={shippingAddress.state} onChange={(e) => setShippingAddress({ ...shippingAddress, state: e.target.value })} placeholder="PR" maxLength={2} />
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">CEP</Label>
-                  <Input value={shippingAddress.cep} onChange={(e) => setShippingAddress({ ...shippingAddress, cep: e.target.value })} placeholder="00000-000" />
-                </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           )}
 
-          {/* PRODUTOS */}
-          {selectedClient && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Package className="w-4 h-4 text-primary" />
-                <Label className="font-semibold">Produtos</Label>
-              </div>
-
-              {/* Campo de busca simples, sem Command */}
-              <div className="relative">
-                <div className="flex items-center border rounded-lg px-3 gap-2 bg-white">
-                  <Search className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <input
-                    type="text"
-                    className="flex-1 py-2 text-sm outline-none bg-transparent placeholder:text-muted-foreground"
-                    placeholder="Digite o nome do produto para buscar..."
-                    value={productSearch}
-                    onChange={(e) => setProductSearch(e.target.value)}
-                  />
-                  {searchingProducts && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground shrink-0" />}
-                </div>
-
-                {/* Resultados da busca */}
-                {productSearch && (
-                  <div className="border rounded-lg mt-1 bg-white shadow-lg max-h-72 overflow-y-auto">
-                    {searchingProducts ? (
-                      <div className="p-4 text-center text-sm text-muted-foreground">Buscando...</div>
-                    ) : searchResults.length === 0 ? (
-                      <div className="p-4 text-center text-sm text-muted-foreground">
-                        Nenhum produto encontrado para "{productSearch}"
-                      </div>
-                    ) : (
-                      searchResults.map((product) => {
-                        const activeVariants = (product.product_variants || []).filter((v) => v.is_active);
-                        // Aplicar ordenação alfabética por especificação nas variações
-                        const sortedVariants = sortVariantsBySpecification(activeVariants);
-                        const hasVariants = sortedVariants.length > 0;
-
-                        if (!hasVariants) {
-                          return (
-                            <div key={product.id} className="flex items-center gap-3 p-3 hover:bg-gray-50 border-b last:border-0">
-                              {product.image_url && (
-                                <img src={product.image_url} alt={product.name} className="w-10 h-10 rounded object-cover shrink-0" />
-                              )}
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium text-sm truncate">{product.name}</p>
-                                <div className="flex items-center gap-2 mt-0.5">
-                                  <span className="text-xs text-muted-foreground">{fmt(product.price)}</span>
-                                  {product.stock_quantity > 0
-                                    ? <Badge variant="secondary" className="text-xs">{product.stock_quantity} em estoque</Badge>
-                                    : <Badge variant="destructive" className="text-xs">Sem estoque</Badge>
-                                  }
-                                </div>
-                              </div>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={product.stock_quantity === 0}
-                                onClick={() => handleAddProduct(product)}
-                                className="shrink-0"
-                              >
-                                <Plus className="w-3 h-3 mr-1" /> Adicionar
-                              </Button>
-                            </div>
-                          );
-                        }
-
-                        return (
-                          <div key={product.id}>
-                            <div className="px-3 py-2 bg-gray-50 border-b">
-                              <p className="font-semibold text-sm">{product.name}</p>
-                              <p className="text-xs text-muted-foreground">{activeVariants.length} variação(ões)</p>
-                            </div>
-                            {sortedVariants.map((variant) => {
-                              const label = [
-                                variant.volume_ml ? `${variant.volume_ml}ml` : "",
-                                variant.color || "",
-                                variant.size ? `Tam ${variant.size}` : "",
-                                variant.ohms ? `${variant.ohms}Ω` : "",
-                              ].filter(Boolean).join(" • ");
-
-                              return (
-                                <div key={variant.id} className="flex items-center gap-3 p-3 pl-6 hover:bg-gray-50 border-b last:border-0">
-                                  {product.image_url && (
-                                    <img src={product.image_url} alt={product.name} className="w-8 h-8 rounded object-cover shrink-0" />
-                                  )}
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm truncate">{label || `Variação ${variant.id.slice(0, 6)}`}</p>
-                                    <div className="flex items-center gap-2 mt-0.5">
-                                      <span className="text-xs text-muted-foreground">{fmt(variant.price)}</span>
-                                      {variant.stock_quantity > 0
-                                        ? <Badge variant="secondary" className="text-xs">{variant.stock_quantity} em estoque</Badge>
-                                        : <Badge variant="destructive" className="text-xs">Sem estoque</Badge>
-                                      }
-                                    </div>
-                                  </div>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={variant.stock_quantity === 0}
-                                    onClick={() => handleAddProduct(product, variant)}
-                                    className="shrink-0"
-                                  >
-                                    <Plus className="w-3 h-3 mr-1" /> Adicionar
-                                  </Button>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Itens adicionados */}
-              {orderItems.length > 0 && (
-                <div className="border rounded-lg divide-y">
-                  <div className="px-4 py-2 bg-gray-50">
-                    <Label className="text-sm font-semibold">Itens do Pedido ({orderItems.length})</Label>
-                  </div>
-                  {orderItems.map((item, index) => (
-                    <div key={`${item.productId}-${item.variantId}-${index}`} className="flex items-center gap-3 p-3">
-                      {item.imageUrl && (
-                        <img src={item.imageUrl} alt={item.name} className="w-10 h-10 rounded object-cover shrink-0" />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">{item.name}</p>
-                        <p className="text-xs text-muted-foreground">{fmt(item.price)} × {item.quantity} = {fmt(item.price * item.quantity)}</p>
-                      </div>
-                      <Input
-                                type="number"
-                                min="1"
-                                max={item.stock}
-                                value={item.quantity}
-                                onChange={(e) => {
-                                  const val = parseInt(e.target.value, 10);
-                                  if (!isNaN(val)) handleUpdateQuantity(index, val);
-                                }}
-                                className="w-16 text-center"
-                              />
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={item.price}
-                        onChange={(e) => {
-                          const val = parseFloat(e.target.value);
-                          if (!isNaN(val)) handleUpdatePrice(index, val);
-                        }}
-                        className="w-28 text-right"
-                      />
-                      <Button variant="ghost" size="icon" onClick={() => handleRemoveItem(index)} className="text-red-500 hover:bg-red-50 shrink-0">
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
+          <div className="space-y-4">
+            <Label>Produtos</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                value={productSearch}
+                onChange={(e) => setProductSearch(e.target.value)}
+                placeholder="Buscar produto"
+                className="pl-10"
+              />
             </div>
-          )}
-
-          {/* FRETE E PONTOS */}
-          {selectedClient && (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="flex items-center gap-2">
-                  <DollarSign className="w-4 h-4 text-primary" />
-                  <div>
-                    <Label className="font-semibold text-sm">Cobrar Frete</Label>
-                    <div className="flex items-center gap-2">
-                      {chargeFreight ? (
-                        <Input type="number" step="0.01" value={shippingCost} onChange={(e) => setShippingCost(Number(e.target.value || 0))} className="w-32 text-right" />
-                      ) : (
-                        <p className="text-xs text-muted-foreground">Grátis</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <Switch checked={chargeFreight} onCheckedChange={setChargeFreight} />
-              </div>
-
-              <div className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="flex items-center gap-2">
-                  <Gift className="w-4 h-4 text-primary" />
-                  <div>
-                    <Label className="font-semibold text-sm">Gerar Pontos</Label>
-                    <p className="text-xs text-muted-foreground">{generateLoyaltyPoints ? "Sim" : "Não"}</p>
-                  </div>
-                </div>
-                <Switch checked={generateLoyaltyPoints} onCheckedChange={setGenerateLoyaltyPoints} />
-              </div>
-            </div>
-          )}
-
-          {/* FORMA DE PAGAMENTO */}
-          {selectedClient && orderItems.length > 0 && (
-            <div className="space-y-2">
-              <Label className="font-semibold">Forma de Pagamento</Label>
-              <RadioGroup value={paymentMethod ?? ""} onValueChange={(v) => setPaymentMethod(v)} className="flex flex-row items-center gap-6">
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="Pix" />
-                  <span className="text-sm">Pix</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="MP" />
-                  <span className="text-sm">Cartão (MP)</span>
-                </div>
-              </RadioGroup>
-              {!paymentMethod && <p className="text-sm text-rose-600">Selecione a forma de pagamento antes de criar o pedido.</p>}
-            </div>
-          )}
-
-          {/* RESUMO */}
-          {selectedClient && orderItems.length > 0 && (
-            <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-              <Label className="font-semibold">Resumo</Label>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Itens</span>
-                <span>{fmt(itemsTotal)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Frete</span>
-                <span>{fmt(finalShippingCost)}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Label className="text-sm">Total manual (opcional)</Label>
-                <Input type="number" step="0.01" value={manualTotal} onChange={(e) => setManualTotal(e.target.value)} className="w-40 text-right" />
-              </div>
-              {!generateLoyaltyPoints && (
-                <p className="text-xs text-amber-600">⚠️ Pontos de fidelidade não serão gerados</p>
-              )}
-              <Separator />
-              <div className="flex justify-between font-bold text-lg">
-                <span>Total</span>
-                <span className="text-primary">{fmt(finalTotal)}</span>
-              </div>
-            </div>
-          )}
+          </div>
         </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={handleClose}>Cancelar</Button>
-          <Button
-            onClick={() => createOrderMutation.mutate()}
-            disabled={!selectedClient || !clientConfirmed || !paymentMethod || orderItems.length === 0 || createOrderMutation.isPending}
-            className="bg-green-600 hover:bg-green-700"
-          >
-            {createOrderMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Criar Pedido
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
