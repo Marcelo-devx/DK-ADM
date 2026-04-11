@@ -44,7 +44,7 @@ const fetchVariants = async (productId: string) => {
     .from('product_variants')
     .select(`*, flavors(name)`)
     .eq('product_id', productId)
-    .eq('is_active', true);
+    .order('created_at', { ascending: true });
   if (error) throw error;
   return data as any[];
 };
