@@ -88,7 +88,7 @@ serve(async (req) => {
             new_value: newValue !== null ? String(newValue) : null,
             changed_by: user.id,
             change_type: fieldConfig.type,
-            reason
+            reason: reason || null
           })
         }
       }

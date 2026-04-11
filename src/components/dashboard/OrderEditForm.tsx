@@ -21,10 +21,8 @@ interface OrderEditFormProps {
 
 export function OrderEditForm({ order, onSave, onCancel, isLoading }: OrderEditFormProps) {
   const [updates, setUpdates] = useState<any>({});
-  const [reason, setReason] = useState("");
 
   useEffect(() => {
-    // Inicializar com valores do pedido
     setUpdates({
       status: order.status,
       delivery_status: order.delivery_status,
@@ -39,10 +37,7 @@ export function OrderEditForm({ order, onSave, onCancel, isLoading }: OrderEditF
   }, [order]);
 
   const handleSubmit = async () => {
-    if (!reason.trim()) {
-      return;
-    }
-    await onSave(updates, reason);
+    await onSave(updates, "");
   };
 
   const handleChange = (field: string, value: any) => {
@@ -256,7 +251,7 @@ export function OrderEditForm({ order, onSave, onCancel, isLoading }: OrderEditF
         </div>
       </div>
 
-      {/* Observação */}
+      {/* Informações Adicionais */}
       <div className="space-y-4">
         <h4 className="font-medium text-sm text-muted-foreground uppercase">Informações Adicionais</h4>
         <div className="space-y-2">
@@ -270,20 +265,6 @@ export function OrderEditForm({ order, onSave, onCancel, isLoading }: OrderEditF
         </div>
       </div>
 
-      {/* Motivo da alteração */}
-      <div className="space-y-2 p-4 bg-slate-50 border rounded-lg">
-        <Label htmlFor="change_reason">
-          Motivo da Alteração <span className="text-red-500">*</span>
-        </Label>
-        <Textarea
-          id="change_reason"
-          placeholder="Descreva o motivo desta alteração..."
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          rows={2}
-        />
-      </div>
-
       {/* Ações */}
       <div className="flex items-center justify-end gap-3 pt-4 border-t">
         <Button variant="outline" onClick={onCancel} disabled={isLoading}>
@@ -291,7 +272,7 @@ export function OrderEditForm({ order, onSave, onCancel, isLoading }: OrderEditF
         </Button>
         <Button
           onClick={handleSubmit}
-          disabled={!hasChanges || !reason.trim() || isLoading}
+          disabled={!hasChanges || isLoading}
           className="gap-2"
         >
           {isLoading ? (
