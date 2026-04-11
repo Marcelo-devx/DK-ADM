@@ -45,6 +45,15 @@ interface OrderItem {
   quantity: number;
   price_at_purchase: number;
   image_url_at_purchase: string | null;
+  variant_id: string | null;
+  variant?: {
+    flavor_id: number | null;
+    volume_ml: number | null;
+    color: string | null;
+    ohms: string | null;
+    size: string | null;
+    flavors?: { name: string } | null;
+  } | null;
 }
 
 interface OrderDetailModalProps {
@@ -56,10 +65,13 @@ interface OrderDetailModalProps {
 const fetchOrderItems = async (orderId: number): Promise<OrderItem[]> => {
   const { data, error } = await supabase
     .from("order_items")
-    .select("*")
+    .select("*, product_variants(flavor_id, volume_ml, color, ohms, size, flavors(name))")
     .eq("order_id", orderId);
   if (error) throw new Error(error.message);
-  return data;
+  return data.map((item: any) => ({
+    ...item,
+    variant: item.product_variants ?? null,
+  }));
 };
 
 const fetchCustomerProfile = async (userId: string) => {
@@ -193,7 +205,26 @@ export const OrderDetailModal = ({ order, isOpen, onClose }: OrderDetailModalPro
                       </div>
                       <div>
                         <p className="font-medium text-sm line-clamp-1">{item.name_at_purchase}</p>
-                        <p className="text-xs text-muted-foreground">
+                        {item.variant && (
+                          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                            {item.variant.flavors?.name && (
+                              <span className="text-xs text-primary font-semibold">🍃 {item.variant.flavors.name}</span>
+                            )}
+                            {item.variant.color && (
+                              <span className="text-xs text-muted-foreground">🎨 {item.variant.color}</span>
+                            )}
+                            {item.variant.volume_ml && (
+                              <span className="text-xs text-muted-foreground">💧 {item.variant.volume_ml}ml</span>
+                            )}
+                            {item.variant.ohms && (
+                              <span className="text-xs text-muted-foreground">⚡ {item.variant.ohms}Ω</span>
+                            )}
+                            {item.variant.size && (
+                              <span className="text-xs text-muted-foreground">📐 {item.variant.size}</span>
+                            )}
+                          </div>
+                        )}
+                        <p className="text-xs text-muted-foreground mt-0.5">
                           {item.quantity} un. x {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(item.price_at_purchase)}
                         </p>
                       </div>
