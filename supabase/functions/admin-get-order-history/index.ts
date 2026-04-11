@@ -6,6 +6,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const ADMIN_ROLES = ['adm', 'gerente_geral']
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -15,7 +17,10 @@ serve(async (req) => {
     // Verificar autenticação
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
-      return new Response('Unauthorized', { status: 401, headers: corsHeaders })
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
     // Criar cliente Supabase
@@ -27,30 +32,38 @@ serve(async (req) => {
     const token = authHeader.replace('Bearer ', '')
     const { data: { user }, error: userError } = await supabase.auth.getUser(token)
     if (userError || !user) {
-      return new Response('Invalid token', { status: 401, headers: corsHeaders })
+      console.error('[admin-get-order-history] Token inválido:', userError?.message)
+      return new Response(
+        JSON.stringify({ error: 'Invalid token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
-    // Verificar se é admin ou é dono do pedido
-    const { data: profile } = await supabase
+    // Verificar role do usuário
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', user.id)
       .single()
 
-    const isAdmin = profile && profile.role === 'adm'
+    if (profileError) {
+      console.error('[admin-get-order-history] Erro ao buscar profile:', profileError.message)
+    }
+
+    const isAdminRole = profile && ADMIN_ROLES.includes(profile.role)
 
     // Parse request body
     const { orderId } = await req.json()
 
     if (!orderId) {
-      return new Response('Invalid request body: orderId is required', { 
-        status: 400, 
-        headers: corsHeaders 
-      })
+      return new Response(
+        JSON.stringify({ error: 'orderId é obrigatório' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
-    // Se não for admin, verificar se o pedido pertence ao usuário
-    if (!isAdmin) {
+    // Se não for admin/gerente_geral, verificar se o pedido pertence ao usuário
+    if (!isAdminRole) {
       const { data: orderCheck } = await supabase
         .from('orders')
         .select('user_id')
@@ -58,7 +71,10 @@ serve(async (req) => {
         .single()
 
       if (!orderCheck || orderCheck.user_id !== user.id) {
-        return new Response('Forbidden', { status: 403, headers: corsHeaders })
+        return new Response(
+          JSON.stringify({ error: 'Forbidden' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
       }
     }
 
@@ -79,10 +95,13 @@ serve(async (req) => {
 
     if (historyError) {
       console.error('[admin-get-order-history] Erro ao buscar histórico:', historyError)
-      return new Response(historyError.message, { status: 500, headers: corsHeaders })
+      return new Response(
+        JSON.stringify({ error: historyError.message }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
-    console.log(`[admin-get-order-history] Histórico do pedido ${orderId}: ${history?.length || 0} entradas`)
+    console.log(`[admin-get-order-history] Histórico do pedido ${orderId}: ${history?.length || 0} entradas. Solicitado por ${user.id} (${profile?.role})`)
 
     return new Response(
       JSON.stringify({ 
@@ -93,7 +112,7 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('[admin-get-order-history] Erro:', error)
+    console.error('[admin-get-order-history] Erro inesperado:', error)
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

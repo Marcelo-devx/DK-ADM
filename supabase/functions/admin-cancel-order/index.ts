@@ -6,6 +6,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const ALLOWED_ROLES = ['adm', 'gerente_geral']
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -15,7 +17,10 @@ serve(async (req) => {
     // Verificar autenticação
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
-      return new Response('Unauthorized', { status: 401, headers: corsHeaders })
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
     // Criar cliente Supabase
@@ -27,28 +32,42 @@ serve(async (req) => {
     const token = authHeader.replace('Bearer ', '')
     const { data: { user }, error: userError } = await supabase.auth.getUser(token)
     if (userError || !user) {
-      return new Response('Invalid token', { status: 401, headers: corsHeaders })
+      console.error('[admin-cancel-order] Token inválido:', userError?.message)
+      return new Response(
+        JSON.stringify({ error: 'Invalid token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
-    // Verificar se é admin
-    const { data: profile } = await supabase
+    // Verificar se tem role permitido (adm ou gerente_geral)
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', user.id)
       .single()
 
-    if (!profile || profile.role !== 'adm') {
-      return new Response('Forbidden - Admin only', { status: 403, headers: corsHeaders })
+    if (profileError) {
+      console.error('[admin-cancel-order] Erro ao buscar profile:', profileError.message)
+    }
+
+    console.log(`[admin-cancel-order] Usuário ${user.id} com role: ${profile?.role}`)
+
+    if (!profile || !ALLOWED_ROLES.includes(profile.role)) {
+      console.warn(`[admin-cancel-order] Acesso negado para role: ${profile?.role}`)
+      return new Response(
+        JSON.stringify({ error: 'Forbidden - Acesso negado. Apenas Admin e Gerente Geral podem cancelar pedidos.' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
     // Parse request body
     const { orderId, reason, returnStock } = await req.json()
 
     if (!orderId || !reason) {
-      return new Response('Invalid request body: orderId and reason are required', { 
-        status: 400, 
-        headers: corsHeaders 
-      })
+      return new Response(
+        JSON.stringify({ error: 'orderId e reason são obrigatórios' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
     // Buscar pedido atual
@@ -59,10 +78,14 @@ serve(async (req) => {
       .single()
 
     if (fetchError || !currentOrder) {
-      return new Response('Order not found', { status: 404, headers: corsHeaders })
+      console.error('[admin-cancel-order] Pedido não encontrado:', orderId, fetchError?.message)
+      return new Response(
+        JSON.stringify({ error: 'Pedido não encontrado' }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
-    // Se o pedido já estiver cancelado, não faz nada
+    // Se o pedido já estiver cancelado, retorna sucesso sem fazer nada
     if (currentOrder.status === 'Cancelado') {
       return new Response(
         JSON.stringify({ 
@@ -73,7 +96,7 @@ serve(async (req) => {
       )
     }
 
-    // Atualizar status para Cancelado
+    // Atualizar status para Cancelado (sem excluir o pedido)
     const { error: updateError } = await supabase
       .from('orders')
       .update({ 
@@ -85,12 +108,14 @@ serve(async (req) => {
 
     if (updateError) {
       console.error('[admin-cancel-order] Erro ao cancelar pedido:', updateError)
-      return new Response(updateError.message, { status: 500, headers: corsHeaders })
+      return new Response(
+        JSON.stringify({ error: updateError.message }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
-    // Se returnStock for true, devolver estoque
-    // O trigger return_order_stock_on_cancel já fará isso automaticamente quando status mudar para Cancelado
-    // Não precisamos fazer nada adicional aqui
+    // O trigger return_order_stock_on_cancel devolve o estoque automaticamente
+    // quando status muda para 'Cancelado'
 
     // Registrar histórico
     const historyEntry = {
@@ -109,9 +134,10 @@ serve(async (req) => {
 
     if (historyError) {
       console.error('[admin-cancel-order] Erro ao inserir histórico:', historyError)
+      // Não falha o cancelamento por causa do histórico
     }
 
-    console.log(`[admin-cancel-order] Pedido ${orderId} cancelado. Devolver estoque: ${returnStock}. Motivo: ${reason}`)
+    console.log(`[admin-cancel-order] Pedido ${orderId} cancelado por ${user.id} (${profile.role}). Devolver estoque: ${returnStock}. Motivo: ${reason}`)
 
     return new Response(
       JSON.stringify({ 
@@ -123,7 +149,7 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('[admin-cancel-order] Erro:', error)
+    console.error('[admin-cancel-order] Erro inesperado:', error)
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

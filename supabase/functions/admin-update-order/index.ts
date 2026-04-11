@@ -6,6 +6,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const ALLOWED_ROLES = ['adm', 'gerente_geral']
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -15,7 +17,10 @@ serve(async (req) => {
     // Verificar autenticação
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
-      return new Response('Unauthorized', { status: 401, headers: corsHeaders })
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
     // Criar cliente Supabase
@@ -27,25 +32,42 @@ serve(async (req) => {
     const token = authHeader.replace('Bearer ', '')
     const { data: { user }, error: userError } = await supabase.auth.getUser(token)
     if (userError || !user) {
-      return new Response('Invalid token', { status: 401, headers: corsHeaders })
+      console.error('[admin-update-order] Token inválido:', userError?.message)
+      return new Response(
+        JSON.stringify({ error: 'Invalid token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
-    // Verificar se é admin
-    const { data: profile } = await supabase
+    // Verificar se tem role permitido (adm ou gerente_geral)
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', user.id)
       .single()
 
-    if (!profile || profile.role !== 'adm') {
-      return new Response('Forbidden - Admin only', { status: 403, headers: corsHeaders })
+    if (profileError) {
+      console.error('[admin-update-order] Erro ao buscar profile:', profileError.message)
+    }
+
+    console.log(`[admin-update-order] Usuário ${user.id} com role: ${profile?.role}`)
+
+    if (!profile || !ALLOWED_ROLES.includes(profile.role)) {
+      console.warn(`[admin-update-order] Acesso negado para role: ${profile?.role}`)
+      return new Response(
+        JSON.stringify({ error: 'Forbidden - Acesso negado. Apenas Admin e Gerente Geral podem editar pedidos.' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
     // Parse request body
     const { orderId, updates, reason } = await req.json()
 
     if (!orderId || !updates || typeof updates !== 'object') {
-      return new Response('Invalid request body', { status: 400, headers: corsHeaders })
+      return new Response(
+        JSON.stringify({ error: 'orderId e updates são obrigatórios' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
     // Buscar pedido atual para comparação
@@ -56,7 +78,11 @@ serve(async (req) => {
       .single()
 
     if (fetchError || !currentOrder) {
-      return new Response('Order not found', { status: 404, headers: corsHeaders })
+      console.error('[admin-update-order] Pedido não encontrado:', orderId, fetchError?.message)
+      return new Response(
+        JSON.stringify({ error: 'Pedido não encontrado' }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
     // Processar alterações e registrar histórico
@@ -102,7 +128,10 @@ serve(async (req) => {
 
     if (updateError) {
       console.error('[admin-update-order] Erro ao atualizar pedido:', updateError)
-      return new Response(updateError.message, { status: 500, headers: corsHeaders })
+      return new Response(
+        JSON.stringify({ error: updateError.message }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
     // Inserir histórico
@@ -117,7 +146,7 @@ serve(async (req) => {
       }
     }
 
-    console.log(`[admin-update-order] Pedido ${orderId} atualizado. ${historyEntries.length} campos alterados.`)
+    console.log(`[admin-update-order] Pedido ${orderId} atualizado por ${user.id} (${profile.role}). ${historyEntries.length} campos alterados.`)
 
     return new Response(
       JSON.stringify({ 
@@ -129,7 +158,7 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('[admin-update-order] Erro:', error)
+    console.error('[admin-update-order] Erro inesperado:', error)
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
