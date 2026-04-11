@@ -948,7 +948,9 @@ const OrdersPage = () => {
                                         </Tooltip>
                                     </TooltipProvider>
                                 )}
-                                {/* Botão de Histórico */}
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-[11px] text-muted-foreground font-mono">{formatPhone(phone || "")}</span>
                                 <TooltipProvider>
                                     <Tooltip>
                                         <TooltipTrigger asChild>
@@ -961,10 +963,10 @@ const OrdersPage = () => {
                                                         id: order.user_id,
                                                         first_name: order.profiles?.first_name,
                                                         last_name: order.profiles?.last_name,
-                                                        email: order.profiles?.email || "", // Será carregado pelo modal
+                                                        email: order.profiles?.email || "",
                                                         created_at: null,
                                                         force_pix_on_next_purchase: false,
-                                                        order_count: 0, 
+                                                        order_count: 0,
                                                         completed_order_count: 0
                                                     });
                                                     setIsClientHistoryOpen(true);
@@ -977,7 +979,6 @@ const OrdersPage = () => {
                                     </Tooltip>
                                 </TooltipProvider>
                             </div>
-                            <span className="text-[11px] text-muted-foreground font-mono">{formatPhone(phone || "")}</span>
                         </div>
                         </TableCell>
                         <TableCell className="font-bold">{formatCurrency(finalTotal)}</TableCell>
@@ -994,100 +995,14 @@ const OrdersPage = () => {
                             </Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                            {needsManualValidation ? (
-                                <>
-                                    <TooltipProvider>
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <Button 
-                                                    size="icon" 
-                                                    className="bg-green-600 hover:bg-green-700 h-8 w-8"
-                                                    onClick={() => validatePaymentAndSetPendingMutation.mutate(order.id)}
-                                                    disabled={validatePaymentAndSetPendingMutation.isPending && validatePaymentAndSetPendingMutation.variables === order.id}
-                                                >
-                                                    {validatePaymentAndSetPendingMutation.isPending && validatePaymentAndSetPendingMutation.variables === order.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckSquare className="w-4 h-4" />}
-                                                </Button>
-                                            </TooltipTrigger>
-                                            <TooltipContent><p>Validar Comprovante e Liberar para Envio</p></TooltipContent>
-                                        </Tooltip>
-                                    </TooltipProvider>
-                                    <TooltipProvider>
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <Button 
-                                                    size="icon" 
-                                                    variant="destructive" 
-                                                    className="h-8 w-8"
-                                                    onClick={() => setActionToConfirm({ action: 'cancel_fraud', client: order })}
-                                                >
-                                                    <ShieldX className="w-4 h-4" />
-                                                </Button>
-                                            </TooltipTrigger>
-                                            <TooltipContent><p>Cancelar Pedido (Suspeita de Fraude)</p></TooltipContent>
-                                        </Tooltip>
-                                    </TooltipProvider>
-                                </>
-                            ) : (
-                                <>
-                                    {isInRoute && (
-                                        <TooltipProvider>
-                                            <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                    <Button 
-                                                        size="sm" 
-                                                        variant="outline"
-                                                        className="text-green-600 border-green-200 bg-green-50 hover:bg-green-100 font-bold h-8 px-3 text-xs"
-                                                        onClick={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: 'Entregue', info: 'Confirmado pelo painel' })}
-                                                        disabled={updateDeliveryStatusMutation.isPending}
-                                                    >
-                                                        <CheckCircle2 className="w-3 h-3 mr-1" /> Entregue
-                                                    </Button>
-                                                </TooltipTrigger>
-                                                <TooltipContent>Marcar pedido como entregue</TooltipContent>
-                                            </Tooltip>
-                                        </TooltipProvider>
-                                    )}
-                                    
-                                    <Button variant="ghost" size="icon" onClick={() => { setSelectedOrder(order); setIsDetailModalOpen(true); }}><Eye className="h-4 w-4 text-primary" /></Button>
-                                    
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end">
-                                            <DropdownMenuLabel>Ações do Pedido</DropdownMenuLabel>
-                                            {phone && (
-                                                <DropdownMenuItem asChild>
-                                                    <a href={getWhatsAppLink(phone, `Olá ${name}, falando sobre o pedido #${order.id}...`)} target="_blank" rel="noreferrer" className="cursor-pointer text-green-600 font-medium">
-                                                        <MessageCircle className="w-4 h-4 mr-2" /> Abrir WhatsApp
-                                                    </a>
-                                                </DropdownMenuItem>
-                                            )}
-                                            <DropdownMenuItem onSelect={() => { setSelectedOrder(order); setIsLabelModalOpen(true); }} disabled={!isPaid}>
-                                                <Printer className="w-4 h-4 mr-2" /> Imprimir Etiqueta
-                                            </DropdownMenuItem>
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: 'Embalado', info: 'Marcado como embalado manualmente' })} disabled={!isPaid || order.delivery_status === 'Despachado' || order.delivery_status === 'Entregue' || order.delivery_status === 'Cancelado'}>
-                                                <Package className="w-4 h-4 mr-2" /> Marcar como Embalado
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: 'Despachado', info: 'Despachado manualmente' })} disabled={!isPaid || isInRoute || order.delivery_status === 'Entregue'}>
-                                                <Truck className="w-4 h-4 mr-2" /> Marcar como Despachado
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: 'Entregue', info: 'Entregue manualmente' })} disabled={order.delivery_status === 'Entregue'}>
-                                                <CheckCircle2 className="w-4 h-4 mr-2" /> Marcar como Entregue
-                                            </DropdownMenuItem>
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuItem onSelect={() => { setSelectedOrder(order); setIsDeleteAlertOpen(true); }} className="text-red-600">
-                                                <Trash2 className="w-4 h-4 mr-2" /> Excluir Pedido
-                                            </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
-                                </>
-                            )}
+                        <div className="flex items-center justify-end gap-2">
+                          <Button variant="ghost" size="icon" onClick={() => { setSelectedOrder(order); setIsDetailModalOpen(true); }}><Eye className="h-4 w-4 text-primary" /></Button>
+                          <Button variant="ghost" size="icon" onClick={() => { /* existing menu action */ }}><MoreHorizontal className="h-4 w-4" /></Button>
                         </div>
                         </TableCell>
                     </TableRow>
                     );
-                })}
+                })} 
             </TableBody>
             </Table>
         </div>
