@@ -73,57 +73,82 @@ const fetchSupplierOrders = async () => {
 };
 
 // ─── Busca server-side de produtos (chamada a cada digitação) ─────────────────
-// Retorna no máximo 60 resultados para manter a UI fluida
+// Busca variantes diretamente para garantir que TODAS aparecem (não só a primeira)
 const searchProducts = async (term: string): Promise<SelectableItem[]> => {
   const trimmed = term.trim();
 
-  // Busca produtos base
+  // Busca variantes diretamente com join ao produto
+  let variantQuery = supabase
+    .from("product_variants")
+    .select(
+      `id, volume_ml, cost_price, stock_quantity, ohms, size, color,
+       flavors(name),
+       products!inner(id, name, brand, category, cost_price, stock_quantity)`
+    )
+    .eq("is_active", true)
+    .order("id")
+    .limit(200);
+
+  if (trimmed) {
+    variantQuery = variantQuery.ilike("products.name", `%${trimmed}%`);
+  }
+
+  const { data: variantsData, error: variantsError } = await variantQuery;
+
+  // Busca produtos sem variantes
   let productQuery = supabase
     .from("products")
-    .select(
-      `id, name, stock_quantity, cost_price, brand, category, is_visible,
-       product_variants(id, flavor_id, volume_ml, price, cost_price, stock_quantity, ohms, size, color, flavors(name))`
-    )
+    .select(`id, name, stock_quantity, cost_price, brand, category`)
     .order("name")
-    .limit(60);
+    .limit(100);
 
   if (trimmed) {
     productQuery = productQuery.ilike("name", `%${trimmed}%`);
   }
 
-  const { data, error } = await productQuery;
-  if (error) throw error;
+  const { data: productsData, error: productsError } = await productQuery;
 
   const flattened: SelectableItem[] = [];
 
-  (data || []).forEach((p: any) => {
-    if (p.product_variants && p.product_variants.length > 0) {
-      p.product_variants.forEach((v: any) => {
-        const flavorName = v.flavors?.name || "";
-        const volumeLabel = v.volume_ml ? `${v.volume_ml}ml` : "";
-        const ohmsLabel = v.ohms ? `${v.ohms}` : "";
-        const sizeLabel = v.size ? `${v.size}` : "";
-        const colorLabel = v.color ? v.color : "";
+  // Conjunto de product_ids que têm variantes ativas
+  const productIdsWithVariants = new Set<number>();
 
-        const nameParts = [colorLabel, sizeLabel, ohmsLabel, flavorName].filter(Boolean);
-        const variationName = nameParts.length > 0 ? ` - ${nameParts.join(" - ")}` : "";
-        const volumeSuffix = volumeLabel ? ` (${volumeLabel})` : "";
+  if (!variantsError && variantsData) {
+    variantsData.forEach((v: any) => {
+      const p = v.products;
+      if (!p) return;
+      productIdsWithVariants.add(p.id);
 
-        flattened.push({
-          id: p.id,
-          variant_id: v.id,
-          name: `${p.name}${variationName}${volumeSuffix}`,
-          stock_quantity: v.stock_quantity ?? 0,
-          cost_price: v.cost_price ?? p.cost_price,
-          is_variant: true,
-          brand: p.brand ?? null,
-          category: p.category ?? null,
-          ohms: v.ohms ?? null,
-          size: v.size ?? null,
-          color: v.color ?? null,
-        });
+      const flavorName = v.flavors?.name || "";
+      const volumeLabel = v.volume_ml ? `${v.volume_ml}ml` : "";
+      const ohmsLabel = v.ohms ? `${v.ohms}` : "";
+      const sizeLabel = v.size ? `${v.size}` : "";
+      const colorLabel = v.color ? v.color : "";
+
+      const nameParts = [colorLabel, sizeLabel, ohmsLabel, flavorName].filter(Boolean);
+      const variationName = nameParts.length > 0 ? ` - ${nameParts.join(" / ")}` : "";
+      const volumeSuffix = volumeLabel ? ` (${volumeLabel})` : "";
+
+      flattened.push({
+        id: p.id,
+        variant_id: v.id,
+        name: `${p.name}${variationName}${volumeSuffix}`,
+        stock_quantity: v.stock_quantity ?? 0,
+        cost_price: v.cost_price ?? p.cost_price,
+        is_variant: true,
+        brand: p.brand ?? null,
+        category: p.category ?? null,
+        ohms: v.ohms ?? null,
+        size: v.size ?? null,
+        color: v.color ?? null,
       });
-    } else {
+    });
+  }
+
+  // Adiciona produtos sem variantes (que não aparecem na query de variantes)
+  if (!productsError && productsData) {
+    productsData.forEach((p: any) => {
+      if (productIdsWithVariants.has(p.id)) return; // já tem variantes, pula
       flattened.push({
         id: p.id,
         variant_id: null,
@@ -137,10 +162,26 @@ const searchProducts = async (term: string): Promise<SelectableItem[]> => {
         size: null,
         color: null,
       });
-    }
-  });
+    });
+  }
 
   return flattened.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+};
+
+// ─── Helper: monta variant_name completo ──────────────────────────────────────
+const buildVariantName = (productName: string | null, variant: any | null): string | null => {
+  if (!productName) return null;
+  if (!variant) return productName;
+
+  const colorLabel = variant.color || null;
+  const ohmsLabel = variant.ohms ? `${variant.ohms}Ω` : null;
+  const sizeLabel = variant.size || null;
+  const flavorName = variant.flavors?.name || null;
+  const volumeMl = variant.volume_ml || null;
+
+  const variantParts = [colorLabel, sizeLabel, ohmsLabel, flavorName].filter(Boolean);
+  const suffix = volumeMl ? ` (${volumeMl}ml)` : "";
+  return `${productName}${variantParts.length > 0 ? " - " + variantParts.join(" / ") : ""}${suffix}`;
 };
 
 // ─── Página principal ─────────────────────────────────────────────────────────
@@ -248,7 +289,7 @@ const SupplierOrdersPage = () => {
         variantIds.length > 0
           ? supabase
               .from("product_variants")
-              .select("id, volume_ml, flavor_id, flavors(name)")
+              .select("id, volume_ml, color, ohms, size, flavors(name)")
               .in("id", variantIds as any)
           : Promise.resolve({ data: [] }),
       ]);
@@ -264,12 +305,7 @@ const SupplierOrdersPage = () => {
         const variant = item.variant_id ? variantsMap[item.variant_id] : null;
         const flavorName = variant?.flavors?.name || null;
         const volumeMl = variant?.volume_ml || null;
-
-        const nameParts: string[] = [];
-        if (productName) nameParts.push(productName);
-        if (flavorName) nameParts.push(flavorName);
-        const suffix = volumeMl ? ` (${volumeMl}ml)` : "";
-        const variantName = nameParts.length > 0 ? `${nameParts.join(" - ")}${suffix}` : null;
+        const variantName = buildVariantName(productName, variant);
 
         return {
           supplier_order_id: order.id,
@@ -328,7 +364,7 @@ const SupplierOrdersPage = () => {
         variantIds.length > 0
           ? supabase
               .from("product_variants")
-              .select("id, volume_ml, flavor_id, flavors(name)")
+              .select("id, volume_ml, color, ohms, size, flavors(name)")
               .in("id", variantIds as any)
           : Promise.resolve({ data: [] }),
       ]);
@@ -344,12 +380,7 @@ const SupplierOrdersPage = () => {
         const variant = item.variant_id ? variantsMap[item.variant_id] : null;
         const flavorName = variant?.flavors?.name || null;
         const volumeMl = variant?.volume_ml || null;
-
-        const nameParts: string[] = [];
-        if (productName) nameParts.push(productName);
-        if (flavorName) nameParts.push(flavorName);
-        const suffix = volumeMl ? ` (${volumeMl}ml)` : "";
-        const variantName = nameParts.length > 0 ? `${nameParts.join(" - ")}${suffix}` : null;
+        const variantName = buildVariantName(productName, variant);
 
         return {
           supplier_order_id: id,
@@ -497,15 +528,27 @@ const SupplierOrdersPage = () => {
   const handleDownloadOrder = async (order: any) => {
     setDownloadingId(order.id);
     try {
-      // Busca com variant_name (já salvo) + variantes completas para fallback
+      // 1. Busca os itens do pedido (sem join de variante para evitar pegar a errada)
       const { data: items, error } = await supabase
         .from("supplier_order_items")
-        .select(`id, quantity, received_quantity, unit_cost, variant_id, variant_name, 
-                 products(name), 
-                 product_variants(volume_ml, color, ohms, size, flavors(name))`)
+        .select(`id, quantity, received_quantity, unit_cost, variant_id, variant_name, product_id, products(name)`)
         .eq("supplier_order_id", order.id);
 
       if (error) throw error;
+
+      // 2. Para itens sem variant_name salvo, busca as variantes pelo variant_id exato
+      const missingVariantIds = (items || [])
+        .filter((it: any) => it.variant_id && (!it.variant_name || it.variant_name.trim() === ''))
+        .map((it: any) => it.variant_id as string);
+
+      const variantsMap: Record<string, any> = {};
+      if (missingVariantIds.length > 0) {
+        const { data: variantsData } = await supabase
+          .from("product_variants")
+          .select("id, volume_ml, color, ohms, size, flavors(name)")
+          .in("id", missingVariantIds);
+        (variantsData || []).forEach((v: any) => { variantsMap[v.id] = v; });
+      }
 
       const isProcessed =
         order.status === "Recebido" || order.status === "Recebido com Divergência";
@@ -523,42 +566,18 @@ const SupplierOrdersPage = () => {
       doc.text(`Status: ${order.status}`, 14, 34);
       doc.text(`Data: ${new Date(order.created_at).toLocaleDateString("pt-BR")}`, 14, 40);
 
-      // Função auxiliar para montar nome completo da variação
-      const buildVariantLabel = (v: any): string => {
-        if (!v) return '';
-        const parts: string[] = [];
-        if (v.color)   parts.push(v.color);
-        if (v.size)    parts.push(v.size);
-        if (v.ohms)    parts.push(`${v.ohms}Ω`);
-        const flavor = Array.isArray(v.flavors) ? v.flavors[0]?.name : v.flavors?.name;
-        if (flavor)    parts.push(flavor);
-        const suffix = v.volume_ml ? ` ${v.volume_ml}ml` : '';
-        return parts.length > 0 ? ` - ${parts.join(' / ')}${suffix}` : suffix;
-      };
-
-      const tableRows = items.map((item: any) => {
+      const tableRows = (items || []).map((item: any) => {
         let displayName: string;
 
-        // variant_name já contém o nome completo (produto + variação)
+        // variant_name já contém o nome completo (produto + variação) — caminho feliz
         if (item.variant_name && item.variant_name.trim() !== '') {
           displayName = item.variant_name;
         }
         // Fallback: monta manualmente para itens antigos sem variant_name
         else {
-          displayName = item.products?.name || "Produto Removido";
-          if (item.product_variants) {
-            const v = item.product_variants;
-            const parts: string[] = [];
-            if (v.color)  parts.push(v.color);
-            if (v.size)   parts.push(v.size);
-            if (v.ohms)   parts.push(`${v.ohms}Ω`);
-            const flavor = Array.isArray(v.flavors) ? v.flavors[0]?.name : v.flavors?.name;
-            if (flavor)   parts.push(flavor);
-            const suffix = v.volume_ml ? ` ${v.volume_ml}ml` : '';
-            if (parts.length > 0 || suffix) {
-              displayName += ` - ${parts.join(' / ')}${suffix}`;
-            }
-          }
+          const productName = item.products?.name || "Produto Removido";
+          const variant = item.variant_id ? variantsMap[item.variant_id] : null;
+          displayName = buildVariantName(productName, variant) || productName;
         }
 
         return [
