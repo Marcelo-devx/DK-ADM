@@ -67,10 +67,6 @@ const DashboardLayout = () => {
           navigate("/dashboard/orders", { replace: true });
           return;
         }
-
-        if (currentPath === "/dashboard") {
-          navigate("/dashboard/orders", { replace: true });
-        }
       }
     }
   }, [loading, isAdmin, isLogistica, isGerente, isGerenteGeral, user?.id, navigate, sessionAccessToken, location.pathname, session]);
