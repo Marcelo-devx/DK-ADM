@@ -922,7 +922,7 @@ const OrdersPage = () => {
                                  <Button
                                    variant="ghost"
                                    size="icon"
-                                   className="h-6 w-6 text-blue-600 hover:bg-blue-50 rounded-full sm:hidden"
+                                   className="h-6 w-6 text-blue-600 hover:bg-blue-50 rounded-full"
                                    onClick={() => {
                                      setSelectedClientForHistory({
                                        id: order.user_id,
