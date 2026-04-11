@@ -365,22 +365,24 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                                                                 </p>
                                                                 <div className="space-y-2">
                                                                     {order.order_items.map((item: any, idx: number) => (
-                                                                        <div key={idx} className="flex items-center gap-3 bg-white p-2 rounded border border-slate-100">
+                                                                        <div key={idx} className="flex items-start gap-3 bg-white p-3 rounded-lg border border-slate-100 shadow-sm">
                                                                             {item.image_url_at_purchase ? (
-                                                                                <img src={item.image_url_at_purchase} alt="" className="w-10 h-10 rounded object-cover border" />
+                                                                                <img src={item.image_url_at_purchase} alt={item.name_at_purchase} className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0" />
                                                                             ) : (
-                                                                                <div className="w-10 h-10 rounded bg-slate-100 flex items-center justify-center border">
-                                                                                    <ShoppingBag className="w-4 h-4 text-slate-300" />
+                                                                                <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center border border-slate-200 shrink-0">
+                                                                                    <Package className="w-5 h-5 text-slate-400" />
                                                                                 </div>
                                                                             )}
-                                                                            <div className="flex-1">
-                                                                                <p className="text-sm font-medium text-slate-800 line-clamp-1">{item.name_at_purchase}</p>
-                                                                                <p className="text-xs text-slate-500">
-                                                                                    {item.quantity} un. x {formatCurrency(item.price_at_purchase)}
+                                                                            <div className="flex-1 min-w-0">
+                                                                                <p className="text-sm font-semibold text-slate-800 leading-snug" title={item.name_at_purchase}>
+                                                                                    {item.name_at_purchase}
+                                                                                </p>
+                                                                                <p className="text-xs text-slate-500 mt-1">
+                                                                                    {item.quantity} un. × {formatCurrency(item.price_at_purchase)} cada
                                                                                 </p>
                                                                             </div>
-                                                                            <div className="font-bold text-sm text-slate-700">
-                                                                                {formatCurrency(item.quantity * item.price_at_purchase)}
+                                                                            <div className="text-right shrink-0">
+                                                                                <p className="font-bold text-sm text-slate-800">{formatCurrency(item.quantity * item.price_at_purchase)}</p>
                                                                             </div>
                                                                         </div>
                                                                     ))}

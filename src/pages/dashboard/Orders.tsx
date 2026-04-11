@@ -833,12 +833,15 @@ const OrdersPage = () => {
                     const PaymentIcon = paymentDetails.icon;
                     
                     // Compute final total as: items subtotal + shipping + donation - coupon (explicit composition)
+                    // Fallback to total_price from DB when order_items is empty (e.g. logista RLS timing)
                     const itemsSubtotalRaw = (order.order_items || []).reduce((acc: number, it: any) => acc + (Number(it.price_at_purchase) || 0) * (Number(it.quantity) || 0), 0);
                     const shipping = Number(order.shipping_cost) || 0;
                     const donation = Number(order.donation_amount) || 0;
                     const coupon = Number(order.coupon_discount) || 0;
 
-                    const finalTotal = itemsSubtotalRaw + shipping + donation - coupon;
+                    const finalTotal = (order.order_items && order.order_items.length > 0)
+                      ? itemsSubtotalRaw + shipping + donation - coupon
+                      : Number(order.total_price) || 0;
                     
                     const phone = order.profiles?.phone;
                     const name = order.profiles?.first_name || "Cliente";
