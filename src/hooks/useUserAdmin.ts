@@ -25,20 +25,20 @@ export interface AdminUser {
 }
 
 export interface UpdateUserPayload {
-  first_name?: string;
-  last_name?: string;
-  email?: string;
-  cpf_cnpj?: string;
-  phone?: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  email?: string | null;
+  cpf_cnpj?: string | null;
+  phone?: string | null;
   date_of_birth?: string | null;
   gender?: string | null;
-  cep?: string;
-  street?: string;
-  number?: string;
-  complement?: string;
-  neighborhood?: string;
-  city?: string;
-  state?: string;
+  cep?: string | null;
+  street?: string | null;
+  number?: string | null;
+  complement?: string | null;
+  neighborhood?: string | null;
+  city?: string | null;
+  state?: string | null;
   role?: string;
   force_pix_on_next_purchase?: boolean;
   is_credit_card_enabled?: boolean;

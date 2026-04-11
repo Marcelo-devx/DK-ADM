@@ -85,9 +85,18 @@ export function UserEditModal({ isOpen, onClose, user, onConfirm }: UserEditModa
     try {
       const payload: UpdateUserPayload = {
         ...form,
+        // Campos opcionais: envia null se vazio para não salvar string vazia no banco
         date_of_birth: form.date_of_birth || null,
         gender: form.gender || null,
-        complement: form.complement || "",
+        complement: form.complement || null,
+        cpf_cnpj: form.cpf_cnpj || null,
+        phone: form.phone || null,
+        cep: form.cep || null,
+        street: form.street || null,
+        number: form.number || null,
+        neighborhood: form.neighborhood || null,
+        city: form.city || null,
+        state: form.state || null,
       };
       await onConfirm(user.id, payload);
       onClose();
