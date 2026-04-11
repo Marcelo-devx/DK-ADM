@@ -11,10 +11,11 @@ import {
   Heart,
   Bitcoin,
   Bike,
+  Truck,
   Map as MapIcon,
+
   FileOutput,
   Printer,
-  Truck,
   Package,
   LayoutGrid,
   ListTree,
@@ -56,10 +57,9 @@ import { useSidebar } from "./DashboardLayout";
 const Sidebar = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isLogistica, isAdmin, isGerente } = useUser();
+  const { isLogistica, isAdmin, isGerente, isGerenteGeral } = useUser();
   const { sidebarOpen, setSidebarOpen } = useSidebar();
 
-  // Fecha sidebar ao navegar (mobile)
   useEffect(() => {
     setSidebarOpen(false);
   }, [location.pathname]);
@@ -80,15 +80,15 @@ const Sidebar = () => {
   const iconClass = (color: string, isActive: boolean) =>
     cn("w-4 h-4 mr-3 transition-colors", isActive ? "text-primary" : color);
 
+  const showGerenteGeralMenus = isGerenteGeral && !isAdmin;
+
   const sidebarContent = (
     <>
-      {/* Header da sidebar */}
       <div className="p-6 pb-2 flex items-center justify-between">
         <h1 className="text-2xl font-black tracking-tight flex items-center gap-2 text-gray-900">
           <Box className="w-8 h-8 fill-primary text-primary" />
           Tabacaria
         </h1>
-        {/* Botão fechar — só aparece no mobile */}
         <button
           className="lg:hidden p-1 rounded-lg hover:bg-gray-200 text-gray-500"
           onClick={() => setSidebarOpen(false)}
@@ -97,7 +97,14 @@ const Sidebar = () => {
         </button>
       </div>
 
-      {isGerente && !isAdmin && (
+      {showGerenteGeralMenus && (
+        <span className="mx-6 mt-1 mb-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold uppercase tracking-wider">
+          <Crown className="w-3 h-3" />
+          Gerente Geral
+        </span>
+      )}
+
+      {isGerente && !isAdmin && !isGerenteGeral && (
         <span className="mx-6 mt-1 mb-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 text-[10px] font-bold uppercase tracking-wider">
           <Crown className="w-3 h-3" />
           Gerente Logística
@@ -112,7 +119,7 @@ const Sidebar = () => {
       )}
 
       <nav className="flex-1 overflow-y-auto px-3 pb-6 space-y-1 custom-scrollbar">
-        {isLogistica && !isAdmin ? (
+        {isLogistica && !isAdmin && !showGerenteGeralMenus ? (
           <>
             <p className={sectionTitleClass}>Logística</p>
             <NavLink to="/dashboard/orders" className={navLinkClass}>
@@ -127,7 +134,6 @@ const Sidebar = () => {
           </>
         ) : (
           <>
-            {/* VISÃO GERAL */}
             <p className={sectionTitleClass}>Visão Geral</p>
             <NavLink to="/dashboard" end className={navLinkClass}>
               {({ isActive }) => (<><Home className={iconClass("text-slate-500", isActive)} />Dashboard</>)}
@@ -136,7 +142,6 @@ const Sidebar = () => {
               {({ isActive }) => (<><BarChart3 className={iconClass("text-slate-500", isActive)} />Analytics</>)}
             </NavLink>
 
-            {/* VENDAS & FINANCEIRO */}
             <p className={sectionTitleClass}>Vendas & Financeiro</p>
             <NavLink to="/dashboard/orders" className={navLinkClass}>
               {({ isActive }) => (<><DollarSign className={iconClass("text-green-600", isActive)} />Pedidos (Clientes)</>)}
@@ -151,7 +156,6 @@ const Sidebar = () => {
               {({ isActive }) => (<><Bitcoin className={iconClass("text-green-600", isActive)} />Cripto</>)}
             </NavLink>
 
-            {/* CATÁLOGO */}
             <p className={sectionTitleClass}>Catálogo</p>
             <NavLink to="/dashboard/products" className={navLinkClass}>
               {({ isActive }) => (<><Package className={iconClass("text-blue-600", isActive)} />Produtos</>)}
@@ -169,7 +173,6 @@ const Sidebar = () => {
               {({ isActive }) => (<><Tags className={iconClass("text-blue-600", isActive)} />Marcas</>)}
             </NavLink>
 
-            {/* LOGÍSTICA */}
             <p className={sectionTitleClass}>Logística</p>
             <NavLink to="/dashboard/spoke-export" className={navLinkClass}>
               {({ isActive }) => (<><FileOutput className={iconClass("text-green-600", isActive)} />Exportar Rotas</>)}
@@ -184,13 +187,11 @@ const Sidebar = () => {
               {({ isActive }) => (<><Printer className={iconClass("text-indigo-600", isActive)} />Imprimir Etiquetas</>)}
             </NavLink>
 
-            {/* INTELIGÊNCIA */}
             <p className={sectionTitleClass}>Inteligência</p>
             <NavLink to="/dashboard/metaflow-insights" className={navLinkClass}>
               {({ isActive }) => (<><Lightbulb className={iconClass("text-purple-600", isActive)} />Insights de Negócio</>)}
             </NavLink>
 
-            {/* CLIENTES */}
             <p className={sectionTitleClass}>Clientes</p>
             <NavLink to="/dashboard/clients" className={navLinkClass}>
               {({ isActive }) => (<><Users className={iconClass("text-cyan-600", isActive)} />Base de Clientes</>)}
@@ -208,7 +209,6 @@ const Sidebar = () => {
               {({ isActive }) => (<><Award className={iconClass("text-cyan-600", isActive)} />Adicionar Pontos (Manual)</>)}
             </NavLink>
 
-            {/* MARKETING */}
             <p className={sectionTitleClass}>Marketing</p>
             <NavLink to="/dashboard/coupon-management" className={navLinkClass}>
               {({ isActive }) => (<><Gift className={iconClass("text-purple-600", isActive)} />Gestão de Cupons</>)}
@@ -226,7 +226,6 @@ const Sidebar = () => {
               {({ isActive }) => (<><Ticket className={iconClass("text-pink-600", isActive)} />Cupons</>)}
             </NavLink>
 
-            {/* CONTEÚDO DO SITE */}
             <p className={sectionTitleClass}>Conteúdo do Site</p>
             <NavLink to="/dashboard/hero-slides" className={navLinkClass}>
               {({ isActive }) => (<><Image className={iconClass("text-amber-600", isActive)} />Banners (Slides)</>)}
@@ -244,7 +243,6 @@ const Sidebar = () => {
               {({ isActive }) => (<><Star className={iconClass("text-amber-600", isActive)} />Avaliações</>)}
             </NavLink>
 
-            {/* ADMINISTRAÇÃO */}
             <p className={sectionTitleClass}>Administração</p>
             <NavLink to="/dashboard/user-admin" className={navLinkClass}>
               {({ isActive }) => (<><ShieldAlert className={iconClass("text-red-600", isActive)} />Admin Usuários</>)}
@@ -256,7 +254,6 @@ const Sidebar = () => {
               {({ isActive }) => (<><Trash2 className={iconClass("text-red-700", isActive)} />Limpeza de Pedidos</>)}
             </NavLink>
 
-            {/* SISTEMA */}
             <p className={sectionTitleClass}>Sistema</p>
             <NavLink to="/dashboard/incoming-webhooks" className={navLinkClass}>
               {({ isActive }) => (<><Webhook className={iconClass("text-slate-500", isActive)} />Webhooks (Entrada)</>)}
@@ -283,7 +280,6 @@ const Sidebar = () => {
         )}
       </nav>
 
-      {/* FOOTER COM LOGOUT */}
       <div className="p-4 border-t border-gray-200 bg-white/50">
         <button
           onClick={handleLogout}
@@ -298,7 +294,6 @@ const Sidebar = () => {
 
   return (
     <>
-      {/* Overlay escuro no mobile quando sidebar está aberta */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/50 lg:hidden"
@@ -306,7 +301,6 @@ const Sidebar = () => {
         />
       )}
 
-      {/* Sidebar — fixa no desktop, drawer no mobile */}
       <aside
         className={cn(
           "fixed top-0 left-0 z-50 h-screen w-72 bg-gray-50/95 border-r border-gray-200 flex flex-col transition-transform duration-300 ease-in-out",

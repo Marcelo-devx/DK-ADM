@@ -16,6 +16,7 @@ export const useUser = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLogistica, setIsLogistica] = useState(false);
   const [isGerente, setIsGerente] = useState(false);
+  const [isGerenteGeral, setIsGerenteGeral] = useState(false);
   const [role, setRole] = useState<string>('user');
 
   const userId = user?.id;
@@ -28,6 +29,7 @@ export const useUser = () => {
         setIsAdmin(false);
         setIsLogistica(false);
         setIsGerente(false);
+        setIsGerenteGeral(false);
         setRole('user');
         return;
       }
@@ -45,15 +47,16 @@ export const useUser = () => {
           setIsAdmin(false);
           setIsLogistica(false);
           setIsGerente(false);
+          setIsGerenteGeral(false);
           setRole('user');
           setProfile(null);
         } else if (data) {
           setProfile(data as Profile);
           setRole(data.role);
           setIsAdmin(data.role === 'adm');
-          // gerente também entra como logistica para ter acesso às rotas de logística
-          setIsLogistica(data.role === 'logistica' || data.role === 'gerente');
-          setIsGerente(data.role === 'gerente');
+          setIsGerenteGeral(data.role === 'gerente_geral');
+          setIsGerente(data.role === 'gerente' || data.role === 'gerente_geral');
+          setIsLogistica(data.role === 'logistica' || data.role === 'gerente' || data.role === 'gerente_geral');
         }
       } catch (e) {
         if (e instanceof Error) {
@@ -64,6 +67,7 @@ export const useUser = () => {
         setIsAdmin(false);
         setIsLogistica(false);
         setIsGerente(false);
+        setIsGerenteGeral(false);
         setRole('user');
         setProfile(null);
       } finally {
@@ -74,5 +78,5 @@ export const useUser = () => {
     fetchUserProfile();
   }, [userId]);
 
-  return { user, profile, loading, isAdmin, isLogistica, isGerente, role };
+  return { user, profile, loading, isAdmin, isLogistica, isGerente, isGerenteGeral, role };
 };

@@ -5,14 +5,25 @@ import { useSession } from "@/components/SessionContextProvider";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 
-// Rotas permitidas para o role "logistica" e "gerente"
-const LOGISTICA_ALLOWED_ROUTES = [
+const OPERACIONAL_ALLOWED_ROUTES = [
   "/dashboard/orders",
+  "/dashboard/donations",
+  "/dashboard/products",
+  "/dashboard/price-management",
+  "/dashboard/clients",
+  "/dashboard/cadastrar-cliente",
+  "/dashboard/club-dk",
+  "/dashboard/user-coupons-history",
+  "/dashboard/promotions",
+  "/dashboard/coupons",
+  "/dashboard/user-admin",
+  "/dashboard/order-admin",
+  "/dashboard/shipping-rates",
   "/dashboard/spoke-export",
   "/dashboard/print-labels",
+  "/dashboard/delivery-routes",
 ];
 
-// Contexto para controlar abertura da sidebar no mobile
 interface SidebarContextType {
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
@@ -26,7 +37,7 @@ const SidebarContext = createContext<SidebarContextType>({
 export const useSidebar = () => useContext(SidebarContext);
 
 const DashboardLayout = () => {
-  const { loading, isAdmin, isLogistica, isGerente, user } = useUser();
+  const { loading, isAdmin, isLogistica, isGerente, isGerenteGeral, user } = useUser();
   const navigate = useNavigate();
   const location = useLocation();
   const session = useSession();
@@ -41,34 +52,16 @@ const DashboardLayout = () => {
         return;
       }
 
-      if (!isAdmin && !isLogistica) {
+      if (!isAdmin && !isLogistica && !isGerente && !isGerenteGeral) {
         navigate("/", { replace: true });
         return;
       }
 
-      // logistica pura (sem ser gerente nem admin) — restrição de rotas
-      if (isLogistica && !isAdmin && !isGerente) {
+      if ((isLogistica || isGerente || isGerenteGeral) && !isAdmin) {
         const currentPath = location.pathname;
         const isAllowed =
           currentPath === "/dashboard" ||
-          LOGISTICA_ALLOWED_ROUTES.some((r) => currentPath.startsWith(r));
-
-        if (!isAllowed) {
-          navigate("/dashboard/orders", { replace: true });
-          return;
-        }
-
-        if (currentPath === "/dashboard") {
-          navigate("/dashboard/orders", { replace: true });
-        }
-      }
-
-      // gerente — mesmas rotas que logistica, sem acesso ao resto
-      if (isGerente && !isAdmin) {
-        const currentPath = location.pathname;
-        const isAllowed =
-          currentPath === "/dashboard" ||
-          LOGISTICA_ALLOWED_ROUTES.some((r) => currentPath.startsWith(r));
+          OPERACIONAL_ALLOWED_ROUTES.some((r) => currentPath.startsWith(r));
 
         if (!isAllowed) {
           navigate("/dashboard/orders", { replace: true });
@@ -80,7 +73,7 @@ const DashboardLayout = () => {
         }
       }
     }
-  }, [loading, isAdmin, isLogistica, isGerente, user?.id, navigate, sessionAccessToken, location.pathname]);
+  }, [loading, isAdmin, isLogistica, isGerente, isGerenteGeral, user?.id, navigate, sessionAccessToken, location.pathname, session]);
 
   useEffect(() => {
     checkAuth();
