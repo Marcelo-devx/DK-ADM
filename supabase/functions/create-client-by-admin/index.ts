@@ -7,6 +7,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const jsonResponse = (payload: Record<string, unknown>, status = 200) =>
+  new Response(JSON.stringify(payload), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -19,33 +25,25 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    // Authorization: accept either
-    // - a preconfigured ADMIN_CREATE_TOKEN / N8N_SECRET_TOKEN (shared secret), or
-    // - a Supabase service role key, or
-    // - an access token of an authenticated user that has profiles.role = 'adm'
     const authHeader = req.headers.get('Authorization') || '';
     const token = authHeader.replace('Bearer ', '').trim();
     const allowedToken = Deno.env.get('N8N_SECRET_TOKEN') || Deno.env.get('ADMIN_CREATE_TOKEN');
 
     let isAuthorized = false;
 
-    // 1) If a management token is configured and provided, allow
     if (allowedToken && token && token === allowedToken) {
       isAuthorized = true;
     }
 
-    // 2) If called using the service role key, allow
     if (!isAuthorized && token && token === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')) {
       isAuthorized = true;
     }
 
-    // 3) If a user access token is provided, validate it and ensure the user's profile role is 'adm'
     if (!isAuthorized && token) {
       try {
         const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
         if (!userError && userData && userData.user && userData.user.id) {
           const userId = userData.user.id;
-          // Check profile role using admin client (bypass RLS)
           const { data: profile, error: profileErr } = await supabaseAdmin
             .from('profiles')
             .select('role')
@@ -62,34 +60,45 @@ serve(async (req) => {
     }
 
     if (!isAuthorized) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return jsonResponse({
+        error: 'Acesso negado. Você não tem permissão para cadastrar clientes.',
+        code: 'UNAUTHORIZED',
+      }, 401);
     }
 
     const body = await req.json().catch(() => ({}));
     const { email, password, full_name, cpf_cnpj, phone, gender } = body || {};
 
     if (!email) {
-      return new Response(JSON.stringify({ error: 'Missing email' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return jsonResponse({
+        error: 'O e-mail é obrigatório para cadastrar um cliente.',
+        code: 'VALIDATION_ERROR',
+      }, 400);
     }
 
     if (!password) {
-      return new Response(JSON.stringify({ error: 'Missing password' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return jsonResponse({
+        error: 'A senha é obrigatória para cadastrar um cliente.',
+        code: 'VALIDATION_ERROR',
+      }, 400);
     }
 
-    // Check if user already exists using RPC helper
     try {
       const { data: existingId, error: rpcErr } = await supabaseAdmin.rpc('get_user_id_by_email', { user_email: email });
       if (rpcErr) {
         console.error('[create-client-by-admin] RPC get_user_id_by_email error:', rpcErr.message);
       }
       if (existingId) {
-        return new Response(JSON.stringify({ error: 'User already exists', id: existingId }), { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        return jsonResponse({
+          error: 'Já existe um usuário cadastrado com este e-mail.',
+          code: 'EMAIL_ALREADY_EXISTS',
+          id: existingId,
+        }, 409);
       }
     } catch (e) {
       console.warn('[create-client-by-admin] Failed to check existing user (continuing):', String(e));
     }
 
-    // split name
     let first_name = null;
     let last_name = null;
     if (full_name && typeof full_name === 'string') {
@@ -98,10 +107,6 @@ serve(async (req) => {
       last_name = parts.join(' ') || null;
     }
 
-    // Create user via Admin API
-    // NOTE: passing first_name/last_name in user_metadata so the handle_new_user trigger
-    // can pick them up. However, we also do an explicit upsert below to ensure all fields
-    // (including email, cpf_cnpj, phone, gender) are correctly saved regardless of trigger timing.
     const { data: createdUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email: email,
       password: password,
@@ -117,25 +122,26 @@ serve(async (req) => {
 
     if (createError) {
       console.error('[create-client-by-admin] Error creating user:', createError);
-      return new Response(JSON.stringify({ error: 'Database error creating new user', details: createError.message }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      return jsonResponse({
+        error: 'Não foi possível criar o usuário no sistema.',
+        code: 'AUTH_CREATE_FAILED',
+        details: createError.message,
+      }, 500);
     }
 
     const userId = createdUser?.user?.id || createdUser?.id;
     if (!userId) {
       console.error('[create-client-by-admin] Failed to resolve created user id', { createdUser });
-      return new Response(JSON.stringify({ error: 'Failed to resolve created user id' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return jsonResponse({
+        error: 'O usuário foi criado, mas não foi possível identificar o ID gerado.',
+        code: 'USER_ID_NOT_RESOLVED',
+      }, 500);
     }
 
     console.log('[create-client-by-admin] User created successfully, userId:', userId);
 
-    // Small delay to allow the handle_new_user trigger to complete before we upsert
     await new Promise((resolve) => setTimeout(resolve, 300));
 
-    // Upsert profile with all fields including email.
-    // Using onConflict: 'id' so if the trigger already created the row, we update it.
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .upsert({
@@ -153,22 +159,25 @@ serve(async (req) => {
 
     if (profileError) {
       console.error('[create-client-by-admin] Error upserting profile:', profileError);
-      // User was created in auth — return success with a warning instead of failing
-      // so the admin knows the user exists but profile may need manual fix
-      return new Response(JSON.stringify({
+      return jsonResponse({
         success: true,
         id: userId,
         email,
-        warning: 'User created but profile update failed: ' + profileError.message
-      }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        warning: 'O usuário foi criado, mas a atualização do perfil falhou: ' + profileError.message,
+        code: 'PROFILE_UPSERT_FAILED',
+      }, 200);
     }
 
     console.log('[create-client-by-admin] Profile upserted successfully for userId:', userId);
 
-    return new Response(JSON.stringify({ success: true, id: userId, email }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return jsonResponse({ success: true, id: userId, email }, 200);
 
   } catch (e) {
     console.error('[create-client-by-admin] Unexpected error:', e);
-    return new Response(JSON.stringify({ error: 'Unexpected error', details: String(e) }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return jsonResponse({
+      error: 'Ocorreu um erro inesperado ao cadastrar o cliente.',
+      code: 'UNEXPECTED_ERROR',
+      details: String(e),
+    }, 500);
   }
 })

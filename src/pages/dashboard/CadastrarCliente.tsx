@@ -9,15 +9,15 @@ import { showSuccess, showError } from "@/utils/toast";
 export default function CadastrarCliente() {
   const navigate = useNavigate();
   const [formKey, setFormKey] = useState(0);
-  
-  // Usar o hook useClients para acessar a mutação de criação
   const { create, createStatus } = useClients(1);
 
   const handleSubmit = (values: any) => {
     create(values, {
-      onSuccess: () => {
+      onSuccess: (warning: any) => {
         showSuccess("Cliente cadastrado com sucesso!");
-        // Não resetamos o formulário para permitir ver o que foi preenchido
+        if (warning) {
+          showError(warning);
+        }
       },
       onError: (error: any) => {
         showError(error.message || "Erro ao cadastrar cliente");
@@ -30,13 +30,11 @@ export default function CadastrarCliente() {
   };
 
   const handleClearForm = () => {
-    // Incrementa a chave para forçar a recriação do formulário (reset limpo)
     setFormKey(prev => prev + 1);
   };
 
   return (
     <div className="max-w-2xl mx-auto">
-      {/* Header */}
       <div className="mb-6">
         <div className="flex items-center gap-4 mb-2">
           <Button
@@ -58,7 +56,6 @@ export default function CadastrarCliente() {
         </div>
       </div>
 
-      {/* Formulário */}
       <div className="bg-white rounded-lg shadow-sm border p-6">
         <CreateClientForm
           key={formKey}
@@ -67,7 +64,6 @@ export default function CadastrarCliente() {
         />
       </div>
 
-      {/* Botões de Ação Adicionais */}
       <div className="mt-4 flex justify-end gap-3">
         <Button
           variant="outline"

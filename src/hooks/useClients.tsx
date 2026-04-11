@@ -23,7 +23,15 @@ const PAGE_SIZE = 20;
 const ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpybG96aGh2d3FmbWp0a212dWtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDU2NjQsImV4cCI6MjA2NzkyMTY2NH0.Do5c1-TKqpyZTJeX_hLbw1SU40CbwXfCIC-pPpcD_JM";
 
-// fetch page via Edge Function (fallbacks can be handled outside)
+async function readErrorMessageFromResponse(responseText: string) {
+  try {
+    const parsed = JSON.parse(responseText);
+    return parsed?.error || parsed?.warning || parsed?.details || responseText;
+  } catch {
+    return responseText;
+  }
+}
+
 async function fetchClients(page: number, search: string): Promise<Client[]> {
   const body: Record<string, unknown> = { limit: PAGE_SIZE, page };
   if (search) body.search = search;
@@ -91,14 +99,13 @@ async function fetchClients(page: number, search: string): Promise<Client[]> {
 
       const userIds = (profiles || []).map((p: any) => p.id);
 
-      // Busca apenas user_id e status — sem joins pesados, com limite
       let orders: any[] = [];
       if (userIds.length > 0) {
         const { data: ordersData, error: ordersError } = await supabase
           .from('orders')
           .select('user_id, status')
           .in('user_id', userIds as string[])
-          .limit(PAGE_SIZE * 50); // limite seguro: no máximo 50 pedidos por cliente em média
+          .limit(PAGE_SIZE * 50);
         if (ordersError) {
           console.error('[useClients] orders fallback query error:', ordersError.message || ordersError);
           orders = [];
@@ -187,7 +194,7 @@ export function useClients(initialPage = 1) {
   const { data: total = 0, isLoading: isLoadingTotal } = useQuery<number>({
     queryKey: ["clientsTotal"],
     queryFn: fetchTotal,
-    staleTime: 120_000, // 2 minutos — total não muda com frequência
+    staleTime: 120_000,
     enabled: sessionReady && hasSessionUser,
   });
 
@@ -200,12 +207,11 @@ export function useClients(initialPage = 1) {
   } = useQuery<Client[]>({
     queryKey: ["clients", page, search],
     queryFn: () => fetchClients(page, search),
-    staleTime: 60_000, // 1 minuto — evita re-fetch ao voltar para a mesma página
-    placeholderData: (prev) => prev, // mantém dados anteriores enquanto carrega nova página (sem flash de loading)
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
     enabled: sessionReady && hasSessionUser,
   });
 
-  // Prefetch da próxima página em background
   useEffect(() => {
     if (!sessionReady || !hasSessionUser || search) return;
     const totalPages = Math.ceil(total / PAGE_SIZE);
@@ -218,7 +224,6 @@ export function useClients(initialPage = 1) {
     }
   }, [page, search, total, sessionReady, hasSessionUser, qc]);
 
-  // Create client
   const createMutation = useMutation({
     mutationFn: async (values: any) => {
       const { data: sd } = await supabase.auth.getSession();
@@ -236,14 +241,19 @@ export function useClients(initialPage = 1) {
 
         if (error) {
           console.error("[useClients] Edge function returned error:", error);
-          const statusPart = (error?.status ? `status=${error.status} ` : "");
-          throw new Error(`${statusPart}${error?.message || 'Edge Function error'}`);
+          const statusPart = error?.status ? `status=${error.status} ` : "";
+          const detailsPart = error?.details ? ` ${error.details}` : "";
+          throw new Error(`${statusPart}${error?.message || 'Erro na Edge Function'}${detailsPart}`.trim());
         }
 
-        if (data && typeof data === 'object' && (data.error || data.details)) {
-          console.error('[useClients] Edge function response had error payload:', data);
-          const payloadMsg = data.error || data.details || JSON.stringify(data);
-          throw new Error(`Edge Function: ${payloadMsg}`);
+        if (data && typeof data === 'object') {
+          if (data.error) {
+            console.error('[useClients] Edge function response had error payload:', data);
+            throw new Error(`${data.error}${data.details ? ` ${data.details}` : ''}`.trim());
+          }
+          if (data.warning && data.success) {
+            return { data, values, warning: data.warning };
+          }
         }
 
         return { data, values };
@@ -268,12 +278,8 @@ export function useClients(initialPage = 1) {
             );
 
             const text = await fallbackRes.text();
-            let parsed: any = text;
-            try { parsed = JSON.parse(text); } catch (_) { /* keep as text */ }
-
-            const detailMsg = `Status ${fallbackRes.status}: ${
-              typeof parsed === 'string' ? parsed : JSON.stringify(parsed)
-            }`;
+            const parsedMessage = await readErrorMessageFromResponse(text);
+            const detailMsg = `Status ${fallbackRes.status}: ${parsedMessage}`;
             console.error('[useClients] Fallback fetch details:', detailMsg);
             throw new Error(detailMsg);
           } catch (fallbackErr: any) {
@@ -281,7 +287,7 @@ export function useClients(initialPage = 1) {
             const fbMsg = String(fallbackErr?.message || fallbackErr);
             if (fbMsg.includes('Failed to fetch') || fbMsg.includes('NetworkError')) {
               throw new Error(
-                'Erro de rede: não foi possível conectar às Edge Functions do Supabase. Verifique sua conexão, bloqueadores (adblock/privacidade) ou se o serviço de Functions está ativo.'
+                'Não foi possível conectar ao serviço de cadastro de clientes. Verifique sua conexão e tente novamente.'
               );
             }
             throw new Error(fbMsg);
@@ -290,14 +296,14 @@ export function useClients(initialPage = 1) {
 
         if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
           throw new Error(
-            "Erro de rede: não foi possível conectar às Edge Functions do Supabase. Verifique sua conexão, bloqueadores (adblock/privacidade) ou se o serviço de Functions está ativo."
+            "Não foi possível conectar ao serviço de cadastro de clientes. Verifique sua conexão e tente novamente."
           );
         }
 
         throw new Error(msg);
       }
     },
-    onSuccess: ({ data, values }) => {
+    onSuccess: ({ data, values, warning }) => {
       const created = data?.user || data;
       const nameParts = (values?.full_name || "").split(" ");
       const newClient: Client = {
@@ -318,10 +324,11 @@ export function useClients(initialPage = 1) {
       qc.setQueryData<Client[]>(["clients", 1, ""], (prev = []) =>
         [newClient, ...prev].slice(0, PAGE_SIZE)
       );
+
+      return warning;
     },
   });
 
-  // toggle pix
   const togglePixMutation = useMutation({
     mutationFn: async ({ userId, forcePix }: { userId: string; forcePix: boolean }) => {
       const { error } = await supabase
@@ -341,7 +348,6 @@ export function useClients(initialPage = 1) {
     },
   });
 
-  // admin actions
   const actionMutation = useMutation({
     mutationFn: async ({ action, targetUserId }: { action: string; targetUserId: string }) => {
       let fnName = "admin-user-actions";
@@ -361,9 +367,7 @@ export function useClients(initialPage = 1) {
     },
   });
 
-  // helpers exposed
   return {
-    // state
     page,
     setPage,
     total,
@@ -373,14 +377,10 @@ export function useClients(initialPage = 1) {
     isFetching,
     error,
     refetch,
-
-    // search
     searchInput,
     setSearchInput: setSearchDebounced,
     searchNow,
     search,
-
-    // mutations
     create: createMutation.mutate,
     createStatus: {
       isIdle: createMutation.isIdle,
@@ -395,8 +395,6 @@ export function useClients(initialPage = 1) {
     actionStatus: {
       isPending: actionMutation.isPending,
     },
-
-    // pagination config
     pageSize: PAGE_SIZE,
   };
 }
