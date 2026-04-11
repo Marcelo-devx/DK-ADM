@@ -914,7 +914,38 @@ const OrdersPage = () => {
                                 onCheckedChange={() => toggleSelectOne(order.id)}
                             />
                         </TableCell>
-                        <TableCell className="font-mono text-sm font-bold">#{order.id}</TableCell>
+                        <TableCell className="font-mono text-sm font-bold">
+                         <div className="flex items-center gap-1.5">
+                           <TooltipProvider>
+                             <Tooltip>
+                               <TooltipTrigger asChild>
+                                 <Button
+                                   variant="ghost"
+                                   size="icon"
+                                   className="h-6 w-6 text-blue-600 hover:bg-blue-50 rounded-full"
+                                   onClick={() => {
+                                     setSelectedClientForHistory({
+                                       id: order.user_id,
+                                       first_name: order.profiles?.first_name,
+                                       last_name: order.profiles?.last_name,
+                                       email: order.profiles?.email || "",
+                                       created_at: null,
+                                       force_pix_on_next_purchase: false,
+                                       order_count: 0,
+                                       completed_order_count: 0
+                                     });
+                                     setIsClientHistoryOpen(true);
+                                   }}
+                                 >
+                                   <History className="w-3 h-3" />
+                                 </Button>
+                               </TooltipTrigger>
+                               <TooltipContent>Histórico de Pedidos</TooltipContent>
+                             </Tooltip>
+                           </TooltipProvider>
+                           #{order.id}
+                         </div>
+                       </TableCell>
                         <TableCell>
                         <div className="flex flex-col">
                             <span className="text-xs">{new Date(order.created_at).toLocaleDateString("pt-BR")}</span>
