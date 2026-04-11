@@ -100,7 +100,9 @@ export function UserEditModal({ isOpen, onClose, user, onConfirm }: UserEditModa
 
   const getRoleBadgeColor = (role: string) => {
     if (role === "adm") return "text-red-600";
+    if (role === "gerente_geral") return "text-indigo-600";
     if (role === "logistica") return "text-green-600";
+    if (role === "gerente") return "text-purple-600";
     return "text-slate-500";
   };
 
@@ -310,6 +312,12 @@ export function UserEditModal({ isOpen, onClose, user, onConfirm }: UserEditModa
                   <SelectItem value="logistica">
                     <span className="text-green-600">🚚 Logística</span>
                   </SelectItem>
+                  <SelectItem value="gerente">
+                    <span className="text-purple-600">👔 Gerente</span>
+                  </SelectItem>
+                  <SelectItem value="gerente_geral">
+                    <span className="text-indigo-600">⭐ Gerente Geral</span>
+                  </SelectItem>
                   <SelectItem value="adm">
                     <span className="text-red-600">🔐 Administrador</span>
                   </SelectItem>
@@ -317,6 +325,8 @@ export function UserEditModal({ isOpen, onClose, user, onConfirm }: UserEditModa
               </Select>
               <p className="text-xs text-muted-foreground mt-1">
                 {form.role === "adm" && "⚠️ Acesso total ao painel administrativo."}
+                {form.role === "gerente_geral" && "⭐ Acesso ampliado com menus operacionais e administrativos liberados."}
+                {form.role === "gerente" && "👔 Acesso restrito a rotas operacionais e logística."}
                 {form.role === "logistica" && "✅ Acesso restrito: Pedidos, Exportar Rotas e Imprimir Etiquetas."}
                 {form.role === "user" && "Acesso apenas ao site da loja."}
               </p>
