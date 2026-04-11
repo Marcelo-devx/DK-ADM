@@ -237,7 +237,7 @@ serve(async (req) => {
     try {
       const result = await supabaseAdmin
         .from('profiles')
-        .select('id, first_name, last_name, role, force_pix_on_next_purchase, updated_at, created_at, cpf_cnpj')
+        .select('id, first_name, last_name, role, force_pix_on_next_purchase, updated_at, created_at, cpf_cnpj, email')
         .in('id', userIds);
 
       if (result.error) {
@@ -284,11 +284,30 @@ serve(async (req) => {
 
     const profilesMap = new Map((profiles || []).map(p => [p.id, p]));
 
+    // Sync email into profiles for any user where profiles.email is missing
+    const profilesToSync = usersForPage.filter(u => {
+      const p = profilesMap.get(u.id);
+      return u.email && (!p?.email || p.email !== u.email);
+    });
+
+    if (profilesToSync.length > 0) {
+      console.log(`[get-users] Sincronizando email em ${profilesToSync.length} perfis`);
+      for (const u of profilesToSync) {
+        await supabaseAdmin
+          .from('profiles')
+          .update({ email: u.email })
+          .eq('id', u.id);
+        // Update local map so the response is consistent
+        const p = profilesMap.get(u.id);
+        if (p) p.email = u.email;
+      }
+    }
+
     const clients = usersForPage.map(u => {
       const p = profilesMap.get(u.id) || {};
       return {
         id: u.id,
-        email: u.email,
+        email: p.email || u.email,
         created_at: p.created_at || u.created_at,
         updated_at: p.updated_at || null,
         first_name: p.first_name || null,

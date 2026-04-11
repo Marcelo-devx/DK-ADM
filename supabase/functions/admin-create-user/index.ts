@@ -141,6 +141,7 @@ serve(async (req) => {
     const { error: profileError } = await supabaseAdmin.from("profiles").upsert(
       {
         id: userId,
+        email: email,
         first_name,
         last_name,
         cpf_cnpj: cpf_cnpj || null,
