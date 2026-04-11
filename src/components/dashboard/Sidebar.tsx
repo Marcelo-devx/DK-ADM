@@ -56,7 +56,7 @@ import { useSidebar } from "./DashboardLayout";
 const Sidebar = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isLogistica, isAdmin } = useUser();
+  const { isLogistica, isAdmin, isGerente } = useUser();
   const { sidebarOpen, setSidebarOpen } = useSidebar();
 
   // Fecha sidebar ao navegar (mobile)
@@ -97,7 +97,14 @@ const Sidebar = () => {
         </button>
       </div>
 
-      {isLogistica && !isAdmin && (
+      {isGerente && !isAdmin && (
+        <span className="mx-6 mt-1 mb-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 text-[10px] font-bold uppercase tracking-wider">
+          <Crown className="w-3 h-3" />
+          Gerente Logística
+        </span>
+      )}
+
+      {isLogistica && !isGerente && !isAdmin && (
         <span className="mx-6 mt-1 mb-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-[10px] font-bold uppercase tracking-wider">
           <TruckIcon className="w-3 h-3" />
           Logística

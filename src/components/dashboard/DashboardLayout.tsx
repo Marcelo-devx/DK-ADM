@@ -5,7 +5,7 @@ import { useSession } from "@/components/SessionContextProvider";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 
-// Rotas permitidas para o role "logistica"
+// Rotas permitidas para o role "logistica" e "gerente"
 const LOGISTICA_ALLOWED_ROUTES = [
   "/dashboard/orders",
   "/dashboard/spoke-export",
@@ -26,7 +26,7 @@ const SidebarContext = createContext<SidebarContextType>({
 export const useSidebar = () => useContext(SidebarContext);
 
 const DashboardLayout = () => {
-  const { loading, isAdmin, isLogistica, user } = useUser();
+  const { loading, isAdmin, isLogistica, isGerente, user } = useUser();
   const navigate = useNavigate();
   const location = useLocation();
   const session = useSession();
@@ -46,7 +46,25 @@ const DashboardLayout = () => {
         return;
       }
 
-      if (isLogistica && !isAdmin) {
+      // logistica pura (sem ser gerente nem admin) — restrição de rotas
+      if (isLogistica && !isAdmin && !isGerente) {
+        const currentPath = location.pathname;
+        const isAllowed =
+          currentPath === "/dashboard" ||
+          LOGISTICA_ALLOWED_ROUTES.some((r) => currentPath.startsWith(r));
+
+        if (!isAllowed) {
+          navigate("/dashboard/orders", { replace: true });
+          return;
+        }
+
+        if (currentPath === "/dashboard") {
+          navigate("/dashboard/orders", { replace: true });
+        }
+      }
+
+      // gerente — mesmas rotas que logistica, sem acesso ao resto
+      if (isGerente && !isAdmin) {
         const currentPath = location.pathname;
         const isAllowed =
           currentPath === "/dashboard" ||
@@ -62,7 +80,7 @@ const DashboardLayout = () => {
         }
       }
     }
-  }, [loading, isAdmin, isLogistica, user?.id, navigate, sessionAccessToken, location.pathname]);
+  }, [loading, isAdmin, isLogistica, isGerente, user?.id, navigate, sessionAccessToken, location.pathname]);
 
   useEffect(() => {
     checkAuth();

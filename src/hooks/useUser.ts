@@ -15,6 +15,7 @@ export const useUser = () => {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLogistica, setIsLogistica] = useState(false);
+  const [isGerente, setIsGerente] = useState(false);
   const [role, setRole] = useState<string>('user');
 
   const userId = user?.id;
@@ -26,6 +27,7 @@ export const useUser = () => {
         setProfile(null);
         setIsAdmin(false);
         setIsLogistica(false);
+        setIsGerente(false);
         setRole('user');
         return;
       }
@@ -42,13 +44,16 @@ export const useUser = () => {
           console.error('[useUser] Erro ao buscar profile:', error.message);
           setIsAdmin(false);
           setIsLogistica(false);
+          setIsGerente(false);
           setRole('user');
           setProfile(null);
         } else if (data) {
           setProfile(data as Profile);
           setRole(data.role);
           setIsAdmin(data.role === 'adm');
-          setIsLogistica(data.role === 'logistica');
+          // gerente também entra como logistica para ter acesso às rotas de logística
+          setIsLogistica(data.role === 'logistica' || data.role === 'gerente');
+          setIsGerente(data.role === 'gerente');
         }
       } catch (e) {
         if (e instanceof Error) {
@@ -58,6 +63,7 @@ export const useUser = () => {
         }
         setIsAdmin(false);
         setIsLogistica(false);
+        setIsGerente(false);
         setRole('user');
         setProfile(null);
       } finally {
@@ -68,5 +74,5 @@ export const useUser = () => {
     fetchUserProfile();
   }, [userId]);
 
-  return { user, profile, loading, isAdmin, isLogistica, role };
+  return { user, profile, loading, isAdmin, isLogistica, isGerente, role };
 };
