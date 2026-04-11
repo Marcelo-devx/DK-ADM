@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   User, MapPin, Phone, Calendar, Shield, Star,
   Mail, Award, CreditCard, History, Fingerprint,
-  ShoppingBag, Package, Wind, Palette, Ruler, Zap, AlertCircle,
+  ShoppingBag, Package, Wind, Palette, Ruler, Zap, HelpCircle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -47,7 +47,7 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
     staleTime: 60_000,
   });
 
-  // ── Email (fallback via edge function) ───────────────────────────────────
+  // ── Email fallback ────────────────────────────────────────────────────────
   const { data: userEmailData, isLoading: isLoadingEmail } = useQuery({
     queryKey: ["userEmail", client?.id],
     queryFn: async () => {
@@ -63,7 +63,7 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
     staleTime: 300_000,
   });
 
-  // ── QUERY 1: Pedidos (sem join) ───────────────────────────────────────────
+  // ── QUERY 1: Pedidos ──────────────────────────────────────────────────────
   const { data: rawOrders, isLoading: isLoadingOrders } = useQuery({
     queryKey: ["clientOrdersHistory", client?.id],
     queryFn: async () => {
@@ -81,7 +81,7 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
     staleTime: 60_000,
   });
 
-  // ── QUERY 2: Itens dos pedidos (sem join) ────────────────────────────────
+  // ── QUERY 2: Itens dos pedidos ────────────────────────────────────────────
   const orderIds = rawOrders?.map((o: any) => o.id) ?? [];
 
   const { data: rawItems, isLoading: isLoadingItems } = useQuery({
@@ -99,7 +99,7 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
     staleTime: 60_000,
   });
 
-  // ── QUERY 3: Variantes específicas (quando variant_id está preenchido) ───
+  // ── QUERY 3: Variantes específicas (variant_id preenchido) ────────────────
   const specificVariantIds = [...new Set(
     (rawItems ?? []).map((i: any) => i.variant_id).filter(Boolean)
   )];
@@ -110,7 +110,7 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
       if (!specificVariantIds.length) return [];
       const { data, error } = await supabase
         .from("product_variants")
-        .select("id, color, size, ohms, volume_ml, flavor_id, flavors(name)")
+        .select("id, color, size, ohms, volume_ml, price, pix_price, flavors(name)")
         .in("id", specificVariantIds);
       if (error) throw error;
       return data ?? [];
@@ -119,24 +119,21 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
     staleTime: 60_000,
   });
 
-  // ── QUERY 4: Todas as variantes dos produtos (para itens sem variant_id) ─
-  // Quando o variant_id não foi salvo, buscamos TODAS as variantes do produto
-  // para mostrar ao logista quais opções existem (ele precisa saber o que separar).
+  // ── QUERY 4: Variantes dos produtos sem variant_id (para identificar pelo preço) ──
   const productIdsWithoutVariant = [...new Set(
     (rawItems ?? [])
       .filter((i: any) => !i.variant_id && i.item_id)
       .map((i: any) => i.item_id)
   )];
 
-  const { data: allProductVariants } = useQuery({
-    queryKey: ["allProductVariants", productIdsWithoutVariant.join(",")],
+  const { data: candidateVariants } = useQuery({
+    queryKey: ["candidateVariants", productIdsWithoutVariant.join(",")],
     queryFn: async () => {
       if (!productIdsWithoutVariant.length) return [];
       const { data, error } = await supabase
         .from("product_variants")
-        .select("id, product_id, color, size, ohms, volume_ml, flavor_id, flavors(name), stock_quantity")
-        .in("product_id", productIdsWithoutVariant)
-        .order("flavor_id");
+        .select("id, product_id, color, size, ohms, volume_ml, price, pix_price, flavors(name)")
+        .in("product_id", productIdsWithoutVariant);
       if (error) throw error;
       return data ?? [];
     },
@@ -148,23 +145,39 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
   const specificVariantsMap = new Map((specificVariants ?? []).map((v: any) => [v.id, v]));
 
   // product_id → variantes[]
-  const productVariantsMap = new Map<number, any[]>();
-  (allProductVariants ?? []).forEach((v: any) => {
-    const arr = productVariantsMap.get(v.product_id) ?? [];
+  const candidatesByProduct = new Map<number, any[]>();
+  (candidateVariants ?? []).forEach((v: any) => {
+    const arr = candidatesByProduct.get(v.product_id) ?? [];
     arr.push(v);
-    productVariantsMap.set(v.product_id, arr);
+    candidatesByProduct.set(v.product_id, arr);
   });
 
-  // ── Combina tudo ──────────────────────────────────────────────────────────
-  const enrichedItems = (rawItems ?? []).map((item: any) => ({
-    ...item,
-    // Variante específica (pedidos novos com variant_id)
-    specificVariant: item.variant_id ? specificVariantsMap.get(item.variant_id) ?? null : null,
-    // Todas as variantes do produto (pedidos antigos sem variant_id)
-    allVariants: (!item.variant_id && item.item_id)
-      ? (productVariantsMap.get(item.item_id) ?? [])
-      : [],
-  }));
+  // Tenta identificar a variante pelo preço pago
+  // Retorna a variante se houver exatamente UMA com aquele preço (pix ou normal)
+  const guessVariantByPrice = (productId: number, pricePaid: number): any | null => {
+    const variants = candidatesByProduct.get(productId) ?? [];
+    if (!variants.length) return null;
+    const price = Number(pricePaid);
+    const matches = variants.filter((v: any) =>
+      Number(v.price) === price || Number(v.pix_price) === price
+    );
+    return matches.length === 1 ? matches[0] : null;
+  };
+
+  // ── Enriquece itens com variante resolvida ────────────────────────────────
+  const enrichedItems = (rawItems ?? []).map((item: any) => {
+    let resolvedVariant: any | null = null;
+
+    if (item.variant_id) {
+      // Pedido novo: variant_id salvo diretamente
+      resolvedVariant = specificVariantsMap.get(item.variant_id) ?? null;
+    } else if (item.item_id) {
+      // Pedido antigo: tenta identificar pelo preço
+      resolvedVariant = guessVariantByPrice(item.item_id, item.price_at_purchase);
+    }
+
+    return { ...item, resolvedVariant };
+  });
 
   const orders = rawOrders?.map((order: any) => ({
     ...order,
@@ -198,53 +211,31 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
     }
   };
 
-  // Monta os atributos de uma variante como array de strings
-  const getVariantAttrs = (v: any): string[] => {
-    const attrs: string[] = [];
-    const flavor = v.flavors?.name ?? v.flavor_name;
-    if (flavor)       attrs.push(flavor);
-    if (v.color?.trim())  attrs.push(v.color.trim());
-    if (v.size?.trim())   attrs.push(v.size.trim());
-    if (v.ohms?.trim())   attrs.push(`${v.ohms.trim()}Ω`);
-    if (v.volume_ml)      attrs.push(`${v.volume_ml}ml`);
-    return attrs;
-  };
+  // Renderiza os badges de atributos de uma variante
+  const renderVariantBadges = (variant: any, identified: boolean) => {
+    const attrs: { label: string; icon: React.ReactNode; color: string }[] = [];
 
-  // Badge de uma variante específica (comprada — pedidos novos)
-  const renderSpecificVariant = (v: any) => {
-    const attrs = getVariantAttrs(v);
+    const flavor = variant.flavors?.name;
+    if (flavor) attrs.push({ label: flavor, icon: <Wind className="w-2.5 h-2.5" />, color: "bg-purple-100 text-purple-800 border-purple-200" });
+    if (variant.color?.trim()) attrs.push({ label: variant.color.trim(), icon: <Palette className="w-2.5 h-2.5" />, color: "bg-pink-100 text-pink-800 border-pink-200" });
+    if (variant.size?.trim()) attrs.push({ label: variant.size.trim(), icon: <Ruler className="w-2.5 h-2.5" />, color: "bg-blue-100 text-blue-800 border-blue-200" });
+    if (variant.ohms?.trim()) attrs.push({ label: `${variant.ohms.trim()}Ω`, icon: <Zap className="w-2.5 h-2.5" />, color: "bg-amber-100 text-amber-800 border-amber-200" });
+    if (variant.volume_ml) attrs.push({ label: `${variant.volume_ml}ml`, icon: null, color: "bg-cyan-100 text-cyan-800 border-cyan-200" });
+
     if (!attrs.length) return null;
+
     return (
-      <div className="flex flex-wrap gap-1 mt-1">
+      <div className="flex flex-wrap gap-1 mt-1.5">
+        {!identified && (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-bold border border-amber-200">
+            <HelpCircle className="w-2.5 h-2.5" /> Identificado pelo preço
+          </span>
+        )}
         {attrs.map((a, i) => (
-          <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-800 text-[10px] font-bold border border-green-200">
-            ✓ {a}
+          <span key={i} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${a.color}`}>
+            {a.icon} {a.label}
           </span>
         ))}
-      </div>
-    );
-  };
-
-  // Lista de TODAS as variantes do produto (pedidos antigos sem variant_id)
-  const renderAllVariants = (variants: any[]) => {
-    if (!variants.length) return null;
-    return (
-      <div className="mt-2 space-y-1">
-        <div className="flex items-center gap-1 text-[10px] font-bold text-amber-700 uppercase">
-          <AlertCircle className="w-3 h-3" />
-          Variação não registrada — opções disponíveis do produto:
-        </div>
-        <div className="flex flex-wrap gap-1">
-          {variants.map((v: any, i: number) => {
-            const attrs = getVariantAttrs(v);
-            if (!attrs.length) return null;
-            return (
-              <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-semibold border border-slate-200">
-                {attrs.join(" · ")}
-              </span>
-            );
-          })}
-        </div>
       </div>
     );
   };
@@ -262,7 +253,7 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
         </DialogHeader>
 
         <div className="flex-1 overflow-hidden flex flex-col">
-          {/* ── CABEÇALHO DO PERFIL ── */}
+          {/* CABEÇALHO DO PERFIL */}
           <div className="p-6 pb-0 bg-white">
             <div className="flex items-start justify-between bg-slate-50 p-4 rounded-xl border border-slate-100 mb-6">
               <div className="flex gap-4">
@@ -529,11 +520,11 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                                                 {item.name_at_purchase}
                                               </p>
 
-                                              {/* Variante específica (pedidos novos com variant_id salvo) */}
-                                              {item.specificVariant && renderSpecificVariant(item.specificVariant)}
-
-                                              {/* Todas as variantes do produto (pedidos antigos sem variant_id) */}
-                                              {!item.specificVariant && item.allVariants.length > 0 && renderAllVariants(item.allVariants)}
+                                              {/* Variante resolvida (exata ou identificada pelo preço) */}
+                                              {item.resolvedVariant && renderVariantBadges(
+                                                item.resolvedVariant,
+                                                !!item.variant_id // true = exata, false = identificada pelo preço
+                                              )}
 
                                               <p className="text-xs text-slate-500 mt-1">
                                                 {item.quantity} un. × {formatCurrency(item.price_at_purchase)}

@@ -331,6 +331,7 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
           price_at_purchase: item.price,
           name_at_purchase: item.name,
           image_url_at_purchase: item.imageUrl,
+          variant_id: item.variantId ?? null,
         }))
       );
       if (itemsError) throw itemsError;
