@@ -127,6 +127,23 @@ serve(async (req) => {
     console.log(`[admin-delete-user] order_history.changed_by do usuário ${userId} anonimizado`)
 
     // ─────────────────────────────────────────────────────────────────────────
+    // PASSO 3.6: Anonimizar data_jobs onde created_by = userId
+    // FK: data_jobs.created_by → auth.users (NO ACTION — bloqueia delete)
+    // ─────────────────────────────────────────────────────────────────────────
+    const { error: dataJobsError } = await supabase
+      .from('data_jobs')
+      .update({ created_by: null })
+      .eq('created_by', userId)
+
+    if (dataJobsError) {
+      console.error('[admin-delete-user] Erro ao anonimizar data_jobs.created_by:', dataJobsError)
+      // Não bloquear — logar e continuar
+      console.warn('[admin-delete-user] Continuando mesmo com erro em data_jobs...')
+    } else {
+      console.log(`[admin-delete-user] data_jobs.created_by do usuário ${userId} anonimizado`)
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // PASSO 4: Tratar pedidos (excluir ou manter anônimos)
     // ─────────────────────────────────────────────────────────────────────────
     if (deleteOrders) {
