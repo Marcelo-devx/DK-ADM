@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, User, MapPin, Settings2 } from "lucide-react";
+import { Loader2, User, MapPin, Settings2, ShieldCheck } from "lucide-react";
 import { AdminUser, UpdateUserPayload } from "@/hooks/useUserAdmin";
 
 interface UserEditModalProps {
@@ -43,6 +43,7 @@ const EMPTY_FORM: UpdateUserPayload = {
   neighborhood: "",
   city: "",
   state: "",
+  role: "user",
   force_pix_on_next_purchase: false,
   is_credit_card_enabled: false,
 };
@@ -51,7 +52,6 @@ export function UserEditModal({ isOpen, onClose, user, onConfirm }: UserEditModa
   const [form, setForm] = useState<UpdateUserPayload>(EMPTY_FORM);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Preenche o formulário quando o usuário muda
   useEffect(() => {
     if (user) {
       setForm({
@@ -69,6 +69,7 @@ export function UserEditModal({ isOpen, onClose, user, onConfirm }: UserEditModa
         neighborhood: user.neighborhood ?? "",
         city: user.city ?? "",
         state: user.state ?? "",
+        role: user.role ?? "user",
         force_pix_on_next_purchase: user.force_pix_on_next_purchase ?? false,
         is_credit_card_enabled: user.is_credit_card_enabled ?? false,
       });
@@ -82,7 +83,6 @@ export function UserEditModal({ isOpen, onClose, user, onConfirm }: UserEditModa
     if (!user) return;
     setIsSubmitting(true);
     try {
-      // Limpa campos vazios opcionais para não sobrescrever com string vazia
       const payload: UpdateUserPayload = {
         ...form,
         date_of_birth: form.date_of_birth || null,
@@ -97,6 +97,12 @@ export function UserEditModal({ isOpen, onClose, user, onConfirm }: UserEditModa
   };
 
   if (!user) return null;
+
+  const getRoleBadgeColor = (role: string) => {
+    if (role === "adm") return "text-red-600";
+    if (role === "logistica") return "text-green-600";
+    return "text-slate-500";
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -275,6 +281,45 @@ export function UserEditModal({ isOpen, onClose, user, onConfirm }: UserEditModa
                   maxLength={2}
                 />
               </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* ── PERMISSÕES / ROLE ── */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <ShieldCheck className="h-4 w-4 text-slate-400" />
+              <span className="text-sm font-semibold text-slate-700 uppercase tracking-wide">
+                Permissões de Acesso
+              </span>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="role">Role do Usuário</Label>
+              <Select
+                value={form.role ?? "user"}
+                onValueChange={(v) => set("role", v)}
+              >
+                <SelectTrigger id="role" className={getRoleBadgeColor(form.role ?? "user")}>
+                  <SelectValue placeholder="Selecionar role..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="user">
+                    <span className="text-slate-600">👤 Usuário (padrão)</span>
+                  </SelectItem>
+                  <SelectItem value="logistica">
+                    <span className="text-green-600">🚚 Logística</span>
+                  </SelectItem>
+                  <SelectItem value="adm">
+                    <span className="text-red-600">🔐 Administrador</span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                {form.role === "adm" && "⚠️ Acesso total ao painel administrativo."}
+                {form.role === "logistica" && "✅ Acesso restrito: Pedidos, Exportar Rotas e Imprimir Etiquetas."}
+                {form.role === "user" && "Acesso apenas ao site da loja."}
+              </p>
             </div>
           </div>
 

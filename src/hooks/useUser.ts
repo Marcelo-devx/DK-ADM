@@ -5,7 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 interface Profile {
   first_name: string | null;
   last_name: string | null;
-  role: 'user' | 'adm';
+  role: string;
 }
 
 export const useUser = () => {
@@ -14,36 +14,41 @@ export const useUser = () => {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isLogistica, setIsLogistica] = useState(false);
+  const [role, setRole] = useState<string>('user');
 
-  // Usa o user.id como referência estável em vez do objeto user inteiro
   const userId = user?.id;
 
   useEffect(() => {
     const fetchUserProfile = async () => {
-      // Se não há usuário, limpa o estado
       if (!userId) {
         setLoading(false);
         setProfile(null);
         setIsAdmin(false);
+        setIsLogistica(false);
+        setRole('user');
         return;
       }
 
-      // Se há usuário, busca o profile
       setLoading(true);
       try {
         const { data, error } = await supabase
           .from('profiles')
-          .select('role')
+          .select('role, first_name, last_name')
           .eq('id', userId)
           .single();
 
         if (error) {
           console.error('[useUser] Erro ao buscar profile:', error.message);
           setIsAdmin(false);
+          setIsLogistica(false);
+          setRole('user');
           setProfile(null);
         } else if (data) {
           setProfile(data as Profile);
+          setRole(data.role);
           setIsAdmin(data.role === 'adm');
+          setIsLogistica(data.role === 'logistica');
         }
       } catch (e) {
         if (e instanceof Error) {
@@ -52,6 +57,8 @@ export const useUser = () => {
           console.error('[useUser] Erro inesperado:', e);
         }
         setIsAdmin(false);
+        setIsLogistica(false);
+        setRole('user');
         setProfile(null);
       } finally {
         setLoading(false);
@@ -61,5 +68,5 @@ export const useUser = () => {
     fetchUserProfile();
   }, [userId]);
 
-  return { user, profile, loading, isAdmin };
+  return { user, profile, loading, isAdmin, isLogistica, role };
 };

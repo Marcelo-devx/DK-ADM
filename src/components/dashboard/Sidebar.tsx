@@ -42,13 +42,16 @@ import {
   Gift,
   Award,
   ShieldAlert,
-  FileEdit
+  FileEdit,
+  Truck as TruckIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { useUser } from "@/hooks/useUser";
 
 const Sidebar = () => {
   const navigate = useNavigate();
+  const { isLogistica, isAdmin } = useUser();
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -62,10 +65,71 @@ const Sidebar = () => {
     );
 
   const sectionTitleClass = "px-3 mt-6 mb-2 text-xs font-black text-gray-400 uppercase tracking-wider";
-  
-  const iconClass = (color: string, isActive: boolean) => 
+
+  const iconClass = (color: string, isActive: boolean) =>
     cn("w-4 h-4 mr-3 transition-colors", isActive ? "text-primary" : color);
 
+  // ── SIDEBAR LOGÍSTICA (apenas 3 menus) ──
+  if (isLogistica && !isAdmin) {
+    return (
+      <aside className="w-64 h-screen bg-gray-50/80 border-r border-gray-200 flex flex-col">
+        <div className="p-6 pb-2">
+          <h1 className="text-2xl font-black tracking-tight flex items-center gap-2 text-gray-900">
+            <Box className="w-8 h-8 fill-primary text-primary" />
+            Tabacaria
+          </h1>
+          <span className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-[10px] font-bold uppercase tracking-wider">
+            <TruckIcon className="w-3 h-3" />
+            Logística
+          </span>
+        </div>
+
+        <nav className="flex-1 overflow-y-auto px-3 pb-6 space-y-1 custom-scrollbar">
+          <p className={sectionTitleClass}>Logística</p>
+
+          <NavLink to="/dashboard/orders" className={navLinkClass}>
+            {({ isActive }) => (
+              <>
+                <DollarSign className={iconClass("text-green-600", isActive)} />
+                Pedidos (Clientes)
+              </>
+            )}
+          </NavLink>
+
+          <NavLink to="/dashboard/spoke-export" className={navLinkClass}>
+            {({ isActive }) => (
+              <>
+                <FileOutput className={iconClass("text-green-600", isActive)} />
+                Exportar Rotas
+              </>
+            )}
+          </NavLink>
+
+          <NavLink to="/dashboard/print-labels" className={navLinkClass}>
+            {({ isActive }) => (
+              <>
+                <Printer className={iconClass("text-indigo-600", isActive)} />
+                Imprimir Etiquetas
+              </>
+            )}
+          </NavLink>
+        </nav>
+
+        {/* FOOTER COM LOGOUT */}
+        <div className="p-4 border-t border-gray-200 bg-white/50">
+          <button
+            onClick={handleLogout}
+            className="flex items-center w-full px-3 py-2 text-sm font-medium text-red-600 rounded-lg hover:bg-red-50 transition-colors group"
+          >
+            <LogOut className="w-4 h-4 mr-3 group-hover:scale-110 transition-transform" />
+            Sair do Sistema
+          </button>
+        </div>
+      </aside>
+    );
+  }
+
+  // ── SIDEBAR COMPLETA (admin) ──
   return (
     <aside className="w-64 h-screen bg-gray-50/80 border-r border-gray-200 flex flex-col">
       <div className="p-6 pb-2">

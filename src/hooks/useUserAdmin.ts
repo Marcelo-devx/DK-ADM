@@ -39,6 +39,7 @@ export interface UpdateUserPayload {
   neighborhood?: string;
   city?: string;
   state?: string;
+  role?: string;
   force_pix_on_next_purchase?: boolean;
   is_credit_card_enabled?: boolean;
 }

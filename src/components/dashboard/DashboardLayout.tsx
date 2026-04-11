@@ -5,31 +5,60 @@ import { useSession } from "@/components/SessionContextProvider";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 
+// Rotas permitidas para o role "logistica"
+const LOGISTICA_ALLOWED_ROUTES = [
+  "/dashboard/orders",
+  "/dashboard/spoke-export",
+  "/dashboard/print-labels",
+];
+
 const DashboardLayout = () => {
-  const { loading, isAdmin, user } = useUser();
+  const { loading, isAdmin, isLogistica, user } = useUser();
   const navigate = useNavigate();
   const location = useLocation();
   const session = useSession();
 
-  const sessionAccessToken = session?.access_token; // string estável
+  const sessionAccessToken = session?.access_token;
 
   const checkAuth = useCallback(() => {
     if (!loading && session !== undefined) {
       if (!user) {
         navigate("/login", { replace: true });
-      } else if (!isAdmin) {
-        // Se não for admin, redireciona para a página inicial ou uma página de acesso negado.
+        return;
+      }
+
+      // Nem admin nem logistica → redireciona para home
+      if (!isAdmin && !isLogistica) {
         navigate("/", { replace: true });
+        return;
+      }
+
+      // Se for logistica, verifica se a rota atual é permitida
+      if (isLogistica && !isAdmin) {
+        const currentPath = location.pathname;
+        // Permite acesso à raiz /dashboard (será redirecionado abaixo)
+        const isAllowed =
+          currentPath === "/dashboard" ||
+          LOGISTICA_ALLOWED_ROUTES.some((r) => currentPath.startsWith(r));
+
+        if (!isAllowed) {
+          navigate("/dashboard/orders", { replace: true });
+          return;
+        }
+
+        // Redireciona /dashboard raiz para /dashboard/orders
+        if (currentPath === "/dashboard") {
+          navigate("/dashboard/orders", { replace: true });
+        }
       }
     }
-  }, [loading, isAdmin, user?.id, navigate, sessionAccessToken]);
+  }, [loading, isAdmin, isLogistica, user?.id, navigate, sessionAccessToken, location.pathname]);
 
   useEffect(() => {
     checkAuth();
   }, [checkAuth]);
 
   if (loading) {
-    // Mostra uma tela de carregamento enquanto verifica a autenticação e permissão
     return (
       <div className="flex items-center justify-center h-screen">
         Carregando...
@@ -40,7 +69,6 @@ const DashboardLayout = () => {
   return (
     <div className="flex min-h-screen bg-gray-50">
       <Sidebar />
-      {/* Widget removido conforme solicitado */}
       <div className="flex-1 flex flex-col">
         <Header />
         <main className="p-8">
