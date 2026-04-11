@@ -198,15 +198,16 @@ export const SupplierOrderDetailModal = ({ order, isOpen, onClose }: SupplierOrd
         startY: order.notes ? 56 : 48,
         theme: 'striped',
         headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold', fontSize: 9 },
-        bodyStyles: { fontSize: 8 },
+        bodyStyles: { fontSize: 8, overflow: 'linebreak', valign: 'middle' },
         columnStyles: {
-          0: { cellWidth: 100 }, // Produto - mais largo
-          1: { cellWidth: 25, halign: 'center' },
-          2: { cellWidth: 25, halign: 'center' },
-          3: { cellWidth: 25, halign: 'center' },
-          4: { cellWidth: 35, halign: 'right' },
-          5: { cellWidth: 35, halign: 'right' }
+          0: { cellWidth: 'auto', overflow: 'linebreak' },
+          1: { cellWidth: 18, halign: 'center' },
+          2: { cellWidth: 20, halign: 'center' },
+          3: { cellWidth: 20, halign: 'center' },
+          4: { cellWidth: 34, halign: 'right' },
+          5: { cellWidth: 34, halign: 'right' }
         },
+        tableWidth: 269,
         foot: [["", "", "", "", "TOTAL:", formatCurrency(isProcessed ? order.received_total_cost : order.total_cost)]],
         footStyles: { fillColor: [241, 245, 249], textColor: [51, 65, 85], fontStyle: 'bold', fontSize: 9 },
         margin: { top: 50, left: 14, right: 14, bottom: 20 }

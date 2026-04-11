@@ -594,19 +594,20 @@ const SupplierOrdersPage = () => {
       });
 
       autoTable(doc, {
-        head: [["Produto / Variação", "Qtd. Pedida", "Qtd. Recebida", "Custo Unit.", "Subtotal"]],
+        head: [["Produto / Variação", "Qtd.", isProcessed ? "Recebido" : "-", "Custo Unit.", "Subtotal"]],
         body: tableRows,
         startY: 48,
         theme: "striped",
         headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold', fontSize: 9 },
-        bodyStyles: { fontSize: 8 },
+        bodyStyles: { fontSize: 8, overflow: 'linebreak', valign: 'middle' },
         columnStyles: {
-          0: { cellWidth: 120 }, // Produto - mais largo
-          1: { cellWidth: 25, halign: 'center' },
-          2: { cellWidth: 25, halign: 'center' },
-          3: { cellWidth: 40, halign: 'right' },
-          4: { cellWidth: 40, halign: 'right' }
+          0: { cellWidth: 'auto', overflow: 'linebreak' },
+          1: { cellWidth: 18, halign: 'center' },
+          2: { cellWidth: 22, halign: 'center' },
+          3: { cellWidth: 36, halign: 'right' },
+          4: { cellWidth: 36, halign: 'right' }
         },
+        tableWidth: 269,
         foot: [
           [
             "",
