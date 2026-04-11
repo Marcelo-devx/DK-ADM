@@ -142,6 +142,11 @@ const getWhatsAppLink = (phone: string | null, message: string = "") => {
     return `https://wa.me/${fullNumber}?text=${encodeURIComponent(message)}`;
 };
 
+const formatDate = (dateString: string) => {
+  const date = new Date(dateString);
+  return date.toLocaleDateString("pt-BR");
+};
+
 const OrdersPage = () => {
   const queryClient = useQueryClient();
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -337,6 +342,16 @@ const OrdersPage = () => {
       return true;
     }) || [];
   }, [orders, readyToShipOnly, startDate, endDate, debouncedOrderId, debouncedCPF, debouncedClientName, debouncedEmail, statusFilter, deliveryStatusFilter]);
+
+  const handleSelectOrder = (orderId: number, selected: boolean) => {
+    const next = new Set(selectedIds);
+    if (selected) {
+      next.add(orderId);
+    } else {
+      next.delete(orderId);
+    }
+    setSelectedIds(next);
+  };
 
   const validatePaymentAndSetPendingMutation = useMutation({
     mutationFn: async (orderId: number) => {
@@ -841,252 +856,82 @@ const OrdersPage = () => {
                 {isLoading ? (
                     <TableRow><TableCell colSpan={9}><Skeleton className="h-10 w-full" /></TableCell></TableRow>
                 ) : filteredOrders.map((order) => {
-                    const isPaid = order.status === "Finalizada" || order.status === "Pago";
-                    const needsManualValidation = order.status === 'Pago' && order.delivery_status === 'Aguardando Validação'; // Mantém para pedidos antigos
-                    const isInRoute = order.delivery_status === "Despachado";
-                    const isSelected = selectedIds.has(order.id);
-                    const isNextRoute = checkIsNextRoute(order.created_at);
-                    const paymentDetails = getPaymentMethodDetails(order.payment_method);
-                    const PaymentIcon = paymentDetails.icon;
-                    
-                    // Compute final total as: items subtotal + shipping + donation - coupon (explicit composition)
-                    // Fallback to total_price from DB when order_items is empty (e.g. logista RLS timing)
-                    const itemsSubtotalRaw = (order.order_items || []).reduce((acc: number, it: any) => acc + (Number(it.price_at_purchase) || 0) * (Number(it.quantity) || 0), 0);
-                    const shipping = Number(order.shipping_cost) || 0;
-                    const donation = Number(order.donation_amount) || 0;
-                    const coupon = Number(order.coupon_discount) || 0;
+                  const customerName = `${order.profiles?.first_name || ""} ${order.profiles?.last_name || ""}`.trim() || "Sem nome";
+                  const isMobile = true;
 
-                    const finalTotal = (order.order_items && order.order_items.length > 0)
-                      ? itemsSubtotalRaw + shipping + donation - coupon
-                      : Number(order.total_price) || 0;
-                    
-                    const phone = order.profiles?.phone;
-                    const name = order.profiles?.first_name || "Cliente";
-
-                    // Lógica de badge de status atualizada
-                    let statusBadge;
-                    if (order.status === 'Pago' && (order.delivery_status === 'Aguardando Coleta' || order.delivery_status === 'Pendente')) {
-                        statusBadge = (
-                            <Badge variant="secondary" className="bg-green-100 text-green-800">
-                                Pago
-                            </Badge>
-                        );
-                    } else if (needsManualValidation) {
-                        statusBadge = (
-                            <Badge variant="destructive" className="bg-orange-500 hover:bg-orange-600 gap-1">
-                                <ShieldCheck className="w-3 h-3" /> Aguardando Validação
-                            </Badge>
-                        );
-                    } else {
-                        statusBadge = (
-                            <Badge variant="secondary" className={cn("text-[10px] w-fit", isPaid && "bg-green-100 text-green-800")}>
-                                {order.status}
-                            </Badge>
-                        );
-                    }
-
-                    // Lógica de badge de entrega
-                    let deliveryBadge;
-                    if (needsManualValidation) {
-                        deliveryBadge = <Badge variant="outline" className="text-gray-400 border-gray-200">Bloqueado</Badge>;
-                    } else {
-                        deliveryBadge = (
-                            <Badge variant="secondary" className={cn(
-                                "w-fit",
-                                order.delivery_status === 'Entregue' && "bg-green-100 text-green-800",
-                                order.delivery_status === 'Despachado' && "bg-blue-100 text-blue-800 animate-pulse",
-                                order.delivery_status === 'Embalado' && "bg-amber-100 text-amber-800"
-                            )}>
-                                {order.delivery_status}
-                            </Badge>
-                        );
-                    }
-
-                    return (
+                  return (
                     <TableRow key={order.id} className={cn(
-                        isSelected ? "bg-primary/5 border-l-4 border-l-primary" : 
-                        needsManualValidation ? "bg-orange-50/40" : 
-                        (isNextRoute && order.delivery_status === 'Pendente') ? "bg-yellow-50/60 border-l-4 border-l-yellow-400" : ""
+                      "border-l-4 transition-colors hover:bg-muted/30",
+                      order.delivery_status === 'Próx. Dia' ? 'border-l-yellow-500 bg-yellow-50/40' : '',
+                      selectedIds.has(order.id) ? 'bg-primary/5' : '',
+                      order.status === 'Cancelado' ? 'opacity-75' : ''
                     )}>
-                        <TableCell className="text-center">
-                            <Checkbox 
-                                checked={isSelected}
-                                onCheckedChange={() => toggleSelectOne(order.id)}
-                            />
-                        </TableCell>
-                        <TableCell className="font-mono text-sm font-bold">#{order.id}</TableCell>
-                        <TableCell>
-                        <div className="flex flex-col">
-                            <span className="text-xs">{new Date(order.created_at).toLocaleDateString("pt-BR")}</span>
-                            <span className="text-[10px] text-muted-foreground">{new Date(order.created_at).toLocaleTimeString("pt-BR", { hour: '2-digit', minute: '2-digit' })}</span>
-                            
-                            {isNextRoute && order.delivery_status === 'Pendente' && (
-                            <Badge variant="outline" className="mt-1 w-fit text-[9px] bg-yellow-100 text-yellow-800 border-yellow-300 gap-1 px-1">
-                                <CalendarClock className="w-3 h-3" /> Próx. Dia
-                            </Badge>
-                            )}
+                      <TableCell className="w-12">
+                        <Checkbox
+                          checked={selectedIds.has(order.id)}
+                          onCheckedChange={(checked) => handleSelectOrder(order.id, !!checked)}
+                          aria-label={`Selecionar pedido ${order.id}`}
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          <span>#{order.id}</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 md:hidden shrink-0"
+                            onClick={() => {
+                              setSelectedClientForHistory(order);
+                              setIsClientHistoryOpen(true);
+                            }}
+                            title="Ver detalhes do cliente"
+                            aria-label={`Ver detalhes do cliente do pedido ${order.id}`}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
                         </div>
-                        </TableCell>
-                        <TableCell>
-                        <div className="flex flex-col gap-0.5">
-                            <div className="flex items-center gap-2">
-                                <span className="font-medium text-sm text-gray-900">{order.profiles?.first_name} {order.profiles?.last_name}</span>
-                                {phone && (
-                                    <TooltipProvider>
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <a 
-                                                    href={getWhatsAppLink(phone, `Olá ${name}, sobre seu pedido #${order.id}...`)} 
-                                                    target="_blank" 
-                                                    rel="noreferrer"
-                                                    className="bg-green-100 p-1 rounded-full text-green-600 hover:bg-green-200 hover:scale-110 transition-all"
-                                                >
-                                                    <MessageCircle className="w-3 h-3" />
-                                                </a>
-                                            </TooltipTrigger>
-                                            <TooltipContent>Abrir WhatsApp</TooltipContent>
-                                        </Tooltip>
-                                    </TooltipProvider>
-                                )}
-                                {/* Botão de Histórico */}
-                                <TooltipProvider>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <Button 
-                                                variant="ghost" 
-                                                size="icon" 
-                                                className="h-6 w-6 text-blue-600 hover:bg-blue-50 rounded-full"
-                                                onClick={() => {
-                                                    setSelectedClientForHistory({
-                                                        id: order.user_id,
-                                                        first_name: order.profiles?.first_name,
-                                                        last_name: order.profiles?.last_name,
-                                                        email: order.profiles?.email || "", // Será carregado pelo modal
-                                                        created_at: null,
-                                                        force_pix_on_next_purchase: false,
-                                                        order_count: 0, 
-                                                        completed_order_count: 0
-                                                    });
-                                                    setIsClientHistoryOpen(true);
-                                                }}
-                                            >
-                                                <History className="w-3 h-3" />
-                                            </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>Histórico de Pedidos</TooltipContent>
-                                    </Tooltip>
-                                </TooltipProvider>
-                            </div>
-                            <span className="text-[11px] text-muted-foreground font-mono">{formatPhone(phone || "")}</span>
+                      </TableCell>
+                      <TableCell>{formatDate(order.created_at)}</TableCell>
+                      <TableCell>
+                        <div className="font-medium">{customerName}</div>
+                        <div className="text-sm text-muted-foreground">{formatPhone(order.profiles?.phone || null)}</div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-2">
+                          <Badge variant={order.status === 'Cancelado' ? 'destructive' : 'secondary'}>{order.status}</Badge>
+                          <Badge variant="outline">{order.delivery_status}</Badge>
                         </div>
-                        </TableCell>
-                        <TableCell className="font-bold">{formatCurrency(finalTotal)}</TableCell>
-                        <TableCell>
-                          {statusBadge}
-                        </TableCell>
-                        <TableCell>
-                            {deliveryBadge}
-                        </TableCell>
-                        <TableCell>
-                            <Badge variant="outline" className={cn("gap-1 pr-3 w-fit", paymentDetails.style)}>
-                                <PaymentIcon className="w-3 h-3" />
-                                {paymentDetails.label}
-                            </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                            {needsManualValidation ? (
-                                <>
-                                    <TooltipProvider>
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <Button 
-                                                    size="icon" 
-                                                    className="bg-green-600 hover:bg-green-700 h-8 w-8"
-                                                    onClick={() => validatePaymentAndSetPendingMutation.mutate(order.id)}
-                                                    disabled={validatePaymentAndSetPendingMutation.isPending && validatePaymentAndSetPendingMutation.variables === order.id}
-                                                >
-                                                    {validatePaymentAndSetPendingMutation.isPending && validatePaymentAndSetPendingMutation.variables === order.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckSquare className="w-4 h-4" />}
-                                                </Button>
-                                            </TooltipTrigger>
-                                            <TooltipContent><p>Validar Comprovante e Liberar para Envio</p></TooltipContent>
-                                        </Tooltip>
-                                    </TooltipProvider>
-                                    <TooltipProvider>
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <Button 
-                                                    size="icon" 
-                                                    variant="destructive" 
-                                                    className="h-8 w-8"
-                                                    onClick={() => setActionToConfirm({ action: 'cancel_fraud', client: order })}
-                                                >
-                                                    <ShieldX className="w-4 h-4" />
-                                                </Button>
-                                            </TooltipTrigger>
-                                            <TooltipContent><p>Cancelar Pedido (Suspeita de Fraude)</p></TooltipContent>
-                                        </Tooltip>
-                                    </TooltipProvider>
-                                </>
-                            ) : (
-                                <>
-                                    {isInRoute && (
-                                        <TooltipProvider>
-                                            <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                    <Button 
-                                                        size="sm" 
-                                                        variant="outline"
-                                                        className="text-green-600 border-green-200 bg-green-50 hover:bg-green-100 font-bold h-8 px-3 text-xs"
-                                                        onClick={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: 'Entregue', info: 'Confirmado pelo painel' })}
-                                                        disabled={updateDeliveryStatusMutation.isPending}
-                                                    >
-                                                        <CheckCircle2 className="w-3 h-3 mr-1" /> Entregue
-                                                    </Button>
-                                                </TooltipTrigger>
-                                                <TooltipContent>Marcar pedido como entregue</TooltipContent>
-                                            </Tooltip>
-                                        </TooltipProvider>
-                                    )}
-                                    
-                                    <Button variant="ghost" size="icon" onClick={() => { setSelectedOrder(order); setIsDetailModalOpen(true); }}><Eye className="h-4 w-4 text-primary" /></Button>
-                                    
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end">
-                                            <DropdownMenuLabel>Ações do Pedido</DropdownMenuLabel>
-                                            {phone && (
-                                                <DropdownMenuItem asChild>
-                                                    <a href={getWhatsAppLink(phone, `Olá ${name}, falando sobre o pedido #${order.id}...`)} target="_blank" rel="noreferrer" className="cursor-pointer text-green-600 font-medium">
-                                                        <MessageCircle className="w-4 h-4 mr-2" /> Abrir WhatsApp
-                                                    </a>
-                                                </DropdownMenuItem>
-                                            )}
-                                            <DropdownMenuItem onSelect={() => { setSelectedOrder(order); setIsLabelModalOpen(true); }} disabled={!isPaid}>
-                                                <Printer className="w-4 h-4 mr-2" /> Imprimir Etiqueta
-                                            </DropdownMenuItem>
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: 'Embalado', info: 'Marcado como embalado manualmente' })} disabled={!isPaid || order.delivery_status === 'Despachado' || order.delivery_status === 'Entregue' || order.delivery_status === 'Cancelado'}>
-                                                <Package className="w-4 h-4 mr-2" /> Marcar como Embalado
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: 'Despachado', info: 'Despachado manualmente' })} disabled={!isPaid || isInRoute || order.delivery_status === 'Entregue'}>
-                                                <Truck className="w-4 h-4 mr-2" /> Marcar como Despachado
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: 'Entregue', info: 'Entregue manualmente' })} disabled={order.delivery_status === 'Entregue'}>
-                                                <CheckCircle2 className="w-4 h-4 mr-2" /> Marcar como Entregue
-                                            </DropdownMenuItem>
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuItem onSelect={() => { setSelectedOrder(order); setIsDeleteAlertOpen(true); }} className="text-red-600">
-                                                <Trash2 className="w-4 h-4 mr-2" /> Excluir Pedido
-                                            </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
-                                </>
-                            )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              setSelectedClientForHistory(order);
+                              setIsClientHistoryOpen(true);
+                            }}
+                            title="Ver detalhes do cliente"
+                            aria-label={`Ver detalhes do cliente do pedido ${order.id}`}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              setSelectedOrder(order);
+                              setIsDetailModalOpen(true);
+                            }}
+                            title="Ver detalhes do pedido"
+                            aria-label={`Ver detalhes do pedido ${order.id}`}
+                          >
+                            <Package className="h-4 w-4" />
+                          </Button>
                         </div>
-                        </TableCell>
+                      </TableCell>
                     </TableRow>
-                    );
+                  );
                 })}
             </TableBody>
             </Table>
