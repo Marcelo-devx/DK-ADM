@@ -4,7 +4,7 @@ import { useUser } from "@/hooks/useUser";
 import { Loader2 } from "lucide-react";
 
 const Index = () => {
-  const { user, isAdmin, loading } = useUser();
+  const { user, isAdmin, isLogistica, loading } = useUser();
   const navigate = useNavigate();
   const [timeoutError, setTimeoutError] = useState(false);
 
@@ -30,11 +30,13 @@ const Index = () => {
         navigate("/login");
       } else if (isAdmin) {
         navigate("/dashboard");
+      } else if (isLogistica) {
+        navigate("/dashboard/orders");
       } else {
         navigate("/meus-pedidos");
       }
     }
-  }, [user, isAdmin, loading, navigate, timeoutError]);
+  }, [user, isAdmin, isLogistica, loading, navigate, timeoutError]);
 
   const handleRetry = () => {
     setTimeoutError(false);
