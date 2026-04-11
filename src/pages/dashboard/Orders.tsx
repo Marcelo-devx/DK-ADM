@@ -337,13 +337,13 @@ const OrdersPage = () => {
     mutationFn: async (orderId: number) => {
       const { error } = await supabase
         .from("orders")
-        .update({ delivery_status: "Pendente" })
+        .update({ status: "Pago", delivery_status: "Pendente" })
         .eq("id", orderId);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
-      showSuccess("Pagamento validado! Pedido pronto para envio.");
+      showSuccess("Pedido marcado como pago com sucesso!");
     },
     onError: (err: any) => showError(err.message),
   });
@@ -1096,7 +1096,7 @@ const OrdersPage = () => {
                         className="bg-green-600 hover:bg-green-700 font-black h-12 px-6 rounded-xl shadow-lg"
                     >
                         {isProcessingBulk ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <CheckCircle2 className="w-5 h-5 mr-2" />}
-                        Validar Pagamentos
+                        Marcar como Pago
                     </Button>
                     
                     <Button 
