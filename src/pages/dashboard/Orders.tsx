@@ -337,14 +337,14 @@ const OrdersPage = () => {
     mutationFn: async (orderId: number) => {
       const { error } = await supabase
         .from("orders")
-        .update({ status: "Pago", delivery_status: "Pendente" })
+        .update({ status: "Pago", delivery_status: "Aguardando Coleta" })
         .eq("id", orderId)
         .in("status", ["Pendente", "Aguardando Pagamento", "Aguardando Validação"]);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
-      showSuccess("Pedido marcado como pago com sucesso!");
+      showSuccess("Pedido marcado como pago e envio liberado para coleta!");
     },
     onError: (err: any) => showError(err.message),
   });
