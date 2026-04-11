@@ -13,15 +13,39 @@ function extractProjectId(url: string): string {
   return match ? match[1] : 'default';
 }
 
+// Storage seguro com fallback para memória — necessário para iOS Safari
+// em modo de navegação privada e WebViews (WhatsApp, Instagram, etc.)
+// onde window.localStorage pode lançar exceção ou estar indisponível.
+function createSafeStorage() {
+  try {
+    const testKey = '__sb_storage_test__';
+    window.localStorage.setItem(testKey, '1');
+    window.localStorage.removeItem(testKey);
+    return window.localStorage;
+  } catch {
+    // Fallback: storage em memória. A sessão não persiste entre abas,
+    // mas a aplicação não quebra.
+    const mem: Record<string, string> = {};
+    return {
+      getItem: (key: string) => mem[key] ?? null,
+      setItem: (key: string, value: string) => { mem[key] = value; },
+      removeItem: (key: string) => { delete mem[key]; },
+      clear: () => { Object.keys(mem).forEach(k => delete mem[k]); },
+      key: (index: number) => Object.keys(mem)[index] ?? null,
+      get length() { return Object.keys(mem).length; },
+    };
+  }
+}
+
 export const supabase = createClient(
-  SUPABASE_URL, 
+  SUPABASE_URL,
   SUPABASE_PUBLISHABLE_KEY,
   {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
-      storage: window.localStorage,
+      storage: createSafeStorage(),
       storageKey: `sb-${extractProjectId(SUPABASE_URL)}-auth-token`,
       flowType: 'pkce',
     }

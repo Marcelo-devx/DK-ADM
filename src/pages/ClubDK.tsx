@@ -5,7 +5,7 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Crown, Gift, Truck, Zap, Lock, Info, Star, Copy, UserPlus, Cake, Loader2 } from "lucide-react";
+import { Crown, Gift, Zap, Lock, Star, Cake, Loader2 } from "lucide-react";
 import { useUser } from "@/hooks/useUser";
 import { showSuccess, showError } from "@/utils/toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,8 +15,17 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { SalesPopupDisplay } from "@/components/SalesPopupDisplay";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
-// Interface para os cupons de prêmio
 interface RewardCoupon {
     id: number;
     name: string;
@@ -29,8 +38,9 @@ export default function ClubDKPage() {
   const { user } = useUser();
   const queryClient = useQueryClient();
   const [birthDate, setBirthDate] = useState("");
-  // Prevent the birthday RPC from running repeatedly during re-renders/refetches
   const birthdayProcessedRef = useRef(false);
+  // Substitui confirm() nativo — bloqueado no iOS Safari/WebViews
+  const [pendingRedeemCoupon, setPendingRedeemCoupon] = useState<RewardCoupon | null>(null);
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ["loyaltyProfile", user?.id],
@@ -54,7 +64,6 @@ export default function ClubDKPage() {
     },
   });
 
-  // Busca CUPONS que custam pontos (Loja de Resgate)
   const { data: rewardCoupons, isLoading: isLoadingRewards } = useQuery({
     queryKey: ["publicRewardCoupons"],
     queryFn: async () => {
@@ -68,27 +77,17 @@ export default function ClubDKPage() {
     }
   });
 
-  // Processa bônus de aniversário automaticamente — executa apenas quando for o dia do aniversário
   useEffect(() => {
-    // Se já processamos nesta sessão, não executamos novamente
     if (birthdayProcessedRef.current) return;
-
-    // Só tentamos processar se houver usuário e data de nascimento
     if (!user || !profile?.date_of_birth) return;
 
     try {
       const dob = new Date(profile.date_of_birth);
       const today = new Date();
-
-      // Compara apenas dia e mês (aniversário anual)
       const isBirthdayToday = dob.getUTCDate() === today.getUTCDate() && dob.getUTCMonth() === today.getUTCMonth();
 
-      if (!isBirthdayToday) {
-        // Não é hoje — não processar agora
-        return;
-      }
+      if (!isBirthdayToday) return;
 
-      // Marca como processado para evitar reentradas enquanto aguardamos a resposta
       birthdayProcessedRef.current = true;
 
       (async () => {
@@ -98,7 +97,6 @@ export default function ClubDKPage() {
             showError(`Erro ao processar bônus de aniversário: ${error.message}`);
             return;
           }
-
           if (data === 'Bônus concedido com sucesso!' || (typeof data === 'string' && data.toLowerCase().includes('concedido'))) {
             showSuccess("🎉 Feliz aniversário! Você acaba de ganhar seus pontos de presente.");
             queryClient.invalidateQueries({ queryKey: ["loyaltyProfile"] });
@@ -108,7 +106,6 @@ export default function ClubDKPage() {
         }
       })();
     } catch (err: any) {
-      // Em caso de erro de parsing, garantimos que não vamos tentar novamente indefinidamente
       birthdayProcessedRef.current = true;
       console.error('ClubDK birthday processing error:', err);
     }
@@ -135,7 +132,6 @@ export default function ClubDKPage() {
     onSuccess: () => {
         showSuccess("Resgate realizado! O cupom está na sua conta.");
         queryClient.invalidateQueries({ queryKey: ["loyaltyProfile"] });
-        // Opcional: Redirecionar para 'Meus Pedidos' ou mostrar o código
     },
     onError: (err: any) => showError(`Erro no resgate: ${err.message}`),
   });
@@ -145,10 +141,10 @@ export default function ClubDKPage() {
   const currentTier = profile.loyalty_tiers;
   const nextTier = tiers.find((t: any) => t.min_spend > (profile.spend_last_6_months || 0));
   const spend = profile.spend_last_6_months || 0;
-  
+
   let progressPercent = 0;
   let toNextLevel = 0;
-  
+
   if (nextTier) {
     const currentTierMin = currentTier?.min_spend || 0;
     const range = nextTier.min_spend - currentTierMin;
@@ -238,13 +234,11 @@ export default function ClubDKPage() {
                                     {rewardCoupons.map((coupon) => {
                                         const canAfford = profile.points >= coupon.points_cost;
                                         return (
-                                            <button 
-                                                key={coupon.id} 
+                                            <button
+                                                key={coupon.id}
                                                 disabled={!canAfford || redeemMutation.isPending}
                                                 onClick={() => {
-                                                    if(confirm(`Confirmar troca de ${coupon.points_cost} pontos pelo cupom de R$ ${coupon.discount_value}?`)) {
-                                                        redeemMutation.mutate(coupon.id);
-                                                    }
+                                                    if (canAfford) setPendingRedeemCoupon(coupon);
                                                 }}
                                                 className={cn(
                                                     "flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all relative group",
@@ -307,7 +301,32 @@ export default function ClubDKPage() {
             </Card>
         </div>
       </div>
-      
+
+      {/* Dialog de confirmação de resgate — substitui confirm() nativo que é bloqueado no iOS */}
+      <AlertDialog open={!!pendingRedeemCoupon} onOpenChange={(open) => { if (!open) setPendingRedeemCoupon(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Resgate</AlertDialogTitle>
+            <AlertDialogDescription>
+              Deseja trocar <strong>{pendingRedeemCoupon?.points_cost} pontos</strong> pelo cupom de <strong>R$ {pendingRedeemCoupon?.discount_value}</strong>? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingRedeemCoupon) {
+                  redeemMutation.mutate(pendingRedeemCoupon.id);
+                  setPendingRedeemCoupon(null);
+                }
+              }}
+            >
+              Confirmar Resgate
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Componente de Prova Social - Popups de Venda */}
       <SalesPopupDisplay />
     </div>
