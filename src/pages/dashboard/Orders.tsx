@@ -338,7 +338,8 @@ const OrdersPage = () => {
       const { error } = await supabase
         .from("orders")
         .update({ status: "Pago", delivery_status: "Pendente" })
-        .eq("id", orderId);
+        .eq("id", orderId)
+        .in("status", ["Pendente", "Aguardando Pagamento", "Aguardando Validação"]);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -447,7 +448,8 @@ const OrdersPage = () => {
     
     for (const id of Array.from(selectedIds)) {
         const order = orders?.find(o => o.id === id);
-        if (order && order.status === 'Pago' && order.delivery_status === 'Aguardando Validação') {
+        const isEligible = order && ["Pendente", "Aguardando Pagamento", "Aguardando Validação"].includes(order.status);
+        if (isEligible) {
             try {
                 await validatePaymentAndSetPendingMutation.mutateAsync(id);
                 successCount++;
@@ -458,7 +460,7 @@ const OrdersPage = () => {
     setIsProcessingBulk(false);
     setSelectedIds(new Set());
     if (successCount > 0) showSuccess(`${successCount} pagamentos validados com sucesso!`);
-    else showError("Nenhum pedido apto para validação foi processado.");
+    else showError("Nenhum pedido elegível para marcação manual como pago foi processado.");
   };
 
   const handleBulkPackaged = async () => {
