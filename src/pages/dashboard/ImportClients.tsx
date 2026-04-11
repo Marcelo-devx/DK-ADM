@@ -25,7 +25,7 @@ const ImportClientsPage = () => {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [clientsToImport, setClientsToImport] = useState<any[]>([]);
   const [isResultModalOpen, setIsResultModalOpen] = useState(false);
-  const [importResult, setImportResult] = useState<{ success: number; failed: number; errors: string[] } | null>(null);
+  const [importResult, setImportResult] = useState<{ created?: number; updated?: number; success: number; failed: number; errors: string[] } | null>(null);
 
   // Função robusta para converter datas da planilha para ISO (YYYY-MM-DD)
   const formatAnyDateToISO = (val: any) => {
@@ -62,17 +62,30 @@ const ImportClientsPage = () => {
 
   const bulkImportMutation = useMutation({
     mutationFn: async (clients: any[]) => {
-      const { data, error } = await supabase.functions.invoke("bulk-import-clients", { 
-        body: { clients } 
+      const { data, error } = await supabase.functions.invoke("bulk-import-clients", {
+        body: { clients }
       });
-      if (error) throw new Error(error.message);
+      if (error) {
+        // Tenta extrair mensagem de erro mais detalhada do corpo da resposta
+        const detail = (error as any)?.context?.json?.details || (error as any)?.context?.json?.error || error.message;
+        throw new Error(detail);
+      }
+      if (!data) throw new Error("Resposta vazia da função de importação.");
       return data;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       setIsImportModalOpen(false);
       setClientsToImport([]);
-      setImportResult(data.details);
+      // Normaliza o resultado para o modal (garante campo 'success' para retrocompatibilidade)
+      const details = data?.details ?? {};
+      setImportResult({
+        created: details.created ?? 0,
+        updated: details.updated ?? 0,
+        success: (details.created ?? 0) + (details.updated ?? 0),
+        failed: details.failed ?? 0,
+        errors: details.errors ?? [],
+      });
       setIsResultModalOpen(true);
     },
     onError: (error: Error) => {
