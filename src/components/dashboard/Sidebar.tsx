@@ -5,49 +5,24 @@ import { useEffect } from "react";
 import {
   Home,
   BarChart3,
-  Lightbulb,
   DollarSign,
-  Coins,
   Heart,
-  Bitcoin,
   Bike,
-  Truck,
-  Map as MapIcon,
-
   FileOutput,
   Printer,
   Package,
-  LayoutGrid,
-  ListTree,
-  Tags,
   Users,
   UserPlus,
-  FileUp,
   Crown,
   TicketCheck,
   Percent,
   Ticket,
-  Star,
-  ShoppingCart,
-  Image,
-  GalleryHorizontal,
-  MessageSquare,
-  Webhook,
-  Plug,
-  Workflow,
-  Cloud,
-  Lock,
-  Settings,
-  LogOut,
-  Box,
-  Globe,
-  Gift,
-  Award,
   ShieldAlert,
   FileEdit,
-  Truck as TruckIcon,
-  Trash2,
   X,
+  Box,
+  Truck as TruckIcon,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -80,7 +55,7 @@ const Sidebar = () => {
   const iconClass = (color: string, isActive: boolean) =>
     cn("w-4 h-4 mr-3 transition-colors", isActive ? "text-primary" : color);
 
-  const showGerenteGeralMenus = isGerenteGeral && !isAdmin;
+  const isGerenteGeralView = isGerenteGeral && !isAdmin;
 
   const sidebarContent = (
     <>
@@ -97,14 +72,14 @@ const Sidebar = () => {
         </button>
       </div>
 
-      {showGerenteGeralMenus && (
+      {isGerenteGeralView && (
         <span className="mx-6 mt-1 mb-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold uppercase tracking-wider">
           <Crown className="w-3 h-3" />
           Gerente Geral
         </span>
       )}
 
-      {isGerente && !isAdmin && !isGerenteGeral && (
+      {isGerente && !isAdmin && !isGerenteGeralView && (
         <span className="mx-6 mt-1 mb-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 text-[10px] font-bold uppercase tracking-wider">
           <Crown className="w-3 h-3" />
           Gerente Logística
@@ -119,7 +94,53 @@ const Sidebar = () => {
       )}
 
       <nav className="flex-1 overflow-y-auto px-3 pb-6 space-y-1 custom-scrollbar">
-        {isLogistica && !isAdmin && !showGerenteGeralMenus ? (
+        {isGerenteGeralView ? (
+          <>
+            <p className={sectionTitleClass}>Operação</p>
+            <NavLink to="/dashboard/orders" className={navLinkClass}>
+              {({ isActive }) => (<><DollarSign className={iconClass("text-green-600", isActive)} />Pedidos (Clientes)</>)}
+            </NavLink>
+            <NavLink to="/dashboard/donations" className={navLinkClass}>
+              {({ isActive }) => (<><Heart className={iconClass("text-rose-600", isActive)} />Doações</>)}
+            </NavLink>
+            <NavLink to="/dashboard/products" className={navLinkClass}>
+              {({ isActive }) => (<><Package className={iconClass("text-blue-600", isActive)} />Produtos</>)}
+            </NavLink>
+            <NavLink to="/dashboard/shipping-rates" className={navLinkClass}>
+              {({ isActive }) => (<><Bike className={iconClass("text-indigo-600", isActive)} />Fretes e Taxa</>)}
+            </NavLink>
+
+            <p className={sectionTitleClass}>Clientes</p>
+            <NavLink to="/dashboard/clients" className={navLinkClass}>
+              {({ isActive }) => (<><Users className={iconClass("text-cyan-600", isActive)} />Base de Cliente</>)}
+            </NavLink>
+            <NavLink to="/dashboard/cadastrar-cliente" className={navLinkClass}>
+              {({ isActive }) => (<><UserPlus className={iconClass("text-cyan-600", isActive)} />Cadastrar Cliente</>)}
+            </NavLink>
+
+            <p className={sectionTitleClass}>Fidelidade & Promoções</p>
+            <NavLink to="/dashboard/club-dk" className={navLinkClass}>
+              {({ isActive }) => (<><Crown className={iconClass("text-pink-600", isActive)} />Club DK Fidelidade</>)}
+            </NavLink>
+            <NavLink to="/dashboard/user-coupons-history" className={navLinkClass}>
+              {({ isActive }) => (<><TicketCheck className={iconClass("text-pink-600", isActive)} />Histórico de Cupons</>)}
+            </NavLink>
+            <NavLink to="/dashboard/promotions" className={navLinkClass}>
+              {({ isActive }) => (<><Percent className={iconClass("text-pink-600", isActive)} />Kits & Promoções</>)}
+            </NavLink>
+            <NavLink to="/dashboard/coupons" className={navLinkClass}>
+              {({ isActive }) => (<><Ticket className={iconClass("text-pink-600", isActive)} />Cupons</>)}
+            </NavLink>
+
+            <p className={sectionTitleClass}>Administração</p>
+            <NavLink to="/dashboard/user-admin" className={navLinkClass}>
+              {({ isActive }) => (<><ShieldAlert className={iconClass("text-red-600", isActive)} />Admin Usuários</>)}
+            </NavLink>
+            <NavLink to="/dashboard/order-admin" className={navLinkClass}>
+              {({ isActive }) => (<><FileEdit className={iconClass("text-red-600", isActive)} />Admin Pedidos</>)}
+            </NavLink>
+          </>
+        ) : isLogistica && !isAdmin ? (
           <>
             <p className={sectionTitleClass}>Logística</p>
             <NavLink to="/dashboard/orders" className={navLinkClass}>
@@ -140,141 +161,6 @@ const Sidebar = () => {
             </NavLink>
             <NavLink to="/dashboard/analytics" className={navLinkClass}>
               {({ isActive }) => (<><BarChart3 className={iconClass("text-slate-500", isActive)} />Analytics</>)}
-            </NavLink>
-
-            <p className={sectionTitleClass}>Vendas & Financeiro</p>
-            <NavLink to="/dashboard/orders" className={navLinkClass}>
-              {({ isActive }) => (<><DollarSign className={iconClass("text-green-600", isActive)} />Pedidos (Clientes)</>)}
-            </NavLink>
-            <NavLink to="/dashboard/donations" className={navLinkClass}>
-              {({ isActive }) => (<><Heart className={iconClass("text-rose-600", isActive)} />Doações</>)}
-            </NavLink>
-            <NavLink to="/dashboard/supplier-orders" className={navLinkClass}>
-              {({ isActive }) => (<><Truck className={iconClass("text-green-600", isActive)} />Pedidos (Fornecedor)</>)}
-            </NavLink>
-            <NavLink to="/dashboard/crypto" className={navLinkClass}>
-              {({ isActive }) => (<><Bitcoin className={iconClass("text-green-600", isActive)} />Cripto</>)}
-            </NavLink>
-
-            <p className={sectionTitleClass}>Catálogo</p>
-            <NavLink to="/dashboard/products" className={navLinkClass}>
-              {({ isActive }) => (<><Package className={iconClass("text-blue-600", isActive)} />Produtos</>)}
-            </NavLink>
-            <NavLink to="/dashboard/price-management" className={navLinkClass}>
-              {({ isActive }) => (<><Coins className={iconClass("text-blue-600", isActive)} />Gestão de Preços</>)}
-            </NavLink>
-            <NavLink to="/dashboard/categories" className={navLinkClass}>
-              {({ isActive }) => (<><LayoutGrid className={iconClass("text-blue-600", isActive)} />Categorias</>)}
-            </NavLink>
-            <NavLink to="/dashboard/sub-categories" className={navLinkClass}>
-              {({ isActive }) => (<><ListTree className={iconClass("text-blue-600", isActive)} />Sub-categorias</>)}
-            </NavLink>
-            <NavLink to="/dashboard/brands" className={navLinkClass}>
-              {({ isActive }) => (<><Tags className={iconClass("text-blue-600", isActive)} />Marcas</>)}
-            </NavLink>
-
-            <p className={sectionTitleClass}>Logística</p>
-            <NavLink to="/dashboard/spoke-export" className={navLinkClass}>
-              {({ isActive }) => (<><FileOutput className={iconClass("text-green-600", isActive)} />Exportar Rotas</>)}
-            </NavLink>
-            <NavLink to="/dashboard/delivery-routes" className={navLinkClass}>
-              {({ isActive }) => (<><MapIcon className={iconClass("text-green-600", isActive)} />Rotas de Entrega</>)}
-            </NavLink>
-            <NavLink to="/dashboard/shipping-rates" className={navLinkClass}>
-              {({ isActive }) => (<><Bike className={iconClass("text-indigo-600", isActive)} />Fretes e Taxas</>)}
-            </NavLink>
-            <NavLink to="/dashboard/print-labels" className={navLinkClass}>
-              {({ isActive }) => (<><Printer className={iconClass("text-indigo-600", isActive)} />Imprimir Etiquetas</>)}
-            </NavLink>
-
-            <p className={sectionTitleClass}>Inteligência</p>
-            <NavLink to="/dashboard/metaflow-insights" className={navLinkClass}>
-              {({ isActive }) => (<><Lightbulb className={iconClass("text-purple-600", isActive)} />Insights de Negócio</>)}
-            </NavLink>
-
-            <p className={sectionTitleClass}>Clientes</p>
-            <NavLink to="/dashboard/clients" className={navLinkClass}>
-              {({ isActive }) => (<><Users className={iconClass("text-cyan-600", isActive)} />Base de Clientes</>)}
-            </NavLink>
-            <NavLink to="/dashboard/cadastrar-cliente" className={navLinkClass}>
-              {({ isActive }) => (<><UserPlus className={iconClass("text-cyan-600", isActive)} />Cadastrar Cliente</>)}
-            </NavLink>
-            <NavLink to="/dashboard/import-clients" className={navLinkClass}>
-              {({ isActive }) => (<><FileUp className={iconClass("text-cyan-600", isActive)} />Importar Clientes</>)}
-            </NavLink>
-            <NavLink to="/dashboard/bulk-add-points" className={navLinkClass}>
-              {({ isActive }) => (<><Gift className={iconClass("text-cyan-600", isActive)} />Adicionar Pontos em Massa</>)}
-            </NavLink>
-            <NavLink to="/dashboard/manual-add-points" className={navLinkClass}>
-              {({ isActive }) => (<><Award className={iconClass("text-cyan-600", isActive)} />Adicionar Pontos (Manual)</>)}
-            </NavLink>
-
-            <p className={sectionTitleClass}>Marketing</p>
-            <NavLink to="/dashboard/coupon-management" className={navLinkClass}>
-              {({ isActive }) => (<><Gift className={iconClass("text-purple-600", isActive)} />Gestão de Cupons</>)}
-            </NavLink>
-            <NavLink to="/dashboard/club-dk" className={navLinkClass}>
-              {({ isActive }) => (<><Crown className={iconClass("text-pink-600", isActive)} />Club DK (Fidelidade)</>)}
-            </NavLink>
-            <NavLink to="/dashboard/user-coupons-history" className={navLinkClass}>
-              {({ isActive }) => (<><TicketCheck className={iconClass("text-pink-600", isActive)} />Histórico de Cupons</>)}
-            </NavLink>
-            <NavLink to="/dashboard/promotions" className={navLinkClass}>
-              {({ isActive }) => (<><Percent className={iconClass("text-pink-600", isActive)} />Kits & Promoções</>)}
-            </NavLink>
-            <NavLink to="/dashboard/coupons" className={navLinkClass}>
-              {({ isActive }) => (<><Ticket className={iconClass("text-pink-600", isActive)} />Cupons</>)}
-            </NavLink>
-
-            <p className={sectionTitleClass}>Conteúdo do Site</p>
-            <NavLink to="/dashboard/hero-slides" className={navLinkClass}>
-              {({ isActive }) => (<><Image className={iconClass("text-amber-600", isActive)} />Banners (Slides)</>)}
-            </NavLink>
-            <NavLink to="/dashboard/home-content" className={navLinkClass}>
-              {({ isActive }) => (<><GalleryHorizontal className={iconClass("text-amber-600", isActive)} />Conteúdo da Home</>)}
-            </NavLink>
-            <NavLink to="/dashboard/popups" className={navLinkClass}>
-              {({ isActive }) => (<><MessageSquare className={iconClass("text-amber-600", isActive)} />Avisos Informativos</>)}
-            </NavLink>
-            <NavLink to="/dashboard/sales-popups" className={navLinkClass}>
-              {({ isActive }) => (<><ShoppingCart className={iconClass("text-amber-600", isActive)} />Prova Social (Popups)</>)}
-            </NavLink>
-            <NavLink to="/dashboard/reviews" className={navLinkClass}>
-              {({ isActive }) => (<><Star className={iconClass("text-amber-600", isActive)} />Avaliações</>)}
-            </NavLink>
-
-            <p className={sectionTitleClass}>Administração</p>
-            <NavLink to="/dashboard/user-admin" className={navLinkClass}>
-              {({ isActive }) => (<><ShieldAlert className={iconClass("text-red-600", isActive)} />Admin Usuários</>)}
-            </NavLink>
-            <NavLink to="/dashboard/order-admin" className={navLinkClass}>
-              {({ isActive }) => (<><FileEdit className={iconClass("text-red-600", isActive)} />Admin Pedidos</>)}
-            </NavLink>
-            <NavLink to="/dashboard/cleanup-orders" className={navLinkClass}>
-              {({ isActive }) => (<><Trash2 className={iconClass("text-red-700", isActive)} />Limpeza de Pedidos</>)}
-            </NavLink>
-
-            <p className={sectionTitleClass}>Sistema</p>
-            <NavLink to="/dashboard/incoming-webhooks" className={navLinkClass}>
-              {({ isActive }) => (<><Webhook className={iconClass("text-slate-500", isActive)} />Webhooks (Entrada)</>)}
-            </NavLink>
-            <NavLink to="/dashboard/integrations" className={navLinkClass}>
-              {({ isActive }) => (<><Plug className={iconClass("text-slate-500", isActive)} />Integrações</>)}
-            </NavLink>
-            <NavLink to="/dashboard/n8n-integration" className={navLinkClass}>
-              {({ isActive }) => (<><Workflow className={iconClass("text-slate-500", isActive)} />Automação (N8N)</>)}
-            </NavLink>
-            <NavLink to="/dashboard/cloudinary-stats" className={navLinkClass}>
-              {({ isActive }) => (<><Cloud className={iconClass("text-slate-500", isActive)} />Cloudinary (Mídia)</>)}
-            </NavLink>
-            <NavLink to="/dashboard/secrets" className={navLinkClass}>
-              {({ isActive }) => (<><Lock className={iconClass("text-slate-500", isActive)} />Segurança (Keys)</>)}
-            </NavLink>
-            <NavLink to="/dashboard/settings" className={navLinkClass}>
-              {({ isActive }) => (<><Settings className={iconClass("text-slate-500", isActive)} />Configurações</>)}
-            </NavLink>
-            <NavLink to="/dashboard/spoke-integration" className={navLinkClass}>
-              {({ isActive }) => (<><Globe className={iconClass("text-slate-500", isActive)} />Integração Circuit</>)}
             </NavLink>
           </>
         )}
