@@ -90,34 +90,18 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
     staleTime: 60_000,
   });
 
-  // ─── QUERY 2: Busca os itens + dados de variante de todos os pedidos ───────
-  // Query separada garante que a política logistica_can_view_all_order_items
-  // seja avaliada corretamente no contexto do usuário logista.
+  // ─── QUERY 2: Busca os itens de TODOS os pedidos encontrados ──────────────
+  // Query separada garante que a política gerente/logistica_can_view_all_order_items
+  // seja avaliada corretamente no contexto do usuário.
   const orderIds = rawOrders?.map((o: any) => o.id) ?? [];
 
-  const { data: allItems, isLoading: isLoadingItems } = useQuery({
+  const { data: rawItems, isLoading: isLoadingItems } = useQuery({
     queryKey: ["clientOrderItems", client?.id, orderIds.join(",")],
     queryFn: async () => {
       if (!orderIds.length) return [];
       const { data, error } = await supabase
         .from("order_items")
-        .select(`
-          order_id,
-          name_at_purchase,
-          quantity,
-          price_at_purchase,
-          image_url_at_purchase,
-          variant_id,
-          product_variants (
-            flavor_id,
-            color,
-            size,
-            ohms,
-            volume_ml,
-            sku,
-            flavors ( name )
-          )
-        `)
+        .select("order_id, name_at_purchase, quantity, price_at_purchase, image_url_at_purchase, variant_id")
         .in("order_id", orderIds);
 
       if (error) throw error;
@@ -127,10 +111,39 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
     staleTime: 60_000,
   });
 
-  // ─── Combina pedidos + itens ───────────────────────────────────────────────
+  // ─── QUERY 3: Busca as variantes dos itens separadamente ──────────────────
+  // Separar o join de product_variants evita problemas de RLS no contexto do join.
+  const variantIds = [...new Set(
+    (rawItems ?? []).map((i: any) => i.variant_id).filter(Boolean)
+  )];
+
+  const { data: variantsData } = useQuery({
+    queryKey: ["orderItemVariants", variantIds.join(",")],
+    queryFn: async () => {
+      if (!variantIds.length) return [];
+      const { data, error } = await supabase
+        .from("product_variants")
+        .select("id, color, size, ohms, volume_ml, sku, flavor_id, flavors(name)")
+        .in("id", variantIds);
+
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!client?.id && isOpen && variantIds.length > 0,
+    staleTime: 60_000,
+  });
+
+  // ─── Combina pedidos + itens + variantes ──────────────────────────────────
+  const variantsMap = new Map((variantsData ?? []).map((v: any) => [v.id, v]));
+
+  const allItems = (rawItems ?? []).map((item: any) => ({
+    ...item,
+    product_variants: item.variant_id ? variantsMap.get(item.variant_id) ?? null : null,
+  }));
+
   const orders = rawOrders?.map((order: any) => ({
     ...order,
-    order_items: (allItems ?? []).filter((item: any) => item.order_id === order.id),
+    order_items: allItems.filter((item: any) => item.order_id === order.id),
   }));
 
   const isLoadingAll = isLoadingOrders || isLoadingItems;
