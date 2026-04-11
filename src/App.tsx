@@ -54,6 +54,7 @@ import BulkAddPoints from "./pages/dashboard/BulkAddPoints";
 import ManualAddPoints from "./pages/dashboard/ManualAddPoints";
 import UserAdmin from "./pages/dashboard/UserAdmin";
 import OrderAdmin from "./pages/dashboard/OrderAdmin";
+import CleanupOrders from "./pages/dashboard/CleanupOrders";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -128,6 +129,7 @@ const App = () => (
               <Route path="manual-add-points" element={<ManualAddPoints />} />
               <Route path="user-admin" element={<UserAdmin />} />
               <Route path="order-admin" element={<OrderAdmin />} />
+              <Route path="cleanup-orders" element={<CleanupOrders />} />
             </Route>
             
             <Route path="*" element={<NotFound />} />

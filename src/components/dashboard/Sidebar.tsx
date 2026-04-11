@@ -45,6 +45,7 @@ import {
   ShieldAlert,
   FileEdit,
   Truck as TruckIcon,
+  Trash2,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -243,6 +244,9 @@ const Sidebar = () => {
             </NavLink>
             <NavLink to="/dashboard/order-admin" className={navLinkClass}>
               {({ isActive }) => (<><FileEdit className={iconClass("text-red-600", isActive)} />Admin Pedidos</>)}
+            </NavLink>
+            <NavLink to="/dashboard/cleanup-orders" className={navLinkClass}>
+              {({ isActive }) => (<><Trash2 className={iconClass("text-red-700", isActive)} />Limpeza de Pedidos</>)}
             </NavLink>
 
             {/* SISTEMA */}
