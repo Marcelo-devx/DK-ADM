@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { 
   User, MapPin, Phone, Calendar, Shield, Star, 
   Mail, Award, CreditCard, History, Fingerprint, 
-  ShoppingBag, Package, ChevronRight 
+  ShoppingBag, Package, Palette, Ruler, Zap, Wind
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -63,10 +63,6 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
   });
 
   // ─── QUERY 1: Busca os pedidos SEM join de itens ───────────────────────────
-  // Separar as queries evita o problema de RLS com joins relacionais:
-  // quando o logista faz um join, o Supabase avalia a política de order_items
-  // no contexto do user_id do pedido (não do logista), fazendo os itens
-  // retornarem vazios mesmo com a política logistica_can_view_all_order_items.
   const { data: rawOrders, isLoading: isLoadingOrders } = useQuery({
     queryKey: ["clientOrdersHistory", client?.id],
     queryFn: async () => {
@@ -94,7 +90,7 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
     staleTime: 60_000,
   });
 
-  // ─── QUERY 2: Busca os itens de TODOS os pedidos encontrados ──────────────
+  // ─── QUERY 2: Busca os itens + dados de variante de todos os pedidos ───────
   // Query separada garante que a política logistica_can_view_all_order_items
   // seja avaliada corretamente no contexto do usuário logista.
   const orderIds = rawOrders?.map((o: any) => o.id) ?? [];
@@ -105,7 +101,23 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
       if (!orderIds.length) return [];
       const { data, error } = await supabase
         .from("order_items")
-        .select("order_id, name_at_purchase, quantity, price_at_purchase, image_url_at_purchase")
+        .select(`
+          order_id,
+          name_at_purchase,
+          quantity,
+          price_at_purchase,
+          image_url_at_purchase,
+          variant_id,
+          product_variants (
+            flavor_id,
+            color,
+            size,
+            ohms,
+            volume_ml,
+            sku,
+            flavors ( name )
+          )
+        `)
         .in("order_id", orderIds);
 
       if (error) throw error;
@@ -147,6 +159,54 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
       case 'Pendente':   return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Pendente</Badge>;
       default:           return <Badge variant="secondary">{status}</Badge>;
     }
+  };
+
+  // Renderiza os badges de variação de um item
+  const renderVariantBadges = (item: any) => {
+    const pv = item.product_variants;
+    if (!pv) return null;
+
+    const badges: React.ReactNode[] = [];
+
+    const flavorName = pv.flavors?.name;
+    if (flavorName) {
+      badges.push(
+        <span key="flavor" className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 text-[10px] font-bold">
+          <Wind className="w-2.5 h-2.5" /> {flavorName}
+        </span>
+      );
+    }
+    if (pv.color && pv.color.trim()) {
+      badges.push(
+        <span key="color" className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-pink-100 text-pink-700 text-[10px] font-bold">
+          <Palette className="w-2.5 h-2.5" /> {pv.color}
+        </span>
+      );
+    }
+    if (pv.size && pv.size.trim()) {
+      badges.push(
+        <span key="size" className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold">
+          <Ruler className="w-2.5 h-2.5" /> {pv.size}
+        </span>
+      );
+    }
+    if (pv.ohms && pv.ohms.trim()) {
+      badges.push(
+        <span key="ohms" className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold">
+          <Zap className="w-2.5 h-2.5" /> {pv.ohms}Ω
+        </span>
+      );
+    }
+    if (pv.volume_ml) {
+      badges.push(
+        <span key="volume" className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-700 text-[10px] font-bold">
+          {pv.volume_ml}ml
+        </span>
+      );
+    }
+
+    if (badges.length === 0) return null;
+    return <div className="flex flex-wrap gap-1 mt-1">{badges}</div>;
   };
 
   return (
@@ -440,7 +500,7 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                                         {items.map((item: any, idx: number) => (
                                           <div
                                             key={idx}
-                                            className="flex items-center gap-3 bg-white p-3 rounded-lg border border-slate-100 shadow-sm"
+                                            className="flex items-start gap-3 bg-white p-3 rounded-lg border border-slate-100 shadow-sm"
                                           >
                                             {item.image_url_at_purchase ? (
                                               <img
@@ -460,7 +520,9 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                                               >
                                                 {item.name_at_purchase}
                                               </p>
-                                              <p className="text-xs text-slate-500 mt-0.5">
+                                              {/* Badges de variação */}
+                                              {renderVariantBadges(item)}
+                                              <p className="text-xs text-slate-500 mt-1">
                                                 {item.quantity} un. × {formatCurrency(item.price_at_purchase)}
                                               </p>
                                             </div>
