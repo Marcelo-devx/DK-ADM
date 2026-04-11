@@ -6,6 +6,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const ALLOWED_ROLES = ['adm', 'gerente_geral']
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -14,45 +16,54 @@ serve(async (req) => {
   try {
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
-      return new Response('Unauthorized', { status: 401, headers: corsHeaders })
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      {
-        global: {
-          headers: { Authorization: authHeader }
-        }
-      }
-    )
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+    // Verificar token
+    const token = authHeader.replace('Bearer ', '')
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token)
+    if (userError || !user) {
+      console.error('[admin-delete-order] Token inválido:', userError?.message)
+      return new Response(
+        JSON.stringify({ error: 'Invalid token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Verificar se tem role permitido (adm ou gerente_geral)
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (profileError) {
+      console.error('[admin-delete-order] Erro ao buscar profile:', profileError.message)
+    }
+
+    console.log(`[admin-delete-order] Usuário ${user.id} com role: ${profile?.role}`)
+
+    if (!profile || !ALLOWED_ROLES.includes(profile.role)) {
+      console.warn(`[admin-delete-order] Acesso negado para role: ${profile?.role}`)
+      return new Response(
+        JSON.stringify({ error: 'Não autorizado: Acesso restrito a Admin e Gerente Geral' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
 
     const { orderId, reason } = await req.json()
 
     if (!orderId || !reason) {
       return new Response(
         JSON.stringify({ error: 'ID do pedido e motivo são obrigatórios' }),
-        { status: 400, headers: corsHeaders }
-      )
-    }
-
-    // Verificar permissões do usuário
-    const { data: { user }, error: userError } = await supabase.auth.getUser()
-    if (userError || !user) {
-      return new Response('Unauthorized', { status: 401, headers: corsHeaders })
-    }
-
-    // Verificar se é admin
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
-    if (profile?.role !== 'adm') {
-      return new Response(
-        JSON.stringify({ error: 'Não autorizado: Acesso restrito a administradores' }),
-        { status: 403, headers: corsHeaders }
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
@@ -66,11 +77,11 @@ serve(async (req) => {
     if (orderError || !order) {
       return new Response(
         JSON.stringify({ error: 'Pedido não encontrado' }),
-        { status: 404, headers: corsHeaders }
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    console.log(`[admin-delete-order] Deletando pedido ${orderId}. Motivo: ${reason}`)
+    console.log(`[admin-delete-order] Deletando pedido ${orderId} por ${user.id} (${profile.role}). Motivo: ${reason}`)
 
     // Deletar o pedido (o trigger trigger_return_stock_on_delete vai devolver o estoque)
     const { error: deleteError } = await supabase
@@ -82,7 +93,7 @@ serve(async (req) => {
       console.error('[admin-delete-order] Erro ao deletar pedido:', deleteError)
       return new Response(
         JSON.stringify({ error: deleteError.message }),
-        { status: 500, headers: corsHeaders }
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
@@ -108,14 +119,14 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ success: true, message: 'Pedido excluído com sucesso' }),
-      { headers: corsHeaders }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (error) {
-    console.error('[admin-delete-order] Erro:', error)
+    console.error('[admin-delete-order] Erro inesperado:', error)
     return new Response(
       JSON.stringify({ error: `Erro ao excluir pedido: ${error.message}` }),
-      { status: 500, headers: corsHeaders }
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
 })
