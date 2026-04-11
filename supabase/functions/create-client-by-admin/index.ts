@@ -83,7 +83,6 @@ serve(async (req) => {
         console.error('[create-client-by-admin] RPC get_user_id_by_email error:', rpcErr.message);
       }
       if (existingId) {
-        // If RPC returns an id (uuid), respond with conflict
         return new Response(JSON.stringify({ error: 'User already exists', id: existingId }), { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
     } catch (e) {
@@ -100,6 +99,9 @@ serve(async (req) => {
     }
 
     // Create user via Admin API
+    // NOTE: passing first_name/last_name in user_metadata so the handle_new_user trigger
+    // can pick them up. However, we also do an explicit upsert below to ensure all fields
+    // (including email, cpf_cnpj, phone, gender) are correctly saved regardless of trigger timing.
     const { data: createdUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email: email,
       password: password,
@@ -107,15 +109,14 @@ serve(async (req) => {
       user_metadata: {
         first_name,
         last_name,
-        phone,
-        cpf_cnpj,
-        gender
+        phone: phone || null,
+        cpf_cnpj: cpf_cnpj || null,
+        gender: gender || null,
       }
     });
 
     if (createError) {
       console.error('[create-client-by-admin] Error creating user:', createError);
-      // If duplicate email or conflict, createError.message should indicate it — return helpful error
       return new Response(JSON.stringify({ error: 'Database error creating new user', details: createError.message }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -128,27 +129,41 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Failed to resolve created user id' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Create profile row
+    console.log('[create-client-by-admin] User created successfully, userId:', userId);
+
+    // Small delay to allow the handle_new_user trigger to complete before we upsert
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    // Upsert profile with all fields including email.
+    // Using onConflict: 'id' so if the trigger already created the row, we update it.
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .upsert({
         id: userId,
+        email: email,
         first_name: first_name,
         last_name: last_name,
         cpf_cnpj: cpf_cnpj || null,
         phone: phone || null,
         gender: gender || null,
         role: 'user',
-        // Explicitly require PIX by default for newly created users (admin-created and imports)
         force_pix_on_next_purchase: true,
-        // Ensure credit card is disabled until allowed
-        is_credit_card_enabled: false
+        is_credit_card_enabled: false,
       }, { onConflict: 'id' });
 
     if (profileError) {
-      console.error('[create-client-by-admin] Error creating profile:', profileError);
-      return new Response(JSON.stringify({ error: 'Error creating profile', details: profileError.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      console.error('[create-client-by-admin] Error upserting profile:', profileError);
+      // User was created in auth — return success with a warning instead of failing
+      // so the admin knows the user exists but profile may need manual fix
+      return new Response(JSON.stringify({
+        success: true,
+        id: userId,
+        email,
+        warning: 'User created but profile update failed: ' + profileError.message
+      }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
+
+    console.log('[create-client-by-admin] Profile upserted successfully for userId:', userId);
 
     return new Response(JSON.stringify({ success: true, id: userId, email }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
