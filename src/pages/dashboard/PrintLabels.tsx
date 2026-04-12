@@ -207,15 +207,22 @@ export default function PrintLabelsPage() {
         }
       }
 
-      // Tenta obter emails via edge function (não crítico)
+      // Buscar emails via edge function dedicada (envia os user_ids e recebe emails)
       let emailMap = new Map<string, string>();
       try {
-        const { data: usersData } = await supabase.functions.invoke("get-users");
-        if (usersData) {
-          usersData.forEach((u: any) => emailMap.set(u.id, u.email));
+        const { data: emailsData, error: emailsError } = await supabase.functions.invoke("get-users-emails", {
+          body: { user_ids: userIds }
+        });
+        if (emailsError) {
+          console.error("get-users-emails retornou erro:", emailsError);
+        } else if (Array.isArray(emailsData)) {
+          emailsData.forEach((u: any) => {
+            if (u.id && u.email) emailMap.set(u.id, u.email);
+          });
+          console.log(`[PrintLabels] Emails carregados: ${emailMap.size} de ${userIds.length}`);
         }
       } catch (e) {
-        console.debug("get-users edge function falhou (não crítico):", e);
+        console.error("get-users-emails edge function falhou:", e);
       }
 
       return ordersData.map((o: any) => ({
