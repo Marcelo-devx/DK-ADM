@@ -561,15 +561,78 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
 
           <Separator />
 
-          {/* ── 2. PRODUTOS ── */}
+          {/* ── 2. FORMA DE PAGAMENTO ── */}
+          <div className="space-y-3">
+            <Label className="text-base font-semibold">2. Forma de Pagamento</Label>
+            <RadioGroup
+              value={paymentMethod || ""}
+              onValueChange={setPaymentMethod}
+              className="grid grid-cols-2 gap-3"
+            >
+              {/* PIX */}
+              <div
+                className={`flex items-center gap-3 border-2 rounded-xl px-4 py-3 cursor-pointer transition-all ${
+                  paymentMethod === "pix"
+                    ? "border-cyan-500 bg-cyan-50"
+                    : "border-gray-200 hover:border-cyan-300 hover:bg-cyan-50/30"
+                }`}
+                onClick={() => setPaymentMethod("pix")}
+              >
+                <RadioGroupItem value="pix" id="pix" />
+                <div className="flex items-center gap-2">
+                  <QrCode className={`h-5 w-5 ${paymentMethod === "pix" ? "text-cyan-600" : "text-gray-400"}`} />
+                  <div>
+                    <Label htmlFor="pix" className="cursor-pointer font-semibold text-sm">PIX</Label>
+                    <p className="text-[10px] text-muted-foreground">Preço PIX aplicado</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Cartão de Crédito */}
+              <div
+                className={`flex items-center gap-3 border-2 rounded-xl px-4 py-3 cursor-pointer transition-all ${
+                  paymentMethod === "credit_card"
+                    ? "border-purple-500 bg-purple-50"
+                    : "border-gray-200 hover:border-purple-300 hover:bg-purple-50/30"
+                }`}
+                onClick={() => setPaymentMethod("credit_card")}
+              >
+                <RadioGroupItem value="credit_card" id="credit_card" />
+                <div className="flex items-center gap-2">
+                  <CreditCard className={`h-5 w-5 ${paymentMethod === "credit_card" ? "text-purple-600" : "text-gray-400"}`} />
+                  <div>
+                    <Label htmlFor="credit_card" className="cursor-pointer font-semibold text-sm">Cartão de Crédito</Label>
+                    <p className="text-[10px] text-muted-foreground">Preço normal aplicado</p>
+                  </div>
+                </div>
+              </div>
+            </RadioGroup>
+
+            {!paymentMethod && (
+              <p className="text-xs text-amber-600 flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />
+                Selecione a forma de pagamento antes de adicionar produtos
+              </p>
+            )}
+          </div>
+
+          <Separator />
+
+          {/* ── 3. PRODUTOS ── */}
           <div className="space-y-2">
-            <Label className="text-base font-semibold">2. Produtos</Label>
+            <Label className="text-base font-semibold">3. Produtos</Label>
 
             {paymentMethod && (
               <div className={`text-xs px-3 py-1.5 rounded-md font-medium ${paymentMethod === "pix" ? "bg-cyan-50 text-cyan-700 border border-cyan-200" : "bg-purple-50 text-purple-700 border border-purple-200"}`}>
                 {paymentMethod === "pix"
                   ? "💰 Preços PIX aplicados automaticamente"
                   : "💳 Preços Cartão de Crédito aplicados automaticamente"}
+              </div>
+            )}
+
+            {!paymentMethod && (
+              <div className="text-xs px-3 py-1.5 rounded-md font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                ⚠️ Selecione a forma de pagamento acima primeiro para aplicar os preços corretos
               </div>
             )}
 
@@ -622,14 +685,14 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
                             <p className="text-sm font-medium truncate">{product.name}</p>
                             {!hasVariants && (
                               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                {product.pix_price != null && product.pix_price > 0 ? (
+                                {product.pix_price != null && Number(product.pix_price) > 0 ? (
                                   <>
-                                    <span className="text-cyan-700 font-medium">PIX: {formatCurrency(product.pix_price)}</span>
+                                    <span className="text-cyan-700 font-medium">PIX: {formatCurrency(Number(product.pix_price))}</span>
                                     <span>|</span>
-                                    <span>Cartão: {formatCurrency(product.price)}</span>
+                                    <span>Cartão: {formatCurrency(Number(product.price))}</span>
                                   </>
                                 ) : (
-                                  <span>{formatCurrency(product.price)}</span>
+                                  <span>{formatCurrency(Number(product.price))}</span>
                                 )}
                                 <span>· Estoque: {product.stock_quantity}</span>
                               </div>
@@ -654,6 +717,11 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
                           {sortVariantsBySpecification(activeVariants).map((variant) => {
                             const label = getVariantLabel(variant);
                             const hasPix = variant.pix_price != null && Number(variant.pix_price) > 0;
+                            const effectivePrice = getEffectivePrice(
+                              Number(variant.price),
+                              hasPix ? Number(variant.pix_price) : null,
+                              paymentMethod
+                            );
                             return (
                               <div
                                 key={variant.id}
@@ -676,8 +744,8 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0 ml-2">
-                                  <span className="text-xs font-bold text-green-700">
-                                    {formatCurrency(getEffectivePrice(Number(variant.price), variant.pix_price != null ? Number(variant.pix_price) : null, paymentMethod))}
+                                  <span className={`text-xs font-bold ${paymentMethod === "pix" ? "text-cyan-700" : "text-purple-700"}`}>
+                                    {formatCurrency(effectivePrice)}
                                   </span>
                                   <Plus className="h-3 w-3 text-green-600" />
                                 </div>
@@ -709,12 +777,12 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{item.name}</p>
                         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <span>{formatCurrency(item.price)} cada</span>
+                          <span className={paymentMethod === "pix" ? "text-cyan-700 font-medium" : "text-purple-700 font-medium"}>
+                            {formatCurrency(item.price)} cada
+                          </span>
                           {item.pixPrice != null && item.pixPrice !== item.basePrice && (
-                            <span className="text-[10px]">
-                              ({paymentMethod === "pix"
-                                ? <span className="text-cyan-700">PIX</span>
-                                : <span>Cartão</span>})
+                            <span className="text-[10px] opacity-60">
+                              ({paymentMethod === "pix" ? "PIX" : "Cartão"})
                             </span>
                           )}
                         </div>
@@ -758,10 +826,10 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
 
           <Separator />
 
-          {/* ── 3. ENDEREÇO DE ENTREGA ── */}
+          {/* ── 4. ENDEREÇO DE ENTREGA ── */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label className="text-base font-semibold">3. Endereço de Entrega</Label>
+              <Label className="text-base font-semibold">4. Endereço de Entrega</Label>
               {selectedClient && (
                 <Button
                   variant="ghost"
@@ -846,9 +914,9 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
 
           <Separator />
 
-          {/* ── 4. FRETE E OPÇÕES ── */}
+          {/* ── 5. FRETE E OPÇÕES ── */}
           <div className="space-y-4">
-            <Label className="text-base font-semibold">4. Frete e Opções</Label>
+            <Label className="text-base font-semibold">5. Frete e Opções</Label>
 
             <div className="flex items-center justify-between">
               <div>
@@ -880,63 +948,6 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
               </div>
               <Switch checked={generateLoyaltyPoints} onCheckedChange={setGenerateLoyaltyPoints} />
             </div>
-          </div>
-
-          <Separator />
-
-          {/* ── 5. FORMA DE PAGAMENTO ── */}
-          <div className="space-y-3">
-            <Label className="text-base font-semibold">5. Forma de Pagamento</Label>
-            <RadioGroup
-              value={paymentMethod || ""}
-              onValueChange={setPaymentMethod}
-              className="grid grid-cols-2 gap-3"
-            >
-              {/* PIX */}
-              <div
-                className={`flex items-center gap-3 border-2 rounded-xl px-4 py-3 cursor-pointer transition-all ${
-                  paymentMethod === "pix"
-                    ? "border-cyan-500 bg-cyan-50"
-                    : "border-gray-200 hover:border-cyan-300 hover:bg-cyan-50/30"
-                }`}
-                onClick={() => setPaymentMethod("pix")}
-              >
-                <RadioGroupItem value="pix" id="pix" />
-                <div className="flex items-center gap-2">
-                  <QrCode className={`h-5 w-5 ${paymentMethod === "pix" ? "text-cyan-600" : "text-gray-400"}`} />
-                  <div>
-                    <Label htmlFor="pix" className="cursor-pointer font-semibold text-sm">PIX</Label>
-                    <p className="text-[10px] text-muted-foreground">Preço PIX aplicado</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Cartão de Crédito */}
-              <div
-                className={`flex items-center gap-3 border-2 rounded-xl px-4 py-3 cursor-pointer transition-all ${
-                  paymentMethod === "credit_card"
-                    ? "border-purple-500 bg-purple-50"
-                    : "border-gray-200 hover:border-purple-300 hover:bg-purple-50/30"
-                }`}
-                onClick={() => setPaymentMethod("credit_card")}
-              >
-                <RadioGroupItem value="credit_card" id="credit_card" />
-                <div className="flex items-center gap-2">
-                  <CreditCard className={`h-5 w-5 ${paymentMethod === "credit_card" ? "text-purple-600" : "text-gray-400"}`} />
-                  <div>
-                    <Label htmlFor="credit_card" className="cursor-pointer font-semibold text-sm">Cartão de Crédito</Label>
-                    <p className="text-[10px] text-muted-foreground">Preço normal aplicado</p>
-                  </div>
-                </div>
-              </div>
-            </RadioGroup>
-
-            {!paymentMethod && (
-              <p className="text-xs text-amber-600 flex items-center gap-1">
-                <AlertCircle className="h-3 w-3" />
-                Selecione a forma de pagamento para aplicar os preços corretos
-              </p>
-            )}
           </div>
 
           <Separator />
