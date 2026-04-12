@@ -350,19 +350,17 @@ export default function PrintLabelsPage() {
 
   // Cabeçalho da planilha (ordem deve bater com o modelo)
   const TEMPLATE_HEADERS = [
-    "Número pedido",
-    "Nome Entrega",
+    "Número do pedido",
     "Endereço",
-    "Complemento Entrega",
-    "Observações",
-    "Telefone Comprador",
-    "Comprador",
-    "F",
-    "Bairro Entrega",
-    "Cidade Entrega",
-    "CEP Entrega",
-    "CPF/CNPJ Comprador",
-    "E-mail Comprador",
+    "Complemento",
+    "_blank1",
+    "Telefone",
+    "Observação",
+    "_blank2",
+    "Cidade",
+    "CEP",
+    "_blank3",
+    "E-mail",
     "Remetente",
     "Endereço Remetente",
     "Cidade Remetente",
@@ -401,7 +399,6 @@ export default function PrintLabelsPage() {
       const exportData = selectedOrders.map(order => {
         const p = order.profiles;
         const addr = order.shipping_address || {};
-        const fullName = `${cleanStr(p?.first_name)} ${cleanStr(p?.last_name)}`.trim();
 
         const sender = pickRandomSender();
         const remName = sender?.name || senderInfo.name || "Minha Loja";
@@ -411,19 +408,17 @@ export default function PrintLabelsPage() {
         const remCep = sender?.cep || senderInfo.cep || "";
 
         return {
-          "Número pedido": order.id,
-          "Nome Entrega": fullName,
+          "Número do pedido": order.id,
           "Endereço": `${addr.street || ''}${addr.number ? `, ${addr.number}` : ''}`.trim(),
-          "Complemento Entrega": addr.complement || "",
-          "Observações": "Frágil",
-          "Telefone Comprador": p?.phone || "",
-          "Comprador": fullName,
-          "F": "",
-          "Bairro Entrega": addr.neighborhood || "",
-          "Cidade Entrega": addr.city || "",
-          "CEP Entrega": addr.cep || "",
-          "CPF/CNPJ Comprador": p?.cpf_cnpj || "",
-          "E-mail Comprador": order.email || "",
+          "Complemento": addr.complement || "",
+          "_blank1": "",
+          "Telefone": p?.phone || "",
+          "Observação": "Frágil",
+          "_blank2": "",
+          "Cidade": addr.city || "",
+          "CEP": addr.cep || "",
+          "_blank3": "",
+          "E-mail": order.email || "",
           "Remetente": remName,
           "Endereço Remetente": remAddress,
           "Cidade Remetente": remCity,
@@ -466,19 +461,17 @@ export default function PrintLabelsPage() {
   const handleDownloadTemplate = () => {
     const sample = [
       {
-        "Número pedido": "12345",
-        "Nome Entrega": "João Silva",
+        "Número do pedido": "12345",
         "Endereço": "Rua das Flores, 123",
-        "Complemento Entrega": "Apto 101",
-        "Observações": "Frágil",
-        "Telefone Comprador": "11999999999",
-        "Comprador": "João Silva",
-        "F": "",
-        "Bairro Entrega": "Centro",
-        "Cidade Entrega": "São Paulo",
-        "CEP Entrega": "01000-000",
-        "CPF/CNPJ Comprador": "123.456.789-00",
-        "E-mail Comprador": "joao@email.com",
+        "Complemento": "Apto 101",
+        "_blank1": "",
+        "Telefone": "11999999999",
+        "Observação": "Frágil",
+        "_blank2": "",
+        "Cidade": "São Paulo",
+        "CEP": "01000-000",
+        "_blank3": "",
+        "E-mail": "joao@email.com",
         "Remetente": "Minha Loja",
         "Endereço Remetente": "Av Paulista, 1000",
         "Cidade Remetente": "São Paulo",
@@ -712,7 +705,7 @@ export default function PrintLabelsPage() {
                       <input type="checkbox" checked={selectedIds.size === filteredOrders.length && filteredOrders.length > 0} onChange={toggleSelectAll} />
                     </TableHead>
                     {TEMPLATE_HEADERS.map(h => (
-                      <TableHead key={h} className="whitespace-nowrap">{h}</TableHead>
+                      <TableHead key={h} className="whitespace-nowrap">{h.startsWith("_blank") ? "" : h}</TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>
@@ -740,20 +733,17 @@ export default function PrintLabelsPage() {
                       const remCep = previewSender?.cep || senderInfo.cep;
 
                       return {
-                        "Número pedido": order.id,
-                        "Nome Entrega": fullName,
+                        "Número do pedido": order.id,
                         "Endereço": `${addr.street || ''}${addr.number ? `, ${addr.number}` : ''}`.trim(),
-                        "Complemento Entrega": addr.complement || "",
-                        // Observação fixa para exportação e etiquetas
-                        "Observações": "Frágil",
-                        "Telefone Comprador": p?.phone || "",
-                        "Comprador": fullName,
-                        "F": "",
-                        "Bairro Entrega": addr.neighborhood || "",
-                        "Cidade Entrega": addr.city || "",
-                        "CEP Entrega": addr.cep || "",
-                        "CPF/CNPJ Comprador": p?.cpf_cnpj || "",
-                        "E-mail Comprador": order.email || "",
+                        "Complemento": addr.complement || "",
+                        "_blank1": "",
+                        "Telefone": p?.phone || "",
+                        "Observação": "Frágil",
+                        "_blank2": "",
+                        "Cidade": addr.city || "",
+                        "CEP": addr.cep || "",
+                        "_blank3": "",
+                        "E-mail": order.email || "",
                         "Remetente": remName,
                         "Endereço Remetente": remAddress,
                         "Cidade Remetente": remCity,
