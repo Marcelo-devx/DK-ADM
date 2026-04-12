@@ -14,15 +14,15 @@ export interface ExtendedProduct {
   stock_quantity: number;
   category: string | null;
   sub_category: string | null;
+  sub_category_names?: string[]; // todas as sub-cats via tabela relacional
   brand: string | null;
   image_url: string | null;
   is_visible: boolean;
   variant_prices?: number[];
   variant_costs?: (number | null)[];
-  variant_stock_total?: number; // total stock across variants
+  variant_stock_total?: number;
   allocated_in_kits?: number;
   created_at: string;
-  // NEW: optional field for imported/flavor display names
   flavor_names?: string | null;
 }
 
@@ -38,6 +38,7 @@ export const useProductData = () => {
               id,
               sku,
               price,
+              pix_price,
               cost_price,
               stock_quantity,
               flavor_id,
@@ -46,6 +47,10 @@ export const useProductData = () => {
               size,
               color,
               flavors (name)
+          ),
+          product_sub_categories(
+              sub_category_id,
+              sub_categories(name)
           ),
           promotion_items (
               quantity,
@@ -75,13 +80,17 @@ export const useProductData = () => {
 
       const variantStockTotal = variantsList.reduce((acc: number, v: any) => acc + (Number(v.stock_quantity) || 0), 0);
 
+      const subCategoryNames: string[] = (p.product_sub_categories ?? [])
+        .map((psc: any) => psc.sub_categories?.name)
+        .filter(Boolean);
+
       return {
           ...p,
           variant_prices: variantsList.map((v: any) => v.price),
           variant_costs: variantsList.map((v: any) => v.cost_price),
           variant_stock_total: variantStockTotal,
           allocated_in_kits: allocated,
-          // ensure variants always present for consumers
+          sub_category_names: subCategoryNames,
           variants: variantsList
       };
     }) as ExtendedProduct[];

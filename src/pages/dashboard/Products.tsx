@@ -248,18 +248,23 @@ const ProductsPage = () => {
           "SKU Produto",
           "Nome Produto",
           "SKU Variação",
-          "Nome Variação",
           "Variant ID",
-          "Flavor ID",
+          "Sabor",
           "Volume (ml)",
+          "Cor",
+          "Ohms",
+          "Tamanho",
           "Preço Variação",
+          "Preço Pix Variação",
           "Preço de Custo Variação",
           "Estoque Variação",
           "Preço Produto",
+          "Preço Pix Produto",
           "Preço de Custo Produto",
           "Estoque Produto",
           "Categoria",
           "Sub-categoria",
+          "Sub-categorias (Todas)",
           "Marca",
           "Imagem",
           "Publicado (Sim/Não)"
@@ -268,36 +273,45 @@ const ProductsPage = () => {
         const rows: any[] = [];
 
         products.forEach((p: any) => {
-          const variants = Array.isArray((p as any).variants) ? (p as any).variants : [];
+          const variants = Array.isArray(p.variants) ? p.variants : [];
+          // Sub-categorias relacionais (todas)
+          const subCatNames: string = Array.isArray(p.sub_category_names) && p.sub_category_names.length > 0
+            ? p.sub_category_names.join(', ')
+            : '';
 
           if (variants.length > 0) {
             variants.forEach((v: any) => {
-              const flavor = v.flavors ? (Array.isArray(v.flavors) ? v.flavors[0]?.name : v.flavors?.name) : '';
-              const variationName = `${flavor ? flavor : ''}${v.volume_ml ? ` (${v.volume_ml}ml)` : ''}`.trim();
+              // flavors é objeto direto (FK), não array
+              const flavorName = v.flavors?.name ?? '';
 
               rows.push([
                 sanitizeCell(p.sku || ''),
                 sanitizeCell(p.name || ''),
                 sanitizeCell(v.sku || ''),
-                sanitizeCell(variationName || ''),
                 v.id ?? '',
-                v.flavor_id ?? '',
+                sanitizeCell(flavorName),
                 v.volume_ml ?? '',
+                sanitizeCell(v.color || ''),
+                sanitizeCell(v.ohms || ''),
+                sanitizeCell(v.size || ''),
                 v.price ?? p.price ?? 0,
+                v.pix_price ?? p.pix_price ?? 0,
                 v.cost_price ?? p.cost_price ?? 0,
                 v.stock_quantity ?? 0,
                 p.price ?? 0,
+                p.pix_price ?? 0,
                 p.cost_price ?? 0,
                 p.stock_quantity ?? 0,
                 sanitizeCell(p.category || ''),
                 sanitizeCell(p.sub_category || ''),
+                sanitizeCell(subCatNames),
                 sanitizeCell(p.brand || ''),
                 sanitizeCell(p.image_url || ''),
                 p.is_visible ? 'Sim' : 'Não'
               ]);
             });
           } else {
-            // product without variants
+            // produto sem variações — 1 linha com campos de variação vazios
             rows.push([
               sanitizeCell(p.sku || ''),
               sanitizeCell(p.name || ''),
@@ -306,14 +320,19 @@ const ProductsPage = () => {
               '',
               '',
               '',
+              '',
+              '',
               p.price ?? 0,
+              p.pix_price ?? 0,
               p.cost_price ?? 0,
               p.stock_quantity ?? 0,
               p.price ?? 0,
+              p.pix_price ?? 0,
               p.cost_price ?? 0,
               p.stock_quantity ?? 0,
               sanitizeCell(p.category || ''),
               sanitizeCell(p.sub_category || ''),
+              sanitizeCell(subCatNames),
               sanitizeCell(p.brand || ''),
               sanitizeCell(p.image_url || ''),
               p.is_visible ? 'Sim' : 'Não'
