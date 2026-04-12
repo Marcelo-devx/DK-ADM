@@ -361,11 +361,6 @@ export default function PrintLabelsPage() {
     "CEP",
     "_blank3",
     "E-mail",
-    "Remetente",
-    "Endereço Remetente",
-    "Cidade Remetente",
-    "Estado Remetente",
-    "CEP Remetente",
   ];
 
   // Função utilitária para sortear um remetente
@@ -419,11 +414,6 @@ export default function PrintLabelsPage() {
           "CEP": addr.cep || "",
           "_blank3": "",
           "E-mail": order.email || "",
-          "Remetente": remName,
-          "Endereço Remetente": remAddress,
-          "Cidade Remetente": remCity,
-          "Estado Remetente": remState,
-          "CEP Remetente": remCep
         };
       });
 
@@ -472,11 +462,6 @@ export default function PrintLabelsPage() {
         "CEP": "01000-000",
         "_blank3": "",
         "E-mail": "joao@email.com",
-        "Remetente": "Minha Loja",
-        "Endereço Remetente": "Av Paulista, 1000",
-        "Cidade Remetente": "São Paulo",
-        "Estado Remetente": "SP",
-        "CEP Remetente": "01310-100"
       }
     ];
 
@@ -744,11 +729,6 @@ export default function PrintLabelsPage() {
                         "CEP": addr.cep || "",
                         "_blank3": "",
                         "E-mail": order.email || "",
-                        "Remetente": remName,
-                        "Endereço Remetente": remAddress,
-                        "Cidade Remetente": remCity,
-                        "Estado Remetente": remState,
-                        "CEP Remetente": remCep
                       };
                     })();
 
