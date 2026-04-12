@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -9,11 +9,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
-import { Search, Loader2, Check, AlertCircle, User, Trash2, Plus, Minus } from "lucide-react";
+import { Search, Loader2, Check, AlertCircle, User, Trash2, Plus, Minus, QrCode, CreditCard, ChevronDown, ChevronUp } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
 import { sortVariantsBySpecification } from "@/utils/variantSort";
+
+// ─── Interfaces ───────────────────────────────────────────────────────────────
 
 interface Client {
   id: string;
@@ -29,15 +32,17 @@ interface Client {
   state: string | null;
   cep: string | null;
   cpf_cnpj: string | null;
+  is_credit_card_enabled: boolean | null;
 }
 
-interface ClientData {
+interface ClientSearchResult {
   user_id: string;
   first_name: string | null;
   last_name: string | null;
   email: string;
   cpf_cnpj: string | null;
   phone: string | null;
+  is_credit_card_enabled: boolean | null;
 }
 
 interface ProductVariant {
@@ -47,6 +52,7 @@ interface ProductVariant {
   volume_ml: number | null;
   sku: string | null;
   price: number;
+  pix_price: number | null;
   stock_quantity: number;
   is_active: boolean;
   color: string | null;
@@ -69,7 +75,9 @@ interface OrderItem {
   productId: number;
   variantId: string | null;
   name: string;
-  price: number;
+  basePrice: number;       // preço cartão (price)
+  pixPrice: number | null; // preço pix (pix_price)
+  price: number;           // preço efetivo (calculado conforme pagamento)
   quantity: number;
   imageUrl: string | null;
   stock: number;
@@ -80,32 +88,74 @@ interface CreateOrderModalProps {
   onClose: () => void;
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const formatCurrency = (value: number) =>
+  value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+const getVariantLabel = (variant: ProductVariant): string =>
+  [
+    variant.volume_ml ? `${variant.volume_ml}ml` : "",
+    variant.color || "",
+    variant.ohms ? `${variant.ohms}Ω` : "",
+    variant.size ? `Tam ${variant.size}` : "",
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .trim() || variant.sku || "Variação";
+
+const getEffectivePrice = (
+  basePrice: number,
+  pixPrice: number | null,
+  paymentMethod: string | null
+): number => {
+  if (paymentMethod === "pix" && pixPrice != null && pixPrice > 0) {
+    return pixPrice;
+  }
+  return basePrice;
+};
+
+// ─── Componente Principal ─────────────────────────────────────────────────────
+
 export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => {
   const queryClient = useQueryClient();
 
+  // Cliente selecionado
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-
-  // Estados para busca de clientes
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
+  // Endereço de entrega (editável)
   const [shippingAddress, setShippingAddress] = useState({
     street: "", number: "", complement: "", neighborhood: "", city: "", state: "", cep: "",
   });
 
+  // Itens do pedido
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
+
+  // Frete
   const [chargeFreight, setChargeFreight] = useState(true);
-  const [generateLoyaltyPoints, setGenerateLoyaltyPoints] = useState(true);
   const [shippingCost, setShippingCost] = useState<string>("");
-  const [manualTotal, setManualTotal] = useState<string>("");
+
+  // Pontos de fidelidade
+  const [generateLoyaltyPoints, setGenerateLoyaltyPoints] = useState(true);
+
+  // Forma de pagamento (apenas pix ou credit_card)
   const [paymentMethod, setPaymentMethod] = useState<string | null>(null);
 
+  // Busca de produtos
   const [productSearch, setProductSearch] = useState("");
   const [searchResults, setSearchResults] = useState<Product[]>([]);
   const [searchingProducts, setSearchingProducts] = useState(false);
   const [expandedProduct, setExpandedProduct] = useState<number | null>(null);
+
+  // Estado de criação
   const [isCreating, setIsCreating] = useState(false);
 
+  // Ref para fechar dropdown de clientes ao clicar fora
+  const clientDropdownRef = useRef<HTMLDivElement>(null);
+
+  // ── Shipping rates ──────────────────────────────────────────────────────────
   const { data: shippingRates } = useQuery({
     queryKey: ["shipping-rates"],
     queryFn: async () => {
@@ -115,7 +165,7 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
     enabled: isOpen,
   });
 
-  // Reset ao fechar
+  // ── Reset ao fechar ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isOpen) {
       setSelectedClient(null);
@@ -126,7 +176,6 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
       setChargeFreight(true);
       setGenerateLoyaltyPoints(true);
       setShippingCost("");
-      setManualTotal("");
       setPaymentMethod(null);
       setProductSearch("");
       setSearchResults([]);
@@ -134,53 +183,72 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
     }
   }, [isOpen]);
 
-  // Debounce para busca de clientes
+  // ── Debounce busca de clientes ──────────────────────────────────────────────
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(searchTerm);
-    }, 500);
+    const timer = setTimeout(() => setDebouncedSearch(searchTerm), 400);
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Busca clientes por e-mail, nome ou CPF diretamente na tabela profiles
+  // ── Busca de clientes — todos, sem limite rígido, mínimo 1 char ─────────────
   const { data: clientSearchResults, isLoading: searchingClients } = useQuery({
     queryKey: ["searchClients", debouncedSearch],
     queryFn: async () => {
-      if (!debouncedSearch || debouncedSearch.length < 2) return [];
-
       const term = debouncedSearch.trim();
+
+      // Se não digitou nada, retorna lista inicial (primeiros 80 clientes)
+      if (!term) {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("id, first_name, last_name, cpf_cnpj, email, phone, is_credit_card_enabled")
+          .order("first_name", { ascending: true })
+          .limit(80);
+        if (error) throw error;
+        return (data || []).map((c) => ({
+          user_id: c.id,
+          first_name: c.first_name,
+          last_name: c.last_name,
+          email: c.email,
+          cpf_cnpj: c.cpf_cnpj,
+          phone: c.phone,
+          is_credit_card_enabled: c.is_credit_card_enabled,
+        })) as ClientSearchResult[];
+      }
+
       const queryText = `%${term}%`;
       const isCpfSearch = /^[0-9.\-\s]+$/.test(term);
 
       let query = supabase
         .from("profiles")
-        .select("id, first_name, last_name, cpf_cnpj, email, phone")
+        .select("id, first_name, last_name, cpf_cnpj, email, phone, is_credit_card_enabled")
         .order("first_name", { ascending: true })
-        .limit(20);
+        .limit(100);
 
       if (isCpfSearch) {
-        query = query.or(`cpf_cnpj.ilike.${queryText}`);
+        query = query.ilike("cpf_cnpj", queryText);
       } else {
-        query = query.or(`email.ilike.${queryText},first_name.ilike.${queryText},last_name.ilike.${queryText},cpf_cnpj.ilike.${queryText}`);
+        query = query.or(
+          `email.ilike.${queryText},first_name.ilike.${queryText},last_name.ilike.${queryText},cpf_cnpj.ilike.${queryText}`
+        );
       }
 
       const { data, error } = await query;
       if (error) throw error;
 
-      return (data || []).map((client) => ({
-        user_id: client.id,
-        first_name: client.first_name,
-        last_name: client.last_name,
-        email: client.email,
-        cpf_cnpj: client.cpf_cnpj,
-        phone: client.phone,
-      })) as ClientData[];
+      return (data || []).map((c) => ({
+        user_id: c.id,
+        first_name: c.first_name,
+        last_name: c.last_name,
+        email: c.email,
+        cpf_cnpj: c.cpf_cnpj,
+        phone: c.phone,
+        is_credit_card_enabled: c.is_credit_card_enabled,
+      })) as ClientSearchResult[];
     },
-    enabled: debouncedSearch.length >= 2,
+    enabled: isOpen && !selectedClient,
     refetchOnWindowFocus: false,
   });
 
-  // Preenche endereço ao selecionar cliente
+  // ── Preenche endereço ao selecionar cliente ─────────────────────────────────
   useEffect(() => {
     if (selectedClient) {
       setShippingAddress({
@@ -195,7 +263,7 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
     }
   }, [selectedClient]);
 
-  // Calcula frete ao mudar bairro/cidade
+  // ── Calcula frete ao mudar bairro/cidade ────────────────────────────────────
   useEffect(() => {
     if (!shippingAddress.neighborhood || !shippingAddress.city || !shippingRates) return;
     const neighborhood = shippingAddress.neighborhood.toLowerCase().trim();
@@ -206,8 +274,10 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
     );
     if (!match) {
       match = (shippingRates as any[]).find(
-        (r) => r.city.toLowerCase().trim() === city &&
-          (r.neighborhood.toLowerCase().includes(neighborhood) || neighborhood.includes(r.neighborhood.toLowerCase()))
+        (r) =>
+          r.city.toLowerCase().trim() === city &&
+          (r.neighborhood.toLowerCase().includes(neighborhood) ||
+            neighborhood.includes(r.neighborhood.toLowerCase()))
       );
     }
     if (typeof match?.price !== "undefined" && shippingCost === "") {
@@ -215,13 +285,24 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
     }
   }, [shippingAddress.neighborhood, shippingAddress.city, shippingRates]);
 
+  // ── Recalcula preços dos itens ao trocar forma de pagamento ─────────────────
+  useEffect(() => {
+    if (orderItems.length === 0) return;
+    setOrderItems((prev) =>
+      prev.map((item) => ({
+        ...item,
+        price: getEffectivePrice(item.basePrice, item.pixPrice, paymentMethod),
+      }))
+    );
+  }, [paymentMethod]);
+
+  // ── Totais ──────────────────────────────────────────────────────────────────
   const itemsTotal = orderItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
   const finalShippingCost = chargeFreight ? Number(shippingCost || 0) : 0;
   const computedTotal = itemsTotal + finalShippingCost;
-  const finalTotal = manualTotal && manualTotal.trim() !== "" ? Number(manualTotal) : computedTotal;
 
-  // Selecionar cliente da lista de busca
-  const handleSelectClient = async (clientData: ClientData) => {
+  // ── Selecionar cliente ──────────────────────────────────────────────────────
+  const handleSelectClient = async (clientData: ClientSearchResult) => {
     try {
       const { data: profile, error } = await supabase
         .from("profiles")
@@ -239,7 +320,7 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
     }
   };
 
-  // Busca produtos por nome ou SKU
+  // ── Busca produtos por nome ou SKU ──────────────────────────────────────────
   const searchProducts = async (term: string) => {
     if (!term.trim()) { setSearchResults([]); return; }
     setSearchingProducts(true);
@@ -250,13 +331,13 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
         .from("products")
         .select("id, name, price, pix_price, stock_quantity, image_url, sku, product_variants(*)")
         .ilike("name", like)
-        .limit(50);
+        .limit(100);
 
       const { data: bySku } = await supabase
         .from("products")
         .select("id, name, price, pix_price, stock_quantity, image_url, sku, product_variants(*)")
         .ilike("sku", like)
-        .limit(50);
+        .limit(100);
 
       const map = new Map<number, Product>();
       (byName || []).forEach((p: any) => map.set(p.id, p));
@@ -271,32 +352,54 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
   };
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      searchProducts(productSearch);
-    }, 400);
+    const timer = setTimeout(() => searchProducts(productSearch), 400);
     return () => clearTimeout(timer);
   }, [productSearch]);
 
+  // ── Adicionar produto/variação ao pedido ────────────────────────────────────
   const handleAddProduct = (product: Product, variant?: ProductVariant) => {
-    const priceToUse = variant ? variant.price : product.price || 0;
+    const basePrice = variant ? Number(variant.price) : Number(product.price) || 0;
+    const pixPrice = variant
+      ? (variant.pix_price != null ? Number(variant.pix_price) : null)
+      : (product.pix_price != null ? Number(product.pix_price) : null);
     const stockAvailable = variant ? variant.stock_quantity : product.stock_quantity;
 
     if (stockAvailable === 0) { showError("Produto sem estoque!"); return; }
 
-    const variantLabel = variant
-      ? [variant.volume_ml ? `${variant.volume_ml}ml` : "", variant.color || "", variant.ohms ? `${variant.ohms}Ω` : "", variant.size ? `Tam ${variant.size}` : ""].filter(Boolean).join(" ").trim()
-      : "";
-    const nameToUse = variant ? `${product.name}${variantLabel ? ` - ${variantLabel}` : ""}` : product.name;
+    const effectivePrice = getEffectivePrice(basePrice, pixPrice, paymentMethod);
+
+    const variantLabel = variant ? getVariantLabel(variant) : "";
+    const nameToUse = variant
+      ? `${product.name}${variantLabel ? ` - ${variantLabel}` : ""}`
+      : product.name;
 
     const existingIndex = orderItems.findIndex(
       (item) => item.productId === product.id && item.variantId === (variant?.id || null)
     );
 
     if (existingIndex >= 0) {
-      setOrderItems((prev) => prev.map((item, idx) => idx === existingIndex ? { ...item, quantity: item.quantity + 1 } : item));
+      setOrderItems((prev) =>
+        prev.map((item, idx) =>
+          idx === existingIndex ? { ...item, quantity: item.quantity + 1 } : item
+        )
+      );
     } else {
-      setOrderItems((prev) => [...prev, { productId: product.id, variantId: variant?.id || null, name: nameToUse, price: priceToUse, quantity: 1, imageUrl: product.image_url, stock: stockAvailable }]);
+      setOrderItems((prev) => [
+        ...prev,
+        {
+          productId: product.id,
+          variantId: variant?.id || null,
+          name: nameToUse,
+          basePrice,
+          pixPrice,
+          price: effectivePrice,
+          quantity: 1,
+          imageUrl: product.image_url,
+          stock: stockAvailable,
+        },
+      ]);
     }
+
     setProductSearch("");
     setSearchResults([]);
     setExpandedProduct(null);
@@ -307,14 +410,17 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
   };
 
   const handleChangeQuantity = (index: number, delta: number) => {
-    setOrderItems((prev) => prev.map((item, idx) => {
-      if (idx !== index) return item;
-      const newQty = item.quantity + delta;
-      if (newQty < 1) return item;
-      return { ...item, quantity: newQty };
-    }));
+    setOrderItems((prev) =>
+      prev.map((item, idx) => {
+        if (idx !== index) return item;
+        const newQty = item.quantity + delta;
+        if (newQty < 1) return item;
+        return { ...item, quantity: newQty };
+      })
+    );
   };
 
+  // ── Criar pedido ────────────────────────────────────────────────────────────
   const handleCreateOrder = async () => {
     if (!selectedClient) { showError("Selecione um cliente"); return; }
     if (orderItems.length === 0) { showError("Adicione ao menos um produto"); return; }
@@ -332,7 +438,7 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
           name_at_purchase: item.name,
           variant_id: item.variantId,
         })),
-        total_price: finalTotal,
+        total_price: computedTotal,
         shipping_cost: chargeFreight ? Number(shippingCost || 0) : 0,
         shipping_address: shippingAddress,
         payment_method: paymentMethod,
@@ -352,9 +458,7 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
     }
   };
 
-  const formatCurrency = (value: number) =>
-    value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
@@ -364,63 +468,87 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
 
         <div className="space-y-6 py-2">
 
-          {/* ── BUSCA DE CLIENTE ── */}
+          {/* ── 1. CLIENTE ── */}
           <div className="space-y-2">
             <Label className="text-base font-semibold">1. Cliente</Label>
+
             {!selectedClient ? (
-              <>
+              <div className="relative" ref={clientDropdownRef}>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                   <Input
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Buscar por e-mail, nome ou CPF"
+                    placeholder="Buscar por nome, e-mail ou CPF (ou deixe em branco para ver todos)"
                     className="pl-10"
+                    autoComplete="off"
                   />
                 </div>
 
-                {searchingClients && debouncedSearch.length >= 2 && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                {searchingClients && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Buscando clientes...
                   </div>
                 )}
 
-                {!searchingClients && debouncedSearch.length >= 2 && clientSearchResults && clientSearchResults.length > 0 && (
-                  <div className="space-y-1 max-h-52 overflow-y-auto border rounded-md p-1">
+                {!searchingClients && clientSearchResults && clientSearchResults.length > 0 && (
+                  <div className="space-y-0.5 max-h-56 overflow-y-auto border rounded-md p-1 mt-1 bg-white shadow-md z-10">
                     {clientSearchResults.map((client) => (
                       <div
                         key={client.user_id}
                         className="flex items-center justify-between px-3 py-2 rounded cursor-pointer hover:bg-muted transition-colors"
                         onClick={() => handleSelectClient(client)}
                       >
-                        <div>
-                          <p className="font-medium text-sm">{client.first_name} {client.last_name}</p>
-                          <p className="text-xs text-muted-foreground">{client.email}</p>
-                          {client.cpf_cnpj && <p className="text-[10px] text-muted-foreground">CPF: {client.cpf_cnpj}</p>}
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-sm truncate">
+                              {client.first_name} {client.last_name}
+                            </p>
+                            {client.is_credit_card_enabled && (
+                              <Badge variant="outline" className="text-[9px] px-1 py-0 border-purple-300 text-purple-700 bg-purple-50 shrink-0">
+                                Crédito
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate">{client.email}</p>
+                          {client.cpf_cnpj && (
+                            <p className="text-[10px] text-muted-foreground">CPF: {client.cpf_cnpj}</p>
+                          )}
                         </div>
-                        <Check className="h-4 w-4 text-green-600 shrink-0" />
+                        <Check className="h-4 w-4 text-green-600 shrink-0 ml-2" />
                       </div>
                     ))}
                   </div>
                 )}
 
-                {!searchingClients && debouncedSearch.length >= 2 && clientSearchResults && clientSearchResults.length === 0 && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground p-3 border rounded-md">
+                {!searchingClients && debouncedSearch.length >= 1 && clientSearchResults && clientSearchResults.length === 0 && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground p-3 border rounded-md mt-1">
                     <AlertCircle className="h-4 w-4" />
                     Nenhum cliente encontrado.
                   </div>
                 )}
-              </>
+              </div>
             ) : (
               <Card className="border-green-200 bg-green-50/50">
                 <CardContent className="p-3 flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <User className="h-5 w-5 text-green-600" />
+                    <User className="h-5 w-5 text-green-600 shrink-0" />
                     <div>
-                      <p className="font-medium text-sm">{selectedClient.first_name} {selectedClient.last_name}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-sm">
+                          {selectedClient.first_name} {selectedClient.last_name}
+                        </p>
+                        {selectedClient.is_credit_card_enabled && (
+                          <Badge variant="outline" className="text-[9px] px-1 py-0 border-purple-300 text-purple-700 bg-purple-50">
+                            Crédito
+                          </Badge>
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground">{selectedClient.email}</p>
-                      {selectedClient.phone && <p className="text-xs text-muted-foreground">{selectedClient.phone}</p>}
+                      {selectedClient.phone && (
+                        <p className="text-xs text-muted-foreground">{selectedClient.phone}</p>
+                      )}
                     </div>
                   </div>
                   <Button variant="ghost" size="sm" onClick={() => setSelectedClient(null)}>
@@ -433,9 +561,18 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
 
           <Separator />
 
-          {/* ── BUSCA DE PRODUTOS ── */}
+          {/* ── 2. PRODUTOS ── */}
           <div className="space-y-2">
             <Label className="text-base font-semibold">2. Produtos</Label>
+
+            {paymentMethod && (
+              <div className={`text-xs px-3 py-1.5 rounded-md font-medium ${paymentMethod === "pix" ? "bg-cyan-50 text-cyan-700 border border-cyan-200" : "bg-purple-50 text-purple-700 border border-purple-200"}`}>
+                {paymentMethod === "pix"
+                  ? "💰 Preços PIX aplicados automaticamente"
+                  : "💳 Preços Cartão de Crédito aplicados automaticamente"}
+              </div>
+            )}
+
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
@@ -454,7 +591,7 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
             )}
 
             {!searchingProducts && searchResults.length > 0 && (
-              <div className="border rounded-md max-h-64 overflow-y-auto divide-y">
+              <div className="border rounded-md max-h-72 overflow-y-auto divide-y bg-white shadow-sm">
                 {searchResults.map((product) => {
                   const activeVariants = (product.product_variants || []).filter((v) => v.is_active);
                   const hasVariants = activeVariants.length > 0;
@@ -462,6 +599,7 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
 
                   return (
                     <div key={product.id}>
+                      {/* Linha do produto */}
                       <div
                         className="flex items-center justify-between px-3 py-2 hover:bg-muted/50 cursor-pointer"
                         onClick={() => {
@@ -474,43 +612,78 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
                       >
                         <div className="flex items-center gap-2 min-w-0">
                           {product.image_url && (
-                            <img src={product.image_url} alt={product.name} className="h-8 w-8 rounded object-cover shrink-0" />
+                            <img
+                              src={product.image_url}
+                              alt={product.name}
+                              className="h-8 w-8 rounded object-cover shrink-0"
+                            />
                           )}
                           <div className="min-w-0">
                             <p className="text-sm font-medium truncate">{product.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {hasVariants ? `${activeVariants.length} variações` : formatCurrency(product.price)}
-                              {!hasVariants && ` · Estoque: ${product.stock_quantity}`}
-                            </p>
+                            {!hasVariants && (
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                {product.pix_price != null && product.pix_price > 0 ? (
+                                  <>
+                                    <span className="text-cyan-700 font-medium">PIX: {formatCurrency(product.pix_price)}</span>
+                                    <span>|</span>
+                                    <span>Cartão: {formatCurrency(product.price)}</span>
+                                  </>
+                                ) : (
+                                  <span>{formatCurrency(product.price)}</span>
+                                )}
+                                <span>· Estoque: {product.stock_quantity}</span>
+                              </div>
+                            )}
+                            {hasVariants && (
+                              <p className="text-xs text-muted-foreground">{activeVariants.length} variações disponíveis</p>
+                            )}
                           </div>
                         </div>
                         {!hasVariants ? (
                           <Plus className="h-4 w-4 text-green-600 shrink-0" />
                         ) : (
-                          <span className="text-xs text-muted-foreground shrink-0">{isExpanded ? "▲" : "▼"}</span>
+                          isExpanded
+                            ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" />
+                            : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
                         )}
                       </div>
 
+                      {/* Variações expandidas — TODAS as variações ativas */}
                       {hasVariants && isExpanded && (
-                        <div className="bg-muted/30 divide-y">
-                          {sortVariantsBySpecification(activeVariants).map((variant) => (
-                            <div
-                              key={variant.id}
-                              className="flex items-center justify-between px-6 py-1.5 hover:bg-muted cursor-pointer"
-                              onClick={() => handleAddProduct(product, variant)}
-                            >
-                              <div>
-                                <p className="text-xs font-medium">
-                                  {[variant.volume_ml ? `${variant.volume_ml}ml` : "", variant.color || "", variant.ohms ? `${variant.ohms}Ω` : "", variant.size ? `Tam ${variant.size}` : ""].filter(Boolean).join(" ") || variant.sku || "Variação"}
-                                </p>
-                                <p className="text-[10px] text-muted-foreground">Estoque: {variant.stock_quantity}</p>
+                        <div className="bg-muted/20 divide-y border-t">
+                          {sortVariantsBySpecification(activeVariants).map((variant) => {
+                            const label = getVariantLabel(variant);
+                            const hasPix = variant.pix_price != null && Number(variant.pix_price) > 0;
+                            return (
+                              <div
+                                key={variant.id}
+                                className="flex items-center justify-between px-6 py-2 hover:bg-muted/50 cursor-pointer"
+                                onClick={() => handleAddProduct(product, variant)}
+                              >
+                                <div className="min-w-0">
+                                  <p className="text-xs font-medium">{label}</p>
+                                  <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
+                                    {hasPix ? (
+                                      <>
+                                        <span className="text-cyan-700 font-semibold">PIX: {formatCurrency(Number(variant.pix_price))}</span>
+                                        <span>|</span>
+                                        <span>Cartão: {formatCurrency(Number(variant.price))}</span>
+                                      </>
+                                    ) : (
+                                      <span>{formatCurrency(Number(variant.price))}</span>
+                                    )}
+                                    <span>· Estoque: {variant.stock_quantity}</span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0 ml-2">
+                                  <span className="text-xs font-bold text-green-700">
+                                    {formatCurrency(getEffectivePrice(Number(variant.price), variant.pix_price != null ? Number(variant.pix_price) : null, paymentMethod))}
+                                  </span>
+                                  <Plus className="h-3 w-3 text-green-600" />
+                                </div>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-semibold">{formatCurrency(variant.price)}</span>
-                                <Plus className="h-3 w-3 text-green-600" />
-                              </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -527,23 +700,53 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
                   {orderItems.map((item, idx) => (
                     <div key={idx} className="flex items-center gap-3 px-3 py-2">
                       {item.imageUrl && (
-                        <img src={item.imageUrl} alt={item.name} className="h-8 w-8 rounded object-cover shrink-0" />
+                        <img
+                          src={item.imageUrl}
+                          alt={item.name}
+                          className="h-8 w-8 rounded object-cover shrink-0"
+                        />
                       )}
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{item.name}</p>
-                        <p className="text-xs text-muted-foreground">{formatCurrency(item.price)} cada</p>
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <span>{formatCurrency(item.price)} cada</span>
+                          {item.pixPrice != null && item.pixPrice !== item.basePrice && (
+                            <span className="text-[10px]">
+                              ({paymentMethod === "pix"
+                                ? <span className="text-cyan-700">PIX</span>
+                                : <span>Cartão</span>})
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
-                        <Button variant="outline" size="icon" className="h-6 w-6" onClick={() => handleChangeQuantity(idx, -1)}>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => handleChangeQuantity(idx, -1)}
+                        >
                           <Minus className="h-3 w-3" />
                         </Button>
                         <span className="text-sm w-6 text-center">{item.quantity}</span>
-                        <Button variant="outline" size="icon" className="h-6 w-6" onClick={() => handleChangeQuantity(idx, 1)}>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => handleChangeQuantity(idx, 1)}
+                        >
                           <Plus className="h-3 w-3" />
                         </Button>
                       </div>
-                      <span className="text-sm font-semibold w-20 text-right shrink-0">{formatCurrency(item.price * item.quantity)}</span>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500 hover:text-red-700" onClick={() => handleRemoveProduct(idx)}>
+                      <span className="text-sm font-semibold w-20 text-right shrink-0">
+                        {formatCurrency(item.price * item.quantity)}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-red-500 hover:text-red-700"
+                        onClick={() => handleRemoveProduct(idx)}
+                      >
                         <Trash2 className="h-3 w-3" />
                       </Button>
                     </div>
@@ -555,44 +758,95 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
 
           <Separator />
 
-          {/* ── ENDEREÇO DE ENTREGA ── */}
+          {/* ── 3. ENDEREÇO DE ENTREGA ── */}
           <div className="space-y-3">
-            <Label className="text-base font-semibold">3. Endereço de Entrega</Label>
+            <div className="flex items-center justify-between">
+              <Label className="text-base font-semibold">3. Endereço de Entrega</Label>
+              {selectedClient && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs text-muted-foreground h-7"
+                  onClick={() => {
+                    setShippingAddress({
+                      street: selectedClient.street || "",
+                      number: selectedClient.number || "",
+                      complement: selectedClient.complement || "",
+                      neighborhood: selectedClient.neighborhood || "",
+                      city: selectedClient.city || "",
+                      state: selectedClient.state || "",
+                      cep: selectedClient.cep || "",
+                    });
+                  }}
+                >
+                  ↺ Restaurar do cliente
+                </Button>
+              )}
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
                 <Label className="text-xs">Rua / Logradouro</Label>
-                <Input value={shippingAddress.street} onChange={(e) => setShippingAddress((p) => ({ ...p, street: e.target.value }))} placeholder="Rua das Flores" />
+                <Input
+                  value={shippingAddress.street}
+                  onChange={(e) => setShippingAddress((p) => ({ ...p, street: e.target.value }))}
+                  placeholder="Rua das Flores"
+                />
               </div>
               <div>
                 <Label className="text-xs">Número</Label>
-                <Input value={shippingAddress.number} onChange={(e) => setShippingAddress((p) => ({ ...p, number: e.target.value }))} placeholder="123" />
+                <Input
+                  value={shippingAddress.number}
+                  onChange={(e) => setShippingAddress((p) => ({ ...p, number: e.target.value }))}
+                  placeholder="123"
+                />
               </div>
               <div>
                 <Label className="text-xs">Complemento</Label>
-                <Input value={shippingAddress.complement} onChange={(e) => setShippingAddress((p) => ({ ...p, complement: e.target.value }))} placeholder="Apto 4" />
+                <Input
+                  value={shippingAddress.complement}
+                  onChange={(e) => setShippingAddress((p) => ({ ...p, complement: e.target.value }))}
+                  placeholder="Apto 4"
+                />
               </div>
               <div>
                 <Label className="text-xs">Bairro</Label>
-                <Input value={shippingAddress.neighborhood} onChange={(e) => setShippingAddress((p) => ({ ...p, neighborhood: e.target.value }))} placeholder="Centro" />
+                <Input
+                  value={shippingAddress.neighborhood}
+                  onChange={(e) => setShippingAddress((p) => ({ ...p, neighborhood: e.target.value }))}
+                  placeholder="Centro"
+                />
               </div>
               <div>
                 <Label className="text-xs">CEP</Label>
-                <Input value={shippingAddress.cep} onChange={(e) => setShippingAddress((p) => ({ ...p, cep: e.target.value }))} placeholder="00000-000" />
+                <Input
+                  value={shippingAddress.cep}
+                  onChange={(e) => setShippingAddress((p) => ({ ...p, cep: e.target.value }))}
+                  placeholder="00000-000"
+                />
               </div>
               <div>
                 <Label className="text-xs">Cidade</Label>
-                <Input value={shippingAddress.city} onChange={(e) => setShippingAddress((p) => ({ ...p, city: e.target.value }))} placeholder="São Paulo" />
+                <Input
+                  value={shippingAddress.city}
+                  onChange={(e) => setShippingAddress((p) => ({ ...p, city: e.target.value }))}
+                  placeholder="São Paulo"
+                />
               </div>
               <div>
                 <Label className="text-xs">Estado</Label>
-                <Input value={shippingAddress.state} onChange={(e) => setShippingAddress((p) => ({ ...p, state: e.target.value }))} placeholder="SP" maxLength={2} />
+                <Input
+                  value={shippingAddress.state}
+                  onChange={(e) => setShippingAddress((p) => ({ ...p, state: e.target.value }))}
+                  placeholder="SP"
+                  maxLength={2}
+                />
               </div>
             </div>
           </div>
 
           <Separator />
 
-          {/* ── FRETE E OPÇÕES ── */}
+          {/* ── 4. FRETE E OPÇÕES ── */}
           <div className="space-y-4">
             <Label className="text-base font-semibold">4. Frete e Opções</Label>
 
@@ -630,24 +884,59 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
 
           <Separator />
 
-          {/* ── FORMA DE PAGAMENTO ── */}
+          {/* ── 5. FORMA DE PAGAMENTO ── */}
           <div className="space-y-3">
             <Label className="text-base font-semibold">5. Forma de Pagamento</Label>
-            <RadioGroup value={paymentMethod || ""} onValueChange={setPaymentMethod} className="grid grid-cols-2 gap-2">
-              {[
-                { value: "pix", label: "PIX" },
-                { value: "credit_card", label: "Cartão de Crédito" },
-                { value: "debit_card", label: "Cartão de Débito" },
-                { value: "cash", label: "Dinheiro" },
-                { value: "bank_transfer", label: "Transferência" },
-                { value: "other", label: "Outro" },
-              ].map((opt) => (
-                <div key={opt.value} className={`flex items-center gap-2 border rounded-md px-3 py-2 cursor-pointer transition-colors ${paymentMethod === opt.value ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`} onClick={() => setPaymentMethod(opt.value)}>
-                  <RadioGroupItem value={opt.value} id={opt.value} />
-                  <Label htmlFor={opt.value} className="cursor-pointer text-sm">{opt.label}</Label>
+            <RadioGroup
+              value={paymentMethod || ""}
+              onValueChange={setPaymentMethod}
+              className="grid grid-cols-2 gap-3"
+            >
+              {/* PIX */}
+              <div
+                className={`flex items-center gap-3 border-2 rounded-xl px-4 py-3 cursor-pointer transition-all ${
+                  paymentMethod === "pix"
+                    ? "border-cyan-500 bg-cyan-50"
+                    : "border-gray-200 hover:border-cyan-300 hover:bg-cyan-50/30"
+                }`}
+                onClick={() => setPaymentMethod("pix")}
+              >
+                <RadioGroupItem value="pix" id="pix" />
+                <div className="flex items-center gap-2">
+                  <QrCode className={`h-5 w-5 ${paymentMethod === "pix" ? "text-cyan-600" : "text-gray-400"}`} />
+                  <div>
+                    <Label htmlFor="pix" className="cursor-pointer font-semibold text-sm">PIX</Label>
+                    <p className="text-[10px] text-muted-foreground">Preço PIX aplicado</p>
+                  </div>
                 </div>
-              ))}
+              </div>
+
+              {/* Cartão de Crédito */}
+              <div
+                className={`flex items-center gap-3 border-2 rounded-xl px-4 py-3 cursor-pointer transition-all ${
+                  paymentMethod === "credit_card"
+                    ? "border-purple-500 bg-purple-50"
+                    : "border-gray-200 hover:border-purple-300 hover:bg-purple-50/30"
+                }`}
+                onClick={() => setPaymentMethod("credit_card")}
+              >
+                <RadioGroupItem value="credit_card" id="credit_card" />
+                <div className="flex items-center gap-2">
+                  <CreditCard className={`h-5 w-5 ${paymentMethod === "credit_card" ? "text-purple-600" : "text-gray-400"}`} />
+                  <div>
+                    <Label htmlFor="credit_card" className="cursor-pointer font-semibold text-sm">Cartão de Crédito</Label>
+                    <p className="text-[10px] text-muted-foreground">Preço normal aplicado</p>
+                  </div>
+                </div>
+              </div>
             </RadioGroup>
+
+            {!paymentMethod && (
+              <p className="text-xs text-amber-600 flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />
+                Selecione a forma de pagamento para aplicar os preços corretos
+              </p>
+            )}
           </div>
 
           <Separator />
@@ -657,7 +946,7 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
             <Label className="text-base font-semibold">Resumo</Label>
             <div className="space-y-1 text-sm">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Subtotal</span>
+                <span className="text-muted-foreground">Subtotal ({orderItems.reduce((a, i) => a + i.quantity, 0)} itens)</span>
                 <span>{formatCurrency(itemsTotal)}</span>
               </div>
               <div className="flex justify-between">
@@ -665,22 +954,17 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
                 <span>{chargeFreight ? formatCurrency(Number(shippingCost || 0)) : "Grátis"}</span>
               </div>
               <Separator className="my-1" />
-              <div className="flex justify-between font-semibold text-base">
+              <div className="flex justify-between font-bold text-base">
                 <span>Total</span>
-                <span>{formatCurrency(manualTotal && manualTotal.trim() !== "" ? Number(manualTotal) : computedTotal)}</span>
+                <span className={paymentMethod === "pix" ? "text-cyan-700" : paymentMethod === "credit_card" ? "text-purple-700" : ""}>
+                  {formatCurrency(computedTotal)}
+                </span>
               </div>
-            </div>
-            <div className="mt-2">
-              <Label className="text-xs text-muted-foreground">Total manual (opcional — sobrescreve o calculado)</Label>
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                value={manualTotal}
-                onChange={(e) => setManualTotal(e.target.value)}
-                placeholder={String(computedTotal.toFixed(2))}
-                className="w-48 mt-1"
-              />
+              {paymentMethod && (
+                <p className="text-[10px] text-muted-foreground text-right">
+                  {paymentMethod === "pix" ? "💰 Preços PIX" : "💳 Preços Cartão de Crédito"}
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -689,8 +973,19 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
           <Button variant="outline" onClick={onClose} disabled={isCreating}>
             Cancelar
           </Button>
-          <Button onClick={handleCreateOrder} disabled={isCreating || !selectedClient || orderItems.length === 0 || !paymentMethod}>
-            {isCreating ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Criando...</> : "Criar Pedido"}
+          <Button
+            onClick={handleCreateOrder}
+            disabled={isCreating || !selectedClient || orderItems.length === 0 || !paymentMethod}
+            className={paymentMethod === "pix" ? "bg-cyan-600 hover:bg-cyan-700" : paymentMethod === "credit_card" ? "bg-purple-600 hover:bg-purple-700" : ""}
+          >
+            {isCreating ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                Criando...
+              </>
+            ) : (
+              "Criar Pedido"
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>
