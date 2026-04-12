@@ -189,7 +189,7 @@ const OrdersPage = () => {
     client: any;
   } | null>(null);
 
-  const { data: orders, isLoading, refetch, isRefetching, error } = useQuery<Order[], Error>({
+  const { data: orders, isLoading, refetch, isRefetching, error } = useQuery<Order[], Error>( {
     queryKey: ["ordersAdmin"],
     queryFn: fetchOrders,
     refetchInterval: 30000,
@@ -385,6 +385,31 @@ const OrdersPage = () => {
         queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
     },
   });
+
+  const syncPendingDeliveryMutation = useMutation({
+    mutationFn: async (order: Order) => {
+      const { error } = await supabase
+        .from('orders')
+        .update({ delivery_status: 'Aguardando Coleta' })
+        .eq('id', order.id)
+        .eq('delivery_status', 'Pendente')
+        .in('status', ['Pago', 'Finalizada']);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
+    },
+  });
+
+  useEffect(() => {
+    if (!orders) return;
+
+    orders.forEach((order) => {
+      if ((order.status === 'Pago' || order.status === 'Finalizada') && order.delivery_status === 'Pendente') {
+        syncPendingDeliveryMutation.mutate(order);
+      }
+    });
+  }, [orders, syncPendingDeliveryMutation]);
 
   const deleteOrderMutation = useMutation({
     mutationFn: async (orderId: number) => {
@@ -976,7 +1001,7 @@ const OrdersPage = () => {
                                         <Tooltip>
                                             <TooltipTrigger asChild>
                                                 <a 
-                                                    href={getWhatsAppLink(phone, `Olá ${name}, sobre seu pedido #${order.id}...`)} 
+                                                    href={getWhatsAppLink(phone, `Olá ${name}, falando sobre o pedido #${order.id}...`)} 
                                                     target="_blank" 
                                                     rel="noreferrer"
                                                     className="bg-green-100 p-1 rounded-full text-green-600 hover:bg-green-200 hover:scale-110 transition-all"
@@ -1180,7 +1205,7 @@ const OrdersPage = () => {
 
       {selectedOrder && <OrderDetailModal order={selectedOrder} isOpen={isDetailModalOpen} onClose={() => setIsDetailModalOpen(false)} />}
       {selectedOrder && <ShippingLabelModal order={selectedOrder} isOpen={isLabelModalOpen} onClose={() => { setIsLabelModalOpen(false); setSelectedOrder(null); }} />}
-      
+
       {/* Modal de Histórico do Cliente */}
       <ClientDetailsModal 
         client={selectedClientForHistory} 
