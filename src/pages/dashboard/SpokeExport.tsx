@@ -88,14 +88,29 @@ const fetchOrdersToExport = async (): Promise<Order[]> => {
   if (profilesError) throw new Error(profilesError.message);
   const profilesMap = new Map(profiles.map(p => [p.id, p]));
 
-  // Busca emails usando a função existente
+  // Busca emails via edge function (requer admin autenticado)
   let emailsMap = new Map<string, string>();
   try {
-      const { data: usersData, error: usersError } = await supabase.functions.invoke("get-users");
-      if (!usersError && usersData) {
-          usersData.forEach((u: any) => {
-              emailsMap.set(u.id, u.email);
-          });
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(
+        "https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1/get-users",
+        {
+          headers: {
+            "Authorization": `Bearer ${session?.access_token}`,
+            "Content-Type": "application/json",
+            "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpybG96aGh2d3FmbWp0a212dWtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDU2NjQsImV4cCI6MjA2NzkyMTY2NH0.Do5c1-TKqpyZTJeX_hLbw1SU40CbwXfCIC-pPpcD_JM",
+          },
+        }
+      );
+      if (response.ok) {
+          const usersData = await response.json();
+          if (Array.isArray(usersData)) {
+              usersData.forEach((u: any) => {
+                  emailsMap.set(u.id, u.email);
+              });
+          }
+      } else {
+          console.error("Failed to fetch emails, status:", response.status);
       }
   } catch (e) {
       console.error("Failed to fetch emails", e);
