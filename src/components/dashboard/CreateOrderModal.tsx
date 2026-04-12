@@ -136,7 +136,6 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
       let query = supabase
         .from("profiles")
         .select("id, first_name, last_name, cpf_cnpj, email, phone")
-        .eq("role", "user")
         .order("first_name", { ascending: true })
         .limit(20);
 
