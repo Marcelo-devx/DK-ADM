@@ -890,17 +890,23 @@ const OrdersPage = () => {
 
                     // Lógica de badge de entrega
                     let deliveryBadge;
+                    const deliveryStatusLabel =
+                        isPaid && order.delivery_status === 'Pendente'
+                            ? 'Aguardando Coleta'
+                            : order.delivery_status;
+
                     if (needsManualValidation) {
                         deliveryBadge = <Badge variant="outline" className="text-gray-400 border-gray-200">Bloqueado</Badge>;
                     } else {
                         deliveryBadge = (
                             <Badge variant="secondary" className={cn(
                                 "w-fit",
-                                order.delivery_status === 'Entregue' && "bg-green-100 text-green-800",
-                                order.delivery_status === 'Despachado' && "bg-blue-100 text-blue-800 animate-pulse",
-                                order.delivery_status === 'Embalado' && "bg-amber-100 text-amber-800"
+                                deliveryStatusLabel === 'Entregue' && "bg-green-100 text-green-800",
+                                deliveryStatusLabel === 'Despachado' && "bg-blue-100 text-blue-800 animate-pulse",
+                                deliveryStatusLabel === 'Embalado' && "bg-amber-100 text-amber-800",
+                                deliveryStatusLabel === 'Aguardando Coleta' && "bg-sky-100 text-sky-800"
                             )}>
-                                {order.delivery_status}
+                                {deliveryStatusLabel}
                             </Badge>
                         );
                     }
