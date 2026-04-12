@@ -115,6 +115,7 @@ const SpokeExportPage = () => {
   // NOVOS ESTADOS
   const [changeStatus, setChangeStatus] = useState(false);
   const [clearSelection, setClearSelection] = useState(true);
+  const [isTestExport, setIsTestExport] = useState(false);
 
   const { data: orders, isLoading, refetch, isRefetching } = useQuery<Order[]>({
     queryKey: ["ordersToExport"],
@@ -177,7 +178,7 @@ const SpokeExportPage = () => {
     return "bg-gray-100 text-gray-800 border-gray-300";
   };
 
-  const handleExport = async () => {
+  const handleExport = async (testMode = false) => {
     if (selectedIds.size === 0) {
       showError("Selecione pelo menos um pedido para exportar.");
       return;
@@ -226,39 +227,41 @@ const SpokeExportPage = () => {
       XLSX.utils.book_append_sheet(workbook, worksheet, "Rota Spoke");
 
       // Gera o nome do arquivo com data e hora
-      const fileName = `Rota_Spoke_${format(new Date(), "yyyy-MM-dd_HH-mm")}.xlsx`;
+      const testSuffix = testMode ? "_TESTE" : "";
+      const fileName = `Rota_Spoke${testSuffix}_${format(new Date(), "yyyy-MM-dd_HH-mm")}.xlsx`;
 
       // Download
       XLSX.writeFile(workbook, fileName);
-      showSuccess(`${selectedOrders.length} pedidos exportados com sucesso!`);
+      showSuccess(`${selectedOrders.length} pedidos exportados com sucesso!${testMode ? " (modo teste - nada foi alterado)" : ""}`);
 
-      // --- LÓGICA CONDICIONAL DE ATUALIZAÇÃO ---
-      
-      // 1. Atualizar status se marcado
-      if (changeStatus) {
-        try {
-          const ids = selectedOrders.map(o => o.id);
-          const { error: updateError } = await supabase
-            .from('orders')
-            .update({ delivery_status: 'Aguardando Entregador' })
-            .in('id', ids);
+      // --- LÓGICA CONDICIONAL DE ATUALIZAÇÃO --- (ignorada no modo teste)
+      if (!testMode) {
+        // 1. Atualizar status se marcado
+        if (changeStatus) {
+          try {
+            const ids = selectedOrders.map(o => o.id);
+            const { error: updateError } = await supabase
+              .from('orders')
+              .update({ delivery_status: 'Aguardando Entregador' })
+              .in('id', ids);
 
-          if (updateError) {
-            console.error('Erro ao atualizar status:', updateError);
-            showError('Exportado, mas falha ao atualizar status.');
-          } else {
-            showSuccess('Status atualizado para "Aguardando Entregador".');
-            refetch();
+            if (updateError) {
+              console.error('Erro ao atualizar status:', updateError);
+              showError('Exportado, mas falha ao atualizar status.');
+            } else {
+              showSuccess('Status atualizado para "Aguardando Entregador".');
+              refetch();
+            }
+          } catch (err) {
+            console.error('Erro na atualização de status:', err);
+            showError('Exportado, mas ocorreu um erro ao atualizar status.');
           }
-        } catch (err) {
-          console.error('Erro na atualização de status:', err);
-          showError('Exportado, mas ocorreu um erro ao atualizar status.');
         }
-      }
 
-      // 2. Limpar seleção se marcado
-      if (clearSelection) {
-        setSelectedIds(new Set());
+        // 2. Limpar seleção se marcado
+        if (clearSelection) {
+          setSelectedIds(new Set());
+        }
       }
 
     } catch (err) {
@@ -267,13 +270,13 @@ const SpokeExportPage = () => {
     } finally {
       setIsExporting(false);
       setConfirmOpen(false);
+      setIsTestExport(false);
     }
   };
 
   const handleConfirmExport = () => {
-    // Fecha o diálogo e inicia a exportação
     setConfirmOpen(false);
-    void handleExport();
+    void handleExport(isTestExport);
   };
 
   return (
@@ -440,7 +443,7 @@ const SpokeExportPage = () => {
 
                     <Button 
                         className="w-full h-12 text-lg font-bold bg-blue-600 hover:bg-blue-700 shadow-lg"
-                        onClick={() => setConfirmOpen(true)}
+                        onClick={() => { setIsTestExport(false); setConfirmOpen(true); }}
                         disabled={selectedIds.size === 0 || isExporting}
                     >
                         {isExporting ? (
@@ -448,6 +451,14 @@ const SpokeExportPage = () => {
                         ) : (
                             <><FileDown className="mr-2 h-5 w-5" /> Baixar Planilha</>
                         )}
+                    </Button>
+                    <Button
+                        variant="outline"
+                        className="w-full border-dashed border-gray-400 text-gray-600 hover:bg-gray-50"
+                        onClick={() => { setIsTestExport(true); setConfirmOpen(true); }}
+                        disabled={selectedIds.size === 0 || isExporting}
+                    >
+                        <FileDown className="mr-2 h-4 w-4" /> Exportar Teste (sem alterar)
                     </Button>
                     <p className="text-[10px] text-center text-muted-foreground px-4">
                         Dica: No Spoke, vá em "Adicionar Paradas" {'>'} "Carregar arquivo" e selecione este arquivo.
@@ -460,50 +471,60 @@ const SpokeExportPage = () => {
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Confirmar Exportação</DialogTitle>
+            <DialogTitle>{isTestExport ? "Exportar Teste" : "Confirmar Exportação"}</DialogTitle>
             <DialogDescription>
-              {selectedIds.size} pedidos serão exportados para a planilha de rota.
+              {isTestExport
+                ? `${selectedIds.size} pedidos serão exportados para teste. Nenhum status será alterado.`
+                : `${selectedIds.size} pedidos serão exportados para a planilha de rota.`}
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4 py-4">
-            <div className="flex items-start space-x-3">
-              <Checkbox 
-                id="change-status"
-                checked={changeStatus}
-                onCheckedChange={(checked) => setChangeStatus(checked as boolean)}
-              />
-              <div className="grid gap-1.5 leading-none">
-                <label
-                  htmlFor="change-status"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                >
-                  Mudar status para "Aguardando Entregador"?
-                </label>
-                <p className="text-xs text-muted-foreground">
-                  Ao marcar esta opção, os pedidos mudarão de status e não poderão mais ser selecionados para novas exportações.
-                </p>
+            {isTestExport ? (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
+                ⚠️ Modo teste: a planilha será gerada normalmente, mas <strong>nenhum status será alterado</strong> e a seleção será mantida.
               </div>
-            </div>
+            ) : (
+              <>
+                <div className="flex items-start space-x-3">
+                  <Checkbox 
+                    id="change-status"
+                    checked={changeStatus}
+                    onCheckedChange={(checked) => setChangeStatus(checked as boolean)}
+                  />
+                  <div className="grid gap-1.5 leading-none">
+                    <label
+                      htmlFor="change-status"
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                    >
+                      Mudar status para "Aguardando Entregador"?
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      Ao marcar esta opção, os pedidos mudarão de status e não poderão mais ser selecionados para novas exportações.
+                    </p>
+                  </div>
+                </div>
 
-            <div className="flex items-start space-x-3">
-              <Checkbox 
-                id="clear-selection"
-                checked={clearSelection}
-                onCheckedChange={(checked) => setClearSelection(checked as boolean)}
-              />
-              <div className="grid gap-1.5 leading-none">
-                <label
-                  htmlFor="clear-selection"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                >
-                  Limpar seleção após exportar?
-                </label>
-                <p className="text-xs text-muted-foreground">
-                  Desmarque os pedidos da lista após gerar a planilha.
-                </p>
-              </div>
-            </div>
+                <div className="flex items-start space-x-3">
+                  <Checkbox 
+                    id="clear-selection"
+                    checked={clearSelection}
+                    onCheckedChange={(checked) => setClearSelection(checked as boolean)}
+                  />
+                  <div className="grid gap-1.5 leading-none">
+                    <label
+                      htmlFor="clear-selection"
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                    >
+                      Limpar seleção após exportar?
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      Desmarque os pedidos da lista após gerar a planilha.
+                    </p>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           <DialogFooter>
@@ -518,7 +539,7 @@ const SpokeExportPage = () => {
               {isExporting ? (
                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Exportando...</>
               ) : (
-                <><FileDown className="mr-2 h-4 w-4" /> Confirmar Exportação</>
+                <><FileDown className="mr-2 h-4 w-4" /> {isTestExport ? "Baixar Teste" : "Confirmar Exportação"}</>
               )}
             </Button>
           </DialogFooter>
