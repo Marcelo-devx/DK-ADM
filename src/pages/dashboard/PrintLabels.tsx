@@ -357,17 +357,19 @@ export default function PrintLabelsPage() {
 
   // Cabeçalho da planilha (ordem deve bater com o modelo)
   const TEMPLATE_HEADERS = [
-    "Número do pedido",
+    "Número pedido",
+    "Nome Entrega",
     "Endereço",
     "Complemento",
-    "_blank1",
+    "Entrega",
+    "Observações",
     "Telefone",
-    "Observação",
-    "_blank2",
-    "Cidade",
-    "CEP",
-    "_blank3",
-    "E-mail",
+    "Nota Circuit",
+    "Bairro Entrega",
+    "Cidade Entrega",
+    "CEP Entrega",
+    "CPF/CNPJ Comprador",
+    "E-mail Comprador",
   ];
 
   // Função utilitária para sortear um remetente
@@ -409,18 +411,21 @@ export default function PrintLabelsPage() {
         const remState = sender?.state || senderInfo.state || "";
         const remCep = sender?.cep || senderInfo.cep || "";
 
+        const fullName = `${cleanStr(p?.first_name)} ${cleanStr(p?.last_name)}`.trim();
         return {
-          "Número do pedido": order.id,
+          "Número pedido": order.id,
+          "Nome Entrega": fullName,
           "Endereço": `${addr.street || ''}${addr.number ? `, ${addr.number}` : ''}`.trim(),
           "Complemento": addr.complement || "",
-          "_blank1": "",
+          "Entrega": "",
+          "Observações": "Frágil",
           "Telefone": p?.phone || "",
-          "Observação": "Frágil",
-          "_blank2": "",
-          "Cidade": addr.city || "",
-          "CEP": addr.cep || "",
-          "_blank3": "",
-          "E-mail": order.email || "",
+          "Nota Circuit": "",
+          "Bairro Entrega": addr.neighborhood || "",
+          "Cidade Entrega": addr.city || "",
+          "CEP Entrega": addr.cep || "",
+          "CPF/CNPJ Comprador": p?.cpf_cnpj || "",
+          "E-mail Comprador": order.email || "",
         };
       });
 
@@ -458,17 +463,19 @@ export default function PrintLabelsPage() {
   const handleDownloadTemplate = () => {
     const sample = [
       {
-        "Número do pedido": "12345",
+        "Número pedido": "12345",
+        "Nome Entrega": "João Silva",
         "Endereço": "Rua das Flores, 123",
         "Complemento": "Apto 101",
-        "_blank1": "",
+        "Entrega": "",
+        "Observações": "Frágil",
         "Telefone": "11999999999",
-        "Observação": "Frágil",
-        "_blank2": "",
-        "Cidade": "São Paulo",
-        "CEP": "01000-000",
-        "_blank3": "",
-        "E-mail": "joao@email.com",
+        "Nota Circuit": "",
+        "Bairro Entrega": "Centro",
+        "Cidade Entrega": "São Paulo",
+        "CEP Entrega": "01000-000",
+        "CPF/CNPJ Comprador": "123.456.789-00",
+        "E-mail Comprador": "joao@email.com",
       }
     ];
 
@@ -697,7 +704,7 @@ export default function PrintLabelsPage() {
                       <input type="checkbox" checked={selectedIds.size === filteredOrders.length && filteredOrders.length > 0} onChange={toggleSelectAll} />
                     </TableHead>
                     {TEMPLATE_HEADERS.map(h => (
-                      <TableHead key={h} className="whitespace-nowrap">{h.startsWith("_blank") ? "" : h}</TableHead>
+                      <TableHead key={h} className="whitespace-nowrap">{h}</TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>
@@ -725,17 +732,19 @@ export default function PrintLabelsPage() {
                       const remCep = previewSender?.cep || senderInfo.cep;
 
                       return {
-                        "Número do pedido": order.id,
+                        "Número pedido": order.id,
+                        "Nome Entrega": fullName,
                         "Endereço": `${addr.street || ''}${addr.number ? `, ${addr.number}` : ''}`.trim(),
                         "Complemento": addr.complement || "",
-                        "_blank1": "",
+                        "Entrega": "",
+                        "Observações": "Frágil",
                         "Telefone": p?.phone || "",
-                        "Observação": "Frágil",
-                        "_blank2": "",
-                        "Cidade": addr.city || "",
-                        "CEP": addr.cep || "",
-                        "_blank3": "",
-                        "E-mail": order.email || "",
+                        "Nota Circuit": "",
+                        "Bairro Entrega": addr.neighborhood || "",
+                        "Cidade Entrega": addr.city || "",
+                        "CEP Entrega": addr.cep || "",
+                        "CPF/CNPJ Comprador": p?.cpf_cnpj || "",
+                        "E-mail Comprador": order.email || "",
                       };
                     })();
 
