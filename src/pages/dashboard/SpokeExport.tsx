@@ -70,7 +70,7 @@ const fetchOrdersToExport = async (): Promise<Order[]> => {
     .from("orders")
     .select("id, created_at, total_price, status, delivery_status, user_id, shipping_address")
     .in("status", ["Finalizada", "Pago"]) // Apenas pagos
-    // REMOVIDO O FILTRO: .in("delivery_status", ["Pendente", "Aguardando Coleta"])
+    .in("delivery_status", ["Aguardando Coleta", "Embalado"]) // Apenas prontos para coleta
     .order("created_at", { ascending: false });
 
   if (ordersError) throw new Error(ordersError.message);
