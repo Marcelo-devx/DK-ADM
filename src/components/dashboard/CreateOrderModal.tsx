@@ -343,21 +343,22 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
 
     setIsCreating(true);
     try {
+      // A função create_order no banco espera cart_items_input como jsonb
+      // com campos: itemId, itemType, quantity, variantId
+      const cartItems = orderItems.map((item) => ({
+        itemId: item.productId,
+        itemType: "product",
+        quantity: item.quantity,
+        variantId: item.variantId ?? null,
+      }));
+
       const payload = {
-        user_id: selectedClient.id,
-        items: orderItems.map((item) => ({
-          item_id: item.productId,
-          item_type: item.variantId ? "variant" : "product",
-          quantity: item.quantity,
-          price_at_purchase: effectivePrice(item.basePrice, item.pixPrice, paymentMethod),
-          name_at_purchase: item.name,
-          variant_id: item.variantId,
-        })),
-        total_price: computedTotal,
-        shipping_cost: chargeFreight ? n(shippingCost) : 0,
-        shipping_address: shippingAddress,
-        payment_method: paymentMethod,
-        generate_loyalty_points: generateLoyaltyPoints,
+        user_id_input: selectedClient.id,
+        cart_items_input: cartItems,
+        shipping_address_input: shippingAddress,
+        shipping_cost_input: chargeFreight ? n(shippingCost) : 0,
+        payment_method_input: paymentMethod === "pix" ? "Pix" : "Cartão de Crédito",
+        donation_amount_input: 0,
       };
 
       const { error } = await supabase.rpc("create_order", payload as any);
