@@ -181,7 +181,7 @@ export default function PrintLabelsPage() {
         `)
         // status pago/finalizado e delivery_status Aguardando Coleta ou Pendente
         .in("status", ["Finalizada", "Pago"])
-        .or("delivery_status.eq.Aguardando Coleta,delivery_status.eq.Pendente")
+        .or("delivery_status.eq.Aguardando Coleta,delivery_status.eq.Pendente,delivery_status.eq.Embalado")
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -704,7 +704,7 @@ export default function PrintLabelsPage() {
                 <TableBody>
                   {filteredOrders.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={TEMPLATE_HEADERS.length + 1} className="py-10 text-center text-muted-foreground">Nenhum pedido encontrado com delivery_status 'Aguardando Coleta' ou 'Pendente'.</TableCell>
+                      <TableCell colSpan={TEMPLATE_HEADERS.length + 1} className="py-10 text-center text-muted-foreground">Nenhum pedido encontrado com delivery_status 'Aguardando Coleta', 'Pendente' ou 'Embalado'.</TableCell>
                     </TableRow>
                   )}
 
