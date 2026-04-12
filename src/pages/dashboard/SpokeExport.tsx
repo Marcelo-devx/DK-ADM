@@ -205,15 +205,18 @@ const SpokeExportPage = () => {
         const notes = phoneClean ? `wa.me/55${phoneClean}` : "";
 
         return {
+          "Id": order.id,
+          "Recipient Name": fullName || "Cliente",
           "Address Line 1": addressLine1,
           "Address Line 2": address.complement || "",
+          "": "",
+          "Recipient Phone Number": phoneClean,
+          "Notes": notes,
+          " ": "",
           "City": address.city || "",
           "Zip": zipClean,
-          "Notes": notes,
-          "Recipient Name": fullName || "Cliente",
+          "  ": "",
           "Recipient Email Address": order.email || "",
-          "Recipient Phone Number": phoneClean,
-          "Id": order.id
         };
       });
 
