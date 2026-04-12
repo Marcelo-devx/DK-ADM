@@ -765,20 +765,30 @@ export default function PrintLabelsPage() {
                 <thead>
                   <tr className="text-left text-muted-foreground">
                     <th className="pb-2 pr-4">ID</th>
-                    <th className="pb-2 pr-4">Nome</th>
                     <th className="pb-2 pr-4">Endereço</th>
+                    <th className="pb-2 pr-4">Telefone</th>
+                    <th className="pb-2 pr-4">Cidade</th>
+                    <th className="pb-2 pr-4">CEP</th>
+                    <th className="pb-2 pr-4">E-mail</th>
                   </tr>
                 </thead>
                 <tbody>
                   {exportPreviewOrders.slice(0, 20).map(o => {
                     const p = o.profiles;
                     const addr = o.shipping_address || {};
-                    const fullName = `${cleanStr(p?.first_name)} ${cleanStr(p?.last_name)}`.trim();
                     return (
                       <tr key={o.id} className="border-t">
                         <td className="py-2 pr-4">{o.id}</td>
-                        <td className="py-2 pr-4">{fullName}</td>
                         <td className="py-2 pr-4">{`${addr.street || ""}${addr.number ? `, ${addr.number}` : ""}`}</td>
+                        <td className="py-2 pr-4">{p?.phone || <span className="text-red-400 italic">sem tel.</span>}</td>
+                        <td className="py-2 pr-4">{addr.city || ""}</td>
+                        <td className="py-2 pr-4">{addr.cep || ""}</td>
+                        <td className="py-2 pr-4">
+                          {o.email
+                            ? o.email
+                            : <span className="text-red-400 italic">sem e-mail</span>
+                          }
+                        </td>
                       </tr>
                     );
                   })}
@@ -790,6 +800,14 @@ export default function PrintLabelsPage() {
                 </div>
               )}
             </div>
+
+            {exportPreviewOrders.some(o => !o.email) && (
+              <div className="bg-amber-50 border border-amber-200 rounded-md p-3 mb-3">
+                <p className="text-sm text-amber-800">
+                  ⚠️ {exportPreviewOrders.filter(o => !o.email).length} pedido(s) sem e-mail — a coluna ficará em branco na planilha.
+                </p>
+              </div>
+            )}
 
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setIsExportConfirmOpen(false)}>Cancelar</Button>
