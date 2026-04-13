@@ -37,7 +37,7 @@ serve(async (req) => {
       )
     }
 
-    // Verificar se tem role permitido (adm ou gerente_geral)
+    // Verificar role
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('role')
@@ -67,7 +67,7 @@ serve(async (req) => {
       )
     }
 
-    // Buscar dados do pedido antes de deletar (para histórico)
+    // Buscar dados do pedido
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .select('*, profiles(first_name, last_name, phone)')
@@ -81,88 +81,42 @@ serve(async (req) => {
       )
     }
 
-    console.log(`[admin-delete-order] Deletando pedido ${orderId} por ${user.id} (${profile.role}). Motivo: ${reason}`)
-
     // ---------------------------------------------------------------
-    // REVERTER ESTOQUE: buscar os itens ANTES de deletar
+    // SEGURANÇA: só permite deletar pedidos já Cancelados.
+    // O cancelamento é quem reverte o estoque (via trigger no banco).
+    // Deletar um pedido não-cancelado causaria perda de estoque.
     // ---------------------------------------------------------------
-    const { data: orderItems, error: itemsFetchError } = await supabase
-      .from('order_items')
-      .select('item_id, variant_id, quantity, item_type, name_at_purchase')
-      .eq('order_id', orderId)
-
-    if (itemsFetchError) {
-      console.error('[admin-delete-order] Erro ao buscar order_items para reverter estoque:', itemsFetchError.message)
-    } else if (orderItems && orderItems.length > 0) {
-      console.log(`[admin-delete-order] Revertendo estoque de ${orderItems.length} item(s) do pedido ${orderId}`)
-
-      for (const item of orderItems) {
-        try {
-          if (item.variant_id) {
-            // Item com variante: incrementa stock_quantity na product_variants
-            const { data: variant, error: variantFetchErr } = await supabase
-              .from('product_variants')
-              .select('stock_quantity')
-              .eq('id', item.variant_id)
-              .single()
-
-            if (variantFetchErr || !variant) {
-              console.warn(`[admin-delete-order] Variante ${item.variant_id} não encontrada, pulando reversão`)
-              continue
-            }
-
-            const newStock = (variant.stock_quantity ?? 0) + item.quantity
-            const { error: variantUpdateErr } = await supabase
-              .from('product_variants')
-              .update({ stock_quantity: newStock })
-              .eq('id', item.variant_id)
-
-            if (variantUpdateErr) {
-              console.error(`[admin-delete-order] Erro ao reverter estoque da variante ${item.variant_id}:`, variantUpdateErr.message)
-            } else {
-              console.log(`[admin-delete-order] Variante ${item.variant_id} (${item.name_at_purchase}): ${variant.stock_quantity} → ${newStock} (+${item.quantity})`)
-            }
-
-          } else if (item.item_id) {
-            // Item sem variante: incrementa stock_quantity na products
-            const { data: product, error: productFetchErr } = await supabase
-              .from('products')
-              .select('stock_quantity')
-              .eq('id', item.item_id)
-              .single()
-
-            if (productFetchErr || !product) {
-              console.warn(`[admin-delete-order] Produto ${item.item_id} não encontrado, pulando reversão`)
-              continue
-            }
-
-            const newStock = (product.stock_quantity ?? 0) + item.quantity
-            const { error: productUpdateErr } = await supabase
-              .from('products')
-              .update({ stock_quantity: newStock })
-              .eq('id', item.item_id)
-
-            if (productUpdateErr) {
-              console.error(`[admin-delete-order] Erro ao reverter estoque do produto ${item.item_id}:`, productUpdateErr.message)
-            } else {
-              console.log(`[admin-delete-order] Produto ${item.item_id} (${item.name_at_purchase}): ${product.stock_quantity} → ${newStock} (+${item.quantity})`)
-            }
-          } else {
-            console.warn(`[admin-delete-order] Item sem variant_id nem item_id, pulando reversão:`, item)
-          }
-        } catch (e) {
-          console.error(`[admin-delete-order] Erro inesperado ao reverter item:`, e)
-        }
-      }
-
-      console.log(`[admin-delete-order] Reversão de estoque concluída para pedido ${orderId}`)
-    } else {
-      console.log(`[admin-delete-order] Nenhum item encontrado para reverter estoque do pedido ${orderId}`)
+    if (order.status !== 'Cancelado') {
+      console.warn(`[admin-delete-order] Tentativa de deletar pedido ${orderId} com status "${order.status}" — bloqueado`)
+      return new Response(
+        JSON.stringify({
+          error: `Não é possível excluir um pedido com status "${order.status}". Cancele o pedido primeiro para que o estoque seja devolvido corretamente.`
+        }),
+        { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
-    // ---------------------------------------------------------------
 
-    // Deletar todos os registros filhos antes do pedido (evita foreign key constraint)
-    // Ordem: filhos que não têm dependências entre si primeiro
+    console.log(`[admin-delete-order] Deletando pedido ${orderId} (já Cancelado) por ${user.id} (${profile.role}). Motivo: ${reason}`)
+
+    // Salvar snapshot do pedido no histórico ANTES de deletar
+    const { error: historyInsertError } = await supabase
+      .from('order_history')
+      .insert({
+        order_id: orderId,
+        field_name: 'deleted',
+        old_value: JSON.stringify(order),
+        new_value: null,
+        change_type: 'delete',
+        reason: reason,
+        changed_by: user.id
+      })
+
+    if (historyInsertError) {
+      console.error('[admin-delete-order] Erro ao inserir histórico pré-delete:', historyInsertError)
+      // Não bloqueia a exclusão por causa do histórico
+    }
+
+    // Deletar registros filhos (o estoque JÁ foi revertido pelo trigger no cancelamento)
 
     // 1. order_items
     const { error: itemsError } = await supabase.from('order_items').delete().eq('order_id', orderId)
@@ -183,7 +137,7 @@ serve(async (req) => {
     const { error: primeirosError } = await supabase.from('primeiros_pedidos').delete().eq('order_id', orderId)
     if (primeirosError) console.warn('[admin-delete-order] Aviso primeiros_pedidos:', primeirosError.message)
 
-    // 5. user_coupons — apenas limpa o vínculo (order_id = null), NÃO deleta o cupom
+    // 5. user_coupons — limpa o vínculo (order_id = null), NÃO deleta o cupom
     const { error: couponsError } = await supabase.from('user_coupons').update({ order_id: null }).eq('order_id', orderId)
     if (couponsError) console.warn('[admin-delete-order] Aviso user_coupons:', couponsError.message)
 
@@ -191,11 +145,16 @@ serve(async (req) => {
     const { error: loyaltyError } = await supabase.from('loyalty_history').update({ related_order_id: null }).eq('related_order_id', orderId)
     if (loyaltyError) console.warn('[admin-delete-order] Aviso loyalty_history:', loyaltyError.message)
 
-    // 7. order_history — deletar registros de histórico do pedido
+    // 7. order_history — deletar registros de histórico anteriores do pedido
     const { error: historyDeleteError } = await supabase.from('order_history').delete().eq('order_id', orderId)
     if (historyDeleteError) console.warn('[admin-delete-order] Aviso order_history:', historyDeleteError.message)
 
-    // Agora deletar o pedido principal
+    // Deletar o pedido principal
+    // NOTA: o trigger tr_return_stock_on_order_change no banco também dispara no DELETE,
+    // mas como o pedido já está Cancelado (OLD.status = 'Cancelado'), o trigger não
+    // reverte o estoque de novo (condição: OLD.status <> 'Cancelado' para UPDATE,
+    // e para DELETE ele reverteria — mas os order_items já foram deletados acima,
+    // então não há itens para reverter, sem risco de duplicação).
     const { error: deleteError } = await supabase.from('orders').delete().eq('id', orderId)
 
     if (deleteError) {
@@ -204,24 +163,6 @@ serve(async (req) => {
         JSON.stringify({ error: deleteError.message }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
-    }
-
-    // Registrar histórico de exclusão
-    const { error: historyError } = await supabase
-      .from('order_history')
-      .insert({
-        order_id: orderId,
-        field_name: 'deleted',
-        old_value: JSON.stringify(order),
-        new_value: null,
-        change_type: 'delete',
-        reason: reason,
-        changed_by: user.id
-      })
-
-    if (historyError) {
-      console.error('[admin-delete-order] Erro ao inserir histórico:', historyError)
-      // Não falhar se o histórico falhar, o pedido já foi deletado
     }
 
     console.log(`[admin-delete-order] Pedido ${orderId} deletado com sucesso`)
