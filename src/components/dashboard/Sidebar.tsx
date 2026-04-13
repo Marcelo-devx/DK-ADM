@@ -40,6 +40,7 @@ import {
   Trash2,
   ShoppingCart,
   Zap,
+  FileSearch,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -268,6 +269,9 @@ const Sidebar = () => {
             </NavLink>
             <NavLink to="/dashboard/crypto" className={navLinkClass}>
               {({ isActive }) => (<><KeyRound className={iconClass("text-yellow-600", isActive)} />Crypto</>)}
+            </NavLink>
+            <NavLink to="/dashboard/xk9-relatorio-financeiro" className={navLinkClass}>
+              {({ isActive }) => (<><FileSearch className={iconClass("text-emerald-600", isActive)} />Relatório Financeiro</>)}
             </NavLink>
           </>
         ) : isGerenteGeralView ? (
