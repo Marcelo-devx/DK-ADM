@@ -243,6 +243,9 @@ const Sidebar = () => {
             <NavLink to="/dashboard/user-admin" className={navLinkClass}>
               {({ isActive }) => (<><ShieldAlert className={iconClass("text-red-600", isActive)} />Admin Usuários</>)}
             </NavLink>
+            <NavLink to="/dashboard/investigar-usuario" className={navLinkClass}>
+              {({ isActive }) => (<><Search className={iconClass("text-orange-600", isActive)} />Investigar Usuário</>)}
+            </NavLink>
             <NavLink to="/dashboard/order-admin" className={navLinkClass}>
               {({ isActive }) => (<><FileEdit className={iconClass("text-red-600", isActive)} />Admin Pedidos</>)}
             </NavLink>
