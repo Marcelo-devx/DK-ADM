@@ -88,32 +88,21 @@ const fetchOrdersToExport = async (): Promise<Order[]> => {
   if (profilesError) throw new Error(profilesError.message);
   const profilesMap = new Map(profiles.map(p => [p.id, p]));
 
-  // Busca emails via edge function (requer admin autenticado)
+  // Busca emails via edge function dedicada (igual ao PrintLabels)
   let emailsMap = new Map<string, string>();
   try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch(
-        "https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1/get-users",
-        {
-          headers: {
-            "Authorization": `Bearer ${session?.access_token}`,
-            "Content-Type": "application/json",
-            "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpybG96aGh2d3FmbWp0a212dWtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDU2NjQsImV4cCI6MjA2NzkyMTY2NH0.Do5c1-TKqpyZTJeX_hLbw1SU40CbwXfCIC-pPpcD_JM",
-          },
-        }
-      );
-      if (response.ok) {
-          const usersData = await response.json();
-          if (Array.isArray(usersData)) {
-              usersData.forEach((u: any) => {
-                  emailsMap.set(u.id, u.email);
-              });
-          }
-      } else {
-          console.error("Failed to fetch emails, status:", response.status);
-      }
+    const { data: emailsData, error: emailsError } = await supabase.functions.invoke("get-users-emails", {
+      body: { user_ids: userIds }
+    });
+    if (emailsError) {
+      console.error("get-users-emails retornou erro:", emailsError);
+    } else if (Array.isArray(emailsData)) {
+      emailsData.forEach((u: any) => {
+        if (u.id && u.email) emailsMap.set(u.id, u.email);
+      });
+    }
   } catch (e) {
-      console.error("Failed to fetch emails", e);
+    console.error("get-users-emails edge function falhou:", e);
   }
 
   return orders.map(order => ({
