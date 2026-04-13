@@ -83,7 +83,42 @@ serve(async (req) => {
 
     console.log(`[admin-delete-order] Deletando pedido ${orderId} por ${user.id} (${profile.role}). Motivo: ${reason}`)
 
-    // Deletar o pedido (o trigger trigger_return_stock_on_delete vai devolver o estoque)
+    // Deletar registros filhos primeiro (evita erro de foreign key)
+    const { error: itemsError } = await supabase
+      .from('order_items')
+      .delete()
+      .eq('order_id', orderId)
+
+    if (itemsError) {
+      console.error('[admin-delete-order] Erro ao deletar order_items:', itemsError)
+      return new Response(
+        JSON.stringify({ error: 'Erro ao deletar itens do pedido: ' + itemsError.message }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Deletar route_stops vinculados
+    const { error: routeStopsError } = await supabase
+      .from('route_stops')
+      .delete()
+      .eq('order_id', orderId)
+
+    if (routeStopsError) {
+      console.warn('[admin-delete-order] Aviso ao deletar route_stops:', routeStopsError.message)
+      // Não bloqueia — pode não existir
+    }
+
+    // Deletar primeiros_pedidos vinculados
+    const { error: primeirosError } = await supabase
+      .from('primeiros_pedidos')
+      .delete()
+      .eq('order_id', orderId)
+
+    if (primeirosError) {
+      console.warn('[admin-delete-order] Aviso ao deletar primeiros_pedidos:', primeirosError.message)
+    }
+
+    // Deletar o pedido (o trigger return_order_stock vai devolver o estoque)
     const { error: deleteError } = await supabase
       .from('orders')
       .delete()
