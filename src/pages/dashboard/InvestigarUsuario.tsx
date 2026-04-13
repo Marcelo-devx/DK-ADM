@@ -510,6 +510,9 @@ const InvestigarUsuario = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      💡 Se o pedido vinculado foi <strong>cancelado</strong>, você pode reativar o cupom para o usuário usar novamente.
+                    </p>
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -518,11 +521,12 @@ const InvestigarUsuario = () => {
                           <TableHead>Desconto</TableHead>
                           <TableHead>Usado em</TableHead>
                           <TableHead>Pedido</TableHead>
+                          <TableHead>Ação</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {usedWithOrder.map((uc) => (
-                          <TableRow key={uc.id} className="opacity-70">
+                          <TableRow key={uc.id}>
                             <TableCell className="font-mono text-xs">{uc.id}</TableCell>
                             <TableCell>
                               <p className="font-medium">{uc.coupon_name}</p>
@@ -531,6 +535,40 @@ const InvestigarUsuario = () => {
                             <TableCell className="text-sm">{formatDate(uc.created_at)}</TableCell>
                             <TableCell>
                               <Badge variant="secondary">Pedido #{uc.order_id}</Badge>
+                            </TableCell>
+                            <TableCell>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-green-400 text-green-700 hover:bg-green-50"
+                                    disabled={reativarMutation.isPending}
+                                  >
+                                    <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                                    Reativar
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Reativar cupom?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Isso vai marcar o cupom <strong>"{uc.coupon_name}"</strong> como <strong>não usado</strong> e remover o vínculo com o <strong>Pedido #{uc.order_id}</strong>. O usuário poderá utilizá-lo novamente.
+                                      <br /><br />
+                                      <span className="text-amber-600 font-medium">⚠️ Use apenas se o pedido vinculado foi cancelado.</span>
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => reativarMutation.mutate(uc.id)}
+                                      className="bg-green-600 hover:bg-green-700"
+                                    >
+                                      Sim, reativar
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
                             </TableCell>
                           </TableRow>
                         ))}
