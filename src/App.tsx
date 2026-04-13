@@ -55,6 +55,7 @@ import ManualAddPoints from "./pages/dashboard/ManualAddPoints";
 import UserAdmin from "./pages/dashboard/UserAdmin";
 import OrderAdmin from "./pages/dashboard/OrderAdmin";
 import CleanupOrders from "./pages/dashboard/CleanupOrders";
+import RelatorioFinanceiro from "./pages/dashboard/RelatorioFinanceiro";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -130,6 +131,7 @@ const App = () => (
               <Route path="user-admin" element={<UserAdmin />} />
               <Route path="order-admin" element={<OrderAdmin />} />
               <Route path="cleanup-orders" element={<CleanupOrders />} />
+              <Route path="xk9-relatorio-financeiro" element={<RelatorioFinanceiro />} />
             </Route>
             
             <Route path="*" element={<NotFound />} />
