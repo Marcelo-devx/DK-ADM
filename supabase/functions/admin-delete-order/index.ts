@@ -83,6 +83,84 @@ serve(async (req) => {
 
     console.log(`[admin-delete-order] Deletando pedido ${orderId} por ${user.id} (${profile.role}). Motivo: ${reason}`)
 
+    // ---------------------------------------------------------------
+    // REVERTER ESTOQUE: buscar os itens ANTES de deletar
+    // ---------------------------------------------------------------
+    const { data: orderItems, error: itemsFetchError } = await supabase
+      .from('order_items')
+      .select('item_id, variant_id, quantity, item_type, name_at_purchase')
+      .eq('order_id', orderId)
+
+    if (itemsFetchError) {
+      console.error('[admin-delete-order] Erro ao buscar order_items para reverter estoque:', itemsFetchError.message)
+    } else if (orderItems && orderItems.length > 0) {
+      console.log(`[admin-delete-order] Revertendo estoque de ${orderItems.length} item(s) do pedido ${orderId}`)
+
+      for (const item of orderItems) {
+        try {
+          if (item.variant_id) {
+            // Item com variante: incrementa stock_quantity na product_variants
+            const { data: variant, error: variantFetchErr } = await supabase
+              .from('product_variants')
+              .select('stock_quantity')
+              .eq('id', item.variant_id)
+              .single()
+
+            if (variantFetchErr || !variant) {
+              console.warn(`[admin-delete-order] Variante ${item.variant_id} não encontrada, pulando reversão`)
+              continue
+            }
+
+            const newStock = (variant.stock_quantity ?? 0) + item.quantity
+            const { error: variantUpdateErr } = await supabase
+              .from('product_variants')
+              .update({ stock_quantity: newStock })
+              .eq('id', item.variant_id)
+
+            if (variantUpdateErr) {
+              console.error(`[admin-delete-order] Erro ao reverter estoque da variante ${item.variant_id}:`, variantUpdateErr.message)
+            } else {
+              console.log(`[admin-delete-order] Variante ${item.variant_id} (${item.name_at_purchase}): ${variant.stock_quantity} → ${newStock} (+${item.quantity})`)
+            }
+
+          } else if (item.item_id) {
+            // Item sem variante: incrementa stock_quantity na products
+            const { data: product, error: productFetchErr } = await supabase
+              .from('products')
+              .select('stock_quantity')
+              .eq('id', item.item_id)
+              .single()
+
+            if (productFetchErr || !product) {
+              console.warn(`[admin-delete-order] Produto ${item.item_id} não encontrado, pulando reversão`)
+              continue
+            }
+
+            const newStock = (product.stock_quantity ?? 0) + item.quantity
+            const { error: productUpdateErr } = await supabase
+              .from('products')
+              .update({ stock_quantity: newStock })
+              .eq('id', item.item_id)
+
+            if (productUpdateErr) {
+              console.error(`[admin-delete-order] Erro ao reverter estoque do produto ${item.item_id}:`, productUpdateErr.message)
+            } else {
+              console.log(`[admin-delete-order] Produto ${item.item_id} (${item.name_at_purchase}): ${product.stock_quantity} → ${newStock} (+${item.quantity})`)
+            }
+          } else {
+            console.warn(`[admin-delete-order] Item sem variant_id nem item_id, pulando reversão:`, item)
+          }
+        } catch (e) {
+          console.error(`[admin-delete-order] Erro inesperado ao reverter item:`, e)
+        }
+      }
+
+      console.log(`[admin-delete-order] Reversão de estoque concluída para pedido ${orderId}`)
+    } else {
+      console.log(`[admin-delete-order] Nenhum item encontrado para reverter estoque do pedido ${orderId}`)
+    }
+    // ---------------------------------------------------------------
+
     // Deletar todos os registros filhos antes do pedido (evita foreign key constraint)
     // Ordem: filhos que não têm dependências entre si primeiro
 
