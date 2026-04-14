@@ -93,24 +93,27 @@ const MyOrdersPage = () => {
 
   if (userLoading || isLoading) {
     return (
-      <div className="container mx-auto p-4 md:p-8">
-        <Skeleton className="h-8 w-48 mb-6" />
-        <div className="space-y-6">
-          <Skeleton className="h-48 w-full" />
-          <Skeleton className="h-48 w-full" />
+      <div className="container mx-auto px-4 py-4 md:px-8 md:py-8">
+        <Skeleton className="h-8 w-40 mb-4" />
+        <div className="space-y-4 md:space-y-6">
+          <Skeleton className="h-48 w-full rounded-2xl" />
+          <Skeleton className="h-48 w-full rounded-2xl" />
         </div>
       </div>
     );
   }
 
   if (error) {
-    return <div className="text-center text-red-500">Erro ao carregar pedidos: {(error as Error).message}</div>;
+    return <div className="text-center text-red-500 px-4 py-8">Erro ao carregar pedidos: {(error as Error).message}</div>;
   }
 
   return (
-    <div className="container mx-auto p-4 md:p-8">
-      <div className="flex flex-col gap-4 mb-6 md:flex-row md:items-center md:justify-between">
-        <h1 className="text-3xl font-bold">Meus Pedidos</h1>
+    <div className="container mx-auto px-4 py-4 md:px-8 md:py-8">
+      <div className="flex flex-col gap-3 mb-6 md:flex-row md:items-center md:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-2xl md:text-3xl font-bold">Meus Pedidos</h1>
+          <p className="text-sm text-muted-foreground">Acompanhe seus pedidos e avaliações.</p>
+        </div>
         <Select value={viewFilter} onValueChange={(value) => setViewFilter(value as "all" | "paid" | "canceled") }>
           <SelectTrigger className="w-full md:w-[240px]">
             <SelectValue placeholder="Filtrar pedidos" />
@@ -123,78 +126,78 @@ const MyOrdersPage = () => {
         </Select>
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-4 md:space-y-6">
         {filteredOrders.length === 0 ? (
-          <p>Você ainda não fez nenhum pedido.</p>
+          <p className="rounded-2xl border bg-white p-6 text-sm text-muted-foreground">Você ainda não fez nenhum pedido.</p>
         ) : (
           filteredOrders.map(order => {
             const canceled = isCanceledOrder(order.status);
             return (
               <Card
                 key={order.id}
-                className={canceled ? 'border-red-300 bg-red-50/70 shadow-sm' : ''}
+                className={canceled ? 'border-red-300 bg-red-50/70 shadow-sm' : 'shadow-sm'}
               >
-                <CardHeader className={canceled ? 'border-b border-red-200 bg-red-50/80' : ''}>
-                  <CardTitle className={canceled ? 'text-red-700' : ''}>Pedido #{order.id}</CardTitle>
-                  <CardDescription className={canceled ? 'text-red-700/80' : ''}>
+                <CardHeader className={canceled ? 'border-b border-red-200 bg-red-50/80 p-4 md:p-6' : 'p-4 md:p-6'}>
+                  <CardTitle className={canceled ? 'text-red-700 text-lg md:text-xl' : 'text-lg md:text-xl'}>Pedido #{order.id}</CardTitle>
+                  <CardDescription className={canceled ? 'text-red-700/80 text-sm' : 'text-sm'}>
                     Realizado em {new Date(order.created_at).toLocaleDateString('pt-BR')} - Status: {order.status}
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs text-muted-foreground">
+                <CardContent className="p-4 md:p-6">
+                  <div className="space-y-2 rounded-2xl bg-slate-50 p-4">
+                    <div className="flex justify-between gap-3 text-xs text-muted-foreground">
                       <span>Produtos</span>
-                      <span>{formatCurrency(order.total_price)}</span>
+                      <span className="text-right">{formatCurrency(order.total_price)}</span>
                     </div>
                     
                     {order.shipping_cost > 0 ? (
-                      <div className="flex justify-between text-xs text-muted-foreground">
+                      <div className="flex justify-between gap-3 text-xs text-muted-foreground">
                         <span>Frete</span>
-                        <span>{formatCurrency(order.shipping_cost)}</span>
+                        <span className="text-right">{formatCurrency(order.shipping_cost)}</span>
                       </div>
                     ) : (
-                      <div className="flex justify-between text-xs text-green-600 font-medium">
+                      <div className="flex justify-between gap-3 text-xs text-green-600 font-medium">
                         <span>Frete</span>
                         <span>Grátis</span>
                       </div>
                     )}
 
                     {order.donation_amount > 0 && (
-                      <div className="flex justify-between text-xs text-rose-600 font-bold">
+                      <div className="flex justify-between gap-3 text-xs text-rose-600 font-bold">
                         <span>Doação Solidária</span>
-                        <span>{formatCurrency(order.donation_amount)}</span>
+                        <span className="text-right">{formatCurrency(order.donation_amount)}</span>
                       </div>
                     )}
                     
-                    <div className="flex justify-between items-center mt-1 pt-1 border-t border-dashed">
+                    <div className="flex justify-between items-center pt-2 border-t border-dashed">
                       <span className="text-sm font-bold">Total Pago</span>
-                      <span className="text-sm font-bold">{formatCurrency(order.total_price + (order.shipping_cost || 0) + (order.donation_amount || 0))}</span>
+                      <span className="text-sm font-bold text-right">{formatCurrency(order.total_price + (order.shipping_cost || 0) + (order.donation_amount || 0))}</span>
                     </div>
                   </div>
-                  <ul className="divide-y">
+                  <ul className="divide-y mt-4">
                     {order.order_items.map(item => (
-                      <li key={item.id} className="py-4 flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <img src={item.image_url_at_purchase || ''} alt={item.name_at_purchase} className="h-16 w-16 rounded-md object-cover" />
-                          <div>
-                            <Link to={`/produto/${item.item_id}`} className="font-semibold hover:underline">
+                      <li key={item.id} className="py-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <img src={item.image_url_at_purchase || ''} alt={item.name_at_purchase} className="h-14 w-14 rounded-md object-cover shrink-0" />
+                          <div className="min-w-0">
+                            <Link to={`/produto/${item.item_id}`} className="font-semibold hover:underline line-clamp-2">
                               {item.name_at_purchase}
                             </Link>
                             <p className="text-sm text-muted-foreground">Quantidade: {item.quantity}</p>
                           </div>
                         </div>
-                        <div>
+                        <div className="self-start sm:self-center">
                           {hasReview(item.item_id, order.id) ? (
-                             <div className="flex items-center gap-1 text-yellow-500">
+                             <div className="flex items-center gap-1 text-yellow-500 flex-wrap">
                                {[...Array(getReviewRating(item.item_id, order.id))].map((_, i) => <Star key={i} className="h-5 w-5 fill-current" />)}
                                <span className="text-sm text-muted-foreground ml-1">(Avaliado)</span>
                              </div>
                           ) : (
                             <Dialog open={isReviewModalOpen} onOpenChange={setReviewModalOpen}>
                               <DialogTrigger asChild>
-                                <Button variant="outline">Avaliar Produto</Button>
+                                <Button variant="outline" className="w-full sm:w-auto">Avaliar Produto</Button>
                               </DialogTrigger>
-                              <DialogContent>
+                              <DialogContent className="max-w-[calc(100vw-2rem)] rounded-2xl sm:max-w-lg">
                                 <DialogHeader>
                                   <DialogTitle>Avaliar: {item.name_at_purchase}</DialogTitle>
                                 </DialogHeader>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUser } from "@/hooks/useUser";
-import { Loader2 } from "lucide-react";
+import { Loader2, ShieldCheck, Smartphone } from "lucide-react";
 
 const Index = () => {
   const { user, isAdmin, isLogistica, loading } = useUser();
@@ -9,7 +9,6 @@ const Index = () => {
   const [timeoutError, setTimeoutError] = useState(false);
 
   useEffect(() => {
-    // Timeout de 10 segundos para evitar loading infinito
     const timeoutId = setTimeout(() => {
       if (loading) {
         console.error('[Index] Timeout aguardando carregamento do usuário');
@@ -43,23 +42,22 @@ const Index = () => {
     window.location.reload();
   };
 
-  // Mostra erro se ocorreu timeout
   if (timeoutError) {
     return (
-      <div className="h-screen w-full flex flex-col items-center justify-center bg-gray-50 p-4">
-        <div className="text-center max-w-md">
-          <div className="text-red-500 mb-4">
-            <Loader2 className="h-16 w-16 mx-auto" />
+      <div className="min-h-screen w-full bg-gradient-to-b from-slate-50 to-white px-4 py-8 flex items-center justify-center">
+        <div className="w-full max-w-sm rounded-3xl border border-slate-200 bg-white p-6 shadow-xl text-center space-y-5">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 text-red-500">
+            <Loader2 className="h-8 w-8 animate-spin" />
           </div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">
-            Tempo limite excedido
-          </h2>
-          <p className="text-gray-600 mb-4">
-            O carregamento está demorando mais do que o esperado. Pode haver um problema com sua conexão ou com a sessão.
-          </p>
+          <div className="space-y-2">
+            <h2 className="text-xl font-bold text-slate-900">Tempo limite excedido</h2>
+            <p className="text-sm leading-relaxed text-slate-600">
+              O carregamento demorou mais do que o esperado. Tente novamente para continuar.
+            </p>
+          </div>
           <button
             onClick={handleRetry}
-            className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors"
+            className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary/90"
           >
             Tentar novamente
           </button>
@@ -68,10 +66,24 @@ const Index = () => {
     );
   }
 
-  // Mostra loading normal
   return (
-    <div className="h-screen w-full flex items-center justify-center bg-gray-50">
-      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+    <div className="min-h-screen w-full bg-gradient-to-b from-slate-50 to-white px-4 py-8 flex items-center justify-center">
+      <div className="w-full max-w-sm rounded-3xl border border-slate-200 bg-white p-6 shadow-xl text-center space-y-5">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+          <Smartphone className="h-8 w-8" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-xl font-bold text-slate-900">Carregando acesso</h2>
+          <p className="text-sm leading-relaxed text-slate-600">
+            Estamos preparando sua experiência com segurança.
+          </p>
+        </div>
+        <div className="flex items-center justify-center gap-2 text-xs font-medium text-slate-500">
+          <ShieldCheck className="h-4 w-4 text-emerald-500" />
+          Acesso protegido
+        </div>
+        <Loader2 className="mx-auto h-5 w-5 animate-spin text-primary" />
+      </div>
     </div>
   );
 };
