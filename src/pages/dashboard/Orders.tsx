@@ -507,7 +507,7 @@ const OrdersPage = () => {
         const isPaid = order && (order.status === "Finalizada" || order.status === "Pago");
         if (isPaid && order.delivery_status !== 'Despachado' && order.delivery_status !== 'Entregue' && order.delivery_status !== 'Cancelado') {
             try {
-                await updateDeliveryStatusMutation.mutateAsync({ orderId: id, status: 'Embalado', info: 'Marcado como embalado em massa' });
+                await updateDeliveryStatusMutation.mutateAsync({ orderId: id, status: 'Embalado', info: '' });
                 successCount++;
             } catch (e) {}
         }
