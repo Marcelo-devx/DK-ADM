@@ -37,9 +37,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { CouponForm } from "@/components/dashboard/coupon-form";
 import { showSuccess, showError } from "@/utils/toast";
-import { PlusCircle, MoreHorizontal, Ticket } from "lucide-react";
+import { PlusCircle, MoreHorizontal, Ticket, ShieldCheck, Percent } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useLocation } from "react-router-dom";
 
@@ -53,6 +54,7 @@ type Coupon = {
   stock_quantity: number;
   is_active: boolean;
   discount_type?: string;
+  is_admin_only?: boolean;
 };
 
 const fetchCoupons = async () => {
@@ -64,31 +66,46 @@ const fetchCoupons = async () => {
   return data;
 };
 
+const formatDiscount = (coupon: Coupon) => {
+  if (coupon.discount_type === "shipping") {
+    return <span className="font-bold text-green-600">Frete Grátis</span>;
+  }
+  if (coupon.discount_type === "percentage") {
+    return (
+      <span className="font-bold text-blue-600 flex items-center gap-1">
+        <Percent className="w-3 h-3" />
+        {coupon.discount_value}%
+      </span>
+    );
+  }
+  return (
+    <span className="font-bold text-green-600">
+      {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(coupon.discount_value)}
+    </span>
+  );
+};
+
 const CouponsPage = () => {
   const queryClient = useQueryClient();
   const location = useLocation();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
   const [selectedCoupon, setSelectedCoupon] = useState<Coupon | null>(null);
-  
-  // Estado para sugestão da IA
   const [suggestedData, setSuggestedData] = useState<Partial<Coupon> | null>(null);
 
   useEffect(() => {
-    // Se vierem dados sugeridos via navegação
     if (location.state && location.state.suggestedName) {
-        setSuggestedData({
-            name: location.state.suggestedName,
-            description: location.state.suggestedDescription,
-            // Defaults
-            discount_value: 10,
-            points_cost: 0,
-            minimum_order_value: 0,
-            stock_quantity: 100,
-            is_active: true
-        } as any);
-        setIsModalOpen(true);
-        window.history.replaceState({}, document.title);
+      setSuggestedData({
+        name: location.state.suggestedName,
+        description: location.state.suggestedDescription,
+        discount_value: 10,
+        points_cost: 0,
+        minimum_order_value: 0,
+        stock_quantity: 100,
+        is_active: true,
+      } as any);
+      setIsModalOpen(true);
+      window.history.replaceState({}, document.title);
     }
   }, [location]);
 
@@ -98,8 +115,8 @@ const CouponsPage = () => {
   });
 
   const upsertMutation = useMutation({
-    mutationFn: async (values: Omit<Coupon, 'id'> & { id?: number }) => {
-      const { error } = await supabase.from('coupons').upsert(values);
+    mutationFn: async (values: Omit<Coupon, "id"> & { id?: number }) => {
+      const { error } = await supabase.from("coupons").upsert(values);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -145,14 +162,16 @@ const CouponsPage = () => {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-bold flex items-center gap-2"><Ticket /> Cupons de Desconto</h1>
+        <h1 className="text-3xl font-bold flex items-center gap-2">
+          <Ticket /> Cupons de Desconto
+        </h1>
         <Dialog
           open={isModalOpen}
           onOpenChange={(isOpen) => {
             setIsModalOpen(isOpen);
             if (!isOpen) {
-                setSelectedCoupon(null);
-                setSuggestedData(null);
+              setSelectedCoupon(null);
+              setSuggestedData(null);
             }
           }}
         >
@@ -162,7 +181,7 @@ const CouponsPage = () => {
               Adicionar Cupom
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-lg">
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
                 {selectedCoupon ? "Editar Cupom" : suggestedData ? "Criar Cupom Sugerido (IA)" : "Adicionar Novo Cupom"}
@@ -171,7 +190,7 @@ const CouponsPage = () => {
             <CouponForm
               onSubmit={handleFormSubmit}
               isSubmitting={upsertMutation.isPending}
-              initialData={selectedCoupon || suggestedData || undefined}
+              initialData={(selectedCoupon || suggestedData || undefined) as any}
             />
           </DialogContent>
         </Dialog>
@@ -186,6 +205,7 @@ const CouponsPage = () => {
               <TableHead>Desconto</TableHead>
               <TableHead>Custo (Pontos)</TableHead>
               <TableHead>Estoque</TableHead>
+              <TableHead>Visibilidade</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
@@ -193,31 +213,42 @@ const CouponsPage = () => {
           <TableBody>
             {isLoadingCoupons ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center">
+                <TableCell colSpan={8} className="text-center">
                   Carregando cupons...
                 </TableCell>
               </TableRow>
             ) : coupons && coupons.length > 0 ? (
               coupons.map((coupon) => (
-                <TableRow key={coupon.id}>
-                  <TableCell className="font-medium">{coupon.name}</TableCell>
+                <TableRow key={coupon.id} className={coupon.is_admin_only ? "bg-orange-50/40" : ""}>
+                  <TableCell className="font-medium">
+                    <div className="flex items-center gap-2">
+                      {coupon.name}
+                      {coupon.is_admin_only && (
+                        <Badge variant="outline" className="text-[10px] border-orange-300 text-orange-700 bg-orange-50 gap-1 px-1.5">
+                          <ShieldCheck className="w-3 h-3" /> Admin
+                        </Badge>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell>
-                    <p className="max-w-[200px] truncate" title={coupon.description || ''}>
+                    <p className="max-w-[200px] truncate text-sm text-muted-foreground" title={coupon.description || ""}>
                       {coupon.description || "-"}
                     </p>
                   </TableCell>
-                  <TableCell>
-                    {coupon.discount_type === "shipping" ? (
-                      <span className="font-bold text-green-600">Frete Grátis</span>
-                    ) : (
-                      new Intl.NumberFormat("pt-BR", {
-                        style: "currency",
-                        currency: "BRL",
-                      }).format(coupon.discount_value)
-                    )}
-                  </TableCell>
+                  <TableCell>{formatDiscount(coupon)}</TableCell>
                   <TableCell>{coupon.points_cost}</TableCell>
                   <TableCell>{coupon.stock_quantity === -1 ? "Ilimitado" : coupon.stock_quantity}</TableCell>
+                  <TableCell>
+                    {coupon.is_admin_only ? (
+                      <Badge variant="outline" className="text-orange-700 border-orange-300 bg-orange-50 gap-1 text-[11px]">
+                        <ShieldCheck className="w-3 h-3" /> Só Admin
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-green-700 border-green-300 bg-green-50 text-[11px]">
+                        Público
+                      </Badge>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <Switch
                       checked={coupon.is_active}
@@ -260,7 +291,7 @@ const CouponsPage = () => {
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={7} className="text-center">
+                <TableCell colSpan={8} className="text-center">
                   Nenhum cupom encontrado.
                 </TableCell>
               </TableRow>

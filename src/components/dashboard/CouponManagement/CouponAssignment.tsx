@@ -51,6 +51,18 @@ export const CouponAssignment = ({ client }: CouponAssignmentProps) => {
     refetchOnWindowFocus: false,
   });
 
+  const formatCouponValue = (coupon: Coupon) => {
+    if (coupon.discount_type === "shipping") return "Frete Grátis";
+    if (coupon.discount_type === "percentage") return `${coupon.discount_value}%`;
+    return `R$ ${coupon.discount_value}`;
+  };
+
+  const formatCouponBadge = (coupon: Coupon) => {
+    if (coupon.discount_type === "shipping") return "Frete Grátis";
+    if (coupon.discount_type === "percentage") return "Percentual";
+    return "Desconto";
+  };
+
   const assignCouponMutation = useMutation({
     mutationFn: async (couponId: number) => {
       if (!client?.user_id) {
@@ -197,12 +209,10 @@ export const CouponAssignment = ({ client }: CouponAssignmentProps) => {
                       <span className="font-medium">{coupon.name}</span>
                       <div className="flex items-center gap-2">
                         <Badge variant="outline" className="text-[10px]">
-                          {coupon.discount_type === "shipping" ? "Frete Grátis" : "Desconto"}
+                          {formatCouponBadge(coupon)}
                         </Badge>
                         <span className="text-sm font-bold text-green-600">
-                          {coupon.discount_type === "shipping"
-                            ? "Grátis"
-                            : `R$ ${coupon.discount_value}`}
+                          {formatCouponValue(coupon)}
                         </span>
                       </div>
                     </div>
@@ -236,16 +246,14 @@ export const CouponAssignment = ({ client }: CouponAssignmentProps) => {
                   variant={selectedCoupon.discount_type === "shipping" ? "default" : "secondary"}
                   className="text-[10px]"
                 >
-                  {selectedCoupon.discount_type === "shipping" ? "Frete Grátis" : "Desconto"}
+                  {formatCouponBadge(selectedCoupon)}
                 </Badge>
               </div>
               <div className="flex gap-4 text-sm">
                 <div>
                   <span className="text-gray-500">Valor:</span>{" "}
                   <span className="font-bold text-green-600">
-                    {selectedCoupon.discount_type === "shipping"
-                      ? "Frete Total"
-                      : `R$ ${selectedCoupon.discount_value}`}
+                    {formatCouponValue(selectedCoupon)}
                   </span>
                 </div>
                 <div>

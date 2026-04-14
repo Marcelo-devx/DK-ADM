@@ -13,17 +13,27 @@ import {
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
 import { Switch } from "../ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
 import { useEffect } from "react";
+import { ShieldCheck } from "lucide-react";
 
 const formSchema = z.object({
   id: z.number().optional(),
   name: z.string().min(2, "O nome é obrigatório."),
   description: z.string().optional(),
-  discount_value: z.coerce.number().min(0.01, "O valor do desconto deve ser positivo."),
+  discount_type: z.enum(["product", "shipping", "percentage"]).default("product"),
+  discount_value: z.coerce.number().min(0, "O valor do desconto não pode ser negativo."),
   points_cost: z.coerce.number().int().min(0, "O custo em pontos não pode ser negativo."),
   minimum_order_value: z.coerce.number().min(0, "O valor mínimo do pedido não pode ser negativo."),
   stock_quantity: z.coerce.number().int().min(0, "O estoque não pode ser negativo."),
   is_active: z.boolean().default(true),
+  is_admin_only: z.boolean().default(false),
 });
 
 type CouponFormValues = z.infer<typeof formSchema>;
@@ -41,26 +51,42 @@ export const CouponForm = ({
 }: CouponFormProps) => {
   const form = useForm<CouponFormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: initialData || {
+    defaultValues: {
       name: "",
       description: "",
+      discount_type: "product",
       discount_value: 0,
       points_cost: 0,
       minimum_order_value: 0,
       stock_quantity: 0,
       is_active: true,
+      is_admin_only: false,
+      ...initialData,
     },
   });
 
+  const discountType = form.watch("discount_type");
+
   useEffect(() => {
     if (initialData) {
-      form.reset(initialData);
+      form.reset({
+        name: "",
+        description: "",
+        discount_type: "product",
+        discount_value: 0,
+        points_cost: 0,
+        minimum_order_value: 0,
+        stock_quantity: 0,
+        is_active: true,
+        is_admin_only: false,
+        ...initialData,
+      });
     }
   }, [initialData, form]);
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
         <FormField
           control={form.control}
           name="name"
@@ -89,20 +115,54 @@ export const CouponForm = ({
           )}
         />
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="discount_value"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Valor do Desconto (R$)</FormLabel>
+        <FormField
+          control={form.control}
+          name="discount_type"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Tipo de Desconto</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
                 <FormControl>
-                  <Input type="number" step="0.01" placeholder="Ex: 10.00" {...field} />
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o tipo" />
+                  </SelectTrigger>
                 </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+                <SelectContent>
+                  <SelectItem value="product">Valor Fixo (R$)</SelectItem>
+                  <SelectItem value="percentage">Percentual (%)</SelectItem>
+                  <SelectItem value="shipping">Frete Grátis</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {discountType !== "shipping" && (
+            <FormField
+              control={form.control}
+              name="discount_value"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    {discountType === "percentage" ? "Percentual de Desconto (%)" : "Valor do Desconto (R$)"}
+                  </FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      step={discountType === "percentage" ? "1" : "0.01"}
+                      min="0"
+                      max={discountType === "percentage" ? "100" : undefined}
+                      placeholder={discountType === "percentage" ? "Ex: 10" : "Ex: 10.00"}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
           <FormField
             control={form.control}
             name="minimum_order_value"
@@ -156,16 +216,35 @@ export const CouponForm = ({
                 <FormLabel>Cupom Ativo</FormLabel>
               </div>
               <FormControl>
-                <Switch
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                />
+                <Switch checked={field.value} onCheckedChange={field.onChange} />
               </FormControl>
             </FormItem>
           )}
         />
+
+        <FormField
+          control={form.control}
+          name="is_admin_only"
+          render={({ field }) => (
+            <FormItem className="flex flex-row items-center justify-between rounded-lg border border-orange-200 bg-orange-50 p-3 shadow-sm">
+              <div className="space-y-0.5">
+                <FormLabel className="flex items-center gap-2 text-orange-800">
+                  <ShieldCheck className="w-4 h-4" />
+                  Exclusivo Admin / Gerente Geral
+                </FormLabel>
+                <p className="text-xs text-orange-600">
+                  Quando ativo, este cupom não aparece para os clientes. Só pode ser atribuído manualmente pelo admin ou gerente geral.
+                </p>
+              </div>
+              <FormControl>
+                <Switch checked={field.value} onCheckedChange={field.onChange} />
+              </FormControl>
+            </FormItem>
+          )}
+        />
+
         <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? "Salvando..." : (initialData ? "Salvar Alterações" : "Adicionar Cupom")}
+          {isSubmitting ? "Salvando..." : (initialData?.id ? "Salvar Alterações" : "Adicionar Cupom")}
         </Button>
       </form>
     </Form>
