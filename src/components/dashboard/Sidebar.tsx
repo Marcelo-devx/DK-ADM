@@ -101,9 +101,6 @@ const Sidebar = () => {
       <NavLink to="/dashboard/donations" className={navLinkClass}>
         {({ isActive }) => (<><Heart className={iconClass("text-rose-600", isActive)} />Doações</>)}
       </NavLink>
-      <NavLink to="/dashboard/delivery-routes" className={navLinkClass}>
-        {({ isActive }) => (<><Route className={iconClass("text-orange-600", isActive)} />Rotas de Entrega</>)}
-      </NavLink>
       <NavLink to="/dashboard/spoke-export" className={navLinkClass}>
         {({ isActive }) => (<><FileOutput className={iconClass("text-green-600", isActive)} />Exportar Rotas</>)}
       </NavLink>
