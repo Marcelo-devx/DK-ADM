@@ -23,7 +23,7 @@ const MetaflowInsightsPage = () => {
   const navigate = useNavigate();
   const [isRetentionModalOpen, setIsRetentionModalOpen] = useState(false);
 
-  const { data: insights, isLoading, refetch, isRefetching } = useQuery({
+  const { data: insights, isLoading, refetch, isRefetching, isError, error } = useQuery({
     queryKey: ["actionable-insights-final"],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("actionable-insights");
@@ -66,6 +66,25 @@ const MetaflowInsightsPage = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-96 rounded-2xl" />)}
         </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 gap-4">
+        <div className="p-4 bg-red-50 rounded-2xl border border-red-100">
+          <AlertOctagon className="w-10 h-10 text-red-400" />
+        </div>
+        <div className="text-center">
+          <p className="text-base font-bold text-gray-800">Erro ao carregar insights</p>
+          <p className="text-sm text-muted-foreground mt-1 max-w-sm">
+            {(error as any)?.message || "Não foi possível conectar ao servidor de análise. Tente novamente."}
+          </p>
+        </div>
+        <Button onClick={() => refetch()} variant="outline" className="rounded-xl">
+          <RefreshCw className="w-4 h-4 mr-2" /> Tentar novamente
+        </Button>
       </div>
     );
   }
