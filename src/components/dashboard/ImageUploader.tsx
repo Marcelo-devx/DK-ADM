@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { apiClient } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { showError, showSuccess } from "@/utils/toast";
@@ -47,23 +47,21 @@ export const ImageUploader = ({
     reader.onloadend = async () => {
       const base64data = reader.result as string;
       try {
-        console.log('[ImageUploader] Iniciando upload via Cloudinary...');
+        console.log('[ImageUploader] Iniciando upload via Cloudinary...', { fileName: file.name, fileType: file.type, fileSize: file.size });
 
-        const { data, error } = await supabase.functions.invoke("cloudinary-upload", {
-          body: { image: base64data },
+        const result = await apiClient.invoke<{ secure_url?: string; error?: string; details?: string }>("cloudinary-upload", {
+          image: base64data,
         });
 
-        if (error) {
-          // Tentar extrair mensagem de erro detalhada do corpo da resposta
-          const detail = data?.details || data?.error || error.message || JSON.stringify(error);
-          throw new Error(detail);
+        if (result.error) {
+          throw new Error(result.error);
         }
 
-        if (!data?.secure_url) {
-          throw new Error('Cloudinary não retornou uma URL válida.');
+        if (!result.data?.secure_url) {
+          throw new Error(result.data?.details || result.data?.error || 'Cloudinary não retornou uma URL válida.');
         }
 
-        const { secure_url } = data;
+        const { secure_url } = result.data;
         setMediaUrl(secure_url);
         onUploadSuccess(secure_url);
         console.log("[ImageUploader] Upload Cloudinary bem-sucedido:", secure_url);

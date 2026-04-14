@@ -47,7 +47,6 @@ Deno.serve(async (req: Request) => {
     const folder = 'tabacaria-products';
     const timestamp = Math.floor(Date.now() / 1000);
 
-    // Assinatura: apenas folder e timestamp (sem resource_type)
     const paramsToSign = `folder=${folder}&timestamp=${timestamp}`;
     const toSign = paramsToSign + apiSecret;
     const sigBuffer = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(toSign));
