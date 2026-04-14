@@ -57,7 +57,7 @@ const DashboardLayout = () => {
         return;
       }
 
-      if ((isLogistica || isGerente || isGerenteGeral) && !isAdmin) {
+      if ((isLogistica || isGerente) && !isAdmin && !isGerenteGeral) {
         const currentPath = location.pathname;
         const isAllowed =
           currentPath === "/dashboard" ||
