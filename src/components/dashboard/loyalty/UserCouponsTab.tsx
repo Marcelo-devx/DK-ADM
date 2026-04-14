@@ -12,7 +12,6 @@ import { showSuccess, showError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 
-// Interface específica para o retorno da RPC (Flat structure)
 interface UserCouponRPC {
     id: number;
     created_at: string;
@@ -28,10 +27,13 @@ interface UserCouponRPC {
 }
 
 const fetchUserCoupons = async () => {
-    // Usa a função RPC segura em vez de select direto para evitar erros de RLS
     const { data, error } = await supabase.rpc("get_all_user_coupons_with_usage");
-        
-    if (error) throw error;
+    
+    if (error) {
+        console.error('[UserCouponsTab] Erro ao carregar histórico de cupons:', error);
+        throw error;
+    }
+    
     return data as UserCouponRPC[];
 }
 
@@ -39,14 +41,13 @@ export const UserCouponsTab = ({ className }: { className?: string }) => {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   
-  const { data: userCoupons, isLoading, isError, refetch } = useQuery({ 
+  const { data: userCoupons, isLoading, isError, error, refetch } = useQuery({ 
     queryKey: ["adminUserCouponsV2"], 
     queryFn: fetchUserCoupons 
   });
 
   const deleteUserCouponMutation = useMutation({
     mutationFn: async (id: number) => {
-        // Usa RPC segura para garantir que admins possam deletar sem erro de RLS
         const { error } = await supabase.rpc("admin_delete_user_coupon", { target_id: id });
         if (error) throw error;
     },
@@ -57,19 +58,13 @@ export const UserCouponsTab = ({ className }: { className?: string }) => {
     onError: (err: any) => showError(err.message),
   });
 
-  // Filtrar cupons por nome ou CPF
   const filteredCoupons = userCoupons?.filter((coupon) => {
     if (!searchTerm.trim()) return true;
     
     const searchLower = searchTerm.toLowerCase();
-    
-    // Busca por nome completo ou parcial
     const fullName = `${coupon.profile_first_name || ''} ${coupon.profile_last_name || ''}`.toLowerCase();
     const firstName = (coupon.profile_first_name || '').toLowerCase();
     const lastName = (coupon.profile_last_name || '').toLowerCase();
-    
-    // Tenta buscar por CPF (se estivesse disponível na tabela user_coupons)
-    // Nota: Para incluir CPF na busca, precisariamos buscar de profiles
     
     return fullName.includes(searchLower) || 
            firstName.includes(searchLower) || 
@@ -89,7 +84,6 @@ export const UserCouponsTab = ({ className }: { className?: string }) => {
                 </Button>
             </div>
             
-            {/* Campo de busca */}
             <div className="mt-4">
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -130,7 +124,7 @@ export const UserCouponsTab = ({ className }: { className?: string }) => {
                                     <div className="flex flex-col items-center gap-2">
                                         <AlertCircle className="w-6 h-6" />
                                         <span className="font-bold">Erro ao carregar dados.</span>
-                                        <span className="text-xs">Tente recarregar a página ou verifique suas permissões.</span>
+                                        <span className="text-xs">{error instanceof Error ? error.message : 'Tente recarregar a página ou verifique suas permissões.'}</span>
                                     </div>
                                 </TableCell>
                             </TableRow>
