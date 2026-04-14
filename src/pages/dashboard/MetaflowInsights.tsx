@@ -1,17 +1,16 @@
-"use client";
-
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { 
-  Lightbulb, Package, Target, UserMinus, Plus, ArrowRight, 
-  Sparkles, Crown, Wallet, Zap, RefreshCw, AlertTriangle,
+import {
+  Lightbulb, Package, Target, UserMinus, Plus, ArrowRight,
+  Sparkles, Crown, Wallet, RefreshCw, AlertTriangle,
   TrendingUp, TrendingDown, Clock, BarChart4, AlertOctagon,
-  Hourglass, Brain, Calculator, History, LineChart,
-  Database, Binary, Cpu, Rocket, Search, Coins
+  Hourglass, Brain, Calculator, Search,
+  Database, Binary, Rocket, ShoppingCart, Users, Activity,
+  ChevronRight, Zap, Eye
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -23,436 +22,624 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 const MetaflowInsightsPage = () => {
   const navigate = useNavigate();
   const [isRetentionModalOpen, setIsRetentionModalOpen] = useState(false);
-  
+
   const { data: insights, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["actionable-insights-final"],
     queryFn: async () => {
-        const { data, error } = await supabase.functions.invoke("actionable-insights");
-        if (error) throw error;
-        return data;
+      const { data, error } = await supabase.functions.invoke("actionable-insights");
+      if (error) throw error;
+      return data;
     },
-    refetchInterval: 300000 
+    refetchInterval: 300000
   });
 
-  const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+  const formatCurrency = (val: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
   const handleCreateKit = (productA: string, idA: number, productB: string, idB: number) => {
-    navigate("/dashboard/promotions", { 
-      state: { 
+    navigate("/dashboard/promotions", {
+      state: {
         suggestedName: `Kit ${productA} + ${productB}`,
         suggestedDescription: `Combo especial contendo ${productA} e ${productB}. Economize levando os dois!`,
         suggestedProductIds: [idA, idB]
-      } 
+      }
     });
   };
 
-  const handleRecoverClient = (clientName: string) => {
-     setIsRetentionModalOpen(true);
+  const handleRecoverClient = () => {
+    setIsRetentionModalOpen(true);
   };
 
-  if (isLoading) return <div className="p-8 space-y-4"><Skeleton className="h-20 w-full" /><div className="grid grid-cols-1 md:grid-cols-3 gap-6"><Skeleton className="h-96" /><Skeleton className="h-96" /><Skeleton className="h-96" /></div></div>;
+  if (isLoading) {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-10 w-10 rounded-xl" />
+          <div className="space-y-2">
+            <Skeleton className="h-6 w-48" />
+            <Skeleton className="h-4 w-72" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-96 rounded-2xl" />)}
+        </div>
+      </div>
+    );
+  }
 
-  // Separação dos itens de inventário
   const inventoryItems = insights?.inventory || [];
   const outOfStockItems = inventoryItems.filter((item: any) => item.current_stock === 0);
   const lowStockItems = inventoryItems.filter((item: any) => item.current_stock > 0);
 
-  // Componente auxiliar para renderizar item de estoque
+  const totalAlerts = inventoryItems.length;
+  const churnCount = insights?.churn?.length || 0;
+  const crossSellCount = insights?.associations?.length || 0;
+  const trendingUpCount = insights?.trends?.up?.length || 0;
+
   const InventoryItemRow = ({ item }: { item: any }) => {
     const isStagnant = item.status_type === 'stagnant_low';
     const isOut = item.current_stock === 0;
 
     return (
-        <div className={cn(
-            "flex items-center justify-between p-3 rounded-xl border transition-colors group",
-            isOut ? "border-red-100 bg-red-50/30 hover:bg-red-50" : "border-gray-100 bg-gray-50/50 hover:bg-gray-50"
-        )}>
-            <div className="overflow-hidden">
-                <p className="text-sm font-bold text-gray-800 truncate w-32 md:w-40" title={item.name}>{item.name}</p>
-                <p className="text-[11px] text-muted-foreground font-medium">
-                    {isStagnant ? (
-                        <span className="flex items-center text-orange-600 gap-1"><AlertTriangle className="w-3 h-3" /> Parado (Baixo)</span>
-                    ) : (
-                        `${item.daily_rate} vendas / dia`
-                    )}
-                </p>
-            </div>
-            <div className="text-right">
-                {isOut ? (
-                    <Badge variant="destructive" className="text-[10px] font-black h-5 px-2">
-                        ESGOTADO
-                    </Badge>
-                ) : isStagnant ? (
-                    <Badge variant="outline" className="text-[10px] font-black text-orange-600 border-orange-200 bg-orange-50">
-                        {item.current_stock} UN RESTANTES
-                    </Badge>
-                ) : (
-                    <Badge variant="outline" className={cn("text-[10px] font-black border-orange-200 text-orange-600 bg-white")}>
-                        ACABA EM {item.days_remaining}D
-                    </Badge>
-                )}
-            </div>
+      <div className={cn(
+        "flex items-center justify-between p-3 rounded-xl border transition-all group hover:shadow-sm",
+        isOut
+          ? "border-red-100 bg-gradient-to-r from-red-50/50 to-transparent"
+          : "border-gray-100 bg-gradient-to-r from-orange-50/30 to-transparent"
+      )}>
+        <div className="overflow-hidden flex-1 min-w-0">
+          <p className="text-sm font-semibold text-gray-800 truncate" title={item.name}>{item.name}</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            {isStagnant ? (
+              <span className="flex items-center text-orange-600 gap-1">
+                <AlertTriangle className="w-3 h-3" /> Produto parado
+              </span>
+            ) : (
+              `${item.daily_rate} un/dia`
+            )}
+          </p>
         </div>
+        <div className="ml-3 shrink-0">
+          {isOut ? (
+            <span className="inline-flex items-center gap-1 text-[10px] font-black text-red-600 bg-red-100 px-2 py-1 rounded-full">
+              <AlertOctagon className="w-3 h-3" /> ESGOTADO
+            </span>
+          ) : isStagnant ? (
+            <span className="inline-flex text-[10px] font-bold text-orange-600 bg-orange-100 px-2 py-1 rounded-full">
+              {item.current_stock} UN
+            </span>
+          ) : (
+            <span className={cn(
+              "inline-flex text-[10px] font-bold px-2 py-1 rounded-full",
+              item.days_remaining <= 7
+                ? "text-red-600 bg-red-100"
+                : item.days_remaining <= 15
+                  ? "text-orange-600 bg-orange-100"
+                  : "text-yellow-700 bg-yellow-100"
+            )}>
+              {item.days_remaining}d restantes
+            </span>
+          )}
+        </div>
+      </div>
     );
   };
 
-  // Componente para os Steps
-  const InsightStep = ({ number, icon: Icon, title, desc, color }: any) => (
-    <div className="relative flex flex-col items-center text-center p-4 bg-white rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all group">
-        <div className={cn("absolute top-2 right-2 text-[10px] font-black opacity-20", color)}>#{number}</div>
-        <div className={cn("p-3 rounded-2xl mb-3 transition-transform group-hover:scale-110", color.replace('text-', 'bg-').replace('600', '100'))}>
-            <Icon className={cn("w-6 h-6", color)} />
-        </div>
-        <h4 className="font-bold text-slate-800 text-sm mb-1">{title}</h4>
-        <p className="text-xs text-slate-500 leading-snug">{desc}</p>
+  const StatCard = ({ icon: Icon, label, value, color, bg }: any) => (
+    <div className={cn("rounded-2xl p-4 border flex items-center gap-4", bg)}>
+      <div className={cn("p-2.5 rounded-xl", color)}>
+        <Icon className="w-5 h-5 text-white" />
+      </div>
+      <div>
+        <p className="text-2xl font-black text-gray-900">{value}</p>
+        <p className="text-xs text-gray-500 font-medium">{label}</p>
+      </div>
     </div>
   );
 
   return (
     <div className="space-y-8 pb-20">
-      {/* HEADER INTEGRADO */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-6">
-        <div>
-          <h1 className="text-3xl font-black text-gray-900 tracking-tight flex items-center gap-3">
-            <Sparkles className="w-8 h-8 text-blue-600" /> Inteligência de Negócio
-          </h1>
-          <p className="text-muted-foreground mt-1 font-medium">Recomendações geradas a partir do comportamento de vendas.</p>
+
+      {/* HEADER */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-lg shadow-blue-200">
+            <Sparkles className="w-7 h-7 text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-black text-gray-900 tracking-tight">
+              Inteligência de Negócio
+            </h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Análise em tempo real do comportamento de vendas
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
-            <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => refetch()} 
-                disabled={isRefetching}
-                className="text-muted-foreground hover:text-primary"
-            >
-                <RefreshCw className={cn("w-4 h-4 mr-2", isRefetching && "animate-spin")} />
-                Atualizar
-            </Button>
-            <Badge className="bg-blue-600 text-white font-bold px-3 py-1">IA ATIVA</Badge>
-            <Badge variant="outline" className="text-gray-500 font-bold px-3 py-1">v3.1</Badge>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refetch()}
+            disabled={isRefetching}
+            className="rounded-xl border-gray-200 text-gray-600 hover:text-gray-900"
+          >
+            <RefreshCw className={cn("w-4 h-4 mr-2", isRefetching && "animate-spin")} />
+            Atualizar
+          </Button>
+          <Badge className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold px-3 py-1.5 rounded-xl border-0">
+            <Zap className="w-3 h-3 mr-1" /> IA ATIVA
+          </Badge>
         </div>
       </div>
 
+      {/* KPI CARDS */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard
+          icon={AlertOctagon}
+          label="Alertas de Estoque"
+          value={totalAlerts}
+          color="bg-orange-500"
+          bg="bg-orange-50/50 border-orange-100"
+        />
+        <StatCard
+          icon={UserMinus}
+          label="Clientes em Risco"
+          value={churnCount}
+          color="bg-rose-500"
+          bg="bg-rose-50/50 border-rose-100"
+        />
+        <StatCard
+          icon={ShoppingCart}
+          label="Combos Sugeridos"
+          value={crossSellCount}
+          color="bg-blue-500"
+          bg="bg-blue-50/50 border-blue-100"
+        />
+        <StatCard
+          icon={TrendingUp}
+          label="Produtos em Alta"
+          value={trendingUpCount}
+          color="bg-green-500"
+          bg="bg-green-50/50 border-green-100"
+        />
+      </div>
+
+      {/* MAIN GRID */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        
-        {/* COLUNA 1: REPOSIÇÃO (COM ABAS) */}
-        <Card className="border-none shadow-md bg-white flex flex-col h-full overflow-hidden">
-            <div className="h-1 bg-orange-500" />
-            <CardHeader className="pb-2">
-                <div className="flex justify-between items-start">
-                    <div className="p-2.5 bg-orange-50 rounded-xl text-orange-600 border border-orange-100"><Package className="w-6 h-6" /></div>
-                    <Badge variant="secondary" className="bg-orange-100 text-orange-700 font-bold rounded-full px-3">Reposição</Badge>
+
+        {/* COLUNA 1: ESTOQUE */}
+        <Card className="border border-gray-100 shadow-sm rounded-2xl overflow-hidden flex flex-col">
+          <div className="h-1 bg-gradient-to-r from-orange-400 to-red-500" />
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-orange-50 rounded-xl border border-orange-100">
+                  <Package className="w-5 h-5 text-orange-600" />
                 </div>
-                <CardTitle className="pt-4 text-xl font-bold text-gray-800">Alertas de Estoque</CardTitle>
-                <CardDescription className="text-gray-500">Gestão de ruptura e previsão de demanda.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex-1 p-0">
-                <Tabs defaultValue="esgotados" className="w-full flex flex-col h-full">
-                    <div className="px-6 mb-2">
-                        <TabsList className="w-full grid grid-cols-2 bg-gray-100/80 p-1">
-                            <TabsTrigger value="esgotados" className="text-xs font-bold data-[state=active]:bg-white data-[state=active]:text-red-600 data-[state=active]:shadow-sm">
-                                <AlertOctagon className="w-3 h-3 mr-1.5" /> Esgotados ({outOfStockItems.length})
-                            </TabsTrigger>
-                            <TabsTrigger value="previsao" className="text-xs font-bold data-[state=active]:bg-white data-[state=active]:text-orange-600 data-[state=active]:shadow-sm">
-                                <Hourglass className="w-3 h-3 mr-1.5" /> Baixo ({lowStockItems.length})
-                            </TabsTrigger>
-                        </TabsList>
+                <div>
+                  <CardTitle className="text-base font-bold text-gray-800">Alertas de Estoque</CardTitle>
+                  <CardDescription className="text-xs">Ruptura e previsão de demanda</CardDescription>
+                </div>
+              </div>
+              <Badge variant="secondary" className="bg-orange-100 text-orange-700 font-bold text-[10px] rounded-full">
+                {totalAlerts} itens
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="flex-1 p-0">
+            <Tabs defaultValue="esgotados" className="w-full">
+              <div className="px-5 mb-3">
+                <TabsList className="w-full grid grid-cols-2 bg-gray-100 p-1 rounded-xl h-9">
+                  <TabsTrigger value="esgotados" className="text-[11px] font-bold rounded-lg data-[state=active]:bg-white data-[state=active]:text-red-600 data-[state=active]:shadow-sm">
+                    <AlertOctagon className="w-3 h-3 mr-1" /> Esgotados ({outOfStockItems.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="previsao" className="text-[11px] font-bold rounded-lg data-[state=active]:bg-white data-[state=active]:text-orange-600 data-[state=active]:shadow-sm">
+                    <Hourglass className="w-3 h-3 mr-1" /> Baixo ({lowStockItems.length})
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+              <div className="px-5 pb-5 space-y-2 max-h-[360px] overflow-y-auto">
+                <TabsContent value="esgotados" className="space-y-2 mt-0">
+                  {outOfStockItems.length > 0 ? (
+                    outOfStockItems.map((item: any, i: number) => <InventoryItemRow key={i} item={item} />)
+                  ) : (
+                    <div className="py-12 flex flex-col items-center text-center opacity-60">
+                      <div className="p-4 bg-green-50 rounded-2xl mb-3">
+                        <Package className="w-8 h-8 text-green-500" />
+                      </div>
+                      <p className="text-sm font-bold text-gray-600">Nenhum produto esgotado!</p>
+                      <p className="text-xs text-gray-400 mt-1">Estoque saudável ✓</p>
                     </div>
-
-                    <div className="flex-1 px-6 pb-6 overflow-y-auto max-h-[400px] min-h-[300px]">
-                        <TabsContent value="esgotados" className="space-y-3 mt-2 data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:slide-in-from-left-2">
-                            {outOfStockItems.length > 0 ? (
-                                outOfStockItems.map((item: any, i: number) => <InventoryItemRow key={i} item={item} />)
-                            ) : (
-                                <div className="h-full flex flex-col items-center justify-center text-center py-10 opacity-60">
-                                    <Package className="w-12 h-12 text-green-500 mb-2" />
-                                    <p className="text-sm font-bold text-gray-600">Nenhum produto esgotado!</p>
-                                    <p className="text-xs text-gray-400">Seu estoque está saudável.</p>
-                                </div>
-                            )}
-                        </TabsContent>
-
-                        <TabsContent value="previsao" className="space-y-3 mt-2 data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:slide-in-from-right-2">
-                            {lowStockItems.length > 0 ? (
-                                lowStockItems.map((item: any, i: number) => <InventoryItemRow key={i} item={item} />)
-                            ) : (
-                                <div className="h-full flex flex-col items-center justify-center text-center py-10 opacity-60">
-                                    <Clock className="w-12 h-12 text-gray-300 mb-2" />
-                                    <p className="text-sm font-bold text-gray-600">Sem previsões de ruptura.</p>
-                                    <p className="text-xs text-gray-400">Os produtos ativos têm estoque suficiente para +45 dias.</p>
-                                </div>
-                            )}
-                        </TabsContent>
+                  )}
+                </TabsContent>
+                <TabsContent value="previsao" className="space-y-2 mt-0">
+                  {lowStockItems.length > 0 ? (
+                    lowStockItems.map((item: any, i: number) => <InventoryItemRow key={i} item={item} />)
+                  ) : (
+                    <div className="py-12 flex flex-col items-center text-center opacity-60">
+                      <div className="p-4 bg-gray-50 rounded-2xl mb-3">
+                        <Clock className="w-8 h-8 text-gray-300" />
+                      </div>
+                      <p className="text-sm font-bold text-gray-600">Sem previsões de ruptura</p>
+                      <p className="text-xs text-gray-400 mt-1">Produtos com estoque para +45 dias</p>
                     </div>
-                </Tabs>
-            </CardContent>
+                  )}
+                </TabsContent>
+              </div>
+            </Tabs>
+          </CardContent>
         </Card>
 
         {/* COLUNA 2: CROSS-SELL */}
-        <Card className="border-none shadow-md bg-white flex flex-col h-full">
-            <div className="h-1 bg-blue-500 rounded-t-lg" />
-            <CardHeader className="pb-4">
-                <div className="flex justify-between items-start">
-                    <div className="p-2.5 bg-blue-50 rounded-xl text-blue-600 border border-blue-100"><Target className="w-6 h-6" /></div>
-                    <Badge variant="secondary" className="bg-blue-100 text-blue-700 font-bold rounded-full px-3">Cross-sell</Badge>
+        <Card className="border border-gray-100 shadow-sm rounded-2xl overflow-hidden flex flex-col">
+          <div className="h-1 bg-gradient-to-r from-blue-400 to-indigo-500" />
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-blue-50 rounded-xl border border-blue-100">
+                  <Target className="w-5 h-5 text-blue-600" />
                 </div>
-                <CardTitle className="pt-6 text-xl font-bold text-gray-800">Produtos Sugeridos</CardTitle>
-                <CardDescription className="text-gray-500">Itens que os clientes mais compram juntos.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex-1 space-y-3">
-                {insights?.associations?.length > 0 ? (
-                    insights.associations.map((pair: any, i: number) => (
-                        <div key={i} className="p-4 rounded-xl bg-blue-50/20 border border-blue-100 hover:border-blue-300 transition-all group">
-                            <div className="flex items-center gap-2 text-[12px] font-bold text-blue-900 leading-tight">
-                                <span className="truncate flex-1" title={pair.product_a}>{pair.product_a}</span>
-                                <Plus className="w-3 h-3 shrink-0 text-blue-400" />
-                                <span className="truncate flex-1" title={pair.product_b}>{pair.product_b}</span>
-                            </div>
-                            <div className="mt-3 flex items-center justify-between border-t border-blue-100 pt-3">
-                                <span className="text-[11px] text-blue-600 font-bold">{pair.frequency} pedidos em comum</span>
-                                <Button 
-                                    size="sm" 
-                                    variant="ghost" 
-                                    className="h-6 text-[11px] p-0 font-black text-blue-700 hover:bg-transparent"
-                                    onClick={() => handleCreateKit(pair.product_a, pair.product_a_id, pair.product_b, pair.product_b_id)}
-                                >
-                                    Criar Kit <ArrowRight className="w-3 h-3 ml-1 group-hover:translate-x-1 transition-transform" />
-                                </Button>
-                            </div>
-                        </div>
-                    ))
-                ) : (
-                    <div className="py-20 text-center">
-                        <p className="text-sm text-muted-foreground italic">Aguardando mais dados de vendas.</p>
+                <div>
+                  <CardTitle className="text-base font-bold text-gray-800">Combos Sugeridos</CardTitle>
+                  <CardDescription className="text-xs">Produtos comprados juntos</CardDescription>
+                </div>
+              </div>
+              <Badge variant="secondary" className="bg-blue-100 text-blue-700 font-bold text-[10px] rounded-full">
+                Cross-sell
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="flex-1 space-y-3 max-h-[400px] overflow-y-auto">
+            {insights?.associations?.length > 0 ? (
+              insights.associations.map((pair: any, i: number) => (
+                <div
+                  key={i}
+                  className="p-4 rounded-xl bg-gradient-to-br from-blue-50/50 to-indigo-50/30 border border-blue-100 hover:border-blue-300 hover:shadow-sm transition-all group"
+                >
+                  <div className="flex items-start gap-2 mb-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-blue-900 truncate" title={pair.product_a}>{pair.product_a}</p>
                     </div>
-                )}
-            </CardContent>
+                    <div className="shrink-0 p-1 bg-blue-100 rounded-full">
+                      <Plus className="w-2.5 h-2.5 text-blue-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-blue-900 truncate" title={pair.product_b}>{pair.product_b}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-blue-600 font-semibold bg-blue-100 px-2 py-0.5 rounded-full">
+                      {pair.frequency}x juntos
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 text-[11px] px-2 font-bold text-blue-700 hover:bg-blue-100 rounded-lg"
+                      onClick={() => handleCreateKit(pair.product_a, pair.product_a_id, pair.product_b, pair.product_b_id)}
+                    >
+                      Criar Kit <ChevronRight className="w-3 h-3 ml-0.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="py-16 flex flex-col items-center text-center opacity-60">
+                <div className="p-4 bg-blue-50 rounded-2xl mb-3">
+                  <ShoppingCart className="w-8 h-8 text-blue-300" />
+                </div>
+                <p className="text-sm font-bold text-gray-600">Aguardando dados</p>
+                <p className="text-xs text-gray-400 mt-1">Mais vendas geram sugestões melhores</p>
+              </div>
+            )}
+          </CardContent>
         </Card>
 
         {/* COLUNA 3: RETENÇÃO */}
-        <Card className="border-none shadow-md bg-white flex flex-col h-full">
-            <div className="h-1 bg-rose-500 rounded-t-lg" />
-            <CardHeader className="pb-4">
-                <div className="flex justify-between items-start">
-                    <div className="p-2.5 bg-rose-50 rounded-xl text-rose-600 border border-rose-100"><UserMinus className="w-6 h-6" /></div>
-                    <Badge variant="secondary" className="bg-rose-100 text-rose-700 font-bold rounded-full px-3">Retenção</Badge>
+        <Card className="border border-gray-100 shadow-sm rounded-2xl overflow-hidden flex flex-col">
+          <div className="h-1 bg-gradient-to-r from-rose-400 to-pink-500" />
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-rose-50 rounded-xl border border-rose-100">
+                  <UserMinus className="w-5 h-5 text-rose-600" />
                 </div>
-                <CardTitle className="pt-6 text-xl font-bold text-gray-800">Clientes Sumidos</CardTitle>
-                <CardDescription className="text-gray-500">Clientes frequentes que não compram há {'>'} 30 dias.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex-1 space-y-4">
-                {insights?.churn?.length > 0 ? (
-                    insights.churn.map((client: any, i: number) => (
-                        <div key={i} className="flex items-center justify-between p-3 rounded-xl border border-dashed border-rose-200 bg-rose-50/10 hover:bg-rose-50 transition-colors group">
-                            <div>
-                                <p className="text-sm font-black text-gray-800">{client.customer_name}</p>
-                                <p className="text-[11px] text-muted-foreground font-bold uppercase">{client.total_orders} compras na história</p>
-                            </div>
-                            <div className="text-right">
-                                <p className="text-[11px] font-black text-rose-600 uppercase tracking-tighter">{client.days_since_last_order} dias ausente</p>
-                                <Button 
-                                    variant="link" 
-                                    className="h-5 p-0 text-[10px] text-blue-600 font-black uppercase"
-                                    onClick={() => handleRecoverClient(client.customer_name)}
-                                >
-                                    Recuperar
-                                </Button>
-                            </div>
-                        </div>
-                    ))
-                ) : (
-                    <div className="py-20 text-center">
-                        <p className="text-sm text-muted-foreground italic">Tudo em dia! Seus clientes estão ativos.</p>
+                <div>
+                  <CardTitle className="text-base font-bold text-gray-800">Clientes Sumidos</CardTitle>
+                  <CardDescription className="text-xs">Sem compras há mais de 30 dias</CardDescription>
+                </div>
+              </div>
+              <Badge variant="secondary" className="bg-rose-100 text-rose-700 font-bold text-[10px] rounded-full">
+                {churnCount} clientes
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="flex-1 space-y-3 max-h-[400px] overflow-y-auto">
+            {insights?.churn?.length > 0 ? (
+              insights.churn.map((client: any, i: number) => (
+                <div
+                  key={i}
+                  className="flex items-center justify-between p-3 rounded-xl border border-rose-100 bg-gradient-to-r from-rose-50/40 to-transparent hover:border-rose-200 hover:shadow-sm transition-all group"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center shrink-0">
+                      <span className="text-xs font-black text-rose-600">
+                        {client.customer_name?.charAt(0) || '?'}
+                      </span>
                     </div>
-                )}
-            </CardContent>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-gray-800 truncate">{client.customer_name}</p>
+                      <p className="text-[10px] text-muted-foreground">{client.total_orders} compras no histórico</p>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0 ml-2">
+                    <p className="text-[11px] font-black text-rose-600">{client.days_since_last_order}d</p>
+                    <Button
+                      variant="link"
+                      className="h-4 p-0 text-[10px] text-blue-600 font-bold"
+                      onClick={() => handleRecoverClient()}
+                    >
+                      Recuperar
+                    </Button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="py-16 flex flex-col items-center text-center opacity-60">
+                <div className="p-4 bg-green-50 rounded-2xl mb-3">
+                  <Users className="w-8 h-8 text-green-400" />
+                </div>
+                <p className="text-sm font-bold text-gray-600">Clientes ativos!</p>
+                <p className="text-xs text-gray-400 mt-1">Nenhum cliente sumido no momento</p>
+              </div>
+            )}
+          </CardContent>
         </Card>
       </div>
 
-      {/* NOVA SEÇÃO: MOMENTUM E HORÁRIOS */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4">
-        
-        {/* Gráfico de Horários de Pico */}
-        <Card className="border-none shadow-md bg-white">
-            <CardHeader className="border-b bg-gray-50/50">
-                <CardTitle className="text-lg font-black uppercase text-gray-700 flex items-center gap-2">
-                    <Clock className="w-5 h-5 text-purple-600" /> Horários de Pico (Últimos 30 Dias)
-                </CardTitle>
-                <CardDescription>Volume de pedidos por hora do dia.</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-6 h-[300px]">
-                {insights?.peak_hours ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={insights.peak_hours}>
-                            <XAxis dataKey="hour" tick={{fontSize: 10}} axisLine={false} tickLine={false} />
-                            <Tooltip cursor={{fill: '#f3f4f6'}} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
-                            <Bar dataKey="orders" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={20}>
-                                {insights.peak_hours.map((entry: any, index: number) => (
-                                    <Cell key={`cell-${index}`} fill={entry.orders > 5 ? "#7c3aed" : "#c4b5fd"} />
-                                ))}
-                            </Bar>
-                        </BarChart>
-                    </ResponsiveContainer>
-                ) : (
-                    <div className="h-full flex items-center justify-center text-muted-foreground">Sem dados suficientes.</div>
-                )}
-            </CardContent>
-        </Card>
+      {/* SEGUNDA LINHA: HORÁRIOS + MOMENTUM */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-        {/* Listas de Trending */}
-        <Card className="border-none shadow-md bg-white">
-            <CardHeader className="border-b bg-gray-50/50">
-                <CardTitle className="text-lg font-black uppercase text-gray-700 flex items-center gap-2">
-                    <BarChart4 className="w-5 h-5 text-teal-600" /> Momentum de Vendas
-                </CardTitle>
-                <CardDescription>Variação de vendas nos últimos 7 dias vs semana anterior.</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
-                
-                {/* Em Alta */}
-                <div className="space-y-3">
-                    <h4 className="text-xs font-black uppercase text-green-700 flex items-center gap-1 mb-2">
-                        <TrendingUp className="w-4 h-4" /> Em Alta (Trending)
-                    </h4>
-                    {insights?.trends?.up?.length > 0 ? (
-                        insights.trends.up.map((item: any, i: number) => (
-                            <div key={i} className="flex justify-between items-center text-sm border-b border-green-100 pb-2 last:border-0">
-                                <span className="font-medium truncate max-w-[120px]" title={item.name}>{item.name}</span>
-                                <Badge className="bg-green-100 text-green-800 border-none font-bold">+{item.growth.toFixed(0)}%</Badge>
-                            </div>
-                        ))
-                    ) : (
-                        <p className="text-xs text-muted-foreground italic">Nenhum produto disparou recentemente.</p>
-                    )}
-                </div>
-
-                {/* Esfriando */}
-                <div className="space-y-3">
-                    <h4 className="text-xs font-black uppercase text-red-700 flex items-center gap-1 mb-2">
-                        <TrendingDown className="w-4 h-4" /> Esfriando (Cooling)
-                    </h4>
-                    {insights?.trends?.down?.length > 0 ? (
-                        insights.trends.down.map((item: any, i: number) => (
-                            <div key={i} className="flex justify-between items-center text-sm border-b border-red-100 pb-2 last:border-0">
-                                <span className="font-medium truncate max-w-[120px]" title={item.name}>{item.name}</span>
-                                <Badge variant="outline" className="text-red-600 border-red-200 bg-red-50 font-bold">{item.growth.toFixed(0)}%</Badge>
-                            </div>
-                        ))
-                    ) : (
-                        <p className="text-xs text-muted-foreground italic">Nenhuma queda brusca detectada.</p>
-                    )}
-                </div>
-
-            </CardContent>
-        </Card>
-      </div>
-
-      {/* DASHBOARD DE LTV E MARGEM */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4">
-            {/* RANKING VIP */}
-            <Card className="border-none shadow-md bg-white">
-                <CardHeader className="border-b bg-gray-50/50">
-                    <CardTitle className="text-sm font-black uppercase text-gray-500 flex items-center gap-2">
-                        <Crown className="w-4 h-4 text-yellow-600" /> Top Clientes por Faturamento (LTV)
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                    <div className="divide-y">
-                        {insights?.vips?.map((vip: any, i: number) => (
-                            <div key={i} className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
-                                <div className="flex items-center gap-4">
-                                    <div className="h-10 w-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-black text-sm">#{i+1}</div>
-                                    <div>
-                                        <p className="text-sm font-black text-gray-900">{vip.first_name} {vip.last_name}</p>
-                                        <p className="text-[11px] text-muted-foreground font-bold uppercase">Cliente Fidelidade</p>
-                                    </div>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-sm font-black text-blue-700">{vip.points} pts</p>
-                                    <p className="text-[10px] text-gray-400 font-bold uppercase">Saldo Acumulado</p>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </CardContent>
-            </Card>
-
-            {/* LUCRATIVIDADE POR MARCA */}
-            <Card className="border-none shadow-md bg-white">
-                <CardHeader className="border-b bg-gray-50/50">
-                    <CardTitle className="text-sm font-black uppercase text-gray-500 flex items-center gap-2">
-                        <Wallet className="w-4 h-4 text-green-600" /> Marcas Mais Lucrativas (Margem Bruta)
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-6 space-y-5">
-                    {insights?.profitability?.map((brand: any, i: number) => (
-                        <div key={i} className="space-y-2">
-                            <div className="flex justify-between text-xs font-black uppercase text-gray-700">
-                                <span>{brand.name || 'Sem Marca'}</span>
-                                <span className="text-green-600">{formatCurrency(brand.value)} <span className="text-[10px] text-muted-foreground font-normal">lucro est.</span></span>
-                            </div>
-                            <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden border border-gray-200">
-                                <div 
-                                    className="bg-gradient-to-r from-green-400 to-green-600 h-full transition-all duration-1000" 
-                                    style={{ width: `${(brand.value / (insights.profitability[0]?.value || 1)) * 100}%` }}
-                                />
-                            </div>
-                        </div>
+        {/* Horários de Pico */}
+        <Card className="border border-gray-100 shadow-sm rounded-2xl overflow-hidden">
+          <CardHeader className="border-b border-gray-50 bg-gray-50/50 pb-4">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-purple-50 rounded-xl border border-purple-100">
+                <Clock className="w-5 h-5 text-purple-600" />
+              </div>
+              <div>
+                <CardTitle className="text-base font-bold text-gray-800">Horários de Pico</CardTitle>
+                <CardDescription className="text-xs">Volume de pedidos por hora (últimos 30 dias)</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-5 h-[260px]">
+            {insights?.peak_hours ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={insights.peak_hours} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                  <XAxis
+                    dataKey="hour"
+                    tick={{ fontSize: 9, fill: '#9ca3af' }}
+                    axisLine={false}
+                    tickLine={false}
+                    interval={2}
+                  />
+                  <Tooltip
+                    cursor={{ fill: '#f3f4f6', radius: 4 }}
+                    contentStyle={{
+                      borderRadius: '12px',
+                      border: 'none',
+                      boxShadow: '0 4px 20px -2px rgb(0 0 0 / 0.15)',
+                      fontSize: '12px',
+                      fontWeight: 600
+                    }}
+                    formatter={(value: any) => [`${value} pedidos`, 'Volume']}
+                  />
+                  <Bar dataKey="orders" radius={[6, 6, 0, 0]} barSize={16}>
+                    {insights.peak_hours.map((entry: any, index: number) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={entry.orders > 5 ? "#7c3aed" : entry.orders > 2 ? "#a78bfa" : "#ede9fe"}
+                      />
                     ))}
-                </CardContent>
-            </Card>
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center">
+                <div className="text-center opacity-50">
+                  <Activity className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm text-gray-400">Sem dados suficientes</p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Momentum */}
+        <Card className="border border-gray-100 shadow-sm rounded-2xl overflow-hidden">
+          <CardHeader className="border-b border-gray-50 bg-gray-50/50 pb-4">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-teal-50 rounded-xl border border-teal-100">
+                <BarChart4 className="w-5 h-5 text-teal-600" />
+              </div>
+              <div>
+                <CardTitle className="text-base font-bold text-gray-800">Momentum de Vendas</CardTitle>
+                <CardDescription className="text-xs">Variação: últimos 7 dias vs semana anterior</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-5 grid grid-cols-2 gap-5">
+            <div>
+              <div className="flex items-center gap-1.5 mb-3">
+                <div className="p-1 bg-green-100 rounded-lg">
+                  <TrendingUp className="w-3.5 h-3.5 text-green-600" />
+                </div>
+                <span className="text-xs font-black text-green-700 uppercase tracking-wide">Em Alta</span>
+              </div>
+              <div className="space-y-2">
+                {insights?.trends?.up?.length > 0 ? (
+                  insights.trends.up.map((item: any, i: number) => (
+                    <div key={i} className="flex items-center justify-between gap-2 py-1.5 border-b border-green-50 last:border-0">
+                      <span className="text-xs font-medium text-gray-700 truncate flex-1" title={item.name}>{item.name}</span>
+                      <span className="text-[10px] font-black text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full shrink-0">
+                        +{item.growth.toFixed(0)}%
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-gray-400 italic py-4 text-center">Nenhum produto disparou</p>
+                )}
+              </div>
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5 mb-3">
+                <div className="p-1 bg-red-100 rounded-lg">
+                  <TrendingDown className="w-3.5 h-3.5 text-red-600" />
+                </div>
+                <span className="text-xs font-black text-red-700 uppercase tracking-wide">Esfriando</span>
+              </div>
+              <div className="space-y-2">
+                {insights?.trends?.down?.length > 0 ? (
+                  insights.trends.down.map((item: any, i: number) => (
+                    <div key={i} className="flex items-center justify-between gap-2 py-1.5 border-b border-red-50 last:border-0">
+                      <span className="text-xs font-medium text-gray-700 truncate flex-1" title={item.name}>{item.name}</span>
+                      <span className="text-[10px] font-black text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full shrink-0">
+                        {item.growth.toFixed(0)}%
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-gray-400 italic py-4 text-center">Nenhuma queda detectada</p>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* SEÇÃO EDUCATIVA VISUAL - FLUXO DE DADOS */}
-      <div className="mt-12 mb-8">
-        <h3 className="text-lg font-bold text-slate-700 flex items-center gap-2 mb-6">
-            <Brain className="w-5 h-5" /> Pipeline de Dados: Como funciona?
-        </h3>
-        
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-            <InsightStep 
-                number="1" 
-                icon={Database} 
-                color="text-slate-600" 
-                title="Coleta" 
-                desc="O banco de dados registra cada venda, cliente e estoque." 
-            />
-            <InsightStep 
-                number="2" 
-                icon={Binary} 
-                color="text-blue-600" 
-                title="Processamento" 
-                desc="O código varre milhões de linhas em segundos." 
-            />
-            <InsightStep 
-                number="3" 
-                icon={Calculator} 
-                color="text-purple-600" 
-                title="Análise" 
-                desc="Algoritmos calculam médias, tendências e frequências." 
-            />
-            <InsightStep 
-                number="4" 
-                icon={Search} 
-                color="text-orange-600" 
-                title="Detecção" 
-                desc="Identificação de padrões: quem sumiu, o que combina." 
-            />
-            <InsightStep 
-                number="5" 
-                icon={Lightbulb} 
-                color="text-yellow-600" 
-                title="Insight" 
-                desc="Transformação de dados brutos em sugestões úteis." 
-            />
-            <InsightStep 
-                number="6" 
-                icon={Rocket} 
-                color="text-green-600" 
-                title="Resultado" 
-                desc="Você toma a ação correta e gera mais lucro." 
-            />
+      {/* TERCEIRA LINHA: VIPs + LUCRATIVIDADE */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        {/* Top Clientes VIP */}
+        <Card className="border border-gray-100 shadow-sm rounded-2xl overflow-hidden">
+          <CardHeader className="border-b border-gray-50 bg-gradient-to-r from-yellow-50/50 to-amber-50/30 pb-4">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-yellow-100 rounded-xl border border-yellow-200">
+                <Crown className="w-5 h-5 text-yellow-600" />
+              </div>
+              <div>
+                <CardTitle className="text-base font-bold text-gray-800">Top Clientes VIP</CardTitle>
+                <CardDescription className="text-xs">Maiores saldos de pontos acumulados</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {insights?.vips?.length > 0 ? (
+              <div className="divide-y divide-gray-50">
+                {insights.vips.map((vip: any, i: number) => (
+                  <div key={i} className="flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50/50 transition-colors">
+                    <div className={cn(
+                      "w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm shrink-0",
+                      i === 0 ? "bg-yellow-100 text-yellow-700" :
+                        i === 1 ? "bg-gray-100 text-gray-600" :
+                          i === 2 ? "bg-orange-100 text-orange-600" :
+                            "bg-blue-50 text-blue-500"
+                    )}>
+                      {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-gray-900 truncate">
+                        {vip.first_name} {vip.last_name}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">Cliente Fidelidade</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-black text-blue-700">{vip.points?.toLocaleString('pt-BR')} pts</p>
+                      <p className="text-[10px] text-gray-400">saldo</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="py-12 flex flex-col items-center text-center opacity-60">
+                <Crown className="w-10 h-10 text-gray-200 mb-2" />
+                <p className="text-sm text-gray-400">Sem dados de clientes VIP</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Lucratividade por Marca */}
+        <Card className="border border-gray-100 shadow-sm rounded-2xl overflow-hidden">
+          <CardHeader className="border-b border-gray-50 bg-gradient-to-r from-green-50/50 to-emerald-50/30 pb-4">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-green-100 rounded-xl border border-green-200">
+                <Wallet className="w-5 h-5 text-green-600" />
+              </div>
+              <div>
+                <CardTitle className="text-base font-bold text-gray-800">Marcas Mais Lucrativas</CardTitle>
+                <CardDescription className="text-xs">Margem bruta estimada (últimos 30 dias)</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-5 space-y-4">
+            {insights?.profitability?.length > 0 ? (
+              insights.profitability.map((brand: any, i: number) => {
+                const maxVal = insights.profitability[0]?.value || 1;
+                const pct = Math.round((brand.value / maxVal) * 100);
+                return (
+                  <div key={i} className="space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-semibold text-gray-700">{brand.name || 'Sem Marca'}</span>
+                      <span className="text-sm font-black text-green-700">{formatCurrency(brand.value)}</span>
+                    </div>
+                    <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                      <div
+                        className="bg-gradient-to-r from-green-400 to-emerald-500 h-full rounded-full transition-all duration-700"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-gray-400">{pct}% do top</p>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="py-12 flex flex-col items-center text-center opacity-60">
+                <Wallet className="w-10 h-10 text-gray-200 mb-2" />
+                <p className="text-sm text-gray-400">Sem dados de lucratividade</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* PIPELINE EDUCATIVO */}
+      <div className="mt-4">
+        <div className="flex items-center gap-2 mb-5">
+          <Brain className="w-5 h-5 text-slate-500" />
+          <h3 className="text-sm font-bold text-slate-600 uppercase tracking-wide">Como funciona o pipeline de dados?</h3>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+          {[
+            { n: 1, icon: Database, color: "text-slate-600", bg: "bg-slate-50 border-slate-100", title: "Coleta", desc: "Cada venda, cliente e estoque é registrado automaticamente." },
+            { n: 2, icon: Binary, color: "text-blue-600", bg: "bg-blue-50 border-blue-100", title: "Processamento", desc: "O sistema varre milhões de linhas em segundos." },
+            { n: 3, icon: Calculator, color: "text-purple-600", bg: "bg-purple-50 border-purple-100", title: "Análise", desc: "Algoritmos calculam médias, tendências e frequências." },
+            { n: 4, icon: Search, color: "text-orange-600", bg: "bg-orange-50 border-orange-100", title: "Detecção", desc: "Padrões são identificados: quem sumiu, o que combina." },
+            { n: 5, icon: Lightbulb, color: "text-yellow-600", bg: "bg-yellow-50 border-yellow-100", title: "Insight", desc: "Dados brutos viram sugestões acionáveis." },
+            { n: 6, icon: Rocket, color: "text-green-600", bg: "bg-green-50 border-green-100", title: "Resultado", desc: "Você age com precisão e gera mais lucro." },
+          ].map(({ n, icon: Icon, color, bg, title, desc }) => (
+            <div key={n} className={cn("relative p-4 rounded-2xl border text-center hover:shadow-md transition-all group", bg)}>
+              <div className="absolute top-2 right-2.5 text-[10px] font-black opacity-20 text-gray-400">#{n}</div>
+              <div className={cn("inline-flex p-2.5 rounded-xl mb-3 transition-transform group-hover:scale-110", bg)}>
+                <Icon className={cn("w-5 h-5", color)} />
+              </div>
+              <h4 className="font-bold text-slate-800 text-xs mb-1">{title}</h4>
+              <p className="text-[10px] text-slate-500 leading-snug">{desc}</p>
+            </div>
+          ))}
         </div>
       </div>
 
