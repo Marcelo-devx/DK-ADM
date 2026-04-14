@@ -18,7 +18,13 @@ serve(async (req) => {
     );
 
     // Obter período do corpo da requisição
-    const { period = "12m" } = await req.json();
+    let period = "12m";
+    try {
+      const body = await req.json();
+      period = body.period || "12m";
+    } catch (_) {
+      // usa default
+    }
     
     console.log("[analytics-bi] Processando período:", period);
 
@@ -50,28 +56,38 @@ serve(async (req) => {
     }
 
     // Buscar pedidos filtrados por período
-    const { data: orders } = await supabaseAdmin
+    const { data: ordersRaw, error: ordersError } = await supabaseAdmin
         .from('orders')
-        .select('total_price, created_at, status, payment_method, shipping_cost, coupon_discount, user_id')
+        .select('total_price, created_at, status, payment_method, shipping_cost, coupon_discount, user_id, shipping_address')
         .neq('status', 'Cancelado')
         .gte('created_at', startDate.toISOString())
         .order('created_at', { ascending: true });
 
-    // Buscar perfis (dados demográficos não precisam de filtro de período)
-    const { data: profiles } = await supabaseAdmin
+    if (ordersError) {
+      console.error("[analytics-bi] Erro ao buscar pedidos:", ordersError);
+    }
+
+    const orders = ordersRaw || [];
+
+    // Buscar perfis (dados demográficos)
+    const { data: profilesRaw, error: profilesError } = await supabaseAdmin
         .from('profiles')
-        .select('id, gender, date_of_birth, state');
+        .select('id, gender, date_of_birth, state, city');
+
+    if (profilesError) {
+      console.error("[analytics-bi] Erro ao buscar perfis:", profilesError);
+    }
+
+    const profiles = profilesRaw || [];
 
     // --- PROCESSAMENTO DE BI ---
     
     // Determinar agrupamento baseado no período
-    let groupBy: 'day' | 'week' | 'month';
+    let groupBy = 'month';
     if (period === "7d" || period === "30d") {
       groupBy = 'day';
     } else if (period === "90d" || period === "6m") {
       groupBy = 'week';
-    } else {
-      groupBy = 'month';
     }
 
     // Gerar array de períodos para o gráfico
@@ -80,11 +96,11 @@ serve(async (req) => {
       const current = new Date(startDate);
       
       while (current <= now) {
-        let periodKey: string;
-        let periodLabel: string;
+        let periodKey;
+        let periodLabel;
         
         if (groupBy === 'day') {
-          periodKey = current.toISOString().substring(0, 10); // YYYY-MM-DD
+          periodKey = current.toISOString().substring(0, 10);
           periodLabel = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(current);
         } else if (groupBy === 'week') {
           const weekStart = new Date(current);
@@ -93,11 +109,14 @@ serve(async (req) => {
           periodKey = `${weekStart.toISOString().substring(0, 10)}_to_${weekEnd.toISOString().substring(0, 10)}`;
           periodLabel = `${weekStart.getDate()}/${weekStart.getMonth() + 1}`;
         } else {
-          periodKey = current.toISOString().substring(0, 7); // YYYY-MM
-          periodLabel = new Intl.DateTimeFormat('pt-BR', { month: 'short' }).format(current);
+          periodKey = current.toISOString().substring(0, 7);
+          periodLabel = new Intl.DateTimeFormat('pt-BR', { month: 'short', year: '2-digit' }).format(current);
         }
         
-        periods.push({ key: periodKey, label: periodLabel });
+        // Evitar duplicatas
+        if (!periods.find(p => p.key === periodKey)) {
+          periods.push({ key: periodKey, label: periodLabel });
+        }
         
         if (groupBy === 'day') {
           current.setDate(current.getDate() + 1);
@@ -114,45 +133,63 @@ serve(async (req) => {
     const periodArray = generatePeriodArray();
 
     // Agrupar dados por período
-    const statsByPeriod = periodArray.map(period => {
+    const statsByPeriod = periodArray.map(p => {
       let filtered;
       
       if (groupBy === 'day') {
-        filtered = orders.filter(o => o.created_at.startsWith(period.key));
+        filtered = orders.filter(o => o.created_at && o.created_at.startsWith(p.key));
       } else if (groupBy === 'week') {
-        const [start, end] = period.key.split('_to_');
-        filtered = orders.filter(o => o.created_at >= start && o.created_at <= end);
+        const [start, end] = p.key.split('_to_');
+        filtered = orders.filter(o => o.created_at && o.created_at >= start && o.created_at <= end + 'T23:59:59');
       } else {
-        filtered = orders.filter(o => o.created_at.startsWith(period.key));
+        filtered = orders.filter(o => o.created_at && o.created_at.startsWith(p.key));
       }
       
-      const revenue = filtered.reduce((acc, o) => acc + Number(o.total_price), 0);
-      const approved = filtered.filter(o => o.status === 'Finalizada' || o.status === 'Pago').length;
+      const revenue = filtered.reduce((acc, o) => acc + Number(o.total_price || 0), 0);
+      const approved = filtered.filter(o => o.status === 'Finalizada' || o.status === 'Pago' || o.status === 'Entregue').length;
       
       return {
-        month: period.key,
-        label: period.label,
-        revenue,
+        month: p.key,
+        label: p.label,
+        revenue: Math.round(revenue * 100) / 100,
         orders: filtered.length,
-        approved_rate: filtered.length > 0 ? (approved / filtered.length) * 100 : 0
+        approved_rate: filtered.length > 0 ? Math.round((approved / filtered.length) * 1000) / 10 : 0
       };
     });
 
-    // 2. DEMOGRAFIA
+    // 2. DEMOGRAFIA - Gênero
     const genderStats = profiles.reduce((acc, p) => {
         const g = p.gender || 'Não Informado';
         acc[g] = (acc[g] || 0) + 1;
         return acc;
     }, {});
 
-    const regionStats = profiles.reduce((acc, p) => {
-        const s = p.state || 'Outros';
-        acc[s] = (acc[s] || 0) + 1;
-        return acc;
+    // 3. REGIÕES - extrair do shipping_address dos pedidos (mais preciso)
+    const regionFromOrders = orders.reduce((acc, o) => {
+      let state = null;
+      if (o.shipping_address) {
+        try {
+          const addr = typeof o.shipping_address === 'string' ? JSON.parse(o.shipping_address) : o.shipping_address;
+          state = addr.state || addr.uf || null;
+        } catch (_) {}
+      }
+      if (!state) return acc;
+      acc[state] = (acc[state] || 0) + 1;
+      return acc;
     }, {});
 
-    // 3. NOVOS VS RECORRENTES (apenas do período selecionado)
+    // Fallback para perfis se não houver dados nos pedidos
+    const regionStats = Object.keys(regionFromOrders).length > 0 
+      ? regionFromOrders 
+      : profiles.reduce((acc, p) => {
+          const s = p.state || 'Outros';
+          acc[s] = (acc[s] || 0) + 1;
+          return acc;
+        }, {});
+
+    // 4. NOVOS VS RECORRENTES
     const userOrderCounts = orders.reduce((acc, o) => {
+        if (!o.user_id) return acc;
         acc[o.user_id] = (acc[o.user_id] || 0) + 1;
         return acc;
     }, {});
@@ -160,17 +197,50 @@ serve(async (req) => {
     const recurring = Object.values(userOrderCounts).filter(count => count > 1).length;
     const newUsers = Object.values(userOrderCounts).filter(count => count === 1).length;
 
-    console.log("[analytics-bi] Dados processados:", { period: periodArray.length, genderStats: Object.keys(genderStats).length });
+    // 5. MÉTODOS DE PAGAMENTO
+    const paymentStats = orders.reduce((acc, o) => {
+      const method = o.payment_method || 'Outros';
+      acc[method] = (acc[method] || 0) + 1;
+      return acc;
+    }, {});
+
+    // 6. TOTAIS GERAIS
+    const totalRevenue = orders.reduce((acc, o) => acc + Number(o.total_price || 0), 0);
+    const totalOrders = orders.length;
+    const approvedOrders = orders.filter(o => o.status === 'Finalizada' || o.status === 'Pago' || o.status === 'Entregue').length;
+
+    console.log("[analytics-bi] Dados processados:", { 
+      periods: periodArray.length, 
+      orders: orders.length, 
+      profiles: profiles.length,
+      totalRevenue: Math.round(totalRevenue)
+    });
+
+    // Ordenar regiões por valor
+    const sortedRegions = Object.entries(regionStats)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10);
 
     return new Response(JSON.stringify({
         monthly: statsByPeriod,
+        summary: {
+          totalRevenue: Math.round(totalRevenue * 100) / 100,
+          totalOrders,
+          approvedOrders,
+          approvalRate: totalOrders > 0 ? Math.round((approvedOrders / totalOrders) * 1000) / 10 : 0,
+          avgTicket: totalOrders > 0 ? Math.round((totalRevenue / totalOrders) * 100) / 100 : 0,
+          newUsers,
+          recurringUsers: recurring,
+        },
         demographics: {
             gender: Object.entries(genderStats).map(([name, value]) => ({ name, value })),
-            regions: Object.entries(regionStats).map(([name, value]) => ({ name, value })),
+            regions: sortedRegions,
             retention: [
                 { name: 'Novos', value: newUsers },
                 { name: 'Recorrentes', value: recurring }
-            ]
+            ],
+            paymentMethods: Object.entries(paymentStats).map(([name, value]) => ({ name, value }))
         }
     }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -178,7 +248,7 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error("[analytics-bi] Erro:", error);
+    console.error("[analytics-bi] Erro:", error.message, error.stack);
     return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: corsHeaders });
   }
 })
