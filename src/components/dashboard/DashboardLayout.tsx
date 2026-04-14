@@ -33,6 +33,7 @@ const GERENTE_GERAL_ALLOWED_ROUTES = [
   "/dashboard/clients",
   "/dashboard/cadastrar-cliente",
   "/dashboard/club-dk",
+  "/dashboard/loyalty-management",
   "/dashboard/user-coupons-history",
   "/dashboard/coupon-management",
   "/dashboard/promotions",

@@ -277,6 +277,9 @@ const Sidebar = () => {
       <NavLink to="/dashboard/club-dk" className={navLinkClass}>
         {({ isActive }) => (<><Crown className={iconClass("text-pink-600", isActive)} />Club DK Fidelidade</>)}
       </NavLink>
+      <NavLink to="/dashboard/loyalty-management" className={navLinkClass}>
+        {({ isActive }) => (<><Gift className={iconClass("text-pink-500", isActive)} />Gestão de Fidelidade</>)}
+      </NavLink>
       <NavLink to="/dashboard/user-coupons-history" className={navLinkClass}>
         {({ isActive }) => (<><TicketCheck className={iconClass("text-pink-600", isActive)} />Histórico de Cupons</>)}
       </NavLink>
