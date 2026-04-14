@@ -181,9 +181,9 @@ export default function PrintLabelsPage() {
           user_id,
           notes
         `)
-        // status pago/finalizado e delivery_status Aguardando Coleta ou Pendente
+        // status pago/finalizado e delivery_status elegíveis para etiqueta
         .in("status", ["Finalizada", "Pago"])
-        .or("delivery_status.eq.Aguardando Coleta,delivery_status.eq.Pendente,delivery_status.eq.Embalado")
+        .in("delivery_status", ["Aguardando Coleta", "Pendente", "Embalado", "Despachado"])
         .order("created_at", { ascending: false });
 
       if (error) {
