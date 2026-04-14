@@ -192,14 +192,12 @@ export const ProductVariantManager = ({
   const bulkUpdatePricesMutation = useMutation({
     mutationFn: async () => {
         if (!productId) throw new Error("Produto não identificado.");
-        const { error } = await supabase
-            .from("product_variants")
-            .update({ 
-                price: basePrice, 
-                pix_price: basePixPrice, 
-                cost_price: baseCostPrice 
-            })
-            .eq("product_id", productId);
+        const { error } = await supabase.rpc("bulk_update_variant_prices", {
+            p_product_id: productId,
+            p_price: basePrice,
+            p_pix_price: basePixPrice,
+            p_cost_price: baseCostPrice,
+        });
         if (error) throw error;
     },
     onSuccess: () => {
