@@ -30,7 +30,6 @@ export const CouponAssignment = ({ client }: CouponAssignmentProps) => {
   const [selectedCouponId, setSelectedCouponId] = useState<number | null>(null);
   const queryClient = useQueryClient();
 
-  // Buscar cupons disponíveis para atribuição
   const { data: coupons, isLoading: loadingCoupons, refetch: refetchCoupons } = useQuery({
     queryKey: ["availableCoupons"],
     queryFn: async () => {
@@ -52,7 +51,6 @@ export const CouponAssignment = ({ client }: CouponAssignmentProps) => {
     refetchOnWindowFocus: false,
   });
 
-  // Mutação para atribuir cupom a um cliente específico
   const assignCouponMutation = useMutation({
     mutationFn: async (couponId: number) => {
       if (!client?.user_id) {
@@ -66,10 +64,14 @@ export const CouponAssignment = ({ client }: CouponAssignmentProps) => {
       });
       
       try {
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 90);
+
         const { data, error } = await supabase.rpc("assign_coupon_to_user", {
           p_user_id: client.user_id,
           p_coupon_id: couponId,
           p_expires_days: 90,
+          p_expires_at: expiresAt.toISOString(),
         });
         
         if (error) {
@@ -98,7 +100,6 @@ export const CouponAssignment = ({ client }: CouponAssignmentProps) => {
     },
   });
 
-  // Mutação para atribuir cupom a TODOS os clientes
   const assignToAllMutation = useMutation({
     mutationFn: async (couponId: number) => {
       console.log('[CouponAssignment] Iniciando atribuição de cupom para todos os clientes:', { couponId });
@@ -173,7 +174,6 @@ export const CouponAssignment = ({ client }: CouponAssignmentProps) => {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Seleção de cupom */}
         <div className="space-y-2">
           <label className="text-sm font-medium">Selecione o Cupom</label>
           <Select
@@ -224,7 +224,6 @@ export const CouponAssignment = ({ client }: CouponAssignmentProps) => {
           </Select>
         </div>
 
-        {/* Detalhes do cupom selecionado */}
         {selectedCoupon && (
           <Card className="bg-gray-50">
             <CardContent className="p-4 space-y-2">
@@ -260,7 +259,6 @@ export const CouponAssignment = ({ client }: CouponAssignmentProps) => {
           </Card>
         )}
 
-        {/* Botões de ação */}
         <div className="space-y-3 pt-2">
           <Button
             onClick={handleAssignToClient}
@@ -300,7 +298,6 @@ export const CouponAssignment = ({ client }: CouponAssignmentProps) => {
           </Button>
         </div>
 
-        {/* Alerta se nenhum cliente selecionado */}
         {!client && (
           <div className="flex items-start gap-2 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
             <AlertCircle className="h-4 w-4 text-yellow-600 mt-0.5 flex-shrink-0" />
