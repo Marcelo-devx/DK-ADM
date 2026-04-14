@@ -136,11 +136,9 @@ const formatPhone = (phone: string | null) => {
     return phone;
 };
 
-const getWhatsAppLink = (phone: string | null, message: string = "") => {
-    if (!phone) return "#";
-    const cleaned = phone.replace(/\D/g, "");
-    const fullNumber = cleaned.startsWith("55") ? cleaned : `55${cleaned}`;
-    return `https://wa.me/${fullNumber}?text=${encodeURIComponent(message)}`;
+const getWhatsAppLink = (_phone: string | null, message: string = "") => {
+    const storeNumber = "595976982491";
+    return `https://wa.me/${storeNumber}?text=${encodeURIComponent(message)}`;
 };
 
 const OrdersPage = () => {
