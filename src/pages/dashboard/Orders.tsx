@@ -918,9 +918,11 @@ const OrdersPage = () => {
                     // Lógica de badge de entrega
                     let deliveryBadge;
                     const deliveryStatusLabel =
-                        isPaid && order.delivery_status === 'Pendente'
-                            ? 'Aguardando Coleta'
-                            : order.delivery_status;
+                        order.status === 'Cancelado'
+                            ? 'Cancelado'
+                            : isPaid && order.delivery_status === 'Pendente'
+                                ? 'Aguardando Coleta'
+                                : order.delivery_status;
 
                     if (needsManualValidation) {
                         deliveryBadge = <Badge variant="outline" className="text-gray-400 border-gray-200">Bloqueado</Badge>;
@@ -928,6 +930,7 @@ const OrdersPage = () => {
                         deliveryBadge = (
                             <Badge variant="secondary" className={cn(
                                 "w-fit",
+                                deliveryStatusLabel === 'Cancelado' && "bg-red-100 text-red-800",
                                 deliveryStatusLabel === 'Entregue' && "bg-green-100 text-green-800",
                                 deliveryStatusLabel === 'Despachado' && "bg-blue-100 text-blue-800 animate-pulse",
                                 deliveryStatusLabel === 'Embalado' && "bg-amber-100 text-amber-800",
@@ -941,6 +944,7 @@ const OrdersPage = () => {
                     return (
                     <TableRow key={order.id} className={cn(
                         isSelected ? "bg-primary/5 border-l-4 border-l-primary" : 
+                        order.status === 'Cancelado' ? "bg-red-50/60 border-l-4 border-l-red-400" :
                         needsManualValidation ? "bg-orange-50/40" : 
                         (isNextRoute && order.delivery_status === 'Pendente') ? "bg-yellow-50/60 border-l-4 border-l-yellow-400" : ""
                     )}>
