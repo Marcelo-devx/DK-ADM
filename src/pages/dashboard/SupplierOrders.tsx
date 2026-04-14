@@ -426,14 +426,14 @@ const SupplierOrdersPage = () => {
 
   // ── Atualizar status / receber pedido ───────────────────────────────────────
   const updateStatusMutation = useMutation({
-    mutationFn: async ({
-      id,
-      status,
+    mutationFn: async ({ 
+      id, 
+      status, 
       itemsToProcess,
-    }: {
-      id: number;
-      status: string;
-      itemsToProcess?: any[];
+    }: { 
+      id: number; 
+      status: string; 
+      itemsToProcess?: { id: number; product_id: number; variant_id: string | null; quantity: number; unit_cost: number }[]; 
     }) => {
       let finalStatus = status;
       let receivedTotal = 0;
@@ -454,56 +454,50 @@ const SupplierOrdersPage = () => {
           finalStatus = "Recebido com Divergência";
         }
 
-        // Atualiza estoque em paralelo
-        await Promise.all(
-          itemsToProcess.map(async (item) => {
-            // Atualiza quantidade recebida no item
-            await supabase
-              .from("supplier_order_items")
-              .update({ received_quantity: item.quantity })
-              .match({
-                supplier_order_id: id,
-                product_id: item.product_id,
-                ...(item.variant_id ? { variant_id: item.variant_id } : {}),
-              });
+        // Atualiza estoque SEQUENCIALMENTE para evitar race condition
+        for (const item of itemsToProcess) {
+          // Atualiza quantidade recebida no item usando o id direto
+          await supabase
+            .from("supplier_order_items")
+            .update({ received_quantity: item.quantity })
+            .eq("id", item.id);
 
-            if (item.variant_id) {
-              const { data: variant } = await supabase
-                .from("product_variants")
-                .select("stock_quantity, cost_price")
-                .eq("id", item.variant_id)
-                .single();
+          if (item.variant_id) {
+            const { data: variant } = await supabase
+              .from("product_variants")
+              .select("stock_quantity, cost_price")
+              .eq("id", item.variant_id)
+              .single();
 
-              if (variant) {
-                const updateData: any = { stock_quantity: (variant.stock_quantity || 0) + item.quantity };
-                updateData.cost_price = calcularCMP(
-                  variant.stock_quantity || 0,
-                  variant.cost_price || 0,
-                  item.quantity,
-                  item.unit_cost
-                );
-                await supabase.from("product_variants").update(updateData).eq("id", item.variant_id);
-              }
-            } else {
-              const { data: product } = await supabase
-                .from("products")
-                .select("stock_quantity, cost_price")
-                .eq("id", item.product_id)
-                .single();
-
-              if (product) {
-                const updateData: any = { stock_quantity: (product.stock_quantity || 0) + item.quantity };
-                updateData.cost_price = calcularCMP(
-                  product.stock_quantity || 0,
-                  product.cost_price || 0,
-                  item.quantity,
-                  item.unit_cost
-                );
-                await supabase.from("products").update(updateData).eq("id", item.product_id);
-              }
+            if (variant) {
+              const updateData: any = { stock_quantity: (variant.stock_quantity || 0) + item.quantity };
+              updateData.cost_price = calcularCMP(
+                variant.stock_quantity || 0,
+                variant.cost_price || 0,
+                item.quantity,
+                item.unit_cost
+              );
+              await supabase.from("product_variants").update(updateData).eq("id", item.variant_id);
             }
-          })
-        );
+          } else {
+            const { data: product } = await supabase
+              .from("products")
+              .select("stock_quantity, cost_price")
+              .eq("id", item.product_id)
+              .single();
+
+            if (product) {
+              const updateData: any = { stock_quantity: (product.stock_quantity || 0) + item.quantity };
+              updateData.cost_price = calcularCMP(
+                product.stock_quantity || 0,
+                product.cost_price || 0,
+                item.quantity,
+                item.unit_cost
+              );
+              await supabase.from("products").update(updateData).eq("id", item.product_id);
+            }
+          }
+        }
       }
 
       const updatePayload: any = { status: finalStatus };
@@ -515,6 +509,7 @@ const SupplierOrdersPage = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["supplierOrders"] });
       queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardFinancialStats"] });
       setIsReceiveModalOpen(false);
       showSuccess("Operação finalizada!");
     },

@@ -46,7 +46,7 @@ interface SupplierOrderReceiveModalProps {
   order: SupplierOrder;
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (finalItems: { product_id: number, variant_id: string | null, quantity: number, unit_cost: number }[]) => void;
+  onConfirm: (finalItems: { id: number, product_id: number, variant_id: string | null, quantity: number, unit_cost: number }[]) => void;
   isSubmitting: boolean;
 }
 
@@ -120,6 +120,7 @@ export const SupplierOrderReceiveModal = ({
     const itemsToProcess = items
       .filter(item => checkedItems[item.id])
       .map(item => ({
+        id: item.id,
         product_id: item.product_id,
         variant_id: item.variant_id,
         quantity: receivedQuantities[item.id],
