@@ -32,14 +32,13 @@ interface Order {
   shipping_address: any;
   user_id: string | null;
   email?: string;
-  notes?: string | null;
+  delivery_info?: string | null;
   profiles?: {
     first_name: string | null;
     last_name: string | null;
     phone: string | null;
     cpf_cnpj: string | null;
   } | null;
-  delivery_info?: string | null;
 }
 
 interface Sender {
@@ -179,7 +178,7 @@ export default function PrintLabelsPage() {
           delivery_status,
           shipping_address,
           user_id,
-          notes
+          delivery_info
         `)
         // status pago/finalizado e delivery_status elegíveis para etiqueta
         .in("status", ["Finalizada", "Pago"])
@@ -420,7 +419,7 @@ export default function PrintLabelsPage() {
           "Endereço": `${addr.street || ''}${addr.number ? `, ${addr.number}` : ''}`.trim(),
           "Complemento": addr.complement || "",
           "Entrega": "",
-          "Observações": order.notes || "",
+          "Observações": order.delivery_info || "",
           "Telefone": p?.phone || "",
           "Nota Circuit": "",
           "Bairro Entrega": addr.neighborhood || "",
@@ -739,7 +738,7 @@ export default function PrintLabelsPage() {
                         "Endereço": `${addr.street || ''}${addr.number ? `, ${addr.number}` : ''}`.trim(),
                         "Complemento": addr.complement || "",
                         "Entrega": "",
-                        "Observações": order.notes || "",
+                        "Observações": order.delivery_info || "",
                         "Telefone": p?.phone || "",
                         "Nota Circuit": "",
                         "Bairro Entrega": addr.neighborhood || "",
