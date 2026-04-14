@@ -42,6 +42,7 @@ import {
   Zap,
   FileSearch,
   Search,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -249,6 +250,9 @@ const Sidebar = () => {
             </NavLink>
             <NavLink to="/dashboard/order-admin" className={navLinkClass}>
               {({ isActive }) => (<><FileEdit className={iconClass("text-red-600", isActive)} />Admin Pedidos</>)}
+            </NavLink>
+            <NavLink to="/dashboard/reativar-pedidos" className={navLinkClass}>
+              {({ isActive }) => (<><RefreshCw className={iconClass("text-green-600", isActive)} />Reativar Pedidos</>)}
             </NavLink>
             <NavLink to="/dashboard/cleanup-orders" className={navLinkClass}>
               {({ isActive }) => (<><Trash2 className={iconClass("text-red-500", isActive)} />Limpeza de Pedidos</>)}
