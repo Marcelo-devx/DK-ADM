@@ -270,14 +270,52 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
       const like = `%${term.trim()}%`;
       const fields = "id, name, price, pix_price, stock_quantity, image_url, sku, product_variants(id, product_id, flavor_id, volume_ml, sku, price, pix_price, stock_quantity, is_active, color, ohms, size)";
 
-      const [{ data: byName }, { data: bySku }] = await Promise.all([
+      const [{ data: byName }, { data: bySku }, { data: byVariantSku }] = await Promise.all([
         supabase.from("products").select(fields).ilike("name", like).limit(100),
         supabase.from("products").select(fields).ilike("sku", like).limit(100),
+        supabase
+          .from("product_variants")
+          .select(`id, product_id, flavor_id, volume_ml, sku, price, pix_price, stock_quantity, is_active, color, ohms, size, products(id, name, price, pix_price, stock_quantity, image_url, sku)`)
+          .ilike("sku", like)
+          .limit(100),
       ]);
 
       const map = new Map<number, Product>();
       (byName || []).forEach((p: any) => map.set(p.id, p));
       (bySku || []).forEach((p: any) => map.set(p.id, p));
+
+      (byVariantSku || []).forEach((variantRow: any) => {
+        const parent = variantRow.products;
+        if (!parent) return;
+
+        const existing = map.get(parent.id) || {
+          ...parent,
+          product_variants: [],
+        };
+
+        const variant: ProductVariant = {
+          id: variantRow.id,
+          product_id: variantRow.product_id,
+          flavor_id: variantRow.flavor_id,
+          volume_ml: variantRow.volume_ml,
+          sku: variantRow.sku,
+          price: variantRow.price,
+          pix_price: variantRow.pix_price,
+          stock_quantity: variantRow.stock_quantity,
+          is_active: variantRow.is_active,
+          color: variantRow.color,
+          ohms: variantRow.ohms,
+          size: variantRow.size,
+        };
+
+        const variants = Array.isArray(existing.product_variants) ? existing.product_variants : [];
+        if (!variants.some((v: ProductVariant) => v.id === variant.id)) {
+          existing.product_variants = [...variants, variant];
+        }
+
+        map.set(parent.id, existing);
+      });
+
       setSearchResults(Array.from(map.values()));
     } catch {
       showError("Erro ao buscar produtos");
