@@ -56,6 +56,7 @@ import UserAdmin from "./pages/dashboard/UserAdmin";
 import OrderAdmin from "./pages/dashboard/OrderAdmin";
 import CleanupOrders from "./pages/dashboard/CleanupOrders";
 import RelatorioFinanceiro from "./pages/dashboard/RelatorioFinanceiro";
+import RelatorioEntradaEstoque from "./pages/dashboard/RelatorioEntradaEstoque";
 import InvestigarUsuario from "./pages/dashboard/InvestigarUsuario";
 import ReativarPedidos from "./pages/dashboard/ReativarPedidos";
 
@@ -134,6 +135,7 @@ const App = () => (
               <Route path="order-admin" element={<OrderAdmin />} />
               <Route path="cleanup-orders" element={<CleanupOrders />} />
               <Route path="xk9-relatorio-financeiro" element={<RelatorioFinanceiro />} />
+              <Route path="relatorio-entrada-estoque" element={<RelatorioEntradaEstoque />} />
               <Route path="investigar-usuario" element={<InvestigarUsuario />} />
               <Route path="reativar-pedidos" element={<ReativarPedidos />} />
             </Route>

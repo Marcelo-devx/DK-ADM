@@ -41,6 +41,7 @@ import {
   ShoppingCart,
   Zap,
   FileSearch,
+  FileDown,
   Search,
   RefreshCw,
 } from "lucide-react";
@@ -280,6 +281,9 @@ const Sidebar = () => {
             </NavLink>
             <NavLink to="/dashboard/xk9-relatorio-financeiro" className={navLinkClass}>
               {({ isActive }) => (<><FileSearch className={iconClass("text-emerald-600", isActive)} />Relatório Financeiro</>)}
+            </NavLink>
+            <NavLink to="/dashboard/relatorio-entrada-estoque" className={navLinkClass}>
+              {({ isActive }) => (<><FileDown className={iconClass("text-blue-600", isActive)} />Relatório Entrada Estoque</>)}
             </NavLink>
           </>
         ) : isGerenteGeralView ? (
