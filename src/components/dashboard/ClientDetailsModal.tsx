@@ -521,10 +521,18 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                                               </p>
 
                                               {/* Variante resolvida (exata ou identificada pelo preço) */}
-                                              {item.resolvedVariant && renderVariantBadges(
-                                                item.resolvedVariant,
-                                                !!item.variant_id // true = exata, false = identificada pelo preço
-                                              )}
+                                              {item.resolvedVariant ? (
+                                                renderVariantBadges(
+                                                  item.resolvedVariant,
+                                                  !!item.variant_id // true = exata, false = identificada pelo preço
+                                                )
+                                              ) : item.variant_id ? (
+                                                <div className="flex flex-wrap gap-1 mt-1.5">
+                                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-bold border border-slate-200">
+                                                    <Package className="w-2.5 h-2.5" /> Variação do pedido
+                                                  </span>
+                                                </div>
+                                              ) : null}
 
                                               <p className="text-xs text-slate-500 mt-1">
                                                 {item.quantity} un. × {formatCurrency(item.price_at_purchase)}
