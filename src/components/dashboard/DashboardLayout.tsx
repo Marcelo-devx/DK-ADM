@@ -24,6 +24,26 @@ const OPERACIONAL_ALLOWED_ROUTES = [
   "/dashboard/delivery-routes",
 ];
 
+const GERENTE_GERAL_ALLOWED_ROUTES = [
+  "/dashboard/orders",
+  "/dashboard/donations",
+  "/dashboard/products",
+  "/dashboard/reviews",
+  "/dashboard/shipping-rates",
+  "/dashboard/clients",
+  "/dashboard/cadastrar-cliente",
+  "/dashboard/club-dk",
+  "/dashboard/user-coupons-history",
+  "/dashboard/coupon-management",
+  "/dashboard/promotions",
+  "/dashboard/coupons",
+  "/dashboard/manual-add-points",
+  "/dashboard/user-admin",
+  "/dashboard/investigar-usuario",
+  "/dashboard/order-admin",
+  "/dashboard/reativar-pedidos",
+];
+
 interface SidebarContextType {
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
@@ -55,6 +75,17 @@ const DashboardLayout = () => {
       if (!isAdmin && !isLogistica && !isGerente && !isGerenteGeral) {
         navigate("/", { replace: true });
         return;
+      }
+
+      if (isGerenteGeral && !isAdmin) {
+        const currentPath = location.pathname;
+        const isAllowed =
+          currentPath === "/dashboard" ||
+          GERENTE_GERAL_ALLOWED_ROUTES.some((r) => currentPath.startsWith(r));
+        if (!isAllowed) {
+          navigate("/dashboard/orders", { replace: true });
+          return;
+        }
       }
 
       if ((isLogistica || isGerente) && !isAdmin && !isGerenteGeral) {

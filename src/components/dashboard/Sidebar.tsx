@@ -79,7 +79,7 @@ const Sidebar = () => {
   // gerente_geral has full admin access
   const isFullAccess = isAdmin || isGerenteGeral;
 
-  const fullMenu = (
+  const fullMenu = isAdmin ? (
     <>
       {/* VISÃO GERAL */}
       <p className={sectionTitleClass}>Visão Geral</p>
@@ -241,6 +241,71 @@ const Sidebar = () => {
       </NavLink>
       <NavLink to="/dashboard/relatorio-entrada-estoque" className={navLinkClass}>
         {({ isActive }) => (<><FileDown className={iconClass("text-blue-600", isActive)} />Relatório Entrada Estoque</>)}
+      </NavLink>
+    </>
+  ) : (
+    <>
+      {/* OPERAÇÃO */}
+      <p className={sectionTitleClass}>Operação</p>
+      <NavLink to="/dashboard/orders" className={navLinkClass}>
+        {({ isActive }) => (<><DollarSign className={iconClass("text-green-600", isActive)} />Pedidos (Clientes)</>)}
+      </NavLink>
+      <NavLink to="/dashboard/donations" className={navLinkClass}>
+        {({ isActive }) => (<><Heart className={iconClass("text-rose-600", isActive)} />Doações</>)}
+      </NavLink>
+      <NavLink to="/dashboard/products" className={navLinkClass}>
+        {({ isActive }) => (<><Package className={iconClass("text-blue-600", isActive)} />Produtos</>)}
+      </NavLink>
+      <NavLink to="/dashboard/reviews" className={navLinkClass}>
+        {({ isActive }) => (<><Star className={iconClass("text-yellow-500", isActive)} />Avaliações</>)}
+      </NavLink>
+      <NavLink to="/dashboard/shipping-rates" className={navLinkClass}>
+        {({ isActive }) => (<><Bike className={iconClass("text-indigo-600", isActive)} />Fretes e Taxa</>)}
+      </NavLink>
+
+      {/* CLIENTES */}
+      <p className={sectionTitleClass}>Clientes</p>
+      <NavLink to="/dashboard/clients" className={navLinkClass}>
+        {({ isActive }) => (<><Users className={iconClass("text-cyan-600", isActive)} />Base de Clientes</>)}
+      </NavLink>
+      <NavLink to="/dashboard/cadastrar-cliente" className={navLinkClass}>
+        {({ isActive }) => (<><UserPlus className={iconClass("text-cyan-600", isActive)} />Cadastrar Cliente</>)}
+      </NavLink>
+
+      {/* FIDELIDADE & PROMOÇÕES */}
+      <p className={sectionTitleClass}>Fidelidade & Promoções</p>
+      <NavLink to="/dashboard/club-dk" className={navLinkClass}>
+        {({ isActive }) => (<><Crown className={iconClass("text-pink-600", isActive)} />Club DK Fidelidade</>)}
+      </NavLink>
+      <NavLink to="/dashboard/user-coupons-history" className={navLinkClass}>
+        {({ isActive }) => (<><TicketCheck className={iconClass("text-pink-600", isActive)} />Histórico de Cupons</>)}
+      </NavLink>
+      <NavLink to="/dashboard/coupon-management" className={navLinkClass}>
+        {({ isActive }) => (<><Ticket className={iconClass("text-pink-500", isActive)} />Gestão de Cupons</>)}
+      </NavLink>
+      <NavLink to="/dashboard/promotions" className={navLinkClass}>
+        {({ isActive }) => (<><Percent className={iconClass("text-pink-600", isActive)} />Kits & Promoções</>)}
+      </NavLink>
+      <NavLink to="/dashboard/coupons" className={navLinkClass}>
+        {({ isActive }) => (<><Ticket className={iconClass("text-pink-600", isActive)} />Cupons</>)}
+      </NavLink>
+      <NavLink to="/dashboard/manual-add-points" className={navLinkClass}>
+        {({ isActive }) => (<><Gift className={iconClass("text-pink-400", isActive)} />Pontos Manual</>)}
+      </NavLink>
+
+      {/* ADMINISTRAÇÃO */}
+      <p className={sectionTitleClass}>Administração</p>
+      <NavLink to="/dashboard/user-admin" className={navLinkClass}>
+        {({ isActive }) => (<><ShieldAlert className={iconClass("text-red-600", isActive)} />Admin Usuários</>)}
+      </NavLink>
+      <NavLink to="/dashboard/investigar-usuario" className={navLinkClass}>
+        {({ isActive }) => (<><Search className={iconClass("text-orange-600", isActive)} />Investigar Usuário</>)}
+      </NavLink>
+      <NavLink to="/dashboard/order-admin" className={navLinkClass}>
+        {({ isActive }) => (<><FileEdit className={iconClass("text-red-600", isActive)} />Admin Pedidos</>)}
+      </NavLink>
+      <NavLink to="/dashboard/reativar-pedidos" className={navLinkClass}>
+        {({ isActive }) => (<><RefreshCw className={iconClass("text-green-600", isActive)} />Reativar Pedidos</>)}
       </NavLink>
     </>
   );
