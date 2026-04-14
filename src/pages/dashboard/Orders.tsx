@@ -53,6 +53,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import * as XLSX from 'xlsx';
 import { Card } from "@/components/ui/card";
+import { useUser } from "@/hooks/useUser";
 
 interface Order {
   id: number;
@@ -136,13 +137,16 @@ const formatPhone = (phone: string | null) => {
     return phone;
 };
 
-const getWhatsAppLink = (_phone: string | null, message: string = "") => {
-    const storeNumber = "595976982491";
-    return `https://wa.me/${storeNumber}?text=${encodeURIComponent(message)}`;
+const getWhatsAppLink = (phone: string | null, message: string = "") => {
+    if (!phone) return "#";
+    const cleanPhone = phone.replace(/\D/g, "");
+    return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 };
 
 const OrdersPage = () => {
   const queryClient = useQueryClient();
+  const { isAdmin, isGerenteGeral } = useUser();
+  const canUseWhatsApp = isAdmin || isGerenteGeral;
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
@@ -1000,7 +1004,7 @@ const OrdersPage = () => {
                         <div className="flex flex-col gap-0.5">
                             <div className="flex items-center gap-2">
                                 <span className="font-medium text-sm text-gray-900">{order.profiles?.first_name} {order.profiles?.last_name}</span>
-                                {phone && (
+                                {phone && canUseWhatsApp && (
                                     <TooltipProvider>
                                         <Tooltip>
                                             <TooltipTrigger asChild>
@@ -1124,7 +1128,7 @@ const OrdersPage = () => {
                                         <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                                         <DropdownMenuContent align="end">
                                             <DropdownMenuLabel>Ações do Pedido</DropdownMenuLabel>
-                                            {phone && (
+                                            {phone && canUseWhatsApp && (
                                                 <DropdownMenuItem asChild>
                                                     <a href={getWhatsAppLink(phone, `Olá ${name}, falando sobre o pedido #${order.id}...`)} target="_blank" rel="noreferrer" className="cursor-pointer text-green-600 font-medium">
                                                         <MessageCircle className="w-4 h-4 mr-2" /> Abrir WhatsApp
