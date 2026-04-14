@@ -32,6 +32,7 @@ interface Order {
   shipping_address: any;
   user_id: string | null;
   email?: string;
+  notes?: string | null;
   profiles?: {
     first_name: string | null;
     last_name: string | null;
@@ -177,7 +178,8 @@ export default function PrintLabelsPage() {
           status,
           delivery_status,
           shipping_address,
-          user_id
+          user_id,
+          notes
         `)
         // status pago/finalizado e delivery_status Aguardando Coleta ou Pendente
         .in("status", ["Finalizada", "Pago"])
@@ -418,7 +420,7 @@ export default function PrintLabelsPage() {
           "Endereço": `${addr.street || ''}${addr.number ? `, ${addr.number}` : ''}`.trim(),
           "Complemento": addr.complement || "",
           "Entrega": "",
-          "Observações": "Frágil",
+          "Observações": order.notes || "Frágil",
           "Telefone": p?.phone || "",
           "Nota Circuit": "",
           "Bairro Entrega": addr.neighborhood || "",
@@ -737,7 +739,7 @@ export default function PrintLabelsPage() {
                         "Endereço": `${addr.street || ''}${addr.number ? `, ${addr.number}` : ''}`.trim(),
                         "Complemento": addr.complement || "",
                         "Entrega": "",
-                        "Observações": "Frágil",
+                        "Observações": order.notes || "Frágil",
                         "Telefone": p?.phone || "",
                         "Nota Circuit": "",
                         "Bairro Entrega": addr.neighborhood || "",
