@@ -23,14 +23,20 @@ serve(async (req) => {
       )
     }
 
-    // Criar cliente Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Verificar token
+    // Cliente com service role para bypassar RLS
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    })
+
+    // Verificar token do usuário
     const token = authHeader.replace('Bearer ', '')
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token)
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token)
     if (userError || !user) {
       console.error('[admin-update-order] Token inválido:', userError?.message)
       return new Response(
@@ -40,7 +46,7 @@ serve(async (req) => {
     }
 
     // Verificar se tem role permitido (adm ou gerente_geral)
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('role')
       .eq('id', user.id)
@@ -70,8 +76,8 @@ serve(async (req) => {
       )
     }
 
-    // Buscar pedido atual para comparação
-    const { data: currentOrder, error: fetchError } = await supabase
+    // Buscar pedido atual para comparação (sem restrição de status)
+    const { data: currentOrder, error: fetchError } = await supabaseAdmin
       .from('orders')
       .select('*')
       .eq('id', orderId)
@@ -107,11 +113,19 @@ serve(async (req) => {
         // Só registrar se realmente mudou
         if (JSON.stringify(oldValue) !== JSON.stringify(newValue)) {
           const fieldConfig = fieldsToTrack[field]
+          // Serializar objetos como JSON string para o histórico
+          const oldStr = oldValue !== null && oldValue !== undefined
+            ? (typeof oldValue === 'object' ? JSON.stringify(oldValue) : String(oldValue))
+            : null
+          const newStr = newValue !== null && newValue !== undefined
+            ? (typeof newValue === 'object' ? JSON.stringify(newValue) : String(newValue))
+            : null
+
           historyEntries.push({
             order_id: orderId,
             field_name: field,
-            old_value: oldValue !== null ? String(oldValue) : null,
-            new_value: newValue !== null ? String(newValue) : null,
+            old_value: oldStr,
+            new_value: newStr,
             changed_by: user.id,
             change_type: fieldConfig.type,
             reason: reason || null
@@ -120,8 +134,8 @@ serve(async (req) => {
       }
     }
 
-    // Atualizar pedido
-    const { error: updateError } = await supabase
+    // Atualizar pedido (admin pode editar qualquer pedido independente do status)
+    const { error: updateError } = await supabaseAdmin
       .from('orders')
       .update(updates)
       .eq('id', orderId)
@@ -134,15 +148,17 @@ serve(async (req) => {
       )
     }
 
-    // Inserir histórico
+    // Inserir histórico usando service role (bypassa RLS)
     if (historyEntries.length > 0) {
-      const { error: historyError } = await supabase
+      const { error: historyError } = await supabaseAdmin
         .from('order_history')
         .insert(historyEntries)
 
       if (historyError) {
-        console.error('[admin-update-order] Erro ao inserir histórico:', historyError)
+        console.error('[admin-update-order] Erro ao inserir histórico:', historyError.message, historyError)
         // Continuar mesmo se falhar inserir histórico
+      } else {
+        console.log(`[admin-update-order] ${historyEntries.length} entradas de histórico inseridas.`)
       }
     }
 

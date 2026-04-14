@@ -29,13 +29,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send, History, FileDown, Calendar, FilterX, ShieldCheck, ShieldX, CheckSquare, Plus, Search } from "lucide-react";
+import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send, History, FileDown, Calendar, FilterX, ShieldCheck, ShieldX, CheckSquare, Plus, Search, Pencil } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { showSuccess, showError } from "@/utils/toast";
 import { OrderDetailModal } from "@/components/dashboard/OrderDetailModal";
 import { ShippingLabelModal } from "@/components/dashboard/ShippingLabelModal";
 import { ClientDetailsModal } from "@/components/dashboard/ClientDetailsModal";
 import { CreateOrderModal } from "@/components/dashboard/CreateOrderModal";
+import { OrderEditModal } from "@/components/dashboard/OrderEditModal";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -148,6 +149,7 @@ const OrdersPage = () => {
   const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
   const [isCreateOrderOpen, setIsCreateOrderOpen] = useState(false);
+  const [isEditOrderOpen, setIsEditOrderOpen] = useState(false);
   
   // States para Histórico do Cliente
   const [isClientHistoryOpen, setIsClientHistoryOpen] = useState(false);
