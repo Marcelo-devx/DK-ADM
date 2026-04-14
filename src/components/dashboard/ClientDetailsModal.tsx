@@ -110,7 +110,7 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
       if (!specificVariantIds.length) return [];
       const { data, error } = await supabase
         .from("product_variants")
-        .select("id, color, size, ohms, volume_ml, price, pix_price, flavors(name)")
+        .select("id, product_id, flavor_id, color, size, ohms, volume_ml, sku, price, pix_price, flavors(name)")
         .in("id", specificVariantIds);
       if (error) throw error;
       return data ?? [];
@@ -132,7 +132,7 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
       if (!productIdsWithoutVariant.length) return [];
       const { data, error } = await supabase
         .from("product_variants")
-        .select("id, product_id, color, size, ohms, volume_ml, price, pix_price, flavors(name)")
+        .select("id, product_id, flavor_id, color, size, ohms, volume_ml, sku, price, pix_price, flavors(name)")
         .in("product_id", productIdsWithoutVariant);
       if (error) throw error;
       return data ?? [];
@@ -221,6 +221,7 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
     if (variant.size?.trim()) attrs.push({ label: variant.size.trim(), icon: <Ruler className="w-2.5 h-2.5" />, color: "bg-blue-100 text-blue-800 border-blue-200" });
     if (variant.ohms?.trim()) attrs.push({ label: `${variant.ohms.trim()}Ω`, icon: <Zap className="w-2.5 h-2.5" />, color: "bg-amber-100 text-amber-800 border-amber-200" });
     if (variant.volume_ml) attrs.push({ label: `${variant.volume_ml}ml`, icon: null, color: "bg-cyan-100 text-cyan-800 border-cyan-200" });
+    if (variant.sku?.trim()) attrs.push({ label: variant.sku.trim(), icon: null, color: "bg-slate-100 text-slate-700 border-slate-200" });
 
     if (!attrs.length) return null;
 
@@ -533,6 +534,14 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                                                   </span>
                                                 </div>
                                               ) : null}
+
+                                              {!item.resolvedVariant && item.variant_id === null && (
+                                                <div className="flex flex-wrap gap-1 mt-1.5">
+                                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-bold border border-amber-200">
+                                                    <HelpCircle className="w-2.5 h-2.5" /> Variação não salva no pedido
+                                                  </span>
+                                                </div>
+                                              )}
 
                                               <p className="text-xs text-slate-500 mt-1">
                                                 {item.quantity} un. × {formatCurrency(item.price_at_purchase)}
