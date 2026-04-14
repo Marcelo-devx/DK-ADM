@@ -3,132 +3,160 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card, CardContent, CardHeader, CardTitle, CardDescription,
+} from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  PieChart, Pie, Cell, Legend, AreaChart, Area
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend, AreaChart, Area, LineChart, Line, ComposedChart,
 } from "recharts";
-import { 
-  BarChart3, TrendingUp, TrendingDown, Users, DollarSign,
-  Target, Zap, Map as MapIcon, Calendar, CheckCircle2,
-  ShoppingCart, RefreshCw, AlertCircle, CreditCard
+import {
+  BarChart3, TrendingUp, TrendingDown, Users, DollarSign, Target,
+  Zap, MapPin, Calendar, CheckCircle2, ShoppingCart, RefreshCw,
+  AlertCircle, CreditCard, Package, Tag, Clock, Truck, Star,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
 
-const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#64748b", "#ec4899", "#14b8a6"];
+// ─── Paleta ──────────────────────────────────────────────────────────────────
+const C = ["#3b82f6","#10b981","#f59e0b","#ef4444","#8b5cf6","#64748b","#ec4899","#14b8a6","#f97316","#06b6d4"];
 
 const PERIODS = [
-  { value: "7d", label: "Últimos 7 dias" },
+  { value: "7d",  label: "Últimos 7 dias" },
   { value: "30d", label: "Últimos 30 dias" },
   { value: "90d", label: "Últimos 90 dias" },
-  { value: "6m", label: "Últimos 6 meses" },
+  { value: "6m",  label: "Últimos 6 meses" },
   { value: "12m", label: "Últimos 12 meses" },
   { value: "24m", label: "Últimos 24 meses" },
 ];
 
-const formatCurrency = (v: number) =>
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+const R = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
-const formatPeriodLabel = (period: string) =>
-  PERIODS.find(p => p.value === period)?.label ?? period;
+const pct = (v: number) => `${v.toFixed(1)}%`;
 
-// --- KPI Card ---
-const KpiCard = ({ title, value, sub, icon: Icon, trend, color = "blue" }: {
-  title: string;
-  value: string;
-  sub?: string;
-  icon: any;
-  trend?: { value: number; label: string };
-  color?: string;
+const periodLabel = (p: string) => PERIODS.find(x => x.value === p)?.label ?? p;
+
+// ─── Componentes base ─────────────────────────────────────────────────────────
+
+const EmptyChart = ({ msg = "Sem dados para o período" }: { msg?: string }) => (
+  <div className="flex flex-col items-center justify-center h-full gap-2 text-center">
+    <BarChart3 className="w-8 h-8 text-gray-200" />
+    <p className="text-xs text-muted-foreground">{msg}</p>
+  </div>
+);
+
+const tooltipStyle = {
+  borderRadius: "10px",
+  border: "none",
+  boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+  fontSize: 12,
+};
+
+// KPI grande com ícone colorido
+const KpiCard = ({
+  title, value, sub, icon: Icon, color = "blue", delta,
+}: {
+  title: string; value: string; sub?: string;
+  icon: any; color?: string; delta?: number;
 }) => {
-  const colorMap: Record<string, string> = {
-    blue: "bg-blue-50 text-blue-600",
-    green: "bg-green-50 text-green-600",
-    amber: "bg-amber-50 text-amber-600",
+  const bg: Record<string, string> = {
+    blue:   "bg-blue-50   text-blue-600",
+    green:  "bg-green-50  text-green-600",
+    amber:  "bg-amber-50  text-amber-600",
     purple: "bg-purple-50 text-purple-600",
+    rose:   "bg-rose-50   text-rose-600",
+    teal:   "bg-teal-50   text-teal-600",
   };
   return (
-    <Card className="shadow-sm border bg-white">
-      <CardContent className="pt-6">
-        <div className="flex items-start justify-between">
-          <div className={cn("p-2 rounded-lg", colorMap[color] || colorMap.blue)}>
-            <Icon className="w-5 h-5" />
+    <Card className="border bg-white shadow-sm hover:shadow-md transition-shadow">
+      <CardContent className="pt-5 pb-4">
+        <div className="flex items-start justify-between mb-3">
+          <div className={cn("p-2 rounded-lg", bg[color] ?? bg.blue)}>
+            <Icon className="w-4 h-4" />
           </div>
-          {trend && (
-            <Badge
-              variant="outline"
-              className={cn(
-                "text-[10px] font-bold",
-                trend.value >= 0
-                  ? "text-green-600 border-green-200 bg-green-50"
-                  : "text-red-600 border-red-200 bg-red-50"
-              )}
-            >
-              {trend.value >= 0 ? (
-                <TrendingUp className="w-3 h-3 mr-1" />
-              ) : (
-                <TrendingDown className="w-3 h-3 mr-1" />
-              )}
-              {Math.abs(trend.value).toFixed(1)}%
-            </Badge>
+          {delta !== undefined && (
+            <span className={cn(
+              "text-[10px] font-bold flex items-center gap-0.5 px-1.5 py-0.5 rounded-full",
+              delta >= 0 ? "bg-green-50 text-green-600" : "bg-red-50 text-red-600"
+            )}>
+              {delta >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+              {Math.abs(delta).toFixed(1)}%
+            </span>
           )}
         </div>
-        <div className="mt-4">
-          <p className="text-xs font-bold uppercase text-gray-400 tracking-widest">{title}</p>
-          <p className="text-2xl font-black text-gray-900 mt-1">{value}</p>
-          {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
-        </div>
+        <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">{title}</p>
+        <p className="text-2xl font-black text-gray-900 mt-0.5 leading-tight">{value}</p>
+        {sub && <p className="text-[11px] text-muted-foreground mt-1">{sub}</p>}
       </CardContent>
     </Card>
   );
 };
 
-// --- Loading Skeleton ---
+// Mini stat inline
+const MiniStat = ({ label, value, color = "text-gray-900" }: { label: string; value: string; color?: string }) => (
+  <div className="flex items-center justify-between py-2 border-b last:border-0">
+    <span className="text-xs text-muted-foreground">{label}</span>
+    <span className={cn("text-xs font-bold", color)}>{value}</span>
+  </div>
+);
+
+// Barra de progresso simples
+const ProgressBar = ({ value, max, color = "#3b82f6" }: { value: number; max: number; color?: string }) => (
+  <div className="w-full bg-gray-100 rounded-full h-1.5 mt-1">
+    <div
+      className="h-1.5 rounded-full transition-all"
+      style={{ width: `${max > 0 ? (value / max) * 100 : 0}%`, backgroundColor: color }}
+    />
+  </div>
+);
+
+// Skeleton de loading
 const AnalyticsSkeleton = () => (
-  <div className="space-y-6 p-6">
+  <div className="space-y-6 p-2">
     <div className="flex items-center justify-between">
-      <Skeleton className="h-10 w-64" />
-      <Skeleton className="h-10 w-48" />
+      <Skeleton className="h-9 w-56" />
+      <Skeleton className="h-9 w-44" />
     </div>
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-      {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-32" />)}
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-28" />)}
     </div>
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <Skeleton className="h-80 lg:col-span-2" />
-      <Skeleton className="h-80" />
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <Skeleton className="h-72 lg:col-span-2" />
+      <Skeleton className="h-72" />
+    </div>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <Skeleton className="h-64" />
+      <Skeleton className="h-64" />
     </div>
   </div>
 );
 
-// --- Empty State ---
-const EmptyChart = ({ message = "Sem dados para o período selecionado" }: { message?: string }) => (
-  <div className="flex flex-col items-center justify-center h-full text-center py-12">
-    <BarChart3 className="w-10 h-10 text-gray-200 mb-3" />
-    <p className="text-sm text-muted-foreground">{message}</p>
-  </div>
-);
-
+// ─── Página principal ─────────────────────────────────────────────────────────
 const AnalyticsPage = () => {
-  const [selectedPeriod, setSelectedPeriod] = useState("12m");
+  const [period, setPeriod] = useState("12m");
 
   const { data: bi, isLoading, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ["bi-data-premium", selectedPeriod],
+    queryKey: ["bi-v2", period],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("analytics-bi", {
-        body: { period: selectedPeriod },
+        body: { period },
       });
       if (error) throw new Error(error.message || "Erro ao carregar analytics");
-      if (!data) throw new Error("Nenhum dado retornado");
+      if (!data)  throw new Error("Nenhum dado retornado");
       return data;
     },
     retry: 2,
-    refetchInterval: 300000,
+    refetchInterval: 300_000,
   });
 
   if (isLoading) return <AnalyticsSkeleton />;
@@ -139,404 +167,673 @@ const AnalyticsPage = () => {
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            Erro ao carregar os dados de analytics: {(error as Error)?.message || "Erro desconhecido"}
+            {(error as Error)?.message || "Erro desconhecido ao carregar analytics."}
           </AlertDescription>
         </Alert>
-        <Button onClick={() => refetch()} variant="outline" className="gap-2">
+        <Button onClick={() => refetch()} variant="outline" size="sm" className="gap-2">
           <RefreshCw className="w-4 h-4" /> Tentar novamente
         </Button>
       </div>
     );
   }
 
-  const summary = bi?.summary || {
-    totalRevenue: 0,
-    totalOrders: 0,
-    approvedOrders: 0,
-    approvalRate: 0,
-    avgTicket: 0,
-    newUsers: 0,
-    recurringUsers: 0,
+  // ── Dados com fallbacks ───────────────────────────────────────────────────
+  const s = bi?.summary ?? {
+    totalRevenue: 0, totalOrders: 0, approvedOrders: 0, approvalRate: 0,
+    avgTicket: 0, totalShipping: 0, avgShipping: 0, totalDiscount: 0,
+    newUsers: 0, recurringUsers: 0, couponUsageRate: 0, withCoupon: 0, withoutCoupon: 0,
   };
+  const monthly          = bi?.monthly          ?? [];
+  const topProducts      = bi?.topProducts      ?? [];
+  const topProductsByQty = bi?.topProductsByQty ?? [];
+  const ordersByStatus   = bi?.ordersByStatus   ?? [];
+  const paymentMethods   = bi?.paymentMethods   ?? [];
+  const hourlyHeatmap    = bi?.hourlyHeatmap     ?? [];
+  const weekdayHeatmap   = bi?.weekdayHeatmap    ?? [];
+  const demo             = bi?.demographics      ?? { gender: [], regions: [], tiers: [], retention: [], couponUsage: [] };
 
-  const monthly = bi?.monthly || [];
-  const demographics = bi?.demographics || {
-    gender: [],
-    regions: [],
-    retention: [],
-    paymentMethods: [],
-  };
-
-  const hasMonthlyData = monthly.some((m: any) => m.orders > 0);
+  const hasTimeline = monthly.some((m: any) => m.orders > 0);
+  const maxRegionOrders = Math.max(...(demo.regions ?? []).map((r: any) => r.orders), 1);
+  const maxHour = Math.max(...hourlyHeatmap.map((h: any) => h.orders), 1);
 
   return (
-    <div className="space-y-8 pb-20">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-6 pb-24">
+
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-black text-gray-900 tracking-tight flex items-center gap-3">
-            <BarChart3 className="w-8 h-8 text-blue-600" /> Inteligência de Negócio
+          <h1 className="text-2xl font-black text-gray-900 flex items-center gap-2">
+            <BarChart3 className="w-6 h-6 text-blue-600" /> Inteligência de Negócio
           </h1>
-          <p className="text-muted-foreground mt-1 font-medium">
-            Dados reais processados — {formatPeriodLabel(selectedPeriod)}
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {periodLabel(period)} · {s.totalOrders} pedidos analisados
           </p>
         </div>
-        <div className="flex items-center gap-3 bg-white p-2 rounded-xl border shadow-sm px-4">
-          <Calendar className="w-4 h-4 text-gray-400" />
-          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-            <SelectTrigger className="w-[200px] border-0 focus:ring-0 text-sm font-bold text-gray-600 bg-transparent p-0 h-auto">
-              <SelectValue placeholder="Selecione o período" />
+        <div className="flex items-center gap-2 bg-white border rounded-xl px-3 py-2 shadow-sm">
+          <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
+          <Select value={period} onValueChange={setPeriod}>
+            <SelectTrigger className="border-0 focus:ring-0 text-sm font-semibold text-gray-700 bg-transparent p-0 h-auto w-44">
+              <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {PERIODS.map((period) => (
-                <SelectItem key={period.value} value={period.value}>
-                  {period.label}
-                </SelectItem>
+              {PERIODS.map(p => (
+                <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
               ))}
             </SelectContent>
           </Select>
-          {isFetching && <RefreshCw className="w-4 h-4 text-blue-500 animate-spin" />}
+          {isFetching && <RefreshCw className="w-3.5 h-3.5 text-blue-500 animate-spin" />}
         </div>
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard
-          title="Faturamento Total"
-          value={formatCurrency(summary.totalRevenue)}
-          sub={`${summary.totalOrders} pedidos no período`}
-          icon={DollarSign}
-          color="blue"
-        />
-        <KpiCard
-          title="Ticket Médio"
-          value={formatCurrency(summary.avgTicket)}
-          sub="Valor médio por pedido"
-          icon={Target}
-          color="green"
-        />
-        <KpiCard
-          title="Taxa de Aprovação"
-          value={`${summary.approvalRate.toFixed(1)}%`}
-          sub={`${summary.approvedOrders} de ${summary.totalOrders} pedidos`}
-          icon={CheckCircle2}
-          color="amber"
-        />
-        <KpiCard
-          title="Clientes Recorrentes"
-          value={summary.recurringUsers.toString()}
-          sub={`${summary.newUsers} novos no período`}
-          icon={Users}
-          color="purple"
-        />
+      {/* ── KPIs ───────────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <KpiCard title="Faturamento"    value={R(s.totalRevenue)}          sub={`${s.totalOrders} pedidos`}                icon={DollarSign}   color="blue"   />
+        <KpiCard title="Ticket Médio"   value={R(s.avgTicket)}             sub="por pedido"                                icon={Target}       color="green"  />
+        <KpiCard title="Aprovação"      value={pct(s.approvalRate)}        sub={`${s.approvedOrders} aprovados`}           icon={CheckCircle2} color="teal"   />
+        <KpiCard title="Frete Total"    value={R(s.totalShipping)}         sub={`Média ${R(s.avgShipping)}`}               icon={Truck}        color="amber"  />
+        <KpiCard title="Descontos"      value={R(s.totalDiscount)}         sub={`${pct(s.couponUsageRate)} c/ cupom`}      icon={Tag}          color="rose"   />
+        <KpiCard title="Recorrentes"    value={s.recurringUsers.toString()} sub={`${s.newUsers} novos`}                    icon={Users}        color="purple" />
       </div>
 
-      <Tabs defaultValue="vendas" className="space-y-6">
-        <TabsList className="bg-gray-100 p-1 rounded-xl">
-          <TabsTrigger value="vendas" className="rounded-lg font-bold px-6">
-            Performance de Vendas
-          </TabsTrigger>
-          <TabsTrigger value="clientes" className="rounded-lg font-bold px-6">
-            Comportamento do Cliente
-          </TabsTrigger>
-          <TabsTrigger value="logistica" className="rounded-lg font-bold px-6">
-            Logística & Região
-          </TabsTrigger>
+      {/* ── Tabs ───────────────────────────────────────────────────────────── */}
+      <Tabs defaultValue="vendas" className="space-y-5">
+        <TabsList className="bg-gray-100 p-1 rounded-xl h-auto flex-wrap gap-1">
+          <TabsTrigger value="vendas"    className="rounded-lg font-semibold text-xs px-4 py-2">📈 Vendas</TabsTrigger>
+          <TabsTrigger value="produtos"  className="rounded-lg font-semibold text-xs px-4 py-2">📦 Produtos</TabsTrigger>
+          <TabsTrigger value="clientes"  className="rounded-lg font-semibold text-xs px-4 py-2">👥 Clientes</TabsTrigger>
+          <TabsTrigger value="logistica" className="rounded-lg font-semibold text-xs px-4 py-2">🗺️ Logística</TabsTrigger>
+          <TabsTrigger value="tempo"     className="rounded-lg font-semibold text-xs px-4 py-2">⏰ Horários</TabsTrigger>
         </TabsList>
 
-        {/* ABA VENDAS */}
-        <TabsContent value="vendas" className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <Card className="lg:col-span-2 shadow-md border-none">
-              <CardHeader>
-                <CardTitle className="text-lg">
-                  Faturamento — {formatPeriodLabel(selectedPeriod)}
-                </CardTitle>
-                <CardDescription>Evolução da receita no período selecionado.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[350px] w-full">
-                  {hasMonthlyData ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={monthly}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis
-                          dataKey="label"
-                          axisLine={false}
-                          tickLine={false}
-                          tick={{ fontSize: 11, fontWeight: 700 }}
-                        />
-                        <YAxis
-                          axisLine={false}
-                          tickLine={false}
-                          tick={{ fontSize: 11 }}
-                          tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`}
-                        />
-                        <Tooltip
-                          cursor={{ fill: "#f8fafc" }}
-                          contentStyle={{
-                            borderRadius: "12px",
-                            border: "none",
-                            boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
-                          }}
-                          formatter={(value: number) => [formatCurrency(value), "Faturamento"]}
-                        />
-                        <Bar dataKey="revenue" fill="#3b82f6" radius={[6, 6, 0, 0]} barSize={35} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <EmptyChart />
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+        {/* ════════════════════════════════════════════════════════════════════
+            ABA VENDAS
+        ════════════════════════════════════════════════════════════════════ */}
+        <TabsContent value="vendas" className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
 
-            <Card className="shadow-md border-none">
-              <CardHeader>
-                <CardTitle className="text-lg">Taxa de Aprovação</CardTitle>
-                <CardDescription>% de pedidos convertidos em venda real.</CardDescription>
+          {/* Faturamento + Pedidos (ComposedChart) */}
+          <Card className="border-none shadow-md">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Faturamento & Volume de Pedidos</CardTitle>
+              <CardDescription>Receita (barras) e quantidade de pedidos (linha) no período.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-72">
+                {hasTimeline ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={monthly} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 600 }} />
+                      <YAxis yAxisId="rev" axisLine={false} tickLine={false} tick={{ fontSize: 10 }}
+                        tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
+                      <YAxis yAxisId="ord" orientation="right" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
+                      <Tooltip contentStyle={tooltipStyle}
+                        formatter={(v: number, name: string) =>
+                          name === "revenue" ? [R(v), "Faturamento"] : [v, "Pedidos"]} />
+                      <Bar yAxisId="rev" dataKey="revenue" fill="#3b82f6" radius={[5,5,0,0]} barSize={28} opacity={0.9} />
+                      <Line yAxisId="ord" type="monotone" dataKey="orders" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3, fill: "#f59e0b" }} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                ) : <EmptyChart />}
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+            {/* Taxa de aprovação */}
+            <Card className="border-none shadow-md">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Taxa de Aprovação</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="h-[260px] w-full">
-                  {hasMonthlyData ? (
+                <div className="h-44">
+                  {hasTimeline ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={monthly}>
                         <defs>
-                          <linearGradient id="colorRate" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                          <linearGradient id="gApproval" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%"  stopColor="#10b981" stopOpacity={0.25} />
                             <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                           </linearGradient>
                         </defs>
                         <XAxis dataKey="label" hide />
                         <YAxis hide domain={[0, 100]} />
-                        <Tooltip
-                          formatter={(value: number) => [`${value.toFixed(1)}%`, "Aprovação"]}
-                        />
-                        <Area
-                          type="monotone"
-                          dataKey="approved_rate"
-                          stroke="#10b981"
-                          strokeWidth={3}
-                          fillOpacity={1}
-                          fill="url(#colorRate)"
-                        />
+                        <Tooltip contentStyle={tooltipStyle}
+                          formatter={(v: number) => [`${v.toFixed(1)}%`, "Aprovação"]} />
+                        <Area type="monotone" dataKey="approved_rate" stroke="#10b981"
+                          strokeWidth={2.5} fill="url(#gApproval)" />
                       </AreaChart>
                     </ResponsiveContainer>
-                  ) : (
-                    <EmptyChart />
-                  )}
+                  ) : <EmptyChart />}
                 </div>
-                <div className="mt-4 p-4 bg-green-50 rounded-xl border border-green-100">
-                  <p className="text-xs font-bold text-green-700 uppercase">Taxa Atual</p>
-                  <p className="text-2xl font-black text-green-700 mt-1">
-                    {summary.approvalRate.toFixed(1)}%
-                  </p>
-                  <p className="text-xs text-green-600 mt-1">
-                    {summary.approvedOrders} pedidos aprovados de {summary.totalOrders} total
-                  </p>
+                <div className="mt-3 p-3 bg-green-50 rounded-xl">
+                  <p className="text-xs font-bold text-green-700">Taxa no período</p>
+                  <p className="text-2xl font-black text-green-700">{pct(s.approvalRate)}</p>
+                  <p className="text-[11px] text-green-600">{s.approvedOrders} de {s.totalOrders} pedidos</p>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Status dos pedidos */}
+            <Card className="border-none shadow-md">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Status dos Pedidos</CardTitle>
+                <CardDescription className="text-xs">Todos os pedidos do período</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {ordersByStatus.length > 0 ? (
+                  <div className="space-y-0">
+                    {ordersByStatus.map((s: any, i: number) => (
+                      <div key={s.name} className="flex items-center justify-between py-2 border-b last:border-0">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: C[i % C.length] }} />
+                          <span className="text-xs font-medium text-gray-700">{s.name}</span>
+                        </div>
+                        <Badge variant="secondary" className="text-[10px] font-bold">{s.value}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                ) : <EmptyChart msg="Sem dados de status" />}
+              </CardContent>
+            </Card>
+
+            {/* Métodos de pagamento */}
+            <Card className="border-none shadow-md">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Métodos de Pagamento</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {paymentMethods.length > 0 ? (
+                  <div className="h-44">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={paymentMethods} innerRadius={45} outerRadius={70}
+                          paddingAngle={4} dataKey="value">
+                          {paymentMethods.map((_: any, i: number) => (
+                            <Cell key={i} fill={C[i % C.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip contentStyle={tooltipStyle}
+                          formatter={(v: number, _: any, p: any) => [v, p.payload.name]} />
+                        <Legend iconSize={8} iconType="circle"
+                          formatter={(v) => <span className="text-[11px] font-medium">{v}</span>} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : <EmptyChart msg="Sem dados de pagamento" />}
               </CardContent>
             </Card>
           </div>
 
-          {/* Pedidos por período */}
-          <Card className="shadow-md border-none">
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <ShoppingCart className="w-5 h-5 text-blue-600" /> Volume de Pedidos
-              </CardTitle>
-              <CardDescription>Quantidade de pedidos no período.</CardDescription>
+          {/* Frete e descontos ao longo do tempo */}
+          <Card className="border-none shadow-md">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Frete vs. Descontos ao Longo do Tempo</CardTitle>
+              <CardDescription className="text-xs">Comparativo de custos de frete e descontos aplicados.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-[250px] w-full">
-                {hasMonthlyData ? (
+              <div className="h-52">
+                {hasTimeline ? (
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={monthly}>
+                    <LineChart data={monthly} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                      <XAxis
-                        dataKey="label"
-                        axisLine={false}
-                        tickLine={false}
-                        tick={{ fontSize: 11, fontWeight: 700 }}
-                      />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-                      <Tooltip
-                        cursor={{ fill: "#f8fafc" }}
-                        contentStyle={{ borderRadius: "12px", border: "none" }}
-                        formatter={(value: number) => [value, "Pedidos"]}
-                      />
-                      <Bar dataKey="orders" fill="#8b5cf6" radius={[6, 6, 0, 0]} barSize={35} />
-                    </BarChart>
+                      <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 600 }} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }}
+                        tickFormatter={v => `R$${(v/1000).toFixed(1)}k`} />
+                      <Tooltip contentStyle={tooltipStyle}
+                        formatter={(v: number, name: string) =>
+                          [R(v), name === "shipping" ? "Frete" : "Descontos"]} />
+                      <Line type="monotone" dataKey="shipping"  stroke="#f59e0b" strokeWidth={2} dot={false} name="shipping" />
+                      <Line type="monotone" dataKey="discounts" stroke="#ef4444" strokeWidth={2} dot={false} name="discounts" strokeDasharray="4 2" />
+                      <Legend iconType="line"
+                        formatter={(v) => <span className="text-[11px]">{v === "shipping" ? "Frete" : "Descontos"}</span>} />
+                    </LineChart>
                   </ResponsiveContainer>
-                ) : (
-                  <EmptyChart />
-                )}
+                ) : <EmptyChart />}
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* ABA CLIENTES */}
-        <TabsContent value="clientes" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* Fidelização */}
-            <Card className="shadow-md border-none">
-              <CardHeader>
-                <CardTitle className="text-base">Fidelização de Clientes</CardTitle>
-                <CardDescription>Novos vs. recorrentes no período.</CardDescription>
+        {/* ════════════════════════════════════════════════════════════════════
+            ABA PRODUTOS
+        ════════════════════════════════════════════════════════════════════ */}
+        <TabsContent value="produtos" className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+            {/* Top por receita */}
+            <Card className="border-none shadow-md">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <DollarSign className="w-4 h-4 text-blue-600" /> Top 10 por Receita
+                </CardTitle>
+                <CardDescription className="text-xs">Produtos que mais geraram faturamento.</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="h-[250px]">
-                  {demographics.retention.some((r: any) => r.value > 0) ? (
+                {topProducts.length > 0 ? (
+                  <div className="h-72">
                     <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={demographics.retention}
-                          innerRadius={60}
-                          outerRadius={90}
-                          paddingAngle={5}
-                          dataKey="value"
-                        >
-                          {demographics.retention.map((_: any, index: number) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip formatter={(value: number) => [value, "Clientes"]} />
-                        <Legend />
-                      </PieChart>
+                      <BarChart data={topProducts} layout="vertical" margin={{ left: 0, right: 16 }}>
+                        <XAxis type="number" hide />
+                        <YAxis dataKey="name" type="category" axisLine={false} tickLine={false}
+                          tick={{ fontSize: 10, fontWeight: 600 }} width={130}
+                          tickFormatter={v => v.length > 18 ? v.substring(0, 18) + "…" : v} />
+                        <Tooltip contentStyle={tooltipStyle}
+                          formatter={(v: number) => [R(v), "Receita"]} />
+                        <Bar dataKey="revenue" fill="#3b82f6" radius={[0,4,4,0]} barSize={16} />
+                      </BarChart>
                     </ResponsiveContainer>
-                  ) : (
-                    <EmptyChart message="Sem dados de clientes no período" />
-                  )}
-                </div>
+                  </div>
+                ) : <EmptyChart msg="Sem dados de produtos" />}
               </CardContent>
             </Card>
 
-            {/* Gênero */}
-            <Card className="shadow-md border-none">
-              <CardHeader>
-                <CardTitle className="text-base">Perfil por Gênero</CardTitle>
-                <CardDescription>Distribuição dos clientes cadastrados.</CardDescription>
+            {/* Top por quantidade */}
+            <Card className="border-none shadow-md">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Package className="w-4 h-4 text-purple-600" /> Top 10 por Quantidade
+                </CardTitle>
+                <CardDescription className="text-xs">Produtos mais vendidos em unidades.</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="h-[250px]">
-                  {demographics.gender.length > 0 ? (
+                {topProductsByQty.length > 0 ? (
+                  <div className="h-72">
                     <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={demographics.gender}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          outerRadius={90}
-                          dataKey="value"
-                        >
-                          {demographics.gender.map((_: any, index: number) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip formatter={(value: number) => [value, "Clientes"]} />
-                        <Legend />
-                      </PieChart>
+                      <BarChart data={topProductsByQty} layout="vertical" margin={{ left: 0, right: 16 }}>
+                        <XAxis type="number" hide />
+                        <YAxis dataKey="name" type="category" axisLine={false} tickLine={false}
+                          tick={{ fontSize: 10, fontWeight: 600 }} width={130}
+                          tickFormatter={v => v.length > 18 ? v.substring(0, 18) + "…" : v} />
+                        <Tooltip contentStyle={tooltipStyle}
+                          formatter={(v: number) => [v, "Unidades"]} />
+                        <Bar dataKey="qty" fill="#8b5cf6" radius={[0,4,4,0]} barSize={16} />
+                      </BarChart>
                     </ResponsiveContainer>
-                  ) : (
-                    <EmptyChart message="Dados de gênero não informados" />
-                  )}
-                </div>
+                  </div>
+                ) : <EmptyChart msg="Sem dados de produtos" />}
               </CardContent>
-            </Card>
-
-            {/* Sugestão de IA */}
-            <Card className="bg-[#0B1221] text-white shadow-xl border-none p-6 flex flex-col justify-between">
-              <div className="space-y-4">
-                <div className="h-12 w-12 rounded-2xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-900/40">
-                  <Zap className="w-6 h-6" />
-                </div>
-                <h3 className="text-xl font-black italic uppercase tracking-tighter">Sugestão de IA</h3>
-                <p className="text-gray-400 text-sm leading-relaxed">
-                  {summary.recurringUsers > 0 && summary.newUsers > 0
-                    ? `Você tem ${summary.recurringUsers} clientes recorrentes e ${summary.newUsers} novos. `
-                    : ""}
-                  Sua taxa de recorrência pode ser otimizada.{" "}
-                  <strong>Ação sugerida:</strong> Criar um cupom de 10% OFF exclusivo para clientes
-                  que não compram há mais de 30 dias.
-                </p>
-              </div>
-              <Button className="w-full mt-6 bg-blue-600 hover:bg-blue-700 font-bold h-12 uppercase text-xs">
-                Ativar Campanha
-              </Button>
             </Card>
           </div>
 
-          {/* Métodos de Pagamento */}
-          {demographics.paymentMethods.length > 0 && (
-            <Card className="shadow-md border-none">
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <CreditCard className="w-4 h-4 text-blue-600" /> Métodos de Pagamento
-                </CardTitle>
+          {/* Tabela top 10 */}
+          {topProducts.length > 0 && (
+            <Card className="border-none shadow-md">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Ranking Completo — Top 10 Produtos</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="h-[250px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={demographics.paymentMethods} layout="vertical" margin={{ left: 20 }}>
-                      <XAxis type="number" hide />
-                      <YAxis
-                        dataKey="name"
-                        type="category"
-                        axisLine={false}
-                        tickLine={false}
-                        tick={{ fontSize: 12, fontWeight: 700 }}
-                        width={80}
-                      />
-                      <Tooltip cursor={{ fill: "#f1f5f9" }} formatter={(v: number) => [v, "Pedidos"]} />
-                      <Bar dataKey="value" fill="#f59e0b" radius={[0, 4, 4, 0]} barSize={20} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                <div className="space-y-0">
+                  {topProducts.map((p: any, i: number) => (
+                    <div key={p.name} className="flex items-center gap-3 py-2.5 border-b last:border-0">
+                      <span className={cn(
+                        "w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shrink-0",
+                        i === 0 ? "bg-amber-100 text-amber-700" :
+                        i === 1 ? "bg-gray-100 text-gray-600" :
+                        i === 2 ? "bg-orange-100 text-orange-700" : "bg-gray-50 text-gray-400"
+                      )}>
+                        {i + 1}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-gray-800 truncate">{p.name}</p>
+                        <div className="flex items-center gap-3 mt-0.5">
+                          <span className="text-[10px] text-muted-foreground">{p.qty} un.</span>
+                          <ProgressBar value={p.revenue} max={topProducts[0]?.revenue ?? 1} color={C[i % C.length]} />
+                        </div>
+                      </div>
+                      <span className="text-xs font-bold text-gray-900 shrink-0">{R(p.revenue)}</span>
+                    </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>
           )}
         </TabsContent>
 
-        {/* ABA LOGÍSTICA */}
-        <TabsContent value="logistica" className="space-y-6">
-          <Card className="shadow-md border-none">
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <MapIcon className="w-5 h-5 text-blue-600" /> Distribuição por Região (Top Estados)
+        {/* ════════════════════════════════════════════════════════════════════
+            ABA CLIENTES
+        ════════════════════════════════════════════════════════════════════ */}
+        <TabsContent value="clientes" className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+            {/* Novos vs Recorrentes */}
+            <Card className="border-none shadow-md">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Fidelização</CardTitle>
+                <CardDescription className="text-xs">Novos vs. clientes recorrentes.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="h-44">
+                  {demo.retention.some((r: any) => r.value > 0) ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={demo.retention} innerRadius={45} outerRadius={70}
+                          paddingAngle={4} dataKey="value">
+                          {demo.retention.map((_: any, i: number) => (
+                            <Cell key={i} fill={C[i % C.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip contentStyle={tooltipStyle} />
+                        <Legend iconSize={8} iconType="circle"
+                          formatter={v => <span className="text-[11px]">{v}</span>} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : <EmptyChart msg="Sem dados de clientes" />}
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <div className="bg-blue-50 rounded-lg p-2 text-center">
+                    <p className="text-lg font-black text-blue-700">{s.newUsers}</p>
+                    <p className="text-[10px] text-blue-600 font-medium">Novos</p>
+                  </div>
+                  <div className="bg-green-50 rounded-lg p-2 text-center">
+                    <p className="text-lg font-black text-green-700">{s.recurringUsers}</p>
+                    <p className="text-[10px] text-green-600 font-medium">Recorrentes</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Gênero */}
+            <Card className="border-none shadow-md">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Perfil por Gênero</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-44">
+                  {demo.gender.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={demo.gender} cx="50%" cy="50%" outerRadius={70}
+                          labelLine={false} dataKey="value">
+                          {demo.gender.map((_: any, i: number) => (
+                            <Cell key={i} fill={C[i % C.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip contentStyle={tooltipStyle} />
+                        <Legend iconSize={8} iconType="circle"
+                          formatter={v => <span className="text-[11px]">{v}</span>} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : <EmptyChart msg="Dados de gênero não informados" />}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Uso de cupons */}
+            <Card className="border-none shadow-md">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Uso de Cupons</CardTitle>
+                <CardDescription className="text-xs">Pedidos com e sem desconto.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="h-44">
+                  {demo.couponUsage.some((c: any) => c.value > 0) ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={demo.couponUsage} innerRadius={45} outerRadius={70}
+                          paddingAngle={4} dataKey="value">
+                          <Cell fill="#10b981" />
+                          <Cell fill="#e5e7eb" />
+                        </Pie>
+                        <Tooltip contentStyle={tooltipStyle} />
+                        <Legend iconSize={8} iconType="circle"
+                          formatter={v => <span className="text-[11px]">{v}</span>} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : <EmptyChart msg="Sem dados de cupons" />}
+                </div>
+                <div className="mt-2 p-2 bg-gray-50 rounded-lg text-center">
+                  <p className="text-lg font-black text-gray-800">{pct(s.couponUsageRate)}</p>
+                  <p className="text-[10px] text-muted-foreground">dos pedidos usaram cupom</p>
+                  <p className="text-[10px] text-rose-600 font-semibold mt-0.5">Total descontado: {R(s.totalDiscount)}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Tiers de fidelidade */}
+          {demo.tiers.length > 0 && (
+            <Card className="border-none shadow-md">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Star className="w-4 h-4 text-amber-500" /> Distribuição por Tier de Fidelidade
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-52">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={demo.tiers} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 600 }} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
+                      <Tooltip contentStyle={tooltipStyle}
+                        formatter={(v: number) => [v, "Clientes"]} />
+                      <Bar dataKey="value" radius={[5,5,0,0]} barSize={40}>
+                        {demo.tiers.map((_: any, i: number) => (
+                          <Cell key={i} fill={C[i % C.length]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Card de sugestão */}
+          <Card className="bg-gradient-to-br from-[#0B1221] to-[#1a2540] text-white border-none shadow-xl">
+            <CardContent className="pt-6 pb-6">
+              <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
+                <div className="h-12 w-12 rounded-2xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-900/40 shrink-0">
+                  <Zap className="w-6 h-6" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-black uppercase tracking-tight">Sugestão de Campanha</h3>
+                  <p className="text-gray-400 text-sm mt-1 leading-relaxed">
+                    Você tem <strong className="text-white">{s.recurringUsers} clientes recorrentes</strong> e{" "}
+                    <strong className="text-white">{s.newUsers} novos</strong> no período.{" "}
+                    {s.couponUsageRate < 30
+                      ? `Apenas ${pct(s.couponUsageRate)} dos pedidos usaram cupom — ative uma campanha de desconto para aumentar a conversão.`
+                      : `Com ${pct(s.couponUsageRate)} de uso de cupons, considere criar um programa de fidelidade para reduzir a dependência de descontos.`}
+                  </p>
+                </div>
+                <Button className="bg-blue-600 hover:bg-blue-700 font-bold shrink-0 uppercase text-xs h-10 px-6">
+                  Ativar Campanha
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ════════════════════════════════════════════════════════════════════
+            ABA LOGÍSTICA
+        ════════════════════════════════════════════════════════════════════ */}
+        <TabsContent value="logistica" className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+            {/* Gráfico de regiões */}
+            <Card className="lg:col-span-2 border-none shadow-md">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-blue-600" /> Pedidos por Estado
+                </CardTitle>
+                <CardDescription className="text-xs">Baseado nos endereços de entrega.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="h-80">
+                  {demo.regions.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={demo.regions} layout="vertical" margin={{ left: 0, right: 60 }}>
+                        <XAxis type="number" hide />
+                        <YAxis dataKey="name" type="category" axisLine={false} tickLine={false}
+                          tick={{ fontSize: 11, fontWeight: 700 }} width={35} />
+                        <Tooltip contentStyle={tooltipStyle}
+                          formatter={(v: number, name: string) =>
+                            [name === "orders" ? v : R(v), name === "orders" ? "Pedidos" : "Receita"]} />
+                        <Bar dataKey="orders" fill="#3b82f6" radius={[0,4,4,0]} barSize={18}
+                          label={{ position: "right", fontSize: 10, fontWeight: 700, fill: "#374151" }} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : <EmptyChart msg="Sem dados de região" />}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Lista de regiões com receita */}
+            <Card className="border-none shadow-md">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Receita por Estado</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {demo.regions.length > 0 ? (
+                  <div className="space-y-0">
+                    {demo.regions.slice(0, 10).map((r: any, i: number) => (
+                      <div key={r.name} className="py-2 border-b last:border-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: C[i % C.length] }} />
+                            <span className="text-xs font-bold text-gray-700">{r.name}</span>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground">{r.orders} pedidos</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <ProgressBar value={r.orders} max={maxRegionOrders} color={C[i % C.length]} />
+                          <span className="text-[10px] font-bold text-gray-800 ml-2 shrink-0">{R(r.revenue)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : <EmptyChart msg="Sem dados de região" />}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Métricas de frete */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card className="border-none shadow-md">
+              <CardContent className="pt-5">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 bg-amber-50 rounded-lg"><Truck className="w-4 h-4 text-amber-600" /></div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Frete Total</p>
+                </div>
+                <p className="text-2xl font-black text-gray-900">{R(s.totalShipping)}</p>
+                <p className="text-xs text-muted-foreground mt-1">no período selecionado</p>
+              </CardContent>
+            </Card>
+            <Card className="border-none shadow-md">
+              <CardContent className="pt-5">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 bg-blue-50 rounded-lg"><Target className="w-4 h-4 text-blue-600" /></div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Frete Médio</p>
+                </div>
+                <p className="text-2xl font-black text-gray-900">{R(s.avgShipping)}</p>
+                <p className="text-xs text-muted-foreground mt-1">por pedido</p>
+              </CardContent>
+            </Card>
+            <Card className="border-none shadow-md">
+              <CardContent className="pt-5">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 bg-purple-50 rounded-lg"><ShoppingCart className="w-4 h-4 text-purple-600" /></div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Frete / Receita</p>
+                </div>
+                <p className="text-2xl font-black text-gray-900">
+                  {s.totalRevenue > 0 ? pct((s.totalShipping / s.totalRevenue) * 100) : "0%"}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">representação do frete na receita</p>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* ════════════════════════════════════════════════════════════════════
+            ABA HORÁRIOS
+        ════════════════════════════════════════════════════════════════════ */}
+        <TabsContent value="tempo" className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+
+          {/* Heatmap por hora */}
+          <Card className="border-none shadow-md">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Clock className="w-4 h-4 text-blue-600" /> Pedidos por Hora do Dia
               </CardTitle>
-              <CardDescription>
-                Baseado nos endereços de entrega dos pedidos no período.
+              <CardDescription className="text-xs">
+                Identifique os horários de pico para campanhas e atendimento.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-[400px] w-full">
-                {demographics.regions.length > 0 ? (
+              <div className="h-56">
+                {hourlyHeatmap.some((h: any) => h.orders > 0) ? (
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={demographics.regions}
-                      layout="vertical"
-                      margin={{ left: 50 }}
-                    >
-                      <XAxis type="number" hide />
-                      <YAxis
-                        dataKey="name"
-                        type="category"
-                        axisLine={false}
-                        tickLine={false}
-                        tick={{ fontSize: 12, fontWeight: 700 }}
-                      />
-                      <Tooltip
-                        cursor={{ fill: "#f1f5f9" }}
-                        formatter={(v: number) => [v, "Pedidos"]}
-                      />
-                      <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={20} />
+                    <BarChart data={hourlyHeatmap} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey="label" axisLine={false} tickLine={false}
+                        tick={{ fontSize: 9, fontWeight: 600 }} interval={1} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
+                      <Tooltip contentStyle={tooltipStyle}
+                        formatter={(v: number, name: string) =>
+                          [name === "orders" ? v : R(v), name === "orders" ? "Pedidos" : "Receita"]} />
+                      <Bar dataKey="orders" radius={[3,3,0,0]} barSize={18}>
+                        {hourlyHeatmap.map((h: any, i: number) => (
+                          <Cell key={i}
+                            fill={`rgba(59,130,246,${0.15 + (h.orders / maxHour) * 0.85})`} />
+                        ))}
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
-                ) : (
-                  <EmptyChart message="Sem dados de região disponíveis" />
-                )}
+                ) : <EmptyChart msg="Sem dados de horário" />}
+              </div>
+              {/* Top 3 horários */}
+              {hourlyHeatmap.some((h: any) => h.orders > 0) && (
+                <div className="mt-4 flex gap-3">
+                  {[...hourlyHeatmap]
+                    .sort((a: any, b: any) => b.orders - a.orders)
+                    .slice(0, 3)
+                    .map((h: any, i: number) => (
+                      <div key={h.label} className={cn(
+                        "flex-1 rounded-xl p-3 text-center",
+                        i === 0 ? "bg-blue-600 text-white" : "bg-gray-50"
+                      )}>
+                        <p className={cn("text-lg font-black", i === 0 ? "text-white" : "text-gray-800")}>{h.label}</p>
+                        <p className={cn("text-[10px] font-medium", i === 0 ? "text-blue-100" : "text-muted-foreground")}>
+                          {h.orders} pedidos
+                        </p>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Heatmap por dia da semana */}
+          <Card className="border-none shadow-md">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-purple-600" /> Pedidos por Dia da Semana
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Descubra os dias mais movimentados para planejar estoque e equipe.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-52">
+                {weekdayHeatmap.some((d: any) => d.orders > 0) ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={weekdayHeatmap} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false}
+                        tick={{ fontSize: 11, fontWeight: 700 }} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
+                      <Tooltip contentStyle={tooltipStyle}
+                        formatter={(v: number, name: string) =>
+                          [name === "orders" ? v : R(v), name === "orders" ? "Pedidos" : "Receita"]} />
+                      <Bar dataKey="orders" radius={[5,5,0,0]} barSize={40}>
+                        {weekdayHeatmap.map((d: any, i: number) => (
+                          <Cell key={i} fill={C[i % C.length]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : <EmptyChart msg="Sem dados por dia da semana" />}
               </div>
             </CardContent>
           </Card>

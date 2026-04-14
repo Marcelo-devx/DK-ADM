@@ -17,155 +17,158 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    // Obter período do corpo da requisição
     let period = "12m";
     try {
       const body = await req.json();
       period = body.period || "12m";
-    } catch (_) {
-      // usa default
-    }
-    
+    } catch (_) {}
+
     console.log("[analytics-bi] Processando período:", period);
 
-    // Calcular data inicial baseada no período
     const now = new Date();
     const startDate = new Date();
-    
     switch (period) {
-      case "7d":
-        startDate.setDate(now.getDate() - 7);
-        break;
-      case "30d":
-        startDate.setDate(now.getDate() - 30);
-        break;
-      case "90d":
-        startDate.setDate(now.getDate() - 90);
-        break;
-      case "6m":
-        startDate.setMonth(now.getMonth() - 6);
-        break;
-      case "12m":
-        startDate.setFullYear(now.getFullYear() - 1);
-        break;
-      case "24m":
-        startDate.setFullYear(now.getFullYear() - 2);
-        break;
-      default:
-        startDate.setFullYear(now.getFullYear() - 1);
+      case "7d":   startDate.setDate(now.getDate() - 7); break;
+      case "30d":  startDate.setDate(now.getDate() - 30); break;
+      case "90d":  startDate.setDate(now.getDate() - 90); break;
+      case "6m":   startDate.setMonth(now.getMonth() - 6); break;
+      case "12m":  startDate.setFullYear(now.getFullYear() - 1); break;
+      case "24m":  startDate.setFullYear(now.getFullYear() - 2); break;
+      default:     startDate.setFullYear(now.getFullYear() - 1);
     }
 
-    // Buscar pedidos filtrados por período
-    const { data: ordersRaw, error: ordersError } = await supabaseAdmin
+    // ── Buscar dados em paralelo ──────────────────────────────────────────────
+    const [ordersRes, itemsRes, profilesRes] = await Promise.all([
+      supabaseAdmin
         .from('orders')
-        .select('total_price, created_at, status, payment_method, shipping_cost, coupon_discount, user_id, shipping_address')
-        .neq('status', 'Cancelado')
+        .select('id, total_price, shipping_cost, coupon_discount, created_at, status, payment_method, user_id, shipping_address')
         .gte('created_at', startDate.toISOString())
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: true }),
 
-    if (ordersError) {
-      console.error("[analytics-bi] Erro ao buscar pedidos:", ordersError);
-    }
+      supabaseAdmin
+        .from('order_items')
+        .select('order_id, item_id, name_at_purchase, quantity, price_at_purchase, item_type')
+        .gte('created_at', startDate.toISOString()),
 
-    const orders = ordersRaw || [];
-
-    // Buscar perfis (dados demográficos)
-    const { data: profilesRaw, error: profilesError } = await supabaseAdmin
+      supabaseAdmin
         .from('profiles')
-        .select('id, gender, date_of_birth, state, city');
+        .select('id, gender, state, city, created_at, tier_id, current_tier_name'),
+    ]);
 
-    if (profilesError) {
-      console.error("[analytics-bi] Erro ao buscar perfis:", profilesError);
-    }
+    const allOrders = ordersRes.data || [];
+    const allItems  = itemsRes.data  || [];
+    const profiles  = profilesRes.data || [];
 
-    const profiles = profilesRaw || [];
+    // Pedidos sem cancelados para métricas de receita
+    const orders = allOrders.filter(o => o.status !== 'Cancelado');
 
-    // --- PROCESSAMENTO DE BI ---
-    
-    // Determinar agrupamento baseado no período
+    console.log("[analytics-bi] Dados brutos:", { allOrders: allOrders.length, items: allItems.length, profiles: profiles.length });
+
+    // ── Agrupamento temporal ──────────────────────────────────────────────────
     let groupBy = 'month';
-    if (period === "7d" || period === "30d") {
-      groupBy = 'day';
-    } else if (period === "90d" || period === "6m") {
-      groupBy = 'week';
-    }
+    if (period === "7d" || period === "30d") groupBy = 'day';
+    else if (period === "90d" || period === "6m") groupBy = 'week';
 
-    // Gerar array de períodos para o gráfico
     const generatePeriodArray = () => {
       const periods = [];
       const current = new Date(startDate);
-      
       while (current <= now) {
-        let periodKey;
-        let periodLabel;
-        
+        let key, label;
         if (groupBy === 'day') {
-          periodKey = current.toISOString().substring(0, 10);
-          periodLabel = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(current);
+          key   = current.toISOString().substring(0, 10);
+          label = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(current);
         } else if (groupBy === 'week') {
-          const weekStart = new Date(current);
-          const weekEnd = new Date(current);
-          weekEnd.setDate(weekEnd.getDate() + 6);
-          periodKey = `${weekStart.toISOString().substring(0, 10)}_to_${weekEnd.toISOString().substring(0, 10)}`;
-          periodLabel = `${weekStart.getDate()}/${weekStart.getMonth() + 1}`;
+          const ws = new Date(current);
+          key   = ws.toISOString().substring(0, 10);
+          label = `${ws.getDate()}/${ws.getMonth() + 1}`;
         } else {
-          periodKey = current.toISOString().substring(0, 7);
-          periodLabel = new Intl.DateTimeFormat('pt-BR', { month: 'short', year: '2-digit' }).format(current);
+          key   = current.toISOString().substring(0, 7);
+          label = new Intl.DateTimeFormat('pt-BR', { month: 'short', year: '2-digit' }).format(current);
         }
-        
-        // Evitar duplicatas
-        if (!periods.find(p => p.key === periodKey)) {
-          periods.push({ key: periodKey, label: periodLabel });
-        }
-        
-        if (groupBy === 'day') {
-          current.setDate(current.getDate() + 1);
-        } else if (groupBy === 'week') {
-          current.setDate(current.getDate() + 7);
-        } else {
-          current.setMonth(current.getMonth() + 1);
-        }
+        if (!periods.find(p => p.key === key)) periods.push({ key, label });
+        if (groupBy === 'day')        current.setDate(current.getDate() + 1);
+        else if (groupBy === 'week')  current.setDate(current.getDate() + 7);
+        else                          current.setMonth(current.getMonth() + 1);
       }
-      
       return periods;
     };
 
     const periodArray = generatePeriodArray();
 
-    // Agrupar dados por período
-    const statsByPeriod = periodArray.map(p => {
-      let filtered;
-      
-      if (groupBy === 'day') {
-        filtered = orders.filter(o => o.created_at && o.created_at.startsWith(p.key));
-      } else if (groupBy === 'week') {
-        const [start, end] = p.key.split('_to_');
-        filtered = orders.filter(o => o.created_at && o.created_at >= start && o.created_at <= end + 'T23:59:59');
-      } else {
-        filtered = orders.filter(o => o.created_at && o.created_at.startsWith(p.key));
+    const getOrderKey = (o) => {
+      if (groupBy === 'day')  return o.created_at?.substring(0, 10);
+      if (groupBy === 'week') {
+        // encontrar semana correspondente
+        const d = o.created_at?.substring(0, 10);
+        const found = periodArray.find(p => d >= p.key && d <= (() => {
+          const e = new Date(p.key); e.setDate(e.getDate() + 6); return e.toISOString().substring(0, 10);
+        })());
+        return found?.key;
       }
-      
-      const revenue = filtered.reduce((acc, o) => acc + Number(o.total_price || 0), 0);
-      const approved = filtered.filter(o => o.status === 'Finalizada' || o.status === 'Pago' || o.status === 'Entregue').length;
-      
+      return o.created_at?.substring(0, 7);
+    };
+
+    // ── Série temporal ────────────────────────────────────────────────────────
+    const monthly = periodArray.map(p => {
+      const filtered = orders.filter(o => getOrderKey(o) === p.key);
+      const revenue  = filtered.reduce((s, o) => s + Number(o.total_price || 0), 0);
+      const shipping = filtered.reduce((s, o) => s + Number(o.shipping_cost || 0), 0);
+      const discounts= filtered.reduce((s, o) => s + Number(o.coupon_discount || 0), 0);
+      const approved = filtered.filter(o => ['Finalizada','Pago','Entregue'].includes(o.status)).length;
       return {
-        month: p.key,
+        key: p.key,
         label: p.label,
-        revenue: Math.round(revenue * 100) / 100,
-        orders: filtered.length,
-        approved_rate: filtered.length > 0 ? Math.round((approved / filtered.length) * 1000) / 10 : 0
+        revenue:       Math.round(revenue * 100) / 100,
+        orders:        filtered.length,
+        shipping:      Math.round(shipping * 100) / 100,
+        discounts:     Math.round(discounts * 100) / 100,
+        approved_rate: filtered.length > 0 ? Math.round((approved / filtered.length) * 1000) / 10 : 0,
       };
     });
 
-    // 2. DEMOGRAFIA - Gênero
-    const genderStats = profiles.reduce((acc, p) => {
-        const g = p.gender || 'Não Informado';
-        acc[g] = (acc[g] || 0) + 1;
-        return acc;
+    // ── Status dos pedidos ────────────────────────────────────────────────────
+    const statusCount = allOrders.reduce((acc, o) => {
+      acc[o.status] = (acc[o.status] || 0) + 1;
+      return acc;
+    }, {});
+    const ordersByStatus = Object.entries(statusCount)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+
+    // ── Métodos de pagamento ──────────────────────────────────────────────────
+    const paymentCount = orders.reduce((acc, o) => {
+      const m = o.payment_method || 'Outros';
+      acc[m] = (acc[m] || 0) + 1;
+      return acc;
+    }, {});
+    const paymentMethods = Object.entries(paymentCount)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+
+    // ── Top produtos ──────────────────────────────────────────────────────────
+    // Filtrar itens apenas dos pedidos no período (não cancelados)
+    const validOrderIds = new Set(orders.map(o => o.id));
+    const validItems = allItems.filter(i => validOrderIds.has(i.order_id));
+
+    const productMap = validItems.reduce((acc, item) => {
+      const key = item.name_at_purchase || 'Desconhecido';
+      if (!acc[key]) acc[key] = { name: key, qty: 0, revenue: 0 };
+      acc[key].qty     += Number(item.quantity || 0);
+      acc[key].revenue += Number(item.price_at_purchase || 0) * Number(item.quantity || 0);
+      return acc;
     }, {});
 
-    // 3. REGIÕES - extrair do shipping_address dos pedidos (mais preciso)
-    const regionFromOrders = orders.reduce((acc, o) => {
+    const topProducts = Object.values(productMap)
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 10)
+      .map(p => ({ ...p, revenue: Math.round(p.revenue * 100) / 100 }));
+
+    const topProductsByQty = Object.values(productMap)
+      .sort((a, b) => b.qty - a.qty)
+      .slice(0, 10);
+
+    // ── Regiões ───────────────────────────────────────────────────────────────
+    const regionMap = orders.reduce((acc, o) => {
       let state = null;
       if (o.shipping_address) {
         try {
@@ -174,77 +177,121 @@ serve(async (req) => {
         } catch (_) {}
       }
       if (!state) return acc;
-      acc[state] = (acc[state] || 0) + 1;
+      if (!acc[state]) acc[state] = { name: state, orders: 0, revenue: 0 };
+      acc[state].orders  += 1;
+      acc[state].revenue += Number(o.total_price || 0);
       return acc;
     }, {});
 
-    // Fallback para perfis se não houver dados nos pedidos
-    const regionStats = Object.keys(regionFromOrders).length > 0 
-      ? regionFromOrders 
-      : profiles.reduce((acc, p) => {
-          const s = p.state || 'Outros';
-          acc[s] = (acc[s] || 0) + 1;
-          return acc;
-        }, {});
+    const regions = Object.values(regionMap)
+      .sort((a, b) => b.orders - a.orders)
+      .slice(0, 12)
+      .map(r => ({ ...r, revenue: Math.round(r.revenue * 100) / 100 }));
 
-    // 4. NOVOS VS RECORRENTES
-    const userOrderCounts = orders.reduce((acc, o) => {
-        if (!o.user_id) return acc;
-        acc[o.user_id] = (acc[o.user_id] || 0) + 1;
-        return acc;
-    }, {});
-    
-    const recurring = Object.values(userOrderCounts).filter(count => count > 1).length;
-    const newUsers = Object.values(userOrderCounts).filter(count => count === 1).length;
-
-    // 5. MÉTODOS DE PAGAMENTO
-    const paymentStats = orders.reduce((acc, o) => {
-      const method = o.payment_method || 'Outros';
-      acc[method] = (acc[method] || 0) + 1;
+    // ── Gênero ────────────────────────────────────────────────────────────────
+    const genderMap = profiles.reduce((acc, p) => {
+      const g = p.gender || 'Não Informado';
+      acc[g] = (acc[g] || 0) + 1;
       return acc;
     }, {});
+    const gender = Object.entries(genderMap).map(([name, value]) => ({ name, value }));
 
-    // 6. TOTAIS GERAIS
-    const totalRevenue = orders.reduce((acc, o) => acc + Number(o.total_price || 0), 0);
-    const totalOrders = orders.length;
-    const approvedOrders = orders.filter(o => o.status === 'Finalizada' || o.status === 'Pago' || o.status === 'Entregue').length;
-
-    console.log("[analytics-bi] Dados processados:", { 
-      periods: periodArray.length, 
-      orders: orders.length, 
-      profiles: profiles.length,
-      totalRevenue: Math.round(totalRevenue)
-    });
-
-    // Ordenar regiões por valor
-    const sortedRegions = Object.entries(regionStats)
+    // ── Tiers de fidelidade ───────────────────────────────────────────────────
+    const tierMap = profiles.reduce((acc, p) => {
+      const t = p.current_tier_name || 'Bronze';
+      acc[t] = (acc[t] || 0) + 1;
+      return acc;
+    }, {});
+    const tiers = Object.entries(tierMap)
       .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 10);
+      .sort((a, b) => b.value - a.value);
+
+    // ── Novos vs Recorrentes ──────────────────────────────────────────────────
+    const userOrderCounts = orders.reduce((acc, o) => {
+      if (!o.user_id) return acc;
+      acc[o.user_id] = (acc[o.user_id] || 0) + 1;
+      return acc;
+    }, {});
+    const recurringUsers = Object.values(userOrderCounts).filter(c => c > 1).length;
+    const newUsers       = Object.values(userOrderCounts).filter(c => c === 1).length;
+
+    // ── Heatmap por hora do dia ───────────────────────────────────────────────
+    const hourMap = Array.from({ length: 24 }, (_, h) => ({ hour: h, orders: 0, revenue: 0 }));
+    orders.forEach(o => {
+      const h = new Date(o.created_at).getHours();
+      hourMap[h].orders  += 1;
+      hourMap[h].revenue += Number(o.total_price || 0);
+    });
+    const hourlyHeatmap = hourMap.map(h => ({
+      ...h,
+      label: `${String(h.hour).padStart(2, '0')}h`,
+      revenue: Math.round(h.revenue * 100) / 100,
+    }));
+
+    // ── Heatmap por dia da semana ─────────────────────────────────────────────
+    const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    const dayMap = Array.from({ length: 7 }, (_, d) => ({ day: d, name: dayNames[d], orders: 0, revenue: 0 }));
+    orders.forEach(o => {
+      const d = new Date(o.created_at).getDay();
+      dayMap[d].orders  += 1;
+      dayMap[d].revenue += Number(o.total_price || 0);
+    });
+    const weekdayHeatmap = dayMap.map(d => ({ ...d, revenue: Math.round(d.revenue * 100) / 100 }));
+
+    // ── Uso de cupons ─────────────────────────────────────────────────────────
+    const withCoupon    = orders.filter(o => Number(o.coupon_discount || 0) > 0).length;
+    const withoutCoupon = orders.length - withCoupon;
+    const totalDiscount = orders.reduce((s, o) => s + Number(o.coupon_discount || 0), 0);
+
+    // ── Sumário geral ─────────────────────────────────────────────────────────
+    const totalRevenue   = orders.reduce((s, o) => s + Number(o.total_price || 0), 0);
+    const totalShipping  = orders.reduce((s, o) => s + Number(o.shipping_cost || 0), 0);
+    const totalOrders    = orders.length;
+    const approvedOrders = orders.filter(o => ['Finalizada','Pago','Entregue'].includes(o.status)).length;
+
+    const summary = {
+      totalRevenue:    Math.round(totalRevenue * 100) / 100,
+      totalOrders,
+      approvedOrders,
+      approvalRate:    totalOrders > 0 ? Math.round((approvedOrders / totalOrders) * 1000) / 10 : 0,
+      avgTicket:       totalOrders > 0 ? Math.round((totalRevenue / totalOrders) * 100) / 100 : 0,
+      totalShipping:   Math.round(totalShipping * 100) / 100,
+      avgShipping:     totalOrders > 0 ? Math.round((totalShipping / totalOrders) * 100) / 100 : 0,
+      totalDiscount:   Math.round(totalDiscount * 100) / 100,
+      newUsers,
+      recurringUsers,
+      couponUsageRate: totalOrders > 0 ? Math.round((withCoupon / totalOrders) * 1000) / 10 : 0,
+      withCoupon,
+      withoutCoupon,
+    };
+
+    console.log("[analytics-bi] Sumário:", summary);
 
     return new Response(JSON.stringify({
-        monthly: statsByPeriod,
-        summary: {
-          totalRevenue: Math.round(totalRevenue * 100) / 100,
-          totalOrders,
-          approvedOrders,
-          approvalRate: totalOrders > 0 ? Math.round((approvedOrders / totalOrders) * 1000) / 10 : 0,
-          avgTicket: totalOrders > 0 ? Math.round((totalRevenue / totalOrders) * 100) / 100 : 0,
-          newUsers,
-          recurringUsers: recurring,
-        },
-        demographics: {
-            gender: Object.entries(genderStats).map(([name, value]) => ({ name, value })),
-            regions: sortedRegions,
-            retention: [
-                { name: 'Novos', value: newUsers },
-                { name: 'Recorrentes', value: recurring }
-            ],
-            paymentMethods: Object.entries(paymentStats).map(([name, value]) => ({ name, value }))
-        }
+      monthly,
+      summary,
+      topProducts,
+      topProductsByQty,
+      ordersByStatus,
+      paymentMethods,
+      hourlyHeatmap,
+      weekdayHeatmap,
+      demographics: {
+        gender,
+        regions,
+        tiers,
+        retention: [
+          { name: 'Novos', value: newUsers },
+          { name: 'Recorrentes', value: recurringUsers },
+        ],
+        couponUsage: [
+          { name: 'Com Cupom', value: withCoupon },
+          { name: 'Sem Cupom', value: withoutCoupon },
+        ],
+      },
     }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200,
     });
 
   } catch (error) {
