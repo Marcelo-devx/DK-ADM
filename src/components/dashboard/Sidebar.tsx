@@ -200,9 +200,6 @@ const Sidebar = () => {
       <NavLink to="/dashboard/user-admin" className={navLinkClass}>
         {({ isActive }) => (<><ShieldAlert className={iconClass("text-red-600", isActive)} />Admin Usuários</>)}
       </NavLink>
-      <NavLink to="/dashboard/investigar-usuario" className={navLinkClass}>
-        {({ isActive }) => (<><Search className={iconClass("text-orange-600", isActive)} />Investigar Usuário</>)}
-      </NavLink>
       <NavLink to="/dashboard/order-admin" className={navLinkClass}>
         {({ isActive }) => (<><FileEdit className={iconClass("text-red-600", isActive)} />Admin Pedidos</>)}
       </NavLink>
@@ -246,6 +243,12 @@ const Sidebar = () => {
       <p className={sectionTitleClass}>Operação</p>
       <NavLink to="/dashboard/orders" className={navLinkClass}>
         {({ isActive }) => (<><DollarSign className={iconClass("text-green-600", isActive)} />Pedidos (Clientes)</>)}
+      </NavLink>
+      <NavLink to="/dashboard/user-admin" className={navLinkClass}>
+        {({ isActive }) => (<><ShieldAlert className={iconClass("text-red-600", isActive)} />Admin Usuários</>)}
+      </NavLink>
+      <NavLink to="/dashboard/order-admin" className={navLinkClass}>
+        {({ isActive }) => (<><FileEdit className={iconClass("text-red-600", isActive)} />Admin Pedidos</>)}
       </NavLink>
       <NavLink to="/dashboard/donations" className={navLinkClass}>
         {({ isActive }) => (<><Heart className={iconClass("text-rose-600", isActive)} />Doações</>)}
@@ -295,17 +298,14 @@ const Sidebar = () => {
 
       {/* ADMINISTRAÇÃO */}
       <p className={sectionTitleClass}>Administração</p>
-      <NavLink to="/dashboard/user-admin" className={navLinkClass}>
-        {({ isActive }) => (<><ShieldAlert className={iconClass("text-red-600", isActive)} />Admin Usuários</>)}
-      </NavLink>
       <NavLink to="/dashboard/investigar-usuario" className={navLinkClass}>
         {({ isActive }) => (<><Search className={iconClass("text-orange-600", isActive)} />Investigar Usuário</>)}
       </NavLink>
-      <NavLink to="/dashboard/order-admin" className={navLinkClass}>
-        {({ isActive }) => (<><FileEdit className={iconClass("text-red-600", isActive)} />Admin Pedidos</>)}
-      </NavLink>
       <NavLink to="/dashboard/reativar-pedidos" className={navLinkClass}>
         {({ isActive }) => (<><RefreshCw className={iconClass("text-green-600", isActive)} />Reativar Pedidos</>)}
+      </NavLink>
+      <NavLink to="/dashboard/cleanup-orders" className={navLinkClass}>
+        {({ isActive }) => (<><Trash2 className={iconClass("text-red-500", isActive)} />Limpeza de Pedidos</>)}
       </NavLink>
     </>
   );
