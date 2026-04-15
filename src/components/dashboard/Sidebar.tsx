@@ -86,6 +86,9 @@ const Sidebar = () => {
       <NavLink to="/dashboard" end className={navLinkClass}>
         {({ isActive }) => (<><Home className={iconClass("text-slate-500", isActive)} />Dashboard</>)}
       </NavLink>
+      <NavLink to="/dashboard/xk9-relatorio-financeiro" className={navLinkClass}>
+        {({ isActive }) => (<><FileSearch className={iconClass("text-emerald-600", isActive)} />Relatório Financeiro</>)}
+      </NavLink>
       <NavLink to="/dashboard/analytics" className={navLinkClass}>
         {({ isActive }) => (<><BarChart3 className={iconClass("text-slate-500", isActive)} />Analytics</>)}
       </NavLink>
@@ -94,6 +97,7 @@ const Sidebar = () => {
       </NavLink>
 
       {/* OPERAÇÃO */}
+
       <p className={sectionTitleClass}>Operação</p>
       <NavLink to="/dashboard/orders" className={navLinkClass}>
         {({ isActive }) => (<><DollarSign className={iconClass("text-green-600", isActive)} />Pedidos (Clientes)</>)}
