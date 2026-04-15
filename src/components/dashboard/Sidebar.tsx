@@ -317,8 +317,7 @@ const Sidebar = () => {
     <>
       <div className="p-6 pb-2 flex items-center justify-between">
         <h1 className="text-2xl font-black tracking-tight flex items-center gap-2 text-gray-900">
-          <Box className="w-8 h-8 fill-primary text-primary" />
-          Tabacaria
+          <img src="/assets/logo-dk.png" alt="DON DK" className="h-8 w-8 object-contain" />
         </h1>
         <button
           className="lg:hidden p-1 rounded-lg hover:bg-gray-200 text-gray-500"
