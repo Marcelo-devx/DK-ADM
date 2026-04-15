@@ -26,8 +26,25 @@ const MetaflowInsightsPage = () => {
   const { data: insights, isLoading, refetch, isRefetching, isError, error } = useQuery({
     queryKey: ["actionable-insights-final"],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke("actionable-insights");
-      if (error) throw error;
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(
+        "https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1/actionable-insights",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpybG96aGh2d3FmbWp0a212dWtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDU2NjQsImV4cCI6MjA2NzkyMTY2NH0.Do5c1-TKqpyZTJeX_hLbw1SU40CbwXfCIC-pPpcD_JM",
+            "Authorization": `Bearer ${session?.access_token ?? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpybG96aGh2d3FmbWp0a212dWtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDU2NjQsImV4cCI6MjA2NzkyMTY2NH0.Do5c1-TKqpyZTJeX_hLbw1SU40CbwXfCIC-pPpcD_JM"}`,
+          },
+          body: JSON.stringify({}),
+        }
+      );
+      if (!res.ok) {
+        const errText = await res.text().catch(() => res.statusText);
+        throw new Error(`Erro ${res.status}: ${errText}`);
+      }
+      const data = await res.json();
+      if (data?.error) throw new Error(data.error);
       return data;
     },
     refetchInterval: 300000
