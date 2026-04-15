@@ -110,21 +110,11 @@ export function OrderEditModal({ order, isOpen, onClose }: OrderEditModalProps) 
   const handleSave = async () => {
     setIsLoading(true);
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-
-      const res = await fetch('https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1/admin-update-order', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpybG96aGh2d3FmbWp0a212dWtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDU2NjQsImV4cCI6MjA2NzkyMTY2NH0.Do5c1-TKqpyZTJeX_hLbw1SU40CbwXfCIC-pPpcD_JM',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ orderId: order.id, updates, reason: "Edição manual pelo admin" }),
+      const { data, error } = await supabase.functions.invoke('admin-update-order', {
+        body: { orderId: order.id, updates, reason: "Edição manual pelo admin" },
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || 'Erro ao atualizar pedido');
+      if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
 
       showSuccess(`Pedido #${order.id} atualizado com sucesso!`);
