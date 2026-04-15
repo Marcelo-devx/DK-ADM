@@ -20,12 +20,12 @@ import {
   RefreshCw,
   Search,
   CheckCircle2,
-  XCircle,
   Package,
   AlertTriangle,
   StickyNote,
   Loader2,
   ShoppingBag,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -62,14 +62,10 @@ export default function ReativarPedidos() {
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<number | null>(null);
 
-  // Dialog de reativação
   const [reativarDialog, setReativarDialog] = useState<Order | null>(null);
-
-  // Dialog de observação
   const [obsDialog, setObsDialog] = useState<Order | null>(null);
   const [obsText, setObsText] = useState("");
 
-  // Carrega pedidos 666 e 693 automaticamente ao abrir
   useEffect(() => {
     loadOrders([666, 693]);
   }, []);
@@ -85,7 +81,6 @@ export default function ReativarPedidos() {
       if (error) throw error;
       if (!ordersData || ordersData.length === 0) {
         toast.error("Nenhum pedido encontrado com esses IDs.");
-        setLoading(false);
         return;
       }
 
@@ -101,11 +96,9 @@ export default function ReativarPedidos() {
         items: (itemsData || []).filter((i: any) => i.order_id === o.id),
       }));
 
-      // Mescla com os pedidos já carregados (evita duplicatas)
       setOrders((prev) => {
         const existingIds = prev.map((p) => p.id);
         const novos = merged.filter((m) => !existingIds.includes(m.id));
-        // Atualiza os existentes
         const atualizados = prev.map((p) => {
           const novo = merged.find((m) => m.id === p.id);
           return novo || p;
@@ -129,59 +122,22 @@ export default function ReativarPedidos() {
     setSearchId("");
   }
 
+  function removeOrder(id: number) {
+    setOrders((prev) => prev.filter((o) => o.id !== id));
+  }
+
   async function reativarPedido(order: Order) {
     setActionLoading(order.id);
     try {
-      // 1. Atualiza status do pedido para "Pago"
-      const { error: updateError } = await supabase
-        .from("orders")
-        .update({ status: "Pago" })
-        .eq("id", order.id);
+      // Uma única chamada RPC — atômica, sem N roundtrips
+      const { data, error } = await supabase.rpc("reativar_pedido", {
+        p_order_id: order.id,
+      });
 
-      if (updateError) throw updateError;
-
-      // 2. Deduz estoque de cada item (foi devolvido quando cancelou)
-      for (const item of order.items) {
-        if (item.variant_id) {
-          // Produto com variante
-          const { data: variant, error: variantError } = await supabase
-            .from("product_variants")
-            .select("stock_quantity")
-            .eq("id", item.variant_id)
-            .single();
-
-          if (variantError) throw variantError;
-
-          const novoEstoque = Math.max(0, (variant.stock_quantity || 0) - item.quantity);
-          const { error: stockError } = await supabase
-            .from("product_variants")
-            .update({ stock_quantity: novoEstoque })
-            .eq("id", item.variant_id);
-
-          if (stockError) throw stockError;
-        } else if (item.item_id) {
-          // Produto sem variante
-          const { data: product, error: productError } = await supabase
-            .from("products")
-            .select("stock_quantity")
-            .eq("id", item.item_id)
-            .single();
-
-          if (productError) throw productError;
-
-          const novoEstoque = Math.max(0, (product.stock_quantity || 0) - item.quantity);
-          const { error: stockError } = await supabase
-            .from("products")
-            .update({ stock_quantity: novoEstoque })
-            .eq("id", item.item_id);
-
-          if (stockError) throw stockError;
-        }
-      }
+      if (error) throw new Error(error.message);
+      if (data && !data.success) throw new Error(data.error || "Erro ao reativar");
 
       toast.success(`✅ Pedido #${order.id} reativado como "Pago" e estoque deduzido!`);
-
-      // Recarrega o pedido atualizado
       await loadOrders([order.id]);
     } catch (err: any) {
       toast.error(err.message || `Erro ao reativar pedido #${order.id}`);
@@ -212,7 +168,7 @@ export default function ReativarPedidos() {
       toast.success(`✅ Observação adicionada ao pedido #${order.id}!`);
       await loadOrders([order.id]);
     } catch (err: any) {
-      toast.error(err.message || `Erro ao salvar observação`);
+      toast.error(err.message || "Erro ao salvar observação");
     } finally {
       setActionLoading(null);
       setObsDialog(null);
@@ -252,7 +208,7 @@ export default function ReativarPedidos() {
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar outro pedido por ID..."
+            placeholder="Buscar pedido por ID..."
             value={searchId}
             onChange={(e) => setSearchId(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSearch()}
@@ -300,13 +256,23 @@ export default function ReativarPedidos() {
                     </span>
                   )}
                 </div>
-                <div className="text-right">
-                  <div className="text-lg font-bold">{formatCurrency(Number(order.total_price))}</div>
-                  <div className="text-xs text-muted-foreground">{formatDate(order.created_at)}</div>
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <div className="text-lg font-bold">{formatCurrency(Number(order.total_price))}</div>
+                    <div className="text-xs text-muted-foreground">{formatDate(order.created_at)}</div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-muted-foreground hover:text-foreground"
+                    onClick={() => removeOrder(order.id)}
+                    title="Remover da lista"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
 
-              {/* Observação atual */}
               {order.delivery_info && (
                 <div className="mt-2 flex items-start gap-2 text-sm bg-yellow-50 border border-yellow-200 rounded-md px-3 py-2">
                   <StickyNote className="h-4 w-4 text-yellow-600 mt-0.5 shrink-0" />
@@ -358,20 +324,16 @@ export default function ReativarPedidos() {
                     className="gap-2 bg-green-600 hover:bg-green-700 text-white"
                   >
                     {actionLoading === order.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <><Loader2 className="h-4 w-4 animate-spin" /> Reativando...</>
                     ) : (
-                      <CheckCircle2 className="h-4 w-4" />
+                      <><CheckCircle2 className="h-4 w-4" /> Reativar como Pago + Deduzir Estoque</>
                     )}
-                    Reativar como Pago + Deduzir Estoque
                   </Button>
                 )}
 
                 <Button
                   variant="outline"
-                  onClick={() => {
-                    setObsDialog(order);
-                    setObsText("");
-                  }}
+                  onClick={() => { setObsDialog(order); setObsText(""); }}
                   disabled={actionLoading === order.id}
                   className="gap-2"
                 >
@@ -408,7 +370,6 @@ export default function ReativarPedidos() {
                   </li>
                   <li>
                     <strong>Deduzir o estoque</strong> dos {reativarDialog?.items.length} item(s) do pedido
-                    (pois foi devolvido quando cancelou)
                   </li>
                 </ul>
                 <div className="bg-amber-50 border border-amber-200 rounded-md p-3 text-sm text-amber-800 flex gap-2">
@@ -450,7 +411,7 @@ export default function ReativarPedidos() {
                   <Label htmlFor="obs-input">Nova observação</Label>
                   <Textarea
                     id="obs-input"
-                    placeholder='Ex: Troca, Entrega especial, etc.'
+                    placeholder="Ex: Troca, Entrega especial, etc."
                     value={obsText}
                     onChange={(e) => setObsText(e.target.value)}
                     rows={3}
