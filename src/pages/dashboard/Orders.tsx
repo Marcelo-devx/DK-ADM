@@ -847,6 +847,79 @@ const OrdersPage = () => {
         </div>
       </div>
 
+      {/* Active Filter Chips */}
+      {(searchOrderId || searchCPF || searchClientName || searchEmail || startDate || endDate || statusFilter !== "all" || deliveryStatusFilter !== "all" || readyToShipOnly) && (
+        <div className="flex flex-wrap items-center gap-2 mb-3 px-1">
+          <span className="text-xs text-muted-foreground font-medium">Filtros ativos:</span>
+
+          {searchOrderId && (
+            <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
+              # ID: {searchOrderId}
+              <button onClick={() => setSearchOrderId("")} className="hover:text-blue-900 ml-0.5"><X className="w-3 h-3" /></button>
+            </span>
+          )}
+          {searchCPF && (
+            <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
+              CPF: {searchCPF}
+              <button onClick={() => setSearchCPF("")} className="hover:text-blue-900 ml-0.5"><X className="w-3 h-3" /></button>
+            </span>
+          )}
+          {searchClientName && (
+            <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
+              Nome: {searchClientName}
+              <button onClick={() => setSearchClientName("")} className="hover:text-blue-900 ml-0.5"><X className="w-3 h-3" /></button>
+            </span>
+          )}
+          {searchEmail && (
+            <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
+              Email: {searchEmail}
+              <button onClick={() => setSearchEmail("")} className="hover:text-blue-900 ml-0.5"><X className="w-3 h-3" /></button>
+            </span>
+          )}
+          {startDate && (
+            <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
+              De: {new Date(startDate + "T00:00:00").toLocaleDateString("pt-BR")}
+              <button onClick={() => setStartDate("")} className="hover:text-purple-900 ml-0.5"><X className="w-3 h-3" /></button>
+            </span>
+          )}
+          {endDate && (
+            <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
+              Até: {new Date(endDate + "T00:00:00").toLocaleDateString("pt-BR")}
+              <button onClick={() => setEndDate("")} className="hover:text-purple-900 ml-0.5"><X className="w-3 h-3" /></button>
+            </span>
+          )}
+          {statusFilter !== "all" && (
+            <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 border border-green-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
+              Status: {statusFilter}
+              <button onClick={() => setStatusFilter("all")} className="hover:text-green-900 ml-0.5"><X className="w-3 h-3" /></button>
+            </span>
+          )}
+          {deliveryStatusFilter !== "all" && (
+            <span className="inline-flex items-center gap-1 bg-sky-50 text-sky-700 border border-sky-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
+              Entrega: {deliveryStatusFilter}
+              <button onClick={() => setDeliveryStatusFilter("all")} className="hover:text-sky-900 ml-0.5"><X className="w-3 h-3" /></button>
+            </span>
+          )}
+          {readyToShipOnly && (
+            <span className="inline-flex items-center gap-1 bg-blue-600 text-white rounded-full px-2.5 py-0.5 text-xs font-medium">
+              Prontos p/ Envio
+              <button onClick={() => setReadyToShipOnly(false)} className="hover:opacity-80 ml-0.5"><X className="w-3 h-3" /></button>
+            </span>
+          )}
+
+          <button
+            onClick={() => {
+              setSearchOrderId(""); setSearchCPF(""); setSearchClientName(""); setSearchEmail("");
+              setStartDate(""); setEndDate(""); setStatusFilter("all"); setDeliveryStatusFilter("all");
+              setReadyToShipOnly(false);
+            }}
+            className="text-xs text-red-500 hover:text-red-700 underline ml-1"
+          >
+            Limpar tudo
+          </button>
+        </div>
+      )}
+
       <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
         {/* Container com scroll vertical fixo para a tabela */}
         <div className="max-h-[calc(100vh-280px)] overflow-y-auto relative">
