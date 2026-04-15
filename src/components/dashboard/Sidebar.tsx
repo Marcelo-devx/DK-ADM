@@ -324,7 +324,7 @@ const Sidebar = () => {
           <X className="w-5 h-5" />
         </button>
         <div className="w-20 h-20 rounded-2xl bg-white shadow-md border border-gray-200 flex items-center justify-center overflow-hidden">
-          <img src="/assets/logo-dk.png" alt="DON DK" className="w-16 h-16 object-contain" />
+          <img src="/favicon.ico" alt="DON DK" className="w-12 h-12 object-contain" />
         </div>
         <p className="mt-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Painel Administrativo</p>
       </div>
