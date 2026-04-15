@@ -148,15 +148,29 @@ const AnalyticsPage = () => {
   const { data: bi, isLoading, isError, error, refetch, isFetching, failureCount } = useQuery({
     queryKey: ["bi-v2", period],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke("analytics-bi", {
-        body: { period },
-      });
-      if (error) throw new Error(error.message || "Erro ao carregar analytics");
-      if (!data)  throw new Error("Nenhum dado retornado");
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(
+        "https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1/analytics-bi",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpybG96aGh2d3FmbWp0a212dWtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDU2NjQsImV4cCI6MjA2NzkyMTY2NH0.Do5c1-TKqpyZTJeX_hLbw1SU40CbwXfCIC-pPpcD_JM",
+            "Authorization": `Bearer ${session?.access_token ?? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpybG96aGh2d3FmbWp0a212dWtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDU2NjQsImV4cCI6MjA2NzkyMTY2NH0.Do5c1-TKqpyZTJeX_hLbw1SU40CbwXfCIC-pPpcD_JM"}`,
+          },
+          body: JSON.stringify({ period }),
+        }
+      );
+      if (!res.ok) {
+        const errText = await res.text().catch(() => res.statusText);
+        throw new Error(`Erro ${res.status}: ${errText}`);
+      }
+      const data = await res.json();
+      if (data?.error) throw new Error(data.error);
       return data;
     },
-    retry: 5,
-    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 15000),
+    retry: 3,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
     refetchInterval: 300_000,
   });
 
