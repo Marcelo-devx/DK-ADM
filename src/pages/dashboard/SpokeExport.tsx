@@ -79,35 +79,18 @@ const fetchOrdersToExport = async (): Promise<Order[]> => {
   // Filtra apenas user_ids válidos (remove nulls)
   const userIds = [...new Set(orders.map(o => o.user_id).filter(id => id !== null))];
   
-  // Busca profiles apenas para user_ids válidos
+  // Busca profiles com email incluído
   const { data: profiles, error: profilesError } = await supabase
     .from("profiles")
-    .select("id, first_name, last_name, phone")
+    .select("id, first_name, last_name, phone, email")
     .in("id", userIds as string[]);
 
   if (profilesError) throw new Error(profilesError.message);
   const profilesMap = new Map(profiles.map(p => [p.id, p]));
 
-  // Busca emails via edge function dedicada (igual ao PrintLabels)
-  let emailsMap = new Map<string, string>();
-  try {
-    const { data: emailsData, error: emailsError } = await supabase.functions.invoke("get-users-emails", {
-      body: { user_ids: userIds }
-    });
-    if (emailsError) {
-      console.error("get-users-emails retornou erro:", emailsError);
-    } else if (Array.isArray(emailsData)) {
-      emailsData.forEach((u: any) => {
-        if (u.id && u.email) emailsMap.set(u.id, u.email);
-      });
-    }
-  } catch (e) {
-    console.error("get-users-emails edge function falhou:", e);
-  }
-
   return orders.map(order => ({
     ...order,
-    email: order.user_id ? emailsMap.get(order.user_id) || "" : "",
+    email: order.user_id ? (profilesMap.get(order.user_id) as any)?.email || "" : "",
     profiles: order.user_id ? profilesMap.get(order.user_id) || null : null,
   })) as Order[];
 };
