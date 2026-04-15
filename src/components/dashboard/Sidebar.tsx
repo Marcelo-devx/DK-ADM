@@ -283,6 +283,9 @@ const Sidebar = () => {
       <NavLink to="/dashboard/clients" className={navLinkClass}>
         {({ isActive }) => (<><Users className={iconClass("text-cyan-600", isActive)} />Base de Clientes</>)}
       </NavLink>
+      <NavLink to="/dashboard/import-clients" className={navLinkClass}>
+        {({ isActive }) => (<><UserCheck className={iconClass("text-cyan-700", isActive)} />Importar Clientes</>)}
+      </NavLink>
       {/* FIDELIDADE & PROMOÇÕES */}
       <p className={sectionTitleClass}>Fidelidade & Promoções</p>
       <NavLink to="/dashboard/club-dk" className={navLinkClass}>
@@ -307,11 +310,6 @@ const Sidebar = () => {
         {({ isActive }) => (<><Gift className={iconClass("text-pink-400", isActive)} />Pontos Manual</>)}
       </NavLink>
 
-      {/* ADMINISTRAÇÃO */}
-      <p className={sectionTitleClass}>Administração</p>
-      <NavLink to="/dashboard/cleanup-orders" className={navLinkClass}>
-        {({ isActive }) => (<><Trash2 className={iconClass("text-red-500", isActive)} />Limpeza de Pedidos</>)}
-      </NavLink>
     </>
   );
 
