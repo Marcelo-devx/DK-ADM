@@ -644,29 +644,6 @@ const AnalyticsPage = () => {
             </Card>
           )}
 
-          {/* Card de sugestão */}
-          <Card className="bg-gradient-to-br from-[#0B1221] to-[#1a2540] text-white border-none shadow-xl">
-            <CardContent className="pt-6 pb-6">
-              <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
-                <div className="h-12 w-12 rounded-2xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-900/40 shrink-0">
-                  <Zap className="w-6 h-6" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-black uppercase tracking-tight">Sugestão de Campanha</h3>
-                  <p className="text-gray-400 text-sm mt-1 leading-relaxed">
-                    Você tem <strong className="text-white">{s.recurringUsers} clientes recorrentes</strong> e{" "}
-                    <strong className="text-white">{s.newUsers} novos</strong> no período.{" "}
-                    {s.couponUsageRate < 30
-                      ? `Apenas ${pct(s.couponUsageRate)} dos pedidos usaram cupom — ative uma campanha de desconto para aumentar a conversão.`
-                      : `Com ${pct(s.couponUsageRate)} de uso de cupons, considere criar um programa de fidelidade para reduzir a dependência de descontos.`}
-                  </p>
-                </div>
-                <Button className="bg-blue-600 hover:bg-blue-700 font-bold shrink-0 uppercase text-xs h-10 px-6">
-                  Ativar Campanha
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
         </TabsContent>
 
         {/* ════════════════════════════════════════════════════════════════════
