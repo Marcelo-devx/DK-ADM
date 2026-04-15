@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Save, MapPin, DollarSign, Tag } from "lucide-react";
+import { Loader2, Save, MapPin, DollarSign, Tag, Search } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -31,6 +31,7 @@ interface OrderEditModalProps {
 export function OrderEditModal({ order, isOpen, onClose }: OrderEditModalProps) {
   const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(false);
+  const [isCepLoading, setIsCepLoading] = useState(false);
 
   const [updates, setUpdates] = useState<any>({});
 
@@ -72,6 +73,38 @@ export function OrderEditModal({ order, isOpen, onClose }: OrderEditModalProps) 
         [field]: value,
       },
     }));
+  };
+
+  const handleCepLookup = async () => {
+    const cep = (updates.shipping_address?.cep || '').replace(/\D/g, '');
+    if (cep.length !== 8) {
+      showError('CEP inválido. Digite 8 dígitos.');
+      return;
+    }
+    setIsCepLoading(true);
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      const data = await res.json();
+      if (data.erro) {
+        showError('CEP não encontrado.');
+        return;
+      }
+      setUpdates((prev: any) => ({
+        ...prev,
+        shipping_address: {
+          ...prev.shipping_address,
+          street: data.logradouro || prev.shipping_address?.street || '',
+          neighborhood: data.bairro || prev.shipping_address?.neighborhood || '',
+          city: data.localidade || prev.shipping_address?.city || '',
+          state: data.uf || prev.shipping_address?.state || '',
+          cep: data.cep || prev.shipping_address?.cep || '',
+        },
+      }));
+    } catch {
+      showError('Erro ao consultar CEP.');
+    } finally {
+      setIsCepLoading(false);
+    }
   };
 
   const handleSave = async () => {
@@ -236,12 +269,29 @@ export function OrderEditModal({ order, isOpen, onClose }: OrderEditModalProps) 
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div className="space-y-1">
                 <Label htmlFor="cep" className="text-xs">CEP</Label>
-                <Input
-                  id="cep"
-                  value={updates.shipping_address?.cep || ""}
-                  onChange={(e) => handleAddressChange("cep", e.target.value)}
-                  placeholder="00000-000"
-                />
+                <div className="flex gap-2">
+                  <Input
+                    id="cep"
+                    value={updates.shipping_address?.cep || ""}
+                    onChange={(e) => handleAddressChange("cep", e.target.value)}
+                    placeholder="00000-000"
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={handleCepLookup}
+                    disabled={isCepLoading}
+                    title="Buscar endereço pelo CEP"
+                  >
+                    {isCepLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Search className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
               </div>
               <div className="space-y-1 sm:col-span-2">
                 <Label htmlFor="street" className="text-xs">Rua / Logradouro</Label>
