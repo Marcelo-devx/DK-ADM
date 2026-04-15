@@ -15,8 +15,11 @@ serve(async (req) => {
   }
 
   try {
+    console.log('[admin-cancel-order] Request received')
+
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
+      console.warn('[admin-cancel-order] Missing Authorization header')
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -52,6 +55,8 @@ serve(async (req) => {
       console.error('[admin-cancel-order] Erro ao buscar profile:', profileError.message)
     }
 
+    console.log('[admin-cancel-order] Authenticated user', { userId: user.id, role: profile?.role })
+
     if (!profile || !ALLOWED_ROLES.includes(profile.role)) {
       return new Response(JSON.stringify({ error: 'Forbidden - Acesso negado. Apenas Admin e Gerente Geral podem cancelar pedidos.' }), {
         status: 403,
@@ -83,6 +88,7 @@ serve(async (req) => {
     }
 
     if (currentOrder.status === 'Cancelado') {
+      console.log('[admin-cancel-order] Pedido já estava cancelado', { orderId })
       return new Response(JSON.stringify({ success: true, message: 'Pedido já está cancelado' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
@@ -121,7 +127,7 @@ serve(async (req) => {
       console.error('[admin-cancel-order] Erro ao inserir histórico:', historyError.message)
     }
 
-    console.log(`[admin-cancel-order] Pedido ${orderId} cancelado por ${user.id} (${profile.role}). Motivo: ${reason}`)
+    console.log('[admin-cancel-order] Pedido cancelado com sucesso', { orderId, userId: user.id, role: profile.role })
 
     return new Response(JSON.stringify({ success: true, message: 'Pedido cancelado com sucesso' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
