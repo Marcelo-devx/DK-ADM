@@ -640,7 +640,8 @@ const OrdersPage = () => {
 
   return (
     <div className="relative pb-24">
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+      {/* Header Row */}
+      <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <h1 className="text-3xl font-bold flex items-center gap-2">
             <DollarSign className="h-7 w-7 text-green-600" />
@@ -655,119 +656,115 @@ const OrdersPage = () => {
           <span className="text-sm text-muted-foreground font-medium">Pedidos</span>
           <span className="text-2xl font-bold text-slate-900">{filteredOrdersCount}</span>
         </Card>
+      </div>
 
-        <div className="flex flex-wrap items-center gap-3 bg-white p-2 rounded-xl border shadow-sm">
-          {/* Campos de Busca Específicos */}
-          <div className="flex flex-wrap items-center gap-2 flex-1">
-            {/* ID do Pedido */}
-            <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-9 overflow-hidden w-28">
-              <span className="absolute left-3 text-xs text-gray-400 font-medium">#</span>
-              <input
-                type="text"
-                placeholder="ID"
-                value={searchOrderId}
-                onChange={(e) => setSearchOrderId(e.target.value.replace(/\D/g, ""))}
-                className="pl-6 pr-3 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0 font-mono"
-              />
-              {searchOrderId && (
-                <button
-                  onClick={() => setSearchOrderId("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
-                  title="Limpar"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-
-            {/* CPF */}
-            <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-9 overflow-hidden w-32">
-              <input
-                type="text"
-                placeholder="CPF"
-                value={searchCPF}
-                onChange={(e) => setSearchCPF(e.target.value.replace(/\D/g, ""))}
-                className="pl-3 pr-8 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0"
-              />
-              {searchCPF && (
-                <button
-                  onClick={() => setSearchCPF("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
-                  title="Limpar"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-
-            {/* Nome do Cliente */}
-            <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-9 overflow-hidden flex-1 min-w-[200px]">
-              <input
-                type="text"
-                placeholder="Nome do cliente"
-                value={searchClientName}
-                onChange={(e) => setSearchClientName(e.target.value)}
-                className="pl-3 pr-8 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0"
-              />
-              {searchClientName && (
-                <button
-                  onClick={() => setSearchClientName("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
-                  title="Limpar"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-
-            {/* Email */}
-            <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-9 overflow-hidden flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Email do cliente"
-                value={searchEmail}
-                onChange={(e) => setSearchEmail(e.target.value)}
-                className="pl-10 pr-8 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0"
-              />
-              {searchEmail && (
-                <button
-                  onClick={() => setSearchEmail("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
-                  title="Limpar"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
+      {/* Filter Panel */}
+      <div className="bg-white rounded-xl border shadow-sm p-4 mb-4 space-y-3">
+        {/* Row 1: Search fields */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* ID do Pedido */}
+          <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-9 overflow-hidden w-28">
+            <span className="absolute left-3 text-xs text-gray-400 font-medium">#</span>
+            <input
+              type="text"
+              placeholder="ID"
+              value={searchOrderId}
+              onChange={(e) => setSearchOrderId(e.target.value.replace(/\D/g, ""))}
+              className="pl-6 pr-3 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0 font-mono"
+            />
+            {searchOrderId && (
+              <button
+                onClick={() => setSearchOrderId("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
           </div>
 
+          {/* CPF */}
+          <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-9 overflow-hidden w-36">
+            <input
+              type="text"
+              placeholder="CPF"
+              value={searchCPF}
+              onChange={(e) => setSearchCPF(e.target.value.replace(/\D/g, ""))}
+              className="pl-3 pr-8 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0"
+            />
+            {searchCPF && (
+              <button
+                onClick={() => setSearchCPF("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+
+          {/* Nome do Cliente */}
+          <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-9 overflow-hidden flex-1 min-w-[200px]">
+            <input
+              type="text"
+              placeholder="Nome do cliente"
+              value={searchClientName}
+              onChange={(e) => setSearchClientName(e.target.value)}
+              className="pl-3 pr-8 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0"
+            />
+            {searchClientName && (
+              <button
+                onClick={() => setSearchClientName("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+
+          {/* Email */}
+          <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-9 overflow-hidden flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Email do cliente"
+              value={searchEmail}
+              onChange={(e) => setSearchEmail(e.target.value)}
+              className="pl-10 pr-8 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0"
+            />
+            {searchEmail && (
+              <button
+                onClick={() => setSearchEmail("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Row 2: Date + Status filters + Clear */}
+        <div className="flex flex-wrap items-center gap-2">
           {/* Filtros de Data */}
-          <div className="flex items-center gap-2">
-            <Input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="h-9 w-36 text-xs"
-              placeholder="Data Inicial"
-            />
-            <span className="text-muted-foreground text-xs">a</span>
-            <Input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="h-9 w-36 text-xs"
-              placeholder="Data Final"
-            />
-          </div>
+          <Input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="h-9 w-36 text-xs"
+          />
+          <span className="text-muted-foreground text-xs">a</span>
+          <Input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="h-9 w-36 text-xs"
+          />
 
-          {/* Filtro de Status do Pedido (NOVO) */}
+          {/* Status do Pedido */}
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="h-9 w-40 text-xs">
+            <SelectTrigger className="h-9 w-44 text-xs">
               <SelectValue placeholder="Status Pedido" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="all">Todos os status</SelectItem>
               <SelectItem value="Pendente">Pendente</SelectItem>
               <SelectItem value="Pago">Pago</SelectItem>
               <SelectItem value="Em preparo">Em preparo</SelectItem>
@@ -776,13 +773,13 @@ const OrdersPage = () => {
             </SelectContent>
           </Select>
 
-          {/* Filtro de Status de Entrega (NOVO) */}
+          {/* Status de Entrega */}
           <Select value={deliveryStatusFilter} onValueChange={setDeliveryStatusFilter}>
-            <SelectTrigger className="h-9 w-40 text-xs">
+            <SelectTrigger className="h-9 w-48 text-xs">
               <SelectValue placeholder="Status Entrega" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="all">Todos os status</SelectItem>
               <SelectItem value="Pendente">Pendente</SelectItem>
               <SelectItem value="Aguardando Coleta">Aguardando Coleta</SelectItem>
               <SelectItem value="Aguardando Validação">Aguardando Validação</SelectItem>
@@ -796,7 +793,7 @@ const OrdersPage = () => {
             <Button
               variant="ghost"
               size="sm"
-              className="h-9 text-xs"
+              className="h-9 text-xs text-red-500 hover:text-red-600 hover:bg-red-50"
               onClick={() => {
                 setStartDate("");
                 setEndDate("");
@@ -807,14 +804,17 @@ const OrdersPage = () => {
                 setSearchClientName("");
                 setSearchEmail("");
               }}
-              title="Limpar todos os filtros"
             >
               <FilterX className="w-3 h-3 mr-1" />
-              Limpar
+              Limpar filtros
             </Button>
           )}
 
-          <Button 
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Action Buttons */}
+          <Button
             onClick={() => setIsCreateOrderOpen(true)}
             className="bg-green-600 hover:bg-green-700 font-bold h-9 px-4 gap-2"
           >
@@ -822,26 +822,26 @@ const OrdersPage = () => {
             Criar Pedido Manual
           </Button>
 
-          <Button 
-            variant={readyToShipOnly ? "default" : "outline"} 
-            size="sm" 
+          <Button
+            variant={readyToShipOnly ? "default" : "outline"}
+            size="sm"
             className={cn("h-9 gap-2 text-xs", readyToShipOnly && "bg-blue-600")}
             onClick={() => {
-                setReadyToShipOnly(!readyToShipOnly);
-                setSelectedIds(new Set()); 
+              setReadyToShipOnly(!readyToShipOnly);
+              setSelectedIds(new Set());
             }}
           >
             <Package className="w-4 h-4" /> Prontos p/ Envio
           </Button>
 
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             className="h-9 gap-2 text-xs text-green-700 border-green-200 hover:bg-green-50"
             onClick={handleExportExcel}
             disabled={selectedIds.size === 0 || isExporting}
           >
-            {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />} 
+            {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
             Exportar ({selectedIds.size})
           </Button>
         </div>
