@@ -98,6 +98,12 @@ const Sidebar = () => {
       <NavLink to="/dashboard/orders" className={navLinkClass}>
         {({ isActive }) => (<><DollarSign className={iconClass("text-green-600", isActive)} />Pedidos (Clientes)</>)}
       </NavLink>
+      <NavLink to="/dashboard/user-admin" className={navLinkClass}>
+        {({ isActive }) => (<><ShieldAlert className={iconClass("text-red-600", isActive)} />Admin Usuários</>)}
+      </NavLink>
+      <NavLink to="/dashboard/order-admin" className={navLinkClass}>
+        {({ isActive }) => (<><FileEdit className={iconClass("text-red-600", isActive)} />Admin Pedidos</>)}
+      </NavLink>
       <NavLink to="/dashboard/donations" className={navLinkClass}>
         {({ isActive }) => (<><Heart className={iconClass("text-rose-600", isActive)} />Doações</>)}
       </NavLink>
@@ -253,14 +259,14 @@ const Sidebar = () => {
       <NavLink to="/dashboard/donations" className={navLinkClass}>
         {({ isActive }) => (<><Heart className={iconClass("text-rose-600", isActive)} />Doações</>)}
       </NavLink>
-      <NavLink to="/dashboard/products" className={navLinkClass}>
-        {({ isActive }) => (<><Package className={iconClass("text-blue-600", isActive)} />Produtos</>)}
+      <NavLink to="/dashboard/spoke-export" className={navLinkClass}>
+        {({ isActive }) => (<><FileOutput className={iconClass("text-green-600", isActive)} />Exportar Rotas</>)}
       </NavLink>
-      <NavLink to="/dashboard/reviews" className={navLinkClass}>
-        {({ isActive }) => (<><Star className={iconClass("text-yellow-500", isActive)} />Avaliações</>)}
+      <NavLink to="/dashboard/print-labels" className={navLinkClass}>
+        {({ isActive }) => (<><Printer className={iconClass("text-indigo-600", isActive)} />Imprimir Etiquetas</>)}
       </NavLink>
-      <NavLink to="/dashboard/shipping-rates" className={navLinkClass}>
-        {({ isActive }) => (<><Bike className={iconClass("text-indigo-600", isActive)} />Fretes e Taxa</>)}
+      <NavLink to="/dashboard/supplier-orders" className={navLinkClass}>
+        {({ isActive }) => (<><ShoppingCart className={iconClass("text-amber-600", isActive)} />Pedidos Fornecedor</>)}
       </NavLink>
 
       {/* CLIENTES */}
