@@ -239,12 +239,13 @@ const Sidebar = () => {
       <NavLink to="/dashboard/crypto" className={navLinkClass}>
         {({ isActive }) => (<><KeyRound className={iconClass("text-yellow-600", isActive)} />Crypto</>)}
       </NavLink>
-      <NavLink to="/dashboard/xk9-relatorio-financeiro" className={navLinkClass}>
-        {({ isActive }) => (<><FileSearch className={iconClass("text-emerald-600", isActive)} />Relatório Financeiro</>)}
-      </NavLink>
       <NavLink to="/dashboard/relatorio-entrada-estoque" className={navLinkClass}>
         {({ isActive }) => (<><FileDown className={iconClass("text-blue-600", isActive)} />Relatório Entrada Estoque</>)}
       </NavLink>
+      <NavLink to="/dashboard/xk9-relatorio-financeiro" className={navLinkClass}>
+        {({ isActive }) => (<><FileSearch className={iconClass("text-emerald-600", isActive)} />Relatório Financeiro</>)}
+      </NavLink>
+
     </>
   ) : (
     <>
