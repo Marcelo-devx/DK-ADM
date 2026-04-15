@@ -21,6 +21,7 @@ interface UserCouponRPC {
     user_id: string;
     profile_first_name: string | null;
     profile_last_name: string | null;
+    profile_email: string | null;
     coupon_name: string | null;
     coupon_discount_value: number | null;
     usage_date: string | null;
@@ -65,10 +66,12 @@ export const UserCouponsTab = ({ className }: { className?: string }) => {
     const fullName = `${coupon.profile_first_name || ''} ${coupon.profile_last_name || ''}`.toLowerCase();
     const firstName = (coupon.profile_first_name || '').toLowerCase();
     const lastName = (coupon.profile_last_name || '').toLowerCase();
+    const email = (coupon.profile_email || '').toLowerCase();
     
     return fullName.includes(searchLower) || 
            firstName.includes(searchLower) || 
-           lastName.includes(searchLower);
+           lastName.includes(searchLower) ||
+           email.includes(searchLower);
   });
 
   return (
@@ -88,7 +91,7 @@ export const UserCouponsTab = ({ className }: { className?: string }) => {
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                     <Input
-                        placeholder="Buscar cliente por nome..."
+                        placeholder="Buscar por nome ou e-mail..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="pl-10"
@@ -107,6 +110,7 @@ export const UserCouponsTab = ({ className }: { className?: string }) => {
                     <TableHeader className="bg-gray-50">
                         <TableRow>
                             <TableHead>Cliente</TableHead>
+                            <TableHead>E-mail</TableHead>
                             <TableHead>Cupom</TableHead>
                             <TableHead>Valor</TableHead>
                             <TableHead>Status</TableHead>
@@ -117,10 +121,10 @@ export const UserCouponsTab = ({ className }: { className?: string }) => {
                     </TableHeader>
                     <TableBody>
                         {isLoading ? (
-                            <TableRow><TableCell colSpan={7} className="text-center py-10"><Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" /></TableCell></TableRow>
+                            <TableRow><TableCell colSpan={8} className="text-center py-10"><Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" /></TableCell></TableRow>
                         ) : isError ? (
                             <TableRow>
-                                <TableCell colSpan={7} className="text-center py-10 text-red-500 bg-red-50">
+                                <TableCell colSpan={8} className="text-center py-10 text-red-500 bg-red-50">
                                     <div className="flex flex-col items-center gap-2">
                                         <AlertCircle className="w-6 h-6" />
                                         <span className="font-bold">Erro ao carregar dados.</span>
@@ -129,7 +133,7 @@ export const UserCouponsTab = ({ className }: { className?: string }) => {
                                 </TableCell>
                             </TableRow>
                         ) : filteredCoupons?.length === 0 ? (
-                            <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-10">
+                            <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-10">
                                 {searchTerm ? `Nenhum cupom encontrado para "${searchTerm}"` : "Nenhum cupom resgatado ainda."}
                             </TableCell></TableRow>
                         ) : (
@@ -141,6 +145,7 @@ export const UserCouponsTab = ({ className }: { className?: string }) => {
                                             <span className="text-[10px] text-muted-foreground font-mono">ID: ...{uc.user_id.substring(0,6)}</span>
                                         </div>
                                     </TableCell>
+                                    <TableCell className="text-xs text-muted-foreground">{uc.profile_email || <span className="italic text-gray-300">—</span>}</TableCell>
                                     <TableCell className="font-bold text-gray-700">{uc.coupon_name}</TableCell>
                                     <TableCell className="text-emerald-600 font-bold">R$ {uc.coupon_discount_value}</TableCell>
                                     <TableCell>
