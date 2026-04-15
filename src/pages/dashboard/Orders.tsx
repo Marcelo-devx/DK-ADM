@@ -390,6 +390,19 @@ const OrdersPage = () => {
     },
   });
 
+  const finalizeOrderMutation = useMutation({
+    mutationFn: async (orderId: number) => {
+        const { error } = await supabase
+            .from('orders')
+            .update({ status: 'Finalizada', delivery_status: 'Entregue', delivery_info: 'Finalizado em massa pelo painel' })
+            .eq('id', orderId);
+        if (error) throw error;
+    },
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
+    },
+  });
+
   const syncPendingDeliveryMutation = useMutation({
     mutationFn: async (order: Order) => {
       const { error } = await supabase
@@ -527,10 +540,10 @@ const OrdersPage = () => {
 
     for (const id of Array.from(selectedIds)) {
         const order = orders?.find(o => o.id === id);
-        const isPaid = order && (order.status === "Finalizada" || order.status === "Pago");
-        if (isPaid && order.delivery_status !== 'Entregue' && order.delivery_status !== 'Cancelado') {
+        const isEligible = order && order.status !== 'Cancelado' && order.status !== 'Finalizada';
+        if (isEligible) {
             try {
-                await updateDeliveryStatusMutation.mutateAsync({ orderId: id, status: 'Entregue', info: 'Marcado como entregue em massa' });
+                await finalizeOrderMutation.mutateAsync(id);
                 successCount++;
             } catch (e) {}
         }
@@ -538,8 +551,8 @@ const OrdersPage = () => {
 
     setIsProcessingBulk(false);
     setSelectedIds(new Set());
-    if (successCount > 0) showSuccess(`${successCount} pedidos marcados como entregues!`);
-    else showError("Nenhum pedido apto para ser marcado como entregue.");
+    if (successCount > 0) showSuccess(`${successCount} pedidos finalizados como entregues!`);
+    else showError("Nenhum pedido apto para ser finalizado (já finalizados ou cancelados).");
   };
 
   const handleExportExcel = async () => {
