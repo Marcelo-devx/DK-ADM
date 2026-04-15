@@ -293,18 +293,21 @@ export const useOrderAdmin = () => {
 
   // Buscar histórico do pedido
   const getOrderHistory = async (orderId: number): Promise<OrderHistoryEntry[]> => {
-    // Include user's access token in headers so the edge function can authenticate
     const { data: sessionData } = await supabase.auth.getSession();
     const token = sessionData?.session?.access_token;
 
-    const { data, error } = await supabase.functions.invoke('admin-get-order-history', {
-      body: { orderId },
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    const res = await fetch('https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1/admin-get-order-history', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpybG96aGh2d3FmbWp0a212dWtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDU2NjQsImV4cCI6MjA2NzkyMTY2NH0.Do5c1-TKqpyZTJeX_hLbw1SU40CbwXfCIC-pPpcD_JM',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ orderId }),
     });
 
-    if (error) throw error;
-    if (!data?.success) throw new Error(data?.error || 'Error fetching history');
-
+    const data = await res.json();
+    if (!res.ok || !data?.success) throw new Error(data?.error || 'Error fetching history');
     return data.history || [];
   };
 
@@ -314,12 +317,18 @@ export const useOrderAdmin = () => {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token;
 
-      const { data, error } = await supabase.functions.invoke('admin-update-order', {
-        body: { orderId, updates, reason },
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      const res = await fetch('https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1/admin-update-order', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpybG96aGh2d3FmbWp0a212dWtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDU2NjQsImV4cCI6MjA2NzkyMTY2NH0.Do5c1-TKqpyZTJeX_hLbw1SU40CbwXfCIC-pPpcD_JM',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ orderId, updates, reason }),
       });
-      
-      if (error) throw new Error(error.message);
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Erro ao atualizar pedido');
       if (data?.error) throw new Error(data.error);
       return data;
     },
@@ -335,12 +344,18 @@ export const useOrderAdmin = () => {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token;
 
-      const { data, error } = await supabase.functions.invoke('admin-cancel-order', {
-        body: { orderId, reason, returnStock },
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      const res = await fetch('https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1/admin-cancel-order', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpybG96aGh2d3FmbWp0a212dWtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDU2NjQsImV4cCI6MjA2NzkyMTY2NH0.Do5c1-TKqpyZTJeX_hLbw1SU40CbwXfCIC-pPpcD_JM',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ orderId, reason, returnStock }),
       });
-      
-      if (error) throw new Error(error.message);
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Erro ao cancelar pedido');
       if (data?.error) throw new Error(data.error);
       return data;
     },
@@ -356,12 +371,18 @@ export const useOrderAdmin = () => {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token;
 
-      const { data, error } = await supabase.functions.invoke('admin-delete-order', {
-        body: { orderId, reason },
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      const res = await fetch('https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1/admin-delete-order', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpybG96aGh2d3FmbWp0a212dWtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDU2NjQsImV4cCI6MjA2NzkyMTY2NH0.Do5c1-TKqpyZTJeX_hLbw1SU40CbwXfCIC-pPpcD_JM',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ orderId, reason }),
       });
-      
-      if (error) throw new Error(error.message);
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Erro ao excluir pedido');
       if (data?.error) throw new Error(data.error);
       return data;
     },
