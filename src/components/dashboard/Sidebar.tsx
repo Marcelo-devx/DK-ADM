@@ -104,6 +104,12 @@ const Sidebar = () => {
       <NavLink to="/dashboard/order-admin" className={navLinkClass}>
         {({ isActive }) => (<><FileEdit className={iconClass("text-red-600", isActive)} />Admin Pedidos</>)}
       </NavLink>
+      <NavLink to="/dashboard/investigar-usuario" className={navLinkClass}>
+        {({ isActive }) => (<><Search className={iconClass("text-orange-600", isActive)} />Investigar Usuário</>)}
+      </NavLink>
+      <NavLink to="/dashboard/reativar-pedidos" className={navLinkClass}>
+        {({ isActive }) => (<><RefreshCw className={iconClass("text-green-600", isActive)} />Reativar Pedidos</>)}
+      </NavLink>
       <NavLink to="/dashboard/donations" className={navLinkClass}>
         {({ isActive }) => (<><Heart className={iconClass("text-rose-600", isActive)} />Doações</>)}
       </NavLink>
@@ -256,6 +262,12 @@ const Sidebar = () => {
       <NavLink to="/dashboard/order-admin" className={navLinkClass}>
         {({ isActive }) => (<><FileEdit className={iconClass("text-red-600", isActive)} />Admin Pedidos</>)}
       </NavLink>
+      <NavLink to="/dashboard/investigar-usuario" className={navLinkClass}>
+        {({ isActive }) => (<><Search className={iconClass("text-orange-600", isActive)} />Investigar Usuário</>)}
+      </NavLink>
+      <NavLink to="/dashboard/reativar-pedidos" className={navLinkClass}>
+        {({ isActive }) => (<><RefreshCw className={iconClass("text-green-600", isActive)} />Reativar Pedidos</>)}
+      </NavLink>
       <NavLink to="/dashboard/donations" className={navLinkClass}>
         {({ isActive }) => (<><Heart className={iconClass("text-rose-600", isActive)} />Doações</>)}
       </NavLink>
@@ -304,12 +316,6 @@ const Sidebar = () => {
 
       {/* ADMINISTRAÇÃO */}
       <p className={sectionTitleClass}>Administração</p>
-      <NavLink to="/dashboard/investigar-usuario" className={navLinkClass}>
-        {({ isActive }) => (<><Search className={iconClass("text-orange-600", isActive)} />Investigar Usuário</>)}
-      </NavLink>
-      <NavLink to="/dashboard/reativar-pedidos" className={navLinkClass}>
-        {({ isActive }) => (<><RefreshCw className={iconClass("text-green-600", isActive)} />Reativar Pedidos</>)}
-      </NavLink>
       <NavLink to="/dashboard/cleanup-orders" className={navLinkClass}>
         {({ isActive }) => (<><Trash2 className={iconClass("text-red-500", isActive)} />Limpeza de Pedidos</>)}
       </NavLink>
