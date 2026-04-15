@@ -540,7 +540,7 @@ const OrdersPage = () => {
 
     for (const id of Array.from(selectedIds)) {
         const order = orders?.find(o => o.id === id);
-        const isEligible = order && order.status !== 'Cancelado' && order.status !== 'Finalizada';
+        const isEligible = order && (order.status === 'Pago' || order.status === 'Finalizada') && order.delivery_status !== 'Entregue' && order.delivery_status !== 'Cancelado';
         if (isEligible) {
             try {
                 await finalizeOrderMutation.mutateAsync(id);
