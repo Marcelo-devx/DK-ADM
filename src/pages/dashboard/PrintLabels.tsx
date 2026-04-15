@@ -208,22 +208,22 @@ export default function PrintLabelsPage() {
         }
       }
 
-      // Buscar emails via edge function dedicada (envia os user_ids e recebe emails)
+      // Buscar emails via RPC (função SQL com SECURITY DEFINER que acessa auth.users)
       let emailMap = new Map<string, string>();
       try {
-        const { data: emailsData, error: emailsError } = await supabase.functions.invoke("get-users-emails", {
-          body: { user_ids: userIds }
+        const { data: emailsData, error: emailsError } = await supabase.rpc("get_users_emails_by_ids", {
+          user_ids: userIds
         });
         if (emailsError) {
-          console.error("get-users-emails retornou erro:", emailsError);
+          console.error("[PrintLabels] get_users_emails_by_ids RPC erro:", emailsError);
         } else if (Array.isArray(emailsData)) {
           emailsData.forEach((u: any) => {
             if (u.id && u.email) emailMap.set(u.id, u.email);
           });
-          console.log(`[PrintLabels] Emails carregados: ${emailMap.size} de ${userIds.length}`);
+          console.log(`[PrintLabels] Emails carregados via RPC: ${emailMap.size} de ${userIds.length}`);
         }
       } catch (e) {
-        console.error("get-users-emails edge function falhou:", e);
+        console.error("[PrintLabels] get_users_emails_by_ids falhou:", e);
       }
 
       return ordersData.map((o: any) => ({
@@ -249,7 +249,8 @@ export default function PrintLabelsPage() {
       return (
         String(o.id).includes(term) ||
         p?.first_name?.toLowerCase().includes(term) ||
-        p?.last_name?.toLowerCase().includes(term)
+        p?.last_name?.toLowerCase().includes(term) ||
+        (o.email || "").toLowerCase().includes(term)
       );
     });
   }, [orders, searchTerm, removedIds]);
@@ -690,7 +691,7 @@ export default function PrintLabelsPage() {
         <CardHeader className="flex items-center justify-between">
           <CardTitle>Pedidos prontos para etiqueta</CardTitle>
           <div className="flex items-center gap-2">
-            <Input placeholder="Buscar por ID ou nome" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-64" />
+            <Input placeholder="Buscar por ID, nome ou e-mail" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-72" />
           </div>
         </CardHeader>
         <CardContent className="p-0 overflow-auto">
