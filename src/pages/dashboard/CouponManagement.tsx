@@ -53,33 +53,6 @@ const CouponManagementPage = () => {
         <CouponAssignment client={selectedClient} />
       </div>
 
-      {/* Informações Adicionais */}
-      <div className="mt-8 p-6 bg-blue-50 rounded-lg border border-blue-200">
-        <h3 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
-          💡 Dicas de Uso
-        </h3>
-        <ul className="space-y-2 text-sm text-blue-800">
-          <li>
-            <strong>Frete Grátis:</strong> Use quando um cliente esqueceu um produto e quer fazer outro
-            pedido sem pagar 2x o frete.
-          </li>
-          <li>
-            <strong>Primeira Compra:</strong> O cupom é atribuído automaticamente quando novos
-            clientes se cadastram no sistema.
-          </li>
-          <li>
-            <strong>Busca por Cliente:</strong> Você pode buscar por nome completo, primeiro nome,
-            último nome ou CPF.
-          </li>
-          <li>
-            <strong>Tipos de Cupom:</strong> Existem cupons de desconto em produtos (percentual ou
-            valor fixo) e cupons de frete grátis.
-          </li>
-          <li>
-            <strong>Estoque:</strong> Cupons com estoque -1 são considerados ilimitados.
-          </li>
-        </ul>
-      </div>
     </div>
   );
 };
