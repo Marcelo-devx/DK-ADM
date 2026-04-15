@@ -145,7 +145,7 @@ const AnalyticsSkeleton = () => (
 const AnalyticsPage = () => {
   const [period, setPeriod] = useState("12m");
 
-  const { data: bi, isLoading, isError, error, refetch, isFetching } = useQuery({
+  const { data: bi, isLoading, isError, error, refetch, isFetching, failureCount } = useQuery({
     queryKey: ["bi-v2", period],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("analytics-bi", {
@@ -155,11 +155,21 @@ const AnalyticsPage = () => {
       if (!data)  throw new Error("Nenhum dado retornado");
       return data;
     },
-    retry: 2,
+    retry: 5,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 15000),
     refetchInterval: 300_000,
   });
 
-  if (isLoading) return <AnalyticsSkeleton />;
+  if (isLoading) return (
+    <div className="space-y-3">
+      <AnalyticsSkeleton />
+      {failureCount > 0 && (
+        <p className="text-xs text-center text-muted-foreground animate-pulse">
+          Inicializando servidor de analytics... ({failureCount}/5 tentativas)
+        </p>
+      )}
+    </div>
+  );
 
   if (isError) {
     return (
