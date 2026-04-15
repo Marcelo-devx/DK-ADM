@@ -521,6 +521,27 @@ const OrdersPage = () => {
     else showError("Nenhum pedido apto para ser marcado como embalado.");
   };
 
+  const handleBulkDelivered = async () => {
+    setIsProcessingBulk(true);
+    let successCount = 0;
+
+    for (const id of Array.from(selectedIds)) {
+        const order = orders?.find(o => o.id === id);
+        const isPaid = order && (order.status === "Finalizada" || order.status === "Pago");
+        if (isPaid && order.delivery_status !== 'Entregue' && order.delivery_status !== 'Cancelado') {
+            try {
+                await updateDeliveryStatusMutation.mutateAsync({ orderId: id, status: 'Entregue', info: 'Marcado como entregue em massa' });
+                successCount++;
+            } catch (e) {}
+        }
+    }
+
+    setIsProcessingBulk(false);
+    setSelectedIds(new Set());
+    if (successCount > 0) showSuccess(`${successCount} pedidos marcados como entregues!`);
+    else showError("Nenhum pedido apto para ser marcado como entregue.");
+  };
+
   const handleExportExcel = async () => {
     if (selectedIds.size === 0) {
       showError("Selecione pelo menos um pedido para exportar.");
@@ -1269,6 +1290,15 @@ const OrdersPage = () => {
                     >
                         {isProcessingBulk ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Package className="w-5 h-5 mr-2" />}
                         Marcar Embalados
+                    </Button>
+
+                    <Button 
+                        onClick={handleBulkDelivered} 
+                        disabled={isProcessingBulk}
+                        className="bg-green-800 hover:bg-green-900 font-black h-12 px-6 rounded-xl shadow-lg"
+                    >
+                        {isProcessingBulk ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Truck className="w-5 h-5 mr-2" />}
+                        Marcar Entregues
                     </Button>
                     
                     <Button 
