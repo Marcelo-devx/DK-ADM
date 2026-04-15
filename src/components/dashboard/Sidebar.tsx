@@ -315,13 +315,18 @@ const Sidebar = () => {
 
   const sidebarContent = (
     <>
-      <div className="p-6 pb-2 flex items-center justify-between">
+      {/* Header enterprise */}
+      <div className="relative flex flex-col items-center pt-6 pb-4 px-4 border-b border-gray-200 bg-gradient-to-b from-gray-100 to-gray-50">
         <button
-          className="lg:hidden p-1 rounded-lg hover:bg-gray-200 text-gray-500"
+          className="lg:hidden absolute top-3 right-3 p-1 rounded-lg hover:bg-gray-200 text-gray-500"
           onClick={() => setSidebarOpen(false)}
         >
           <X className="w-5 h-5" />
         </button>
+        <div className="w-20 h-20 rounded-2xl bg-white shadow-md border border-gray-200 flex items-center justify-center overflow-hidden">
+          <img src="/favicon.ico" alt="DON DK" className="w-12 h-12 object-contain" />
+        </div>
+        <p className="mt-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Painel Administrativo</p>
       </div>
 
       {isAdmin && (
