@@ -8,6 +8,36 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
 }
 
+// Busca paginada segura
+async function fetchPaginated(supabase, table, selectQuery, filters = [], pageSize = 1000, maxRows = 10000) {
+  let allData = [];
+  let from = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    let query = supabase.from(table).select(selectQuery);
+    for (const f of filters) {
+      query = query[f.method](...f.args);
+    }
+    const { data, error } = await query.range(from, from + pageSize - 1);
+    if (error) {
+      console.error(`[actionable-insights] Erro paginando ${table}:`, error.message);
+      break;
+    }
+    if (!data || data.length === 0) {
+      hasMore = false;
+    } else {
+      allData = allData.concat(data);
+      if (data.length < pageSize || allData.length >= maxRows) {
+        hasMore = false;
+      } else {
+        from += pageSize;
+      }
+    }
+  }
+  return allData;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders })
@@ -27,7 +57,7 @@ serve(async (req) => {
     try {
       const { data, error } = await supabaseAdmin.rpc('get_product_pair_frequency');
       if (error) console.log("[actionable-insights] rpc get_product_pair_frequency error:", error.message);
-      else associations = data || [];
+      else associations = (data || []).slice(0, 10);
       console.log("[actionable-insights] associations:", associations.length);
     } catch (e) {
       console.log("[actionable-insights] associations exception:", e.message);
@@ -59,7 +89,7 @@ serve(async (req) => {
       console.log("[actionable-insights] vips exception:", e.message);
     }
 
-    // ── 4. HISTÓRICO DE VENDAS (30 dias) ─────────────────────────────────────
+    // ── 4. HISTÓRICO DE VENDAS (30 dias) com paginação ───────────────────────
     const today = new Date();
     const sevenDaysAgo = new Date(today); sevenDaysAgo.setDate(today.getDate() - 7);
     const fourteenDaysAgo = new Date(today); fourteenDaysAgo.setDate(today.getDate() - 14);
@@ -67,13 +97,14 @@ serve(async (req) => {
 
     let salesHistory = [];
     try {
-      const { data, error } = await supabaseAdmin
-        .from('order_items')
-        .select('item_id, quantity, created_at')
-        .gte('created_at', thirtyDaysAgo.toISOString())
-        .limit(5000);
-      if (error) console.log("[actionable-insights] salesHistory error:", error.message);
-      else salesHistory = data || [];
+      salesHistory = await fetchPaginated(
+        supabaseAdmin,
+        'order_items',
+        'item_id, quantity, created_at',
+        [{ method: 'gte', args: ['created_at', thirtyDaysAgo.toISOString()] }],
+        2000,
+        10000  // máximo 10k itens
+      );
       console.log("[actionable-insights] salesHistory rows:", salesHistory.length);
     } catch (e) {
       console.log("[actionable-insights] salesHistory exception:", e.message);
@@ -95,10 +126,10 @@ serve(async (req) => {
     }
 
     // ── 6. CÁLCULOS ───────────────────────────────────────────────────────────
-    const velocityMap: Record<number, number> = {};
-    const profitByBrand: Record<string, number> = {};
-    const salesThisWeek: Record<number, number> = {};
-    const salesLastWeek: Record<number, number> = {};
+    const velocityMap = {};
+    const profitByBrand = {};
+    const salesThisWeek = {};
+    const salesLastWeek = {};
     const hoursMap = new Array(24).fill(0);
 
     for (const item of salesHistory) {
@@ -108,8 +139,7 @@ serve(async (req) => {
       velocityMap[item.item_id] = (velocityMap[item.item_id] || 0) + qty;
 
       // Horário de Pico (ajuste BRT -3h)
-      let hour = itemDate.getUTCHours() - 3;
-      if (hour < 0) hour += 24;
+      const hour = ((itemDate.getUTCHours() - 3) + 24) % 24;
       hoursMap[hour] += qty;
 
       if (itemDate >= sevenDaysAgo) {
@@ -119,8 +149,8 @@ serve(async (req) => {
       }
     }
 
-    const alertsCandidates: any[] = [];
-    const trendCandidates: any[] = [];
+    const alertsCandidates = [];
+    const trendCandidates = [];
 
     for (const p of allProducts) {
       const soldLast30Days = velocityMap[p.id] || 0;
@@ -159,7 +189,7 @@ serve(async (req) => {
             }
 
             let vName = p.name;
-            const details: string[] = [];
+            const details = [];
             if (v.flavors?.name) details.push(v.flavors.name);
             if (v.color) details.push(v.color);
             if (details.length > 0) vName += ` (${details.join(' - ')})`;
@@ -173,6 +203,26 @@ serve(async (req) => {
                 days_remaining: daysRemaining,
                 daily_rate: dailyRate.toFixed(2),
                 status_type: 'active'
+              });
+            }
+          }
+        } else {
+          // Produto sem vendas mas com variantes — verificar estoque zerado
+          for (const v of variants) {
+            if ((v.stock_quantity || 0) === 0) {
+              let vName = p.name;
+              const details = [];
+              if (v.flavors?.name) details.push(v.flavors.name);
+              if (v.color) details.push(v.color);
+              if (details.length > 0) vName += ` (${details.join(' - ')})`;
+              alertsCandidates.push({
+                id: p.id,
+                variant_id: v.id,
+                name: vName,
+                current_stock: 0,
+                days_remaining: 0,
+                daily_rate: '0.00',
+                status_type: 'stagnant_low'
               });
             }
           }
@@ -190,6 +240,15 @@ serve(async (req) => {
               status_type: 'active'
             });
           }
+        } else if ((p.stock_quantity || 0) === 0) {
+          alertsCandidates.push({
+            id: p.id,
+            name: p.name,
+            current_stock: 0,
+            days_remaining: 0,
+            daily_rate: '0.00',
+            status_type: 'stagnant_low'
+          });
         }
       }
     }
@@ -197,7 +256,7 @@ serve(async (req) => {
     // ── 7. FILTRAGEM FINAL ────────────────────────────────────────────────────
     const alerts = alertsCandidates
       .sort((a, b) => a.days_remaining - b.days_remaining)
-      .slice(0, 10);
+      .slice(0, 15);
 
     const trendingUp = trendCandidates
       .filter(p => p.growth >= 20 && p.sales_this_week >= 2)
@@ -213,7 +272,7 @@ serve(async (req) => {
 
     const profitability = Object.entries(profitByBrand)
       .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => (b.value as number) - (a.value as number))
+      .sort((a, b) => b.value - a.value)
       .slice(0, 5);
 
     const result = {
@@ -236,7 +295,7 @@ serve(async (req) => {
   } catch (error) {
     console.log("[actionable-insights] ERRO GERAL:", error.message);
     return new Response(JSON.stringify({ error: error.message }), {
-      status: 400,
+      status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }

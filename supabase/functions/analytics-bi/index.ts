@@ -8,6 +8,41 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
 }
 
+// Busca paginada para evitar timeout com grandes volumes
+async function fetchAllPaginated(supabase, table, selectQuery, filters = [], pageSize = 1000) {
+  let allData = [];
+  let from = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    let query = supabase.from(table).select(selectQuery);
+    for (const f of filters) {
+      query = query[f.method](...f.args);
+    }
+    const { data, error } = await query.range(from, from + pageSize - 1);
+    if (error) {
+      console.error(`[analytics-bi] Erro paginando ${table}:`, error.message);
+      break;
+    }
+    if (!data || data.length === 0) {
+      hasMore = false;
+    } else {
+      allData = allData.concat(data);
+      if (data.length < pageSize) {
+        hasMore = false;
+      } else {
+        from += pageSize;
+      }
+    }
+    // Limite de segurança: máximo 20k registros por tabela
+    if (allData.length >= 20000) {
+      console.log(`[analytics-bi] Limite de segurança atingido para ${table}: ${allData.length} registros`);
+      hasMore = false;
+    }
+  }
+  return allData;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders })
@@ -40,32 +75,43 @@ serve(async (req) => {
       default:     startDate.setFullYear(now.getFullYear() - 1);
     }
 
-    // ── Buscar dados em paralelo ──────────────────────────────────────────────
-    const [ordersRes, itemsRes, profilesRes] = await Promise.all([
-      supabaseAdmin
-        .from('orders')
-        .select('id, total_price, shipping_cost, coupon_discount, created_at, status, payment_method, user_id, shipping_address')
-        .gte('created_at', startDate.toISOString())
-        .order('created_at', { ascending: true }),
+    const startIso = startDate.toISOString();
 
-      supabaseAdmin
-        .from('order_items')
-        .select('order_id, item_id, name_at_purchase, quantity, price_at_purchase, item_type')
-        .gte('created_at', startDate.toISOString()),
+    // ── Buscar dados com paginação segura ─────────────────────────────────────
+    console.log("[analytics-bi] Buscando orders...");
+    const allOrders = await fetchAllPaginated(
+      supabaseAdmin,
+      'orders',
+      'id, total_price, shipping_cost, coupon_discount, created_at, status, payment_method, user_id, shipping_address',
+      [{ method: 'gte', args: ['created_at', startIso] }],
+      1000
+    );
 
-      supabaseAdmin
-        .from('profiles')
-        .select('id, gender, state, city, created_at, tier_id, current_tier_name'),
-    ]);
+    console.log("[analytics-bi] Buscando order_items...");
+    const allItems = await fetchAllPaginated(
+      supabaseAdmin,
+      'order_items',
+      'order_id, item_id, name_at_purchase, quantity, price_at_purchase, item_type',
+      [{ method: 'gte', args: ['created_at', startIso] }],
+      2000
+    );
 
-    const allOrders = ordersRes.data || [];
-    const allItems  = itemsRes.data  || [];
-    const profiles  = profilesRes.data || [];
+    console.log("[analytics-bi] Buscando profiles...");
+    // Profiles não precisam de filtro de data, mas limitamos a 5000
+    const profilesRes = await supabaseAdmin
+      .from('profiles')
+      .select('id, gender, state, city, created_at, tier_id, current_tier_name')
+      .limit(5000);
+    const profiles = profilesRes.data || [];
 
     // Pedidos sem cancelados para métricas de receita
     const orders = allOrders.filter(o => o.status !== 'Cancelado');
 
-    console.log("[analytics-bi] Dados brutos:", { allOrders: allOrders.length, items: allItems.length, profiles: profiles.length });
+    console.log("[analytics-bi] Dados brutos:", {
+      allOrders: allOrders.length,
+      items: allItems.length,
+      profiles: profiles.length
+    });
 
     // ── Agrupamento temporal ──────────────────────────────────────────────────
     let groupBy = 'month';
@@ -101,19 +147,29 @@ serve(async (req) => {
     const getOrderKey = (o) => {
       if (groupBy === 'day')  return o.created_at?.substring(0, 10);
       if (groupBy === 'week') {
-        // encontrar semana correspondente
         const d = o.created_at?.substring(0, 10);
-        const found = periodArray.find(p => d >= p.key && d <= (() => {
-          const e = new Date(p.key); e.setDate(e.getDate() + 6); return e.toISOString().substring(0, 10);
-        })());
+        const found = periodArray.find(p => {
+          const end = new Date(p.key);
+          end.setDate(end.getDate() + 6);
+          return d >= p.key && d <= end.toISOString().substring(0, 10);
+        });
         return found?.key;
       }
       return o.created_at?.substring(0, 7);
     };
 
     // ── Série temporal ────────────────────────────────────────────────────────
+    // Pré-agrupar por chave para performance
+    const ordersByKey = {};
+    for (const o of orders) {
+      const key = getOrderKey(o);
+      if (!key) continue;
+      if (!ordersByKey[key]) ordersByKey[key] = [];
+      ordersByKey[key].push(o);
+    }
+
     const monthly = periodArray.map(p => {
-      const filtered = orders.filter(o => getOrderKey(o) === p.key);
+      const filtered = ordersByKey[p.key] || [];
       const revenue  = filtered.reduce((s, o) => s + Number(o.total_price || 0), 0);
       const shipping = filtered.reduce((s, o) => s + Number(o.shipping_cost || 0), 0);
       const discounts= filtered.reduce((s, o) => s + Number(o.coupon_discount || 0), 0);
@@ -130,36 +186,34 @@ serve(async (req) => {
     });
 
     // ── Status dos pedidos ────────────────────────────────────────────────────
-    const statusCount = allOrders.reduce((acc, o) => {
-      acc[o.status] = (acc[o.status] || 0) + 1;
-      return acc;
-    }, {});
+    const statusCount = {};
+    for (const o of allOrders) {
+      statusCount[o.status] = (statusCount[o.status] || 0) + 1;
+    }
     const ordersByStatus = Object.entries(statusCount)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
 
     // ── Métodos de pagamento ──────────────────────────────────────────────────
-    const paymentCount = orders.reduce((acc, o) => {
+    const paymentCount = {};
+    for (const o of orders) {
       const m = o.payment_method || 'Outros';
-      acc[m] = (acc[m] || 0) + 1;
-      return acc;
-    }, {});
+      paymentCount[m] = (paymentCount[m] || 0) + 1;
+    }
     const paymentMethods = Object.entries(paymentCount)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
 
     // ── Top produtos ──────────────────────────────────────────────────────────
-    // Filtrar itens apenas dos pedidos no período (não cancelados)
     const validOrderIds = new Set(orders.map(o => o.id));
-    const validItems = allItems.filter(i => validOrderIds.has(i.order_id));
-
-    const productMap = validItems.reduce((acc, item) => {
+    const productMap = {};
+    for (const item of allItems) {
+      if (!validOrderIds.has(item.order_id)) continue;
       const key = item.name_at_purchase || 'Desconhecido';
-      if (!acc[key]) acc[key] = { name: key, qty: 0, revenue: 0 };
-      acc[key].qty     += Number(item.quantity || 0);
-      acc[key].revenue += Number(item.price_at_purchase || 0) * Number(item.quantity || 0);
-      return acc;
-    }, {});
+      if (!productMap[key]) productMap[key] = { name: key, qty: 0, revenue: 0 };
+      productMap[key].qty     += Number(item.quantity || 0);
+      productMap[key].revenue += Number(item.price_at_purchase || 0) * Number(item.quantity || 0);
+    }
 
     const topProducts = Object.values(productMap)
       .sort((a, b) => b.revenue - a.revenue)
@@ -171,7 +225,8 @@ serve(async (req) => {
       .slice(0, 10);
 
     // ── Regiões ───────────────────────────────────────────────────────────────
-    const regionMap = orders.reduce((acc, o) => {
+    const regionMap = {};
+    for (const o of orders) {
       let state = null;
       if (o.shipping_address) {
         try {
@@ -179,12 +234,11 @@ serve(async (req) => {
           state = addr.state || addr.uf || null;
         } catch (_) {}
       }
-      if (!state) return acc;
-      if (!acc[state]) acc[state] = { name: state, orders: 0, revenue: 0 };
-      acc[state].orders  += 1;
-      acc[state].revenue += Number(o.total_price || 0);
-      return acc;
-    }, {});
+      if (!state) continue;
+      if (!regionMap[state]) regionMap[state] = { name: state, orders: 0, revenue: 0 };
+      regionMap[state].orders  += 1;
+      regionMap[state].revenue += Number(o.total_price || 0);
+    }
 
     const regions = Object.values(regionMap)
       .sort((a, b) => b.orders - a.orders)
@@ -192,39 +246,40 @@ serve(async (req) => {
       .map(r => ({ ...r, revenue: Math.round(r.revenue * 100) / 100 }));
 
     // ── Gênero ────────────────────────────────────────────────────────────────
-    const genderMap = profiles.reduce((acc, p) => {
+    const genderMap = {};
+    for (const p of profiles) {
       const g = p.gender || 'Não Informado';
-      acc[g] = (acc[g] || 0) + 1;
-      return acc;
-    }, {});
+      genderMap[g] = (genderMap[g] || 0) + 1;
+    }
     const gender = Object.entries(genderMap).map(([name, value]) => ({ name, value }));
 
     // ── Tiers de fidelidade ───────────────────────────────────────────────────
-    const tierMap = profiles.reduce((acc, p) => {
+    const tierMap = {};
+    for (const p of profiles) {
       const t = p.current_tier_name || 'Bronze';
-      acc[t] = (acc[t] || 0) + 1;
-      return acc;
-    }, {});
+      tierMap[t] = (tierMap[t] || 0) + 1;
+    }
     const tiers = Object.entries(tierMap)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
 
     // ── Novos vs Recorrentes ──────────────────────────────────────────────────
-    const userOrderCounts = orders.reduce((acc, o) => {
-      if (!o.user_id) return acc;
-      acc[o.user_id] = (acc[o.user_id] || 0) + 1;
-      return acc;
-    }, {});
+    const userOrderCounts = {};
+    for (const o of orders) {
+      if (!o.user_id) continue;
+      userOrderCounts[o.user_id] = (userOrderCounts[o.user_id] || 0) + 1;
+    }
     const recurringUsers = Object.values(userOrderCounts).filter(c => c > 1).length;
     const newUsers       = Object.values(userOrderCounts).filter(c => c === 1).length;
 
     // ── Heatmap por hora do dia ───────────────────────────────────────────────
     const hourMap = Array.from({ length: 24 }, (_, h) => ({ hour: h, orders: 0, revenue: 0 }));
-    orders.forEach(o => {
-      const h = new Date(o.created_at).getHours();
+    for (const o of orders) {
+      // Ajuste para BRT (UTC-3)
+      const h = ((new Date(o.created_at).getUTCHours() - 3) + 24) % 24;
       hourMap[h].orders  += 1;
       hourMap[h].revenue += Number(o.total_price || 0);
-    });
+    }
     const hourlyHeatmap = hourMap.map(h => ({
       ...h,
       label: `${String(h.hour).padStart(2, '0')}h`,
@@ -234,11 +289,11 @@ serve(async (req) => {
     // ── Heatmap por dia da semana ─────────────────────────────────────────────
     const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
     const dayMap = Array.from({ length: 7 }, (_, d) => ({ day: d, name: dayNames[d], orders: 0, revenue: 0 }));
-    orders.forEach(o => {
+    for (const o of orders) {
       const d = new Date(o.created_at).getDay();
       dayMap[d].orders  += 1;
       dayMap[d].revenue += Number(o.total_price || 0);
-    });
+    }
     const weekdayHeatmap = dayMap.map(d => ({ ...d, revenue: Math.round(d.revenue * 100) / 100 }));
 
     // ── Uso de cupons ─────────────────────────────────────────────────────────

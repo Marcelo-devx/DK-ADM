@@ -169,18 +169,25 @@ const AnalyticsPage = () => {
       if (data?.error) throw new Error(data.error);
       return data;
     },
-    retry: 3,
-    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
-    refetchInterval: 300_000,
+    retry: 2,
+    retryDelay: (attempt) => Math.min(3000 * 2 ** attempt, 15000),
+    staleTime: 5 * 60 * 1000,       // dados válidos por 5 min — evita refetch desnecessário
+    refetchInterval: 10 * 60 * 1000, // refetch a cada 10 min (não 5)
+    refetchOnWindowFocus: false,      // não refetch ao focar a janela
   });
 
   if (isLoading) return (
     <div className="space-y-3">
       <AnalyticsSkeleton />
       {failureCount > 0 && (
-        <p className="text-xs text-center text-muted-foreground animate-pulse">
-          Inicializando servidor de analytics... ({failureCount}/5 tentativas)
-        </p>
+        <div className="flex flex-col items-center gap-2 py-4">
+          <p className="text-xs text-center text-muted-foreground animate-pulse">
+            Inicializando servidor de analytics... ({failureCount}/2 tentativas)
+          </p>
+          <p className="text-[11px] text-center text-gray-400">
+            O servidor pode demorar até 30s para iniciar após inatividade.
+          </p>
+        </div>
       )}
     </div>
   );
@@ -194,6 +201,9 @@ const AnalyticsPage = () => {
             {(error as Error)?.message || "Erro desconhecido ao carregar analytics."}
           </AlertDescription>
         </Alert>
+        <p className="text-xs text-muted-foreground">
+          Isso pode acontecer quando há um grande volume de dados sendo processado. Aguarde alguns segundos e tente novamente.
+        </p>
         <Button onClick={() => refetch()} variant="outline" size="sm" className="gap-2">
           <RefreshCw className="w-4 h-4" /> Tentar novamente
         </Button>

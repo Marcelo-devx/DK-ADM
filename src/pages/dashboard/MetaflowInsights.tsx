@@ -23,7 +23,7 @@ const MetaflowInsightsPage = () => {
   const navigate = useNavigate();
   const [isRetentionModalOpen, setIsRetentionModalOpen] = useState(false);
 
-  const { data: insights, isLoading, refetch, isRefetching, isError, error } = useQuery({
+  const { data: insights, isLoading, refetch, isRefetching, isError, error, failureCount } = useQuery({
     queryKey: ["actionable-insights-final"],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -47,7 +47,11 @@ const MetaflowInsightsPage = () => {
       if (data?.error) throw new Error(data.error);
       return data;
     },
-    refetchInterval: 300000
+    retry: 2,
+    retryDelay: (attempt) => Math.min(3000 * 2 ** attempt, 15000),
+    staleTime: 5 * 60 * 1000,        // dados válidos por 5 min
+    refetchInterval: 10 * 60 * 1000,  // refetch a cada 10 min
+    refetchOnWindowFocus: false,       // não refetch ao focar a janela
   });
 
   const formatCurrency = (val: number) =>
@@ -77,6 +81,16 @@ const MetaflowInsightsPage = () => {
             <Skeleton className="h-4 w-72" />
           </div>
         </div>
+        {failureCount > 0 && (
+          <div className="flex flex-col items-center gap-1 py-2">
+            <p className="text-xs text-center text-muted-foreground animate-pulse">
+              Processando dados... ({failureCount}/2 tentativas)
+            </p>
+            <p className="text-[11px] text-center text-gray-400">
+              O servidor pode demorar até 30s para iniciar após inatividade.
+            </p>
+          </div>
+        )}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}
         </div>
@@ -96,7 +110,10 @@ const MetaflowInsightsPage = () => {
         <div className="text-center">
           <p className="text-base font-bold text-gray-800">Erro ao carregar insights</p>
           <p className="text-sm text-muted-foreground mt-1 max-w-sm">
-            {(error as any)?.message || "Não foi possível conectar ao servidor de análise. Tente novamente."}
+            {(error as any)?.message || "Não foi possível conectar ao servidor de análise."}
+          </p>
+          <p className="text-xs text-gray-400 mt-2 max-w-sm">
+            Isso pode ocorrer quando há um grande volume de dados sendo processado. Aguarde alguns segundos e tente novamente.
           </p>
         </div>
         <Button onClick={() => refetch()} variant="outline" className="rounded-xl">
