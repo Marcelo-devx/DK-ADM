@@ -297,7 +297,7 @@ function getPipelineTemplate(paymentMethod: string): StepTemplate[] {
 // ─────────────────────────────────────────────────────────────────────────────
 // Build the pipeline for a single order
 // ─────────────────────────────────────────────────────────────────────────────
-function buildPipeline(order: any, orderLogs: any[]): PipelineStep[] {
+function buildPipeline(order: any, orderLogs: any[], n8nDispatch: any | null): PipelineStep[] {
   const template = getPipelineTemplate(order.payment_method ?? "");
   const orderStatus = (order.status ?? "").toLowerCase();
 
@@ -324,11 +324,60 @@ function buildPipeline(order: any, orderLogs: any[]): PipelineStep[] {
       };
     }
 
-    // ── Special: "N8N Notificado" — fed by order_created logs ────────────
-    // The order_created event IS the N8N notification trigger.
-    // If we have a sent/success log → green.
-    // If no log at all → warning (no record, but may have happened).
+    // ── Special: "N8N Notificado" — use order_n8n_dispatch view ──────────
+    // This is the real source of truth: net._http_response correlated by timestamp
     if (step.key === "n8n_notified") {
+      // Priority 1: use the dispatch view (real HTTP response)
+      if (n8nDispatch) {
+        if (n8nDispatch.dispatch_status === "success") {
+          // Parse the N8N response body to get the actual N8N status
+          let n8nBody: any = null;
+          try {
+            const content = JSON.parse(n8nDispatch.response_content ?? "{}");
+            const firstResult = content?.results?.[0];
+            if (firstResult?.body) {
+              n8nBody = JSON.parse(firstResult.body);
+            }
+          } catch {}
+
+          return {
+            key: step.key,
+            label: step.label,
+            icon: step.icon,
+            status: "success",
+            timestamp: n8nDispatch.dispatched_at,
+            logStatus: "sent",
+            rawDetails: n8nBody?.mensagem ?? n8nDispatch.response_content,
+          };
+        }
+
+        if (n8nDispatch.dispatch_status === "error") {
+          const statusCode = n8nDispatch.status_code;
+          let content: any = {};
+          try { content = JSON.parse(n8nDispatch.response_content ?? "{}"); } catch {}
+
+          const translated = translateError(
+            "n8n_webhook",
+            statusCode,
+            content?.message ?? n8nDispatch.response_content
+          );
+          return {
+            key: step.key,
+            label: step.label,
+            icon: step.icon,
+            status: "error",
+            timestamp: n8nDispatch.dispatched_at,
+            responseCode: statusCode,
+            rawDetails: content?.message ?? n8nDispatch.response_content,
+            rawPayload: content,
+            eventType: "n8n_webhook",
+            logStatus: "error",
+            translatedError: translated,
+          };
+        }
+      }
+
+      // Priority 2: fall back to integration_logs order_created entries
       if (latestLog) {
         const s = mapLogStatus(latestLog.event_type, latestLog.status);
         if (s === "error") {
@@ -351,7 +400,6 @@ function buildPipeline(order: any, orderLogs: any[]): PipelineStep[] {
             translatedError: translated,
           };
         }
-        // sent / success / processing → green (it fired)
         return {
           key: step.key,
           label: step.label,
@@ -364,7 +412,8 @@ function buildPipeline(order: any, orderLogs: any[]): PipelineStep[] {
           logStatus: latestLog.status,
         };
       }
-      // No log — show as warning: "Sem registro de disparo"
+
+      // No data at all — warning
       return {
         key: step.key,
         label: step.label,
@@ -459,19 +508,33 @@ export function useOrderHealth(limit = 60) {
       if (ordersError) throw ordersError;
       if (!orders || orders.length === 0) return [];
 
-      // 2. Fetch all integration logs (large batch — covers all orders)
+      // 2. Fetch all integration logs
       const { data: logs, error: logsError } = await supabase
         .from("integration_logs")
-        .select(
-          "id, created_at, event_type, status, response_code, details, payload"
-        )
+        .select("id, created_at, event_type, status, response_code, details, payload")
         .order("created_at", { ascending: false })
         .limit(2000);
 
       if (logsError) throw logsError;
       const allLogs = logs ?? [];
 
-      // 3. Build a map: orderId → logs[]
+      // 3. Fetch N8N dispatch status from the view (real HTTP responses)
+      const oldestOrder = orders[orders.length - 1];
+      const { data: dispatches } = await supabase
+        .from("order_n8n_dispatch")
+        .select("order_id, status_code, dispatch_status, dispatched_at, response_content")
+        .gte("order_created_at", oldestOrder.created_at)
+        .order("order_id", { ascending: false });
+
+      // Map: order_id → dispatch info
+      const dispatchMap = new Map<number, any>();
+      for (const d of dispatches ?? []) {
+        if (!dispatchMap.has(d.order_id)) {
+          dispatchMap.set(d.order_id, d);
+        }
+      }
+
+      // 4. Build log map: orderId → logs[]
       const logsByOrder = new Map<string, any[]>();
       for (const log of allLogs) {
         const oid = extractOrderId(log);
@@ -480,7 +543,7 @@ export function useOrderHealth(limit = 60) {
         logsByOrder.get(oid)!.push(log);
       }
 
-      // 4. Fetch profiles for customer names
+      // 5. Fetch profiles for customer names
       const userIds = orders.map((o) => o.user_id).filter(Boolean);
       let profiles: any[] = [];
       if (userIds.length > 0) {
@@ -492,20 +555,17 @@ export function useOrderHealth(limit = 60) {
       }
       const profileMap = new Map(profiles.map((p) => [p.id, p]));
 
-      // 5. Build entries
+      // 6. Build entries
       return orders.map((order): OrderHealthEntry => {
         const profile = profileMap.get(order.user_id);
         const addr = order.shipping_address as any;
         const customerName = profile
-          ? `${profile.first_name ?? ""} ${profile.last_name ?? ""}`.trim() ||
-            "Cliente"
-          : addr?.full_name ??
-            addr?.first_name ??
-            order.guest_email ??
-            "Cliente";
+          ? `${profile.first_name ?? ""} ${profile.last_name ?? ""}`.trim() || "Cliente"
+          : addr?.full_name ?? addr?.first_name ?? order.guest_email ?? "Cliente";
 
         const orderLogs = logsByOrder.get(String(order.id)) ?? [];
-        const steps = buildPipeline(order, orderLogs);
+        const n8nDispatch = dispatchMap.get(order.id) ?? null;
+        const steps = buildPipeline(order, orderLogs, n8nDispatch);
         const hasError = steps.some((s) => s.status === "error");
         const errorCount = steps.filter((s) => s.status === "error").length;
 
