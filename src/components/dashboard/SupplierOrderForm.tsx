@@ -104,15 +104,15 @@ const OrderItemRow = memo(function OrderItemRow({
   }, [setValue, index]);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end border p-3 rounded-lg bg-gray-50 relative">
+    <div className="grid grid-cols-1 md:grid-cols-12 gap-2 items-start border p-3 rounded-lg bg-gray-50 relative">
       {/* Produto */}
-      <div className="md:col-span-7">
+      <div className="md:col-span-8">
         <FormField
           control={control}
           name={`items.${index}.product_id`}
           render={() => (
             <FormItem>
-              <FormLabel>Produto / Variação</FormLabel>
+              <FormLabel className="text-[11px]">Produto / Variação</FormLabel>
               <ProductCombobox
                 value={comboValue}
                 selectedItem={selectedItem}
@@ -120,6 +120,7 @@ const OrderItemRow = memo(function OrderItemRow({
                 onChange={handleChange}
                 onClear={handleClear}
                 placeholder="Buscar produto..."
+                allowWrap={true}
               />
               <FormMessage />
             </FormItem>
@@ -134,9 +135,9 @@ const OrderItemRow = memo(function OrderItemRow({
           name={`items.${index}.quantity`}
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="text-xs">Qtd</FormLabel>
+              <FormLabel className="text-[11px]">Qtd</FormLabel>
               <FormControl>
-                <Input type="number" min={1} {...field} />
+                <Input type="number" min={1} className="h-8 text-sm px-2" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -145,15 +146,15 @@ const OrderItemRow = memo(function OrderItemRow({
       </div>
 
       {/* Custo */}
-      <div className="md:col-span-2">
+      <div className="md:col-span-1 min-w-[90px]">
         <FormField
           control={control}
           name={`items.${index}.unit_cost`}
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="text-xs">Custo Unit. (R$)</FormLabel>
+              <FormLabel className="text-[11px]">Custo (R$)</FormLabel>
               <FormControl>
-                <Input type="number" step="0.01" min={0.01} {...field} />
+                <Input type="number" step="0.01" min={0.01} className="h-8 text-sm px-2" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -162,13 +163,13 @@ const OrderItemRow = memo(function OrderItemRow({
       </div>
 
       {/* Remover */}
-      <div className="md:col-span-1 pb-1">
+      <div className="md:col-span-1 pt-5 flex items-center justify-center">
         <Button
           type="button"
           variant="ghost"
           size="icon"
           onClick={onRemove}
-          className="text-red-500 hover:bg-red-50"
+          className="text-red-500 hover:bg-red-50 h-8 w-8"
         >
           <Trash2 className="h-4 w-4" />
         </Button>

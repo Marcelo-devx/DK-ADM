@@ -39,6 +39,7 @@ interface ProductComboboxProps {
   onChange: (value: string, item: SelectableItem) => void;
   onClear?: () => void;
   placeholder?: string;
+  allowWrap?: boolean;
 }
 
 export const ProductCombobox = React.memo(function ProductCombobox({
@@ -48,6 +49,7 @@ export const ProductCombobox = React.memo(function ProductCombobox({
   onChange,
   onClear,
   placeholder = "Buscar produto...",
+  allowWrap = false,
 }: ProductComboboxProps) {
   const [open, setOpen] = React.useState(false);
   const [searchValue, setSearchValue] = React.useState("");
@@ -125,16 +127,33 @@ export const ProductCombobox = React.memo(function ProductCombobox({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="w-full justify-between h-10 px-3 font-normal"
+          className={cn(
+            "w-full justify-between px-3 font-normal",
+            allowWrap ? "h-auto min-h-10 py-2" : "h-10"
+          )}
           title={selectedItem ? selectedItem.name : placeholder}
         >
-          <div className="flex items-center justify-between w-full gap-2 min-w-0">
-            <span className="truncate flex-1 text-left" title={selectedItem?.name ?? placeholder}>
+          <div className={cn(
+            "flex items-center justify-between w-full gap-2 min-w-0",
+            allowWrap && selectedItem ? "items-start" : "items-center"
+          )}>
+            <span
+              className={cn(
+                "flex-1 text-left",
+                allowWrap
+                  ? "whitespace-normal break-words leading-snug"
+                  : "truncate"
+              )}
+              title={selectedItem?.name ?? placeholder}
+            >
               {selectedItem ? selectedItem.name : (
                 <span className="text-muted-foreground">{placeholder}</span>
               )}
             </span>
-            <div className="flex items-center gap-1 shrink-0">
+            <div className={cn(
+              "flex items-center gap-1 shrink-0",
+              allowWrap && selectedItem ? "mt-0.5" : ""
+            )}>
               {selectedItem && (
                 <>
                   <Button
