@@ -110,12 +110,12 @@ export function OrderEditModal({ order, isOpen, onClose }: OrderEditModalProps) 
   const handleSave = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('admin-update-order', {
-        body: { orderId: order.id, updates, reason: "Edição manual pelo admin" },
-      });
+      const { error } = await supabase
+        .from('orders')
+        .update(updates)
+        .eq('id', order.id);
 
       if (error) throw new Error(error.message);
-      if (data?.error) throw new Error(data.error);
 
       showSuccess(`Pedido #${order.id} atualizado com sucesso!`);
       queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });

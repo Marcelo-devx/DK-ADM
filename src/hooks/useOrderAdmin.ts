@@ -31,7 +31,7 @@ interface OrderHistoryEntry {
   changed_at: string;
   change_type: 'status' | 'value' | 'address' | 'cancel' | 'delete';
   reason: string | null;
-  profiles: {
+  profiles?: {
     id: string;
     first_name: string | null;
     last_name: string | null;
@@ -293,25 +293,26 @@ export const useOrderAdmin = () => {
 
   // Buscar histórico do pedido
   const getOrderHistory = async (orderId: number): Promise<OrderHistoryEntry[]> => {
-    const { data, error } = await supabase.functions.invoke('admin-get-order-history', {
-      body: { orderId },
-    });
+    const { data, error } = await supabase
+      .from('order_history')
+      .select('id, order_id, field_name, old_value, new_value, changed_at, change_type, reason, changed_by')
+      .eq('order_id', orderId)
+      .order('changed_at', { ascending: false });
 
     if (error) throw new Error(error.message);
-    if (!data?.success) throw new Error(data?.error || 'Error fetching history');
-    return data.history || [];
+    return data || [];
   };
 
   // Atualizar pedido
   const updateOrderMutation = useMutation({
-    mutationFn: async ({ orderId, updates, reason }: { orderId: number; updates: any; reason: string }) => {
-      const { data, error } = await supabase.functions.invoke('admin-update-order', {
-        body: { orderId, updates, reason },
-      });
+    mutationFn: async ({ orderId, updates }: { orderId: number; updates: any; reason: string }) => {
+      const { error } = await supabase
+        .from('orders')
+        .update(updates)
+        .eq('id', orderId);
 
       if (error) throw new Error(error.message);
-      if (data?.error) throw new Error(data.error);
-      return data;
+      return { success: true };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['adminOrder'] });
