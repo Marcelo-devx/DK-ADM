@@ -34,22 +34,23 @@ function formatTimestamp(ts?: string) {
 function logStatusLabel(logStatus?: string): string | null {
   if (!logStatus) return null;
   const map: Record<string, string> = {
-    sent: "Enviado",
-    success: "Sucesso",
-    sending: "Enviando",
-    processing: "Processando",
-    trigger_fired: "Disparado",
-    approved: "Aprovado",
-    processed: "Processado",
-    received: "Recebido",
-    fetched: "Consultado",
+    sent: "Enviado ✓",
+    success: "Sucesso ✓",
+    sending: "Enviando...",
+    processing: "Processando...",
+    trigger_fired: "Disparado ✓",
+    approved: "Aprovado ✓",
+    processed: "Processado ✓",
+    received: "Recebido ✓",
+    fetched: "Consultado ✓",
     rejected: "Rejeitado",
     unauthorized: "Não autorizado",
     ignored: "Ignorado",
     no_action: "Sem ação",
     in_process: "Em processo",
-    implied: "Criado",
-    implied_by_status: "Confirmado pelo status",
+    implied: "Criado ✓",
+    implied_by_status: "Confirmado pelo status ✓",
+    no_log: "Sem registro",
     error: "Erro",
   };
   return map[logStatus] ?? logStatus;
@@ -67,13 +68,15 @@ export function PipelineNode({
   const isSuccess = step.status === "success";
   const isPending = step.status === "pending";
   const isWarning = step.status === "warning";
+  const isNoLog = step.logStatus === "no_log";
 
   const circleClass = cn(
     "w-11 h-11 rounded-full flex items-center justify-center border-2 shadow-sm transition-all flex-shrink-0",
     isSuccess && "bg-green-50 border-green-400",
     isError && "bg-red-50 border-red-500 ring-4 ring-red-200 animate-pulse",
     isPending && "bg-gray-50 border-gray-300",
-    isWarning && "bg-yellow-50 border-yellow-400"
+    isWarning && !isNoLog && "bg-yellow-50 border-yellow-400",
+    isWarning && isNoLog && "bg-orange-50 border-orange-300"
   );
 
   const labelClass = cn(
@@ -81,7 +84,8 @@ export function PipelineNode({
     isSuccess && "text-green-700",
     isError && "text-red-700",
     isPending && "text-gray-400",
-    isWarning && "text-yellow-700"
+    isWarning && !isNoLog && "text-yellow-700",
+    isWarning && isNoLog && "text-orange-600"
   );
 
   return (
@@ -94,7 +98,8 @@ export function PipelineNode({
             {isSuccess && <CheckCircle2 className="w-5 h-5 text-green-500" />}
             {isError && <XCircle className="w-5 h-5 text-red-500" />}
             {isPending && <Clock className="w-5 h-5 text-gray-300" />}
-            {isWarning && <AlertTriangle className="w-5 h-5 text-yellow-500" />}
+            {isWarning && !isNoLog && <AlertTriangle className="w-5 h-5 text-yellow-500" />}
+            {isWarning && isNoLog && <AlertTriangle className="w-5 h-5 text-orange-400" />}
           </div>
 
           {/* Label */}
@@ -118,6 +123,16 @@ export function PipelineNode({
               Aguardando
             </span>
           )}
+          {isWarning && isNoLog && (
+            <span className="mt-0.5 text-[9px] font-semibold text-orange-500 text-center">
+              Sem registro
+            </span>
+          )}
+          {isWarning && !isNoLog && (
+            <span className="mt-0.5 text-[9px] font-semibold text-yellow-600 text-center">
+              {logStatusLabel(step.logStatus)}
+            </span>
+          )}
         </div>
 
         {/* Connector line */}
@@ -125,11 +140,51 @@ export function PipelineNode({
           <div
             className={cn(
               "flex-1 h-0.5 mx-1",
-              isSuccess ? "bg-green-300" : "bg-gray-200"
+              isSuccess ? "bg-green-300" : isWarning ? "bg-orange-200" : "bg-gray-200"
             )}
           />
         )}
       </div>
+
+      {/* ── Warning banner for no_log (N8N sem registro) ─────────────────── */}
+      {isWarning && isNoLog && (
+        <div className="mt-3 w-full max-w-[220px]">
+          <div className="rounded-xl border-2 border-orange-300 bg-orange-50 p-3 shadow-sm">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0 text-orange-400" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-black text-orange-800 leading-tight">
+                  Sem registro de disparo
+                </p>
+                <p className="text-[10px] text-gray-600 mt-0.5 leading-snug">
+                  Não há log confirmando que o N8N foi notificado para este pedido.
+                </p>
+                <p className="text-[10px] font-semibold text-orange-700 mt-1 leading-snug">
+                  💡 O disparo pode ter ocorrido sem gravar log, ou o trigger falhou silenciosamente.
+                </p>
+                {onRedispatch && (
+                  <div className="mt-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 text-[10px] px-2 border-orange-200 text-orange-700 hover:bg-orange-100"
+                      onClick={onRedispatch}
+                      disabled={isRedispatching}
+                    >
+                      {isRedispatching ? (
+                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                      ) : (
+                        <RotateCcw className="w-3 h-3 mr-1" />
+                      )}
+                      {isRedispatching ? "Disparando..." : "Re-disparar N8N"}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Error banner — opens automatically ─────────────────────────── */}
       {isError && step.translatedError && (
@@ -176,7 +231,6 @@ export function PipelineNode({
                   💡 {step.translatedError.suggestion}
                 </p>
 
-                {/* Raw details */}
                 {step.rawDetails && (
                   <p className="text-[9px] font-mono text-gray-500 mt-1 break-all leading-snug">
                     {step.rawDetails}

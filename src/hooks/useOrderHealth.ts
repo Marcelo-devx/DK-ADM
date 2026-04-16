@@ -110,6 +110,8 @@ interface StepTemplate {
   eventTypes: string[];
   // if true, this step is considered done just because the order exists (no log needed)
   impliedByOrderExistence?: boolean;
+  // if true, infer success from order status values
+  impliedByOrderStatus?: string[];
 }
 
 function getPipelineTemplate(paymentMethod: string): StepTemplate[] {
@@ -123,16 +125,23 @@ function getPipelineTemplate(paymentMethod: string): StepTemplate[] {
         label: "Pedido Criado",
         icon: "📦",
         eventTypes: ["order_created"],
-        // order_created and N8N notification are the SAME event in this system.
-        // The trigger fires, sends to N8N, and logs as order_created.
-        // So this single step covers both "order created" AND "N8N notified".
         impliedByOrderExistence: true,
+      },
+      {
+        // N8N is notified via the order_created event (same trigger).
+        // We show it as a separate node but feed it from the same logs.
+        // If there's a log with status sent/success → green.
+        // If no log but order exists → "Sem registro" (warning, not error).
+        key: "n8n_notified",
+        label: "N8N Notificado",
+        icon: "🔔",
+        eventTypes: ["order_created"],
       },
       {
         key: "pix_generated",
         label: "PIX Gerado",
         icon: "💰",
-        eventTypes: ["mercadopago_preference", "mercadopago_payment_attempt"],
+        eventTypes: ["mercadopago_preference", "mercadopago_payment_attempt", "mercadopago_notification"],
       },
       {
         key: "payment_confirmed",
@@ -143,12 +152,14 @@ function getPipelineTemplate(paymentMethod: string): StepTemplate[] {
           "api_payment_confirmed",
           "order_paid",
         ],
+        impliedByOrderStatus: ["pago", "finaliz", "entregue"],
       },
       {
-        key: "order_finalized",
-        label: "Pedido Finalizado",
+        key: "order_paid",
+        label: "Pedido Pago",
         icon: "🎉",
-        eventTypes: ["order_delivered"],
+        eventTypes: ["order_paid", "order_delivered", "api_payment_confirmed"],
+        impliedByOrderStatus: ["pago", "finaliz", "entregue"],
       },
     ];
   }
@@ -171,6 +182,12 @@ function getPipelineTemplate(paymentMethod: string): StepTemplate[] {
         impliedByOrderExistence: true,
       },
       {
+        key: "n8n_notified",
+        label: "N8N Notificado",
+        icon: "🔔",
+        eventTypes: ["order_created"],
+      },
+      {
         key: "mp_processing",
         label: "MP Processando",
         icon: "💳",
@@ -189,12 +206,14 @@ function getPipelineTemplate(paymentMethod: string): StepTemplate[] {
           "mercadopago_payment_processed",
           "api_payment_confirmed",
         ],
+        impliedByOrderStatus: ["pago", "finaliz", "entregue"],
       },
       {
         key: "order_finalized",
         label: "Pedido Finalizado",
         icon: "🎉",
         eventTypes: ["order_paid", "order_delivered"],
+        impliedByOrderStatus: ["finaliz", "entregue"],
       },
     ];
   }
@@ -210,6 +229,12 @@ function getPipelineTemplate(paymentMethod: string): StepTemplate[] {
         impliedByOrderExistence: true,
       },
       {
+        key: "n8n_notified",
+        label: "N8N Notificado",
+        icon: "🔔",
+        eventTypes: ["order_created"],
+      },
+      {
         key: "crypto_pending",
         label: "Aguardando Crypto",
         icon: "🪙",
@@ -220,12 +245,14 @@ function getPipelineTemplate(paymentMethod: string): StepTemplate[] {
         label: "Confirmado",
         icon: "✅",
         eventTypes: ["api_payment_confirmed", "order_paid"],
+        impliedByOrderStatus: ["pago", "finaliz"],
       },
       {
         key: "order_finalized",
         label: "Finalizado",
         icon: "🎉",
         eventTypes: ["order_delivered"],
+        impliedByOrderStatus: ["finaliz", "entregue"],
       },
     ];
   }
@@ -238,6 +265,12 @@ function getPipelineTemplate(paymentMethod: string): StepTemplate[] {
       icon: "📦",
       eventTypes: ["order_created"],
       impliedByOrderExistence: true,
+    },
+    {
+      key: "n8n_notified",
+      label: "N8N Notificado",
+      icon: "🔔",
+      eventTypes: ["order_created"],
     },
     {
       key: "payment",
@@ -258,12 +291,14 @@ function getPipelineTemplate(paymentMethod: string): StepTemplate[] {
         "api_payment_confirmed",
         "order_paid",
       ],
+      impliedByOrderStatus: ["pago", "finaliz", "entregue"],
     },
     {
-      key: "order_finalized",
-      label: "Finalizado",
+      key: "order_paid",
+      label: "Pedido Pago",
       icon: "🎉",
-      eventTypes: ["order_delivered"],
+      eventTypes: ["order_paid", "order_delivered"],
+      impliedByOrderStatus: ["pago", "finaliz", "entregue"],
     },
   ];
 }
@@ -273,6 +308,7 @@ function getPipelineTemplate(paymentMethod: string): StepTemplate[] {
 // ─────────────────────────────────────────────────────────────────────────────
 function buildPipeline(order: any, orderLogs: any[]): PipelineStep[] {
   const template = getPipelineTemplate(order.payment_method ?? "");
+  const orderStatus = (order.status ?? "").toLowerCase();
 
   return template.map((step): PipelineStep => {
     // Find all logs matching this step's event types
@@ -285,53 +321,87 @@ function buildPipeline(order: any, orderLogs: any[]): PipelineStep[] {
 
     const latestLog = matchingLogs[0];
 
+    // ── Special: "Pedido Criado" — always green if order exists ──────────
+    if (step.impliedByOrderExistence) {
+      return {
+        key: step.key,
+        label: step.label,
+        icon: step.icon,
+        status: "success",
+        timestamp: order.created_at,
+        logStatus: "implied",
+      };
+    }
+
+    // ── Special: "N8N Notificado" — fed by order_created logs ────────────
+    // The order_created event IS the N8N notification trigger.
+    // If we have a sent/success log → green.
+    // If no log at all → warning (no record, but may have happened).
+    if (step.key === "n8n_notified") {
+      if (latestLog) {
+        const s = mapLogStatus(latestLog.event_type, latestLog.status);
+        if (s === "error") {
+          const translated = translateError(
+            latestLog.event_type,
+            latestLog.response_code,
+            latestLog.details
+          );
+          return {
+            key: step.key,
+            label: step.label,
+            icon: step.icon,
+            status: "error",
+            timestamp: latestLog.created_at,
+            responseCode: latestLog.response_code,
+            rawDetails: latestLog.details,
+            rawPayload: latestLog.payload,
+            eventType: latestLog.event_type,
+            logStatus: latestLog.status,
+            translatedError: translated,
+          };
+        }
+        // sent / success / processing → green (it fired)
+        return {
+          key: step.key,
+          label: step.label,
+          icon: step.icon,
+          status: "success",
+          timestamp: latestLog.created_at,
+          rawDetails: latestLog.details,
+          rawPayload: latestLog.payload,
+          eventType: latestLog.event_type,
+          logStatus: latestLog.status,
+        };
+      }
+      // No log — show as warning: "Sem registro de disparo"
+      return {
+        key: step.key,
+        label: step.label,
+        icon: step.icon,
+        status: "warning",
+        logStatus: "no_log",
+      };
+    }
+
+    // ── Infer from order status ───────────────────────────────────────────
+    if (step.impliedByOrderStatus) {
+      const matchesStatus = step.impliedByOrderStatus.some((s) =>
+        orderStatus.includes(s)
+      );
+      if (matchesStatus && !latestLog) {
+        return {
+          key: step.key,
+          label: step.label,
+          icon: step.icon,
+          status: "success",
+          timestamp: order.created_at,
+          logStatus: "implied_by_status",
+        };
+      }
+    }
+
     // ── No log found ──────────────────────────────────────────────────────
     if (!latestLog) {
-      // "Pedido Criado" is always green if the order exists
-      if (step.impliedByOrderExistence) {
-        return {
-          key: step.key,
-          label: step.label,
-          icon: step.icon,
-          status: "success",
-          timestamp: order.created_at,
-          logStatus: "implied",
-        };
-      }
-
-      // For payment steps: if order status already shows it's paid/finalized,
-      // mark as success even without a log
-      const orderStatus = (order.status ?? "").toLowerCase();
-      if (
-        step.key === "payment_confirmed" &&
-        (orderStatus.includes("pago") ||
-          orderStatus.includes("finaliz") ||
-          orderStatus.includes("entregue"))
-      ) {
-        return {
-          key: step.key,
-          label: step.label,
-          icon: step.icon,
-          status: "success",
-          timestamp: order.created_at,
-          logStatus: "implied_by_status",
-        };
-      }
-
-      if (
-        step.key === "order_finalized" &&
-        (orderStatus.includes("finaliz") || orderStatus.includes("entregue"))
-      ) {
-        return {
-          key: step.key,
-          label: step.label,
-          icon: step.icon,
-          status: "success",
-          timestamp: order.created_at,
-          logStatus: "implied_by_status",
-        };
-      }
-
       return {
         key: step.key,
         label: step.label,
