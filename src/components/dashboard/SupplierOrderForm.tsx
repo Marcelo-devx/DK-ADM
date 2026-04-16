@@ -106,7 +106,7 @@ const OrderItemRow = memo(function OrderItemRow({
   return (
     <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end border p-3 rounded-lg bg-gray-50 relative">
       {/* Produto */}
-      <div className="md:col-span-5">
+      <div className="md:col-span-7">
         <FormField
           control={control}
           name={`items.${index}.product_id`}
@@ -128,13 +128,13 @@ const OrderItemRow = memo(function OrderItemRow({
       </div>
 
       {/* Quantidade */}
-      <div className="md:col-span-3">
+      <div className="md:col-span-2">
         <FormField
           control={control}
           name={`items.${index}.quantity`}
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Qtd a Comprar</FormLabel>
+              <FormLabel className="text-xs">Qtd</FormLabel>
               <FormControl>
                 <Input type="number" min={1} {...field} />
               </FormControl>
@@ -145,13 +145,13 @@ const OrderItemRow = memo(function OrderItemRow({
       </div>
 
       {/* Custo */}
-      <div className="md:col-span-3">
+      <div className="md:col-span-2">
         <FormField
           control={control}
           name={`items.${index}.unit_cost`}
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Custo Unit. (R$)</FormLabel>
+              <FormLabel className="text-xs">Custo Unit. (R$)</FormLabel>
               <FormControl>
                 <Input type="number" step="0.01" min={0.01} {...field} />
               </FormControl>
