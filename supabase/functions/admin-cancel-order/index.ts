@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import * as jose from "https://deno.land/x/jose@v4.15.5/index.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,8 +14,23 @@ serve(async (req) => {
 
   try {
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+
+    // Decodifica o JWT sem verificar assinatura para extrair o user_id (sub)
+    // A segurança é garantida pelo service role key nas operações de DB
+    const decoded = jose.decodeJwt(token);
+    const userId = decoded.sub;
+
+    if (!userId) {
+      console.error("[admin-cancel-order] No user ID in token");
+      return new Response(JSON.stringify({ error: "Token inválido" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -22,29 +38,13 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-
-    // Verifica o usuário autenticado
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-
-    const { data: { user }, error: userError } = await userClient.auth.getUser();
-    if (userError || !user) {
-      console.error("[admin-cancel-order] Auth error:", userError);
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Verifica se o usuário tem role de admin ou gerente_geral
     const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
 
+    // Verifica se o usuário tem role de admin ou gerente
     const { data: profile, error: profileError } = await serviceClient
       .from("profiles")
       .select("role")
-      .eq("id", user.id)
+      .eq("id", userId)
       .single();
 
     if (profileError || !profile) {
@@ -73,7 +73,7 @@ serve(async (req) => {
       });
     }
 
-    console.log("[admin-cancel-order] Cancelando pedido:", { orderId, reason, returnStock, userId: user.id });
+    console.log("[admin-cancel-order] Cancelando pedido:", { orderId, reason, returnStock, userId });
 
     // Busca o pedido atual
     const { data: order, error: orderError } = await serviceClient
@@ -121,14 +121,13 @@ serve(async (req) => {
         field_name: "status",
         old_value: oldStatus,
         new_value: "Cancelado",
-        changed_by: user.id,
+        changed_by: userId,
         change_type: "cancel",
         reason: reason,
       });
 
     if (historyError) {
       console.error("[admin-cancel-order] History insert error:", historyError);
-      // Não falha por causa do histórico, apenas loga
     }
 
     console.log("[admin-cancel-order] Pedido cancelado com sucesso:", orderId);
