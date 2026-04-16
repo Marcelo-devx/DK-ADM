@@ -12,7 +12,7 @@ export const useUser = () => {
   const session = useSession();
   const user = session?.user;
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!!user?.id);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLogistica, setIsLogistica] = useState(false);
   const [isGerente, setIsGerente] = useState(false);

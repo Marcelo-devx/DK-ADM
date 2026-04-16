@@ -113,7 +113,13 @@ export const SessionContextProvider = (props: { children: React.ReactNode }) => 
             return session;
           });
         } else if (event === 'SIGNED_OUT') {
-          setSession(null);
+          setSession(prev => {
+            if (prev !== null) {
+              // Havia sessão ativa — foi desconectado (ex: token expirado), redireciona para login
+              setTimeout(() => navigateRef.current('/login'), 0);
+            }
+            return null;
+          });
         } else if (event === 'INITIAL_SESSION') {
           setSession(session);
         }

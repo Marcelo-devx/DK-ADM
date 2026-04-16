@@ -60,7 +60,7 @@ const fetchOrders = async (userId: string) => {
 };
 
 const MyOrdersPage = () => {
-  const { user, loading: userLoading } = useUser();
+  const { user } = useUser();
   const [isReviewModalOpen, setReviewModalOpen] = useState(false);
   const [viewFilter, setViewFilter] = useState<"all" | "paid" | "canceled">("all");
 
@@ -91,7 +91,7 @@ const MyOrdersPage = () => {
 
   const isCanceledOrder = (status: string) => status === 'Cancelado';
 
-  if (userLoading || isLoading) {
+  if (isLoading) {
     return (
       <div className="container mx-auto px-4 py-4 md:px-8 md:py-8">
         <Skeleton className="h-8 w-40 mb-4" />
