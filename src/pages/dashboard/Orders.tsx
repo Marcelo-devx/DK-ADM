@@ -609,7 +609,7 @@ const OrdersPage = () => {
             rows.push({
                 "Número do Pedido": order.id,
                 "Cliente": `${order.profiles?.first_name || ''} ${order.profiles?.last_name || ''}`.trim(),
-                "Data": new Date(order.created_at).toLocaleDateString("pt-BR"),
+                "Data": new Date(order.created_at).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }),
                 "Produto": item.name_at_purchase,
                 "Quantidade": item.quantity,
                 "Custo Unitário": unitCost,
@@ -1098,8 +1098,8 @@ const OrdersPage = () => {
                        </TableCell>
                         <TableCell>
                         <div className="flex flex-col">
-                            <span className="text-xs">{new Date(order.created_at).toLocaleDateString("pt-BR")}</span>
-                            <span className="text-[10px] text-muted-foreground">{new Date(order.created_at).toLocaleTimeString("pt-BR", { hour: '2-digit', minute: '2-digit' })}</span>
+                            <span className="text-xs">{new Date(order.created_at).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}</span>
+                            <span className="text-[10px] text-muted-foreground">{new Date(order.created_at).toLocaleTimeString("pt-BR", { hour: '2-digit', minute: '2-digit', timeZone: "America/Sao_Paulo" })}</span>
                             
                             {isNextRoute && order.delivery_status === 'Pendente' && (
                             <Badge variant="outline" className="mt-1 w-fit text-[9px] bg-yellow-100 text-yellow-800 border-yellow-300 gap-1 px-1">
