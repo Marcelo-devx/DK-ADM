@@ -193,7 +193,7 @@ export const ProductCombobox = React.memo(function ProductCombobox({
         </Button>
       </PopoverTrigger>
 
-      <PopoverContent className="w-[420px] p-0" align="start">
+      <PopoverContent className="w-[520px] p-0" align="start">
         <Command shouldFilter={false}>
           {/* Campo de busca */}
           <div className="flex items-center border-b px-3">
@@ -233,11 +233,10 @@ export const ProductCombobox = React.memo(function ProductCombobox({
                       <Check
                         className={cn("mr-2 h-4 w-4 shrink-0", isSelected ? "opacity-100" : "opacity-0")}
                       />
-                      <div className="flex items-center w-full gap-2 min-w-0">
+                      <div className="flex items-start w-full gap-2 min-w-0">
                         <div className="flex-1 flex flex-col min-w-0">
                           <span
-                            className={cn("truncate", p.is_variant ? "pl-1 text-sm" : "font-medium")}
-                            title={p.name}
+                            className={cn("whitespace-normal break-words leading-snug", p.is_variant ? "pl-1 text-sm" : "font-medium")}
                           >
                             {p.name}
                           </span>
