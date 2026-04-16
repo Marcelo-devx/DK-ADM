@@ -404,30 +404,28 @@ const OrdersPage = () => {
     },
   });
 
-  const syncPendingDeliveryMutation = useMutation({
-    mutationFn: async (order: Order) => {
-      const { error } = await supabase
-        .from('orders')
-        .update({ delivery_status: 'Aguardando Coleta' })
-        .eq('id', order.id)
-        .eq('delivery_status', 'Pendente')
-        .in('status', ['Pago', 'Finalizada']);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
-    },
-  });
-
   useEffect(() => {
     if (!orders) return;
 
-    orders.forEach((order) => {
-      if ((order.status === 'Pago' || order.status === 'Finalizada') && order.delivery_status === 'Pendente') {
-        syncPendingDeliveryMutation.mutate(order);
-      }
-    });
-  }, [orders, syncPendingDeliveryMutation]);
+    const ordersToSync = orders.filter(
+      (order) => (order.status === 'Pago' || order.status === 'Finalizada') && order.delivery_status === 'Pendente'
+    );
+
+    if (ordersToSync.length === 0) return;
+
+    // Faz uma única atualização em lote em vez de uma mutation por pedido
+    const ids = ordersToSync.map((o) => o.id);
+    supabase
+      .from('orders')
+      .update({ delivery_status: 'Aguardando Coleta' })
+      .in('id', ids)
+      .then(({ error }) => {
+        if (!error) {
+          queryClient.invalidateQueries({ queryKey: ['ordersAdmin'] });
+        }
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders]);
 
   const deleteOrderMutation = useMutation({
     mutationFn: async (orderId: number) => {
