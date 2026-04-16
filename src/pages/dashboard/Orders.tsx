@@ -292,17 +292,14 @@ const OrdersPage = () => {
 
       // Filtro de Data
       if (startDate) {
-        const orderDate = new Date(order.created_at);
-        const start = new Date(startDate);
-        start.setHours(0, 0, 0, 0); // Início do dia
-        if (orderDate < start) return false;
+        // Comparar apenas a parte da data (YYYY-MM-DD) para evitar problemas de timezone
+        const orderDateStr = order.created_at.slice(0, 10);
+        if (orderDateStr < startDate) return false;
       }
 
       if (endDate) {
-        const orderDate = new Date(order.created_at);
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999); // Final do dia
-        if (orderDate > end) return false;
+        const orderDateStr = order.created_at.slice(0, 10);
+        if (orderDateStr > endDate) return false;
       }
 
       // Filtro por ID do Pedido (busca exata)
