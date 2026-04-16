@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,7 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ImageUploader } from "../ImageUploader";
-import { Tag } from "lucide-react";
+import { Tag, Loader2 } from "lucide-react";
 
 interface BasicInfoTabProps {
   onSubmit: (values: { name: string; description: string; image_url: string }) => void;
@@ -36,6 +37,8 @@ export const BasicInfoTab = ({
   isSubmitting = false,
   initialData,
 }: BasicInfoTabProps) => {
+  const [isUploading, setIsUploading] = useState(false);
+
   const form = useForm({
     defaultValues: {
       name: initialData?.name || "",
@@ -52,17 +55,19 @@ export const BasicInfoTab = ({
       });
       return false;
     }
-    
+
     console.log("[BasicInfoTab] Enviando dados básicos:", {
       name: values.name,
       description: values.description,
       image_url: values.image_url,
       hasImage: !!values.image_url
     });
-    
+
     onSubmit(values);
     return true;
   };
+
+  const isDisabled = isSubmitting || isUploading;
 
   return (
     <Form {...form}>
@@ -118,9 +123,14 @@ export const BasicInfoTab = ({
               name="image_url"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Imagem Exclusiva do Kit</FormLabel>
+                  <FormLabel>Imagem Exclusiva do Kit <span className="text-xs text-muted-foreground font-normal">(opcional)</span></FormLabel>
                   <ImageUploader
-                    onUploadSuccess={(url) => field.onChange(url)}
+                    onUploadSuccess={(url) => {
+                      field.onChange(url);
+                      setIsUploading(false);
+                    }}
+                    onUploadStart={() => setIsUploading(true)}
+                    onUploadError={() => setIsUploading(false)}
                     initialUrl={field.value}
                     label="Capa da Promoção"
                     className="h-[240px] max-w-full"
@@ -135,10 +145,22 @@ export const BasicInfoTab = ({
         <div className="flex justify-end pt-4">
           <Button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isDisabled}
             className="bg-blue-600 hover:bg-blue-700"
           >
-            {isSubmitting ? "Criando..." : "Avançar →"}
+            {isUploading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Aguardando upload...
+              </>
+            ) : isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Criando...
+              </>
+            ) : (
+              "Avançar →"
+            )}
           </Button>
         </div>
       </form>

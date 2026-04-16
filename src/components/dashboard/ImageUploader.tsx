@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { apiClient } from "@/api/client";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { showError, showSuccess } from "@/utils/toast";
@@ -8,6 +8,8 @@ import { cn } from "@/lib/utils";
 
 interface ImageUploaderProps {
   onUploadSuccess: (url: string) => void;
+  onUploadStart?: () => void;
+  onUploadError?: (error: string) => void;
   initialUrl?: string | null;
   label?: string;
   accept?: string;
@@ -21,6 +23,8 @@ const isVideo = (url: string) => {
 
 export const ImageUploader = ({ 
     onUploadSuccess, 
+    onUploadStart,
+    onUploadError,
     initialUrl, 
     label, 
     accept = "image/png, image/jpeg, image/webp",
@@ -41,27 +45,42 @@ export const ImageUploader = ({
 
     setUploading(true);
     setUploadError(null);
+    onUploadStart?.();
 
     const reader = new FileReader();
     reader.readAsDataURL(file);
+
+    reader.onerror = () => {
+      const msg = 'Erro ao ler o arquivo.';
+      setUploadError(msg);
+      showError(msg);
+      setUploading(false);
+      onUploadError?.(msg);
+      event.target.value = '';
+    };
+
     reader.onloadend = async () => {
       const base64data = reader.result as string;
       try {
         console.log('[ImageUploader] Iniciando upload via Cloudinary...', { fileName: file.name, fileType: file.type, fileSize: file.size });
 
-        const result = await apiClient.invoke<{ secure_url?: string; error?: string; details?: string }>("cloudinary-upload", {
-          image: base64data,
+        const { data, error } = await supabase.functions.invoke('cloudinary-upload', {
+          body: { image: base64data },
         });
 
-        if (result.error) {
-          throw new Error(result.error);
+        if (error) {
+          throw new Error(error.message || 'Falha na comunicação com o servidor.');
         }
 
-        if (!result.data?.secure_url) {
-          throw new Error(result.data?.details || result.data?.error || 'Cloudinary não retornou uma URL válida.');
+        if (data?.error) {
+          throw new Error(data.error);
         }
 
-        const { secure_url } = result.data;
+        if (!data?.secure_url) {
+          throw new Error(data?.details || 'Cloudinary não retornou uma URL válida.');
+        }
+
+        const { secure_url } = data;
         setMediaUrl(secure_url);
         onUploadSuccess(secure_url);
         console.log("[ImageUploader] Upload Cloudinary bem-sucedido:", secure_url);
@@ -71,8 +90,11 @@ export const ImageUploader = ({
         const errorMsg = err?.message || 'Falha no upload do arquivo.';
         setUploadError(errorMsg);
         showError(errorMsg);
+        onUploadError?.(errorMsg);
       } finally {
         setUploading(false);
+        // Reset input so same file can be re-selected
+        event.target.value = '';
       }
     };
   };
@@ -133,7 +155,7 @@ export const ImageUploader = ({
             <>
               <UploadCloud className={cn("h-8 w-8", uploadError ? "text-red-400" : "text-muted-foreground")} />
               <p className="mt-2 text-xs text-muted-foreground font-medium text-center px-4">
-                Arraste ou clique para enviar
+                {uploadError ? "Clique para tentar novamente" : "Arraste ou clique para enviar"}
               </p>
               <Input
                 type="file"

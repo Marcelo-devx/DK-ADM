@@ -12,8 +12,9 @@ function toHex(buffer: ArrayBuffer): string {
 }
 
 Deno.serve(async (req: Request) => {
+  // Handle CORS preflight - must return 200 OK
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response(null, { status: 200, headers: corsHeaders });
   }
 
   try {
