@@ -44,7 +44,7 @@ export const ClientImportModal = ({
   isSubmitting,
 }: ClientImportModalProps) => {
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !isSubmitting && open && onClose()}>
+    <Dialog open={isOpen} onOpenChange={(open) => !isSubmitting && !open && onClose()}>
       <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">

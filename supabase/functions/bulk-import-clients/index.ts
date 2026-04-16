@@ -13,7 +13,7 @@ function buildCorsHeaders(req: Request) {
   };
 }
 
-// Extrai UUID de forma robusta do retorno do RPC (pode vir como string, objeto ou array)
+// Extrai UUID de forma robusta do retorno do RPC
 function extractUUID(data: any): string | null {
   if (!data) return null;
   if (typeof data === 'string') return data;
@@ -22,7 +22,6 @@ function extractUUID(data: any): string | null {
     const first = data[0];
     if (typeof first === 'string') return first;
     if (first && typeof first === 'object') {
-      // Tenta pegar o valor da chave get_user_id_by_email ou qualquer valor UUID
       if (first.get_user_id_by_email) return first.get_user_id_by_email;
       const vals = Object.values(first);
       if (vals.length > 0 && typeof vals[0] === 'string') return vals[0] as string;
@@ -37,9 +36,94 @@ function extractUUID(data: any): string | null {
   return null;
 }
 
-// Aguarda um tempo em ms (para dar tempo ao trigger handle_new_user criar o perfil)
-function sleep(ms: number) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+async function processClient(supabaseAdmin: any, client: any): Promise<{ success: boolean; isNew: boolean; error?: string }> {
+  if (!client.email) throw new Error("Email é obrigatório");
+
+  const email = client.email.trim().toLowerCase();
+
+  const nameParts = (client.full_name || '').trim().split(' ');
+  const firstName = nameParts[0] || '';
+  const lastName = nameParts.slice(1).join(' ') || '';
+
+  const fieldsToUpdate: Record<string, any> = {};
+  if (firstName) fieldsToUpdate.first_name = firstName;
+  if (lastName) fieldsToUpdate.last_name = lastName;
+  if (client.phone) fieldsToUpdate.phone = String(client.phone);
+  if (client.cpf_cnpj) fieldsToUpdate.cpf_cnpj = String(client.cpf_cnpj);
+  if (client.gender) fieldsToUpdate.gender = client.gender;
+  if (client.date_of_birth) fieldsToUpdate.date_of_birth = client.date_of_birth;
+  if (client.cep) fieldsToUpdate.cep = String(client.cep);
+  if (client.street) fieldsToUpdate.street = client.street;
+  if (client.number) fieldsToUpdate.number = String(client.number);
+  if (client.complement) fieldsToUpdate.complement = client.complement;
+  if (client.neighborhood) fieldsToUpdate.neighborhood = client.neighborhood;
+  if (client.city) fieldsToUpdate.city = client.city;
+  if (client.state) fieldsToUpdate.state = client.state;
+  fieldsToUpdate.email = email;
+  fieldsToUpdate.updated_at = new Date().toISOString();
+
+  const password = client.password ? String(client.password) : "123456";
+
+  // Tenta criar o usuário no auth
+  const { data: createdData, error: createError } = await supabaseAdmin.auth.admin.createUser({
+    email: email,
+    password: password,
+    email_confirm: true,
+    user_metadata: { first_name: firstName, last_name: lastName }
+  });
+
+  let userId: string | null = null;
+  let isNewUser = false;
+
+  if (createError) {
+    const isAlreadyExists =
+      createError.message?.toLowerCase().includes("already registered") ||
+      createError.message?.toLowerCase().includes("already been registered") ||
+      (createError as any).status === 422;
+
+    if (isAlreadyExists) {
+      console.log(`[bulk-import-clients] Usuário já existe: ${email}, buscando ID via RPC`);
+      const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('get_user_id_by_email', { user_email: email });
+      if (rpcError) throw new Error(`Erro ao buscar ID do usuário existente: ${rpcError.message}`);
+      userId = extractUUID(rpcData);
+      if (!userId) throw new Error(`Usuário ${email} existe no auth mas ID não foi encontrado via RPC.`);
+    } else {
+      throw createError;
+    }
+  } else {
+    userId = createdData?.user?.id ?? null;
+    isNewUser = true;
+    console.log(`[bulk-import-clients] Novo usuário criado: ${email}, ID: ${userId}`);
+  }
+
+  if (!userId) throw new Error(`ID do usuário não identificado para ${email}.`);
+
+  if (isNewUser) {
+    // Aguarda o trigger handle_new_user criar o perfil
+    await new Promise(resolve => setTimeout(resolve, 400));
+
+    // Tenta update primeiro, depois upsert como fallback
+    const { error: updateError } = await supabaseAdmin
+      .from('profiles')
+      .update(fieldsToUpdate)
+      .eq('id', userId);
+
+    if (updateError) {
+      console.warn(`[bulk-import-clients] Update falhou para ${email}, tentando upsert:`, updateError.message);
+      const { error: upsertError } = await supabaseAdmin
+        .from('profiles')
+        .upsert({ id: userId, ...fieldsToUpdate }, { onConflict: 'id' });
+      if (upsertError) throw upsertError;
+    }
+  } else {
+    const { error: updateError } = await supabaseAdmin
+      .from('profiles')
+      .update(fieldsToUpdate)
+      .eq('id', userId);
+    if (updateError) throw updateError;
+  }
+
+  return { success: true, isNew: isNewUser };
 }
 
 serve(async (req) => {
@@ -74,137 +158,33 @@ serve(async (req) => {
       errors: [] as string[]
     };
 
-    for (const client of clients) {
-      try {
-        if (!client.email) throw new Error("Email é obrigatório");
+    // Processa em lotes de 5 em paralelo para evitar timeout
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < clients.length; i += BATCH_SIZE) {
+      const batch = clients.slice(i, i + BATCH_SIZE);
+      console.log(`[bulk-import-clients] Processando lote ${Math.floor(i / BATCH_SIZE) + 1} (${batch.length} clientes)`);
 
-        const email = client.email.trim().toLowerCase();
-        console.log(`[bulk-import-clients] Processando: ${email}`);
+      const batchResults = await Promise.allSettled(
+        batch.map(client => processClient(supabaseAdmin, client))
+      );
 
-        // Monta os campos a atualizar no perfil
-        const nameParts = (client.full_name || '').trim().split(' ');
-        const firstName = nameParts[0] || '';
-        const lastName = nameParts.slice(1).join(' ') || '';
-
-        const fieldsToUpdate: Record<string, any> = {};
-
-        if (firstName) fieldsToUpdate.first_name = firstName;
-        if (lastName) fieldsToUpdate.last_name = lastName;
-        if (client.phone) fieldsToUpdate.phone = String(client.phone);
-        if (client.cpf_cnpj) fieldsToUpdate.cpf_cnpj = String(client.cpf_cnpj);
-        if (client.gender) fieldsToUpdate.gender = client.gender;
-        if (client.date_of_birth) fieldsToUpdate.date_of_birth = client.date_of_birth;
-
-        // Endereço
-        if (client.cep) fieldsToUpdate.cep = String(client.cep);
-        if (client.street) fieldsToUpdate.street = client.street;
-        if (client.number) fieldsToUpdate.number = String(client.number);
-        if (client.complement) fieldsToUpdate.complement = client.complement;
-        if (client.neighborhood) fieldsToUpdate.neighborhood = client.neighborhood;
-        if (client.city) fieldsToUpdate.city = client.city;
-        if (client.state) fieldsToUpdate.state = client.state;
-
-        // Salva o email também na coluna email do perfil (para facilitar buscas)
-        fieldsToUpdate.email = email;
-        fieldsToUpdate.updated_at = new Date().toISOString();
-
-        // NOTA: NÃO incluímos created_at aqui pois é controlado pelo banco.
-        // O campo client_since da planilha não tem coluna correspondente em profiles.
-
-        const password = client.password ? String(client.password) : "123456";
-
-        // Tenta criar o usuário no auth
-        const { data: createdData, error: createError } = await supabaseAdmin.auth.admin.createUser({
-          email: email,
-          password: password,
-          email_confirm: true,
-          user_metadata: { first_name: firstName, last_name: lastName }
-        });
-
-        let userId: string | null = null;
-        let isNewUser = false;
-
-        if (createError) {
-          // Usuário já existe (status 422 ou mensagem "already registered")
-          if (
-            createError.message?.toLowerCase().includes("already registered") ||
-            createError.message?.toLowerCase().includes("already been registered") ||
-            (createError as any).status === 422
-          ) {
-            console.log(`[bulk-import-clients] Usuário já existe: ${email}, buscando ID via RPC`);
-
-            const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('get_user_id_by_email', { user_email: email });
-
-            if (rpcError) {
-              console.error(`[bulk-import-clients] Erro no RPC get_user_id_by_email para ${email}:`, rpcError.message);
-              throw new Error(`Erro ao buscar ID do usuário existente: ${rpcError.message}`);
-            }
-
-            userId = extractUUID(rpcData);
-            console.log(`[bulk-import-clients] ID extraído do RPC para ${email}: ${userId}`);
-
-            if (!userId) {
-              throw new Error(`Usuário ${email} existe no auth mas ID não foi encontrado via RPC.`);
-            }
+      for (let j = 0; j < batchResults.length; j++) {
+        const result = batchResults[j];
+        const client = batch[j];
+        if (result.status === 'fulfilled') {
+          if (result.value.isNew) {
+            results.created++;
+            console.log(`[bulk-import-clients] ✅ Criado: ${client.email}`);
           } else {
-            console.error(`[bulk-import-clients] Erro ao criar usuário ${email}:`, createError.message);
-            throw createError;
+            results.updated++;
+            console.log(`[bulk-import-clients] ✅ Atualizado: ${client.email}`);
           }
         } else {
-          userId = createdData?.user?.id ?? null;
-          isNewUser = true;
-          console.log(`[bulk-import-clients] Novo usuário criado: ${email}, ID: ${userId}`);
+          results.failed++;
+          const errMsg = `${client.email || 'Linha desconhecida'}: ${result.reason?.message || 'Erro desconhecido'}`;
+          results.errors.push(errMsg);
+          console.error(`[bulk-import-clients] ❌ Falha:`, errMsg);
         }
-
-        if (!userId) throw new Error(`ID do usuário não identificado para ${email}.`);
-
-        if (isNewUser) {
-          // Para novos usuários: o trigger handle_new_user já criou o perfil automaticamente.
-          // Aguardamos um breve momento para garantir que o trigger executou antes do update.
-          await sleep(300);
-
-          // Atualiza o perfil criado pelo trigger com os dados da planilha
-          const { error: updateError } = await supabaseAdmin
-            .from('profiles')
-            .update(fieldsToUpdate)
-            .eq('id', userId);
-
-          if (updateError) {
-            console.error(`[bulk-import-clients] Erro ao atualizar perfil novo de ${email}:`, updateError.message);
-            // Tenta upsert como fallback caso o trigger ainda não tenha criado o perfil
-            const { error: upsertError } = await supabaseAdmin
-              .from('profiles')
-              .upsert({ id: userId, ...fieldsToUpdate }, { onConflict: 'id' });
-
-            if (upsertError) {
-              console.error(`[bulk-import-clients] Erro no upsert fallback para ${email}:`, upsertError.message);
-              throw upsertError;
-            }
-          }
-
-          results.created++;
-          console.log(`[bulk-import-clients] ✅ Criado: ${email}`);
-        } else {
-          // Para usuários existentes: atualiza apenas os campos preenchidos
-          const { error: updateError } = await supabaseAdmin
-            .from('profiles')
-            .update(fieldsToUpdate)
-            .eq('id', userId);
-
-          if (updateError) {
-            console.error(`[bulk-import-clients] Erro ao atualizar perfil existente de ${email}:`, updateError.message);
-            throw updateError;
-          }
-
-          results.updated++;
-          console.log(`[bulk-import-clients] ✅ Atualizado: ${email}`);
-        }
-
-      } catch (err: any) {
-        results.failed++;
-        const errMsg = `${client.email || 'Linha desconhecida'}: ${err.message}`;
-        results.errors.push(errMsg);
-        console.error(`[bulk-import-clients] ❌ Falha:`, errMsg);
       }
     }
 
