@@ -2,18 +2,12 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 
-function buildCorsHeaders(req: Request) {
-  const origin = req.headers.get('origin') || '*';
-  return {
-    'Access-Control-Allow-Origin': origin,
-    'Vary': 'Origin',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Credentials': 'true',
-  };
-}
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
 
-// Extrai UUID de forma robusta do retorno do RPC
 function extractUUID(data: any): string | null {
   if (!data) return null;
   if (typeof data === 'string') return data;
@@ -100,27 +94,21 @@ async function processClient(supabaseAdmin: any, client: any): Promise<{ success
 
   if (isNewUser) {
     // Aguarda o trigger handle_new_user criar o perfil
-    await new Promise(resolve => setTimeout(resolve, 400));
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
 
-    // Tenta update primeiro, depois upsert como fallback
-    const { error: updateError } = await supabaseAdmin
-      .from('profiles')
-      .update(fieldsToUpdate)
-      .eq('id', userId);
+  // Tenta update primeiro, depois upsert como fallback
+  const { error: updateError } = await supabaseAdmin
+    .from('profiles')
+    .update(fieldsToUpdate)
+    .eq('id', userId);
 
-    if (updateError) {
-      console.warn(`[bulk-import-clients] Update falhou para ${email}, tentando upsert:`, updateError.message);
-      const { error: upsertError } = await supabaseAdmin
-        .from('profiles')
-        .upsert({ id: userId, ...fieldsToUpdate }, { onConflict: 'id' });
-      if (upsertError) throw upsertError;
-    }
-  } else {
-    const { error: updateError } = await supabaseAdmin
+  if (updateError) {
+    console.warn(`[bulk-import-clients] Update falhou para ${email}, tentando upsert:`, updateError.message);
+    const { error: upsertError } = await supabaseAdmin
       .from('profiles')
-      .update(fieldsToUpdate)
-      .eq('id', userId);
-    if (updateError) throw updateError;
+      .upsert({ id: userId, ...fieldsToUpdate }, { onConflict: 'id' });
+    if (upsertError) throw upsertError;
   }
 
   return { success: true, isNew: isNewUser };
@@ -128,13 +116,21 @@ async function processClient(supabaseAdmin: any, client: any): Promise<{ success
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: buildCorsHeaders(req) })
+    return new Response(null, { status: 204, headers: corsHeaders });
   }
 
-  const corsHeaders = buildCorsHeaders(req);
-
   try {
-    const { clients } = await req.json();
+    let body: any;
+    try {
+      body = await req.json();
+    } catch (e) {
+      return new Response(JSON.stringify({ error: 'Corpo da requisição inválido.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const { clients } = body;
 
     if (!clients || !Array.isArray(clients) || clients.length === 0) {
       return new Response(JSON.stringify({ error: 'Nenhum cliente fornecido.' }), {
@@ -145,11 +141,16 @@ serve(async (req) => {
 
     console.log(`[bulk-import-clients] Iniciando importação de ${clients.length} clientes`);
 
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      { auth: { persistSession: false } }
-    );
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      throw new Error('Variáveis de ambiente do Supabase não configuradas.');
+    }
+
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: { persistSession: false }
+    });
 
     const results = {
       created: 0,
@@ -158,33 +159,23 @@ serve(async (req) => {
       errors: [] as string[]
     };
 
-    // Processa em lotes de 5 em paralelo para evitar timeout
-    const BATCH_SIZE = 5;
-    for (let i = 0; i < clients.length; i += BATCH_SIZE) {
-      const batch = clients.slice(i, i + BATCH_SIZE);
-      console.log(`[bulk-import-clients] Processando lote ${Math.floor(i / BATCH_SIZE) + 1} (${batch.length} clientes)`);
-
-      const batchResults = await Promise.allSettled(
-        batch.map(client => processClient(supabaseAdmin, client))
-      );
-
-      for (let j = 0; j < batchResults.length; j++) {
-        const result = batchResults[j];
-        const client = batch[j];
-        if (result.status === 'fulfilled') {
-          if (result.value.isNew) {
-            results.created++;
-            console.log(`[bulk-import-clients] ✅ Criado: ${client.email}`);
-          } else {
-            results.updated++;
-            console.log(`[bulk-import-clients] ✅ Atualizado: ${client.email}`);
-          }
+    // Processa sequencialmente para evitar timeout em lotes grandes
+    for (let i = 0; i < clients.length; i++) {
+      const client = clients[i];
+      try {
+        const result = await processClient(supabaseAdmin, client);
+        if (result.isNew) {
+          results.created++;
+          console.log(`[bulk-import-clients] ✅ Criado: ${client.email}`);
         } else {
-          results.failed++;
-          const errMsg = `${client.email || 'Linha desconhecida'}: ${result.reason?.message || 'Erro desconhecido'}`;
-          results.errors.push(errMsg);
-          console.error(`[bulk-import-clients] ❌ Falha:`, errMsg);
+          results.updated++;
+          console.log(`[bulk-import-clients] ✅ Atualizado: ${client.email}`);
         }
+      } catch (err: any) {
+        results.failed++;
+        const errMsg = `${client.email || 'Linha desconhecida'}: ${err?.message || 'Erro desconhecido'}`;
+        results.errors.push(errMsg);
+        console.error(`[bulk-import-clients] ❌ Falha:`, errMsg);
       }
     }
 
@@ -199,7 +190,7 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
       }
-    )
+    );
   } catch (error: any) {
     console.error(`[bulk-import-clients] Erro interno fatal:`, error.message);
     return new Response(
@@ -208,6 +199,6 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 500,
       }
-    )
+    );
   }
 })

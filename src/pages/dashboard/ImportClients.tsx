@@ -62,16 +62,23 @@ const ImportClientsPage = () => {
 
   const bulkImportMutation = useMutation({
     mutationFn: async (clients: any[]) => {
-      const { data, error } = await supabase.functions.invoke("bulk-import-clients", {
-        body: { clients }
-      });
-      if (error) {
-        // Tenta extrair mensagem de erro mais detalhada do corpo da resposta
-        const detail = (error as any)?.context?.json?.details || (error as any)?.context?.json?.error || error.message;
-        throw new Error(detail);
+      try {
+        const { data, error } = await supabase.functions.invoke("bulk-import-clients", {
+          body: { clients }
+        });
+        if (error) {
+          // Tenta extrair mensagem de erro mais detalhada do corpo da resposta
+          const detail = (error as any)?.context?.json?.details || (error as any)?.context?.json?.error || error.message;
+          throw new Error(detail);
+        }
+        if (!data) throw new Error("Resposta vazia da função de importação.");
+        return data;
+      } catch (err: any) {
+        if (err.message?.includes("Failed to send a request")) {
+          throw new Error("Não foi possível conectar à função de importação. Tente novamente em alguns instantes.");
+        }
+        throw err;
       }
-      if (!data) throw new Error("Resposta vazia da função de importação.");
-      return data;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
