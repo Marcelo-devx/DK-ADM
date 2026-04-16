@@ -801,6 +801,7 @@ const OrdersPage = () => {
             <SelectContent>
               <SelectItem value="all">Todos os status</SelectItem>
               <SelectItem value="Pendente">Pendente</SelectItem>
+              <SelectItem value="Aguardando Pagamento">Aguardando Pagamento</SelectItem>
               <SelectItem value="Pago">Pago</SelectItem>
               <SelectItem value="Em preparo">Em preparo</SelectItem>
               <SelectItem value="Finalizada">Finalizada</SelectItem>
