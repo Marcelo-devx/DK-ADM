@@ -59,6 +59,7 @@ import RelatorioFinanceiro from "./pages/dashboard/RelatorioFinanceiro";
 import RelatorioEntradaEstoque from "./pages/dashboard/RelatorioEntradaEstoque";
 import InvestigarUsuario from "./pages/dashboard/InvestigarUsuario";
 import ReativarPedidos from "./pages/dashboard/ReativarPedidos";
+import OrderHealthMonitor from "./pages/dashboard/OrderHealthMonitor";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -138,6 +139,7 @@ const App = () => (
               <Route path="relatorio-entrada-estoque" element={<RelatorioEntradaEstoque />} />
               <Route path="investigar-usuario" element={<InvestigarUsuario />} />
               <Route path="reativar-pedidos" element={<ReativarPedidos />} />
+              <Route path="order-health" element={<OrderHealthMonitor />} />
             </Route>
             
             <Route path="*" element={<NotFound />} />
