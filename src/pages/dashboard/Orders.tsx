@@ -290,16 +290,20 @@ const OrdersPage = () => {
           if (order.delivery_status !== deliveryStatusFilter) return false;
       }
 
-      // Filtro de Data
-      if (startDate) {
-        // Comparar apenas a parte da data (YYYY-MM-DD) para evitar problemas de timezone
-        const orderDateStr = order.created_at.slice(0, 10);
-        if (orderDateStr < startDate) return false;
-      }
+      // Filtro de Data — converte para horário de Brasília (America/Sao_Paulo) antes de comparar
+      if (startDate || endDate) {
+        const orderDateBR = new Date(order.created_at).toLocaleDateString("pt-BR", {
+          timeZone: "America/Sao_Paulo",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        });
+        // Converte de DD/MM/YYYY para YYYY-MM-DD para comparação
+        const [d, m, y] = orderDateBR.split("/");
+        const orderDateStr = `${y}-${m}-${d}`;
 
-      if (endDate) {
-        const orderDateStr = order.created_at.slice(0, 10);
-        if (orderDateStr > endDate) return false;
+        if (startDate && orderDateStr < startDate) return false;
+        if (endDate && orderDateStr > endDate) return false;
       }
 
       // Filtro por ID do Pedido (busca exata)
