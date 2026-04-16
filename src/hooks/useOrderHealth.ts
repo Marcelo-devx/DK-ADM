@@ -165,6 +165,7 @@ function getPipelineTemplate(paymentMethod: string): StepTemplate[] {
   }
 
   // ── CARTÃO ────────────────────────────────────────────────────────────────
+  // Cartão de Crédito NÃO passa pelo N8N — vai direto pro Mercado Pago
   if (
     m.includes("cartão") ||
     m.includes("cartao") ||
@@ -182,27 +183,28 @@ function getPipelineTemplate(paymentMethod: string): StepTemplate[] {
         impliedByOrderExistence: true,
       },
       {
-        key: "n8n_notified",
-        label: "N8N Notificado",
+        key: "mp_notification",
+        label: "MP Notificado",
         icon: "🔔",
-        eventTypes: ["order_created"],
-      },
-      {
-        key: "mp_processing",
-        label: "MP Processando",
-        icon: "💳",
         eventTypes: [
-          "mercadopago_preference",
           "mercadopago_notification",
           "mercadopago_payment_fetch",
+          "mercadopago_preference",
+        ],
+      },
+      {
+        key: "payment_attempt",
+        label: "Tentativa de Pagamento",
+        icon: "💳",
+        eventTypes: [
+          "mercadopago_payment_attempt",
         ],
       },
       {
         key: "payment_result",
-        label: "Resultado Pagamento",
+        label: "Resultado",
         icon: "🏦",
         eventTypes: [
-          "mercadopago_payment_attempt",
           "mercadopago_payment_processed",
           "api_payment_confirmed",
         ],
@@ -219,6 +221,7 @@ function getPipelineTemplate(paymentMethod: string): StepTemplate[] {
   }
 
   // ── CRYPTO ────────────────────────────────────────────────────────────────
+  // Crypto também não passa pelo N8N
   if (m.includes("crypto") || m.includes("cripto")) {
     return [
       {
@@ -227,12 +230,6 @@ function getPipelineTemplate(paymentMethod: string): StepTemplate[] {
         icon: "📦",
         eventTypes: ["order_created"],
         impliedByOrderExistence: true,
-      },
-      {
-        key: "n8n_notified",
-        label: "N8N Notificado",
-        icon: "🔔",
-        eventTypes: ["order_created"],
       },
       {
         key: "crypto_pending",
@@ -257,7 +254,7 @@ function getPipelineTemplate(paymentMethod: string): StepTemplate[] {
     ];
   }
 
-  // ── GENERIC FALLBACK ──────────────────────────────────────────────────────
+  // ── GENERIC FALLBACK (sem N8N) ────────────────────────────────────────────
   return [
     {
       key: "order_created",
@@ -265,12 +262,6 @@ function getPipelineTemplate(paymentMethod: string): StepTemplate[] {
       icon: "📦",
       eventTypes: ["order_created"],
       impliedByOrderExistence: true,
-    },
-    {
-      key: "n8n_notified",
-      label: "N8N Notificado",
-      icon: "🔔",
-      eventTypes: ["order_created"],
     },
     {
       key: "payment",
