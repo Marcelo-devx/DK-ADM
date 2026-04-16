@@ -47,7 +47,14 @@ async function fetchClients(page: number, search: string): Promise<Client[]> {
       };
     }
 
-    const { data, error } = await supabase.functions.invoke("get-users", invokeOptions);
+    // Add a timeout so we don't wait forever for the Edge Function
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Edge Function timeout')), 8000)
+    );
+
+    const invokePromise = supabase.functions.invoke("get-users", invokeOptions);
+    const { data, error } = await Promise.race([invokePromise, timeoutPromise]) as any;
+
     if (error) throw new Error(error.message || 'Erro na Edge Function');
     if (!Array.isArray(data)) throw new Error("Resposta inválida da Edge Function.");
     return data as Client[];
@@ -97,34 +104,8 @@ async function fetchClients(page: number, search: string): Promise<Client[]> {
         throw profilesError;
       }
 
-      const userIds = (profiles || []).map((p: any) => p.id);
-
-      let orders: any[] = [];
-      if (userIds.length > 0) {
-        const { data: ordersData, error: ordersError } = await supabase
-          .from('orders')
-          .select('user_id, status')
-          .in('user_id', userIds as string[])
-          .limit(PAGE_SIZE * 50);
-        if (ordersError) {
-          console.error('[useClients] orders fallback query error:', ordersError.message || ordersError);
-          orders = [];
-        } else {
-          orders = ordersData || [];
-        }
-      }
-
-      const orderCountMap = new Map<string, number>();
-      const completedOrderMap = new Map<string, number>();
-      const completedStatuses = ['Finalizada', 'Pago', 'Entregue', 'Concluída'];
-
-      for (const order of orders) {
-        orderCountMap.set(order.user_id, (orderCountMap.get(order.user_id) || 0) + 1);
-        if (completedStatuses.includes(order.status)) {
-          completedOrderMap.set(order.user_id, (completedOrderMap.get(order.user_id) || 0) + 1);
-        }
-      }
-
+      // Skip order count fetching in fallback to keep it fast
+      // Order counts will show as 0 in fallback mode
       return (profiles || []).map((p: any) => ({
         id: p.id,
         email: p.email || '',
@@ -134,8 +115,8 @@ async function fetchClients(page: number, search: string): Promise<Client[]> {
         last_name: p.last_name || null,
         role: p.role || 'user',
         force_pix_on_next_purchase: p.force_pix_on_next_purchase === true,
-        order_count: orderCountMap.get(p.id) || 0,
-        completed_order_count: completedOrderMap.get(p.id) || 0,
+        order_count: 0,
+        completed_order_count: 0,
         cpf_cnpj: p.cpf_cnpj || null,
       })) as Client[];
     } catch (fallbackErr: any) {
