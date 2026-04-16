@@ -79,7 +79,7 @@ const Sidebar = () => {
   // gerente_geral has full admin access
   const isFullAccess = isAdmin || isGerenteGeral;
 
-  const fullMenu = isAdmin ? (
+  const fullMenu = isFullAccess ? (
     <>
       {/* VISÃO GERAL */}
       <p className={sectionTitleClass}>Visão Geral</p>
