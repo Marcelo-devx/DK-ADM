@@ -140,7 +140,12 @@ const formatPhone = (phone: string | null) => {
 
 const getWhatsAppLink = (phone: string | null, message: string = "") => {
     if (!phone) return "#";
-    const cleanPhone = phone.replace(/\D/g, "");
+    let cleanPhone = phone.replace(/\D/g, "");
+    // Adiciona o código do Brasil (+55) se o número não tiver código de país
+    // Números brasileiros têm 10 ou 11 dígitos (com DDD)
+    if (cleanPhone.length <= 11) {
+        cleanPhone = "55" + cleanPhone;
+    }
     return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 };
 
