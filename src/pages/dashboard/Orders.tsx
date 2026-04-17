@@ -192,6 +192,7 @@ const OrdersPage = () => {
   // Filtros de Status (MULTI-SELECT)
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [deliveryStatusFilter, setDeliveryStatusFilter] = useState<string[]>([]);
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState<string[]>([]);
   
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [isProcessingBulk, setIsProcessingBulk] = useState(false);
@@ -300,6 +301,16 @@ const OrdersPage = () => {
           if (!deliveryStatusFilter.includes(order.delivery_status)) return false;
       }
 
+      // Filtro de Forma de Pagamento (multi-select)
+      if (paymentMethodFilter.length > 0) {
+          const method = order.payment_method?.toLowerCase() || '';
+          const isPix = !order.payment_method || method.includes('pix');
+          const isCard = method.includes('credit') || method.includes('card') || method.includes('cart');
+          const matchesPix = paymentMethodFilter.includes('Pix') && isPix;
+          const matchesCard = paymentMethodFilter.includes('Cartão') && isCard;
+          if (!matchesPix && !matchesCard) return false;
+      }
+
       // Filtro de Data — converte para horário de Brasília (America/Sao_Paulo) antes de comparar
       if (startDate || endDate) {
         const orderDateBR = new Date(order.created_at).toLocaleDateString("pt-BR", {
@@ -351,7 +362,7 @@ const OrdersPage = () => {
 
       return true;
     }) || [];
-  }, [orders, readyToShipOnly, startDate, endDate, debouncedOrderId, debouncedCPF, debouncedClientName, debouncedEmail, statusFilter, deliveryStatusFilter]);
+  }, [orders, readyToShipOnly, startDate, endDate, debouncedOrderId, debouncedCPF, debouncedClientName, debouncedEmail, statusFilter, deliveryStatusFilter, paymentMethodFilter]);
 
   const totalPages = Math.ceil(filteredOrders.length / ORDERS_PER_PAGE);
 
@@ -363,7 +374,7 @@ const OrdersPage = () => {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [readyToShipOnly, startDate, endDate, debouncedOrderId, debouncedCPF, debouncedClientName, debouncedEmail, statusFilter, deliveryStatusFilter]);
+  }, [readyToShipOnly, startDate, endDate, debouncedOrderId, debouncedCPF, debouncedClientName, debouncedEmail, statusFilter, deliveryStatusFilter, paymentMethodFilter]);
 
   const toggleStatusFilter = (value: string) => {
     setStatusFilter(prev =>
@@ -373,6 +384,12 @@ const OrdersPage = () => {
 
   const toggleDeliveryStatusFilter = (value: string) => {
     setDeliveryStatusFilter(prev =>
+      prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
+    );
+  };
+
+  const togglePaymentMethodFilter = (value: string) => {
+    setPaymentMethodFilter(prev =>
       prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
     );
   };
@@ -959,7 +976,56 @@ const OrdersPage = () => {
             </PopoverContent>
           </Popover>
 
-          {(startDate || endDate || statusFilter.length > 0 || deliveryStatusFilter.length > 0 || searchOrderId || searchCPF || searchClientName || searchEmail) && (
+          {/* Forma de Pagamento - Multi-select */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className={cn(
+                "h-9 px-3 text-xs border rounded-md flex items-center gap-2 bg-white hover:bg-gray-50 transition-colors",
+                paymentMethodFilter.length > 0 ? "border-purple-400 text-purple-700 bg-purple-50" : "border-gray-200 text-gray-600"
+              )}>
+                <span>
+                  {paymentMethodFilter.length === 0
+                    ? "Pagamento"
+                    : paymentMethodFilter.length === 1
+                    ? paymentMethodFilter[0]
+                    : `${paymentMethodFilter.length} métodos`}
+                </span>
+                {paymentMethodFilter.length > 0 && (
+                  <span className="bg-purple-600 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold">
+                    {paymentMethodFilter.length}
+                  </span>
+                )}
+                <ChevronDown className="w-3 h-3 opacity-50" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-44 p-2" align="start">
+              <div className="space-y-1">
+                {[
+                  { value: "Pix", icon: QrCode },
+                  { value: "Cartão", icon: CreditCard },
+                ].map(({ value, icon: Icon }) => (
+                  <label key={value} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer text-sm">
+                    <Checkbox
+                      checked={paymentMethodFilter.includes(value)}
+                      onCheckedChange={() => togglePaymentMethodFilter(value)}
+                    />
+                    <Icon className="w-3.5 h-3.5 text-gray-500" />
+                    {value}
+                  </label>
+                ))}
+                {paymentMethodFilter.length > 0 && (
+                  <button
+                    onClick={() => setPaymentMethodFilter([])}
+                    className="w-full text-xs text-red-500 hover:text-red-700 pt-1 border-t mt-1 text-left px-2"
+                  >
+                    Limpar seleção
+                  </button>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          {(startDate || endDate || statusFilter.length > 0 || deliveryStatusFilter.length > 0 || paymentMethodFilter.length > 0 || searchOrderId || searchCPF || searchClientName || searchEmail) && (
             <Button
               variant="ghost"
               size="sm"
@@ -969,6 +1035,7 @@ const OrdersPage = () => {
                 setEndDate("");
                 setStatusFilter([]);
                 setDeliveryStatusFilter([]);
+                setPaymentMethodFilter([]);
                 setSearchOrderId("");
                 setSearchCPF("");
                 setSearchClientName("");
@@ -1018,7 +1085,7 @@ const OrdersPage = () => {
       </div>
 
       {/* Active Filter Chips */}
-      {(searchOrderId || searchCPF || searchClientName || searchEmail || startDate || endDate || statusFilter.length > 0 || deliveryStatusFilter.length > 0 || readyToShipOnly) && (
+      {(searchOrderId || searchCPF || searchClientName || searchEmail || startDate || endDate || statusFilter.length > 0 || deliveryStatusFilter.length > 0 || paymentMethodFilter.length > 0 || readyToShipOnly) && (
         <div className="flex flex-wrap items-center gap-2 mb-3 px-1">
           <span className="text-xs text-muted-foreground font-medium">Filtros ativos:</span>
 
@@ -1070,6 +1137,12 @@ const OrdersPage = () => {
               <button onClick={() => toggleDeliveryStatusFilter(s)} className="hover:text-sky-900 ml-0.5"><X className="w-3 h-3" /></button>
             </span>
           ))}
+          {paymentMethodFilter.map(s => (
+            <span key={s} className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
+              Pagamento: {s}
+              <button onClick={() => togglePaymentMethodFilter(s)} className="hover:text-purple-900 ml-0.5"><X className="w-3 h-3" /></button>
+            </span>
+          ))}
           {readyToShipOnly && (
             <span className="inline-flex items-center gap-1 bg-blue-600 text-white rounded-full px-2.5 py-0.5 text-xs font-medium">
               Prontos p/ Envio
@@ -1081,7 +1154,7 @@ const OrdersPage = () => {
             onClick={() => {
               setSearchOrderId(""); setSearchCPF(""); setSearchClientName(""); setSearchEmail("");
               setStartDate(""); setEndDate(""); setStatusFilter([]); setDeliveryStatusFilter([]);
-              setReadyToShipOnly(false);
+              setPaymentMethodFilter([]); setReadyToShipOnly(false);
             }}
             className="text-xs text-red-500 hover:text-red-700 underline ml-1"
           >
