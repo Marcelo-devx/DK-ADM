@@ -236,7 +236,7 @@ const AnalyticsPage = () => {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <KpiCard title="Fat. Bruto"    value={R(s.totalRevenue)}             sub={`${s.totalOrders ?? 0} pedidos`}        icon={DollarSign}   color="blue"   />
         <KpiCard title="Fat. Líquido"  value={R(s.totalRevenueNoShip ?? 0)} sub="s/ frete e s/ descontos"                icon={DollarSign}   color="green"  />
-        <KpiCard title="Custo Total"   value={R(s.totalCost ?? 0)}           sub="CMV dos produtos"                       icon={TrendingDown} color="rose"   />
+        <KpiCard title="Custo Total"   value={R(s.totalCost ?? 0)}           sub="só produtos c/ custo cadastrado"        icon={TrendingDown} color="rose"   />
         <KpiCard title="Margem Bruta"  value={R(s.grossProfit ?? 0)}         sub={s.totalRevenueNoShip > 0 ? `${pct(((s.grossProfit ?? 0) / s.totalRevenueNoShip) * 100)} do líquido` : "—"} icon={TrendingUp} color="teal" />
         <KpiCard title="Ticket Médio"  value={R(s.avgTicket)}                sub="pedidos aprovados"                      icon={Target}       color="amber"  />
         <KpiCard title="Recorrentes"   value={String(s.recurringUsers ?? 0)} sub={`${s.newUsers ?? 0} novos`}             icon={Users}        color="purple" />
@@ -383,7 +383,7 @@ const AnalyticsPage = () => {
                     <span className="text-sm font-black text-green-700">{R(s.totalRevenueNoShip ?? 0)}</span>
                   </div>
                   <div className="flex items-center justify-between py-2 border-b">
-                    <span className="text-xs font-medium text-gray-500">− Custo (CMV)</span>
+                    <span className="text-xs font-medium text-gray-500">− Custo (c/ custo cadastrado)</span>
                     <span className="text-sm font-bold text-rose-600">− {R(s.totalCost ?? 0)}</span>
                   </div>
                   <div className="flex items-center justify-between py-2 bg-teal-50 px-2 rounded-lg">
