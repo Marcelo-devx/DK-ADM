@@ -26,6 +26,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Users,
+  Loader2,
 } from "lucide-react";
 import { UserBlockModal } from "@/components/dashboard/UserBlockModal";
 import { UserDeleteModal } from "@/components/dashboard/UserDeleteModal";
@@ -52,10 +53,8 @@ export default function UserAdminPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [actionType, setActionType] = useState<"block" | "unblock">("block");
 
-  // Debounce da busca para não disparar query a cada tecla
   const searchTerm = useDebounceValue(searchInput, 400);
 
-  // Volta para página 0 quando a busca muda
   const prevSearch = useRef(searchTerm);
   if (prevSearch.current !== searchTerm) {
     prevSearch.current = searchTerm;
@@ -73,6 +72,7 @@ export default function UserAdminPage() {
 
   const users = searchUsers.data || [];
   const total = countQuery.data ?? 0;
+  const isFetching = searchUsers.isFetching;
 
   // ── Block ──
   const handleBlockClick = (user: AdminUser) => {
@@ -133,7 +133,6 @@ export default function UserAdminPage() {
     }
   };
 
-  // ── Helpers ──
   const formatDate = (dateString: string) =>
     new Date(dateString).toLocaleDateString("pt-BR", {
       day: "2-digit",
@@ -172,12 +171,20 @@ export default function UserAdminPage() {
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por nome, email ou CPF..."
+            placeholder="Buscar por nome, email, CPF ou telefone..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             className="pl-9"
           />
         </div>
+
+        {/* Indicador de carregamento em background */}
+        {isFetching && !searchUsers.isLoading && (
+          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <span>Atualizando...</span>
+          </div>
+        )}
 
         {/* Contador total */}
         {!countQuery.isLoading && (
@@ -345,7 +352,7 @@ export default function UserAdminPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={page === 0 || searchUsers.isLoading}
+                disabled={page === 0 || isFetching}
               >
                 <ChevronLeft className="h-4 w-4 mr-1" />
                 Anterior
@@ -359,7 +366,7 @@ export default function UserAdminPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                disabled={page >= totalPages - 1 || searchUsers.isLoading}
+                disabled={page >= totalPages - 1 || isFetching}
               >
                 Próxima
                 <ChevronRight className="h-4 w-4 ml-1" />

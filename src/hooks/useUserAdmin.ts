@@ -47,14 +47,21 @@ export interface UpdateUserPayload {
 export const PAGE_SIZE = 50;
 
 async function fetchUsersFromEdge(searchTerm: string, page: number): Promise<{ users: AdminUser[]; total: number }> {
-  const { data, error } = await supabase.functions.invoke('admin-list-users', {
-    body: { searchTerm, page, pageSize: PAGE_SIZE },
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
 
-  if (error) throw new Error(error.message);
-  if (data?.error) throw new Error(data.error);
+  try {
+    const { data, error } = await supabase.functions.invoke('admin-list-users', {
+      body: { searchTerm, page, pageSize: PAGE_SIZE },
+    });
 
-  return { users: data.users ?? [], total: data.total ?? 0 };
+    if (error) throw new Error(error.message);
+    if (data?.error) throw new Error(data.error);
+
+    return { users: data.users ?? [], total: data.total ?? 0 };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export const useUserAdmin = (searchTerm: string = '', page: number = 0) => {
@@ -66,18 +73,24 @@ export const useUserAdmin = (searchTerm: string = '', page: number = 0) => {
     queryFn: () => fetchUsersFromEdge(searchTerm, page),
     refetchOnWindowFocus: false,
     placeholderData: (prev) => prev,
+    staleTime: 30_000,   // considera dados frescos por 30s, evita refetch desnecessário
+    retry: 1,
   });
 
-  // Compatibilidade com o componente que usa searchUsers e countQuery separados
+  // isFetching = true só quando está buscando novos dados (não bloqueia UI com placeholder)
+  const isLoadingFirst = usersQuery.isLoading; // sem dados ainda
+  const isFetching = usersQuery.isFetching;    // buscando em background
+
   const searchUsers = {
     data: usersQuery.data?.users,
-    isLoading: usersQuery.isLoading,
+    isLoading: isLoadingFirst,  // skeleton só na primeira carga
+    isFetching,                 // indicador sutil nas trocas de página/busca
     error: usersQuery.error,
   };
 
   const countQuery = {
     data: usersQuery.data?.total,
-    isLoading: usersQuery.isLoading,
+    isLoading: isLoadingFirst,
   };
 
   const totalPages = Math.ceil((usersQuery.data?.total ?? 0) / PAGE_SIZE);
