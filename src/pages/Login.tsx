@@ -3,16 +3,38 @@ import { ThemeSupa } from "@supabase/auth-ui-shared";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { useSession } from "@/components/SessionContextProvider";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+
+const DASHBOARD_ROLES = ['adm', 'gerente', 'gerente_geral', 'logistica'];
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const session = useSession();
+  const redirected = useRef(false);
 
   useEffect(() => {
-    if (session) {
-      navigate("/");
-    }
+    if (!session?.user || redirected.current) return;
+
+    const redirectByRole = async () => {
+      redirected.current = true;
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .single();
+
+        if (data?.role && DASHBOARD_ROLES.includes(data.role)) {
+          navigate('/dashboard');
+        } else {
+          navigate('/');
+        }
+      } catch {
+        navigate('/');
+      }
+    };
+
+    redirectByRole();
   }, [session, navigate]);
 
   return (
