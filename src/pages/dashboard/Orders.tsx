@@ -81,8 +81,9 @@ interface Order {
 const fetchOrders = async (): Promise<Order[]> => {
   const { data: orders, error: ordersError } = await supabase
     .from("orders")
-    .select("*, order_items(item_id, item_type, name_at_purchase, quantity, price_at_purchase)")
-    .order("created_at", { ascending: false });
+    .select("id, created_at, total_price, shipping_cost, coupon_discount, donation_amount, status, delivery_status, user_id, delivery_info, payment_method, shipping_address, order_items(item_id, item_type, name_at_purchase, quantity, price_at_purchase)")
+    .order("created_at", { ascending: false })
+    .limit(300);
 
   if (ordersError) throw new Error(ordersError.message);
   if (!orders) return [];
@@ -668,7 +669,23 @@ const OrdersPage = () => {
   };
 
   if (isLoading) {
-    return <div className="p-6 text-sm text-muted-foreground">Carregando pedidos...</div>;
+    return (
+      <div className="relative pb-24">
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-3xl font-bold flex items-center gap-2">
+            <DollarSign className="h-7 w-7 text-green-600" />
+            Vendas
+          </h1>
+        </div>
+        <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
+          <div className="p-4 space-y-3">
+            {Array.from({ length: 10 }).map((_, i) => (
+              <Skeleton key={i} className="h-14 w-full rounded-lg" />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
