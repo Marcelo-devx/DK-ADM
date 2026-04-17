@@ -44,9 +44,7 @@ import {
   FileDown,
   Search,
   RefreshCw,
-  HeartPulse,
 } from "lucide-react";
-import { useOrderHealthErrorCount } from "@/hooks/useOrderHealth";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@/hooks/useUser";
@@ -57,7 +55,6 @@ const Sidebar = () => {
   const location = useLocation();
   const { isLogistica, isAdmin, isGerente, isGerenteGeral } = useUser();
   const { sidebarOpen, setSidebarOpen } = useSidebar();
-  const { data: healthErrorCount = 0 } = useOrderHealthErrorCount();
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -104,19 +101,6 @@ const Sidebar = () => {
       <p className={sectionTitleClass}>Operação</p>
       <NavLink to="/dashboard/orders" className={navLinkClass}>
         {({ isActive }) => (<><DollarSign className={iconClass("text-green-600", isActive)} />Pedidos (Clientes)</>)}
-      </NavLink>
-      <NavLink to="/dashboard/order-health" className={navLinkClass}>
-        {({ isActive }) => (
-          <span className="flex items-center w-full">
-            <HeartPulse className={iconClass("text-red-500", isActive)} />
-            <span className="flex-1">Monitor de Pedidos</span>
-            {healthErrorCount > 0 && (
-              <span className="ml-1 flex-shrink-0 bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full animate-pulse">
-                {healthErrorCount}
-              </span>
-            )}
-          </span>
-        )}
       </NavLink>
       <NavLink to="/dashboard/user-admin" className={navLinkClass}>
         {({ isActive }) => (<><ShieldAlert className={iconClass("text-red-600", isActive)} />Admin Usuários</>)}
@@ -274,19 +258,6 @@ const Sidebar = () => {
       <p className={sectionTitleClass}>Operação</p>
       <NavLink to="/dashboard/orders" className={navLinkClass}>
         {({ isActive }) => (<><DollarSign className={iconClass("text-green-600", isActive)} />Pedidos (Clientes)</>)}
-      </NavLink>
-      <NavLink to="/dashboard/order-health" className={navLinkClass}>
-        {({ isActive }) => (
-          <span className="flex items-center w-full">
-            <HeartPulse className={iconClass("text-red-500", isActive)} />
-            <span className="flex-1">Monitor de Pedidos</span>
-            {healthErrorCount > 0 && (
-              <span className="ml-1 flex-shrink-0 bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full animate-pulse">
-                {healthErrorCount}
-              </span>
-            )}
-          </span>
-        )}
       </NavLink>
       <NavLink to="/dashboard/user-admin" className={navLinkClass}>
         {({ isActive }) => (<><ShieldAlert className={iconClass("text-red-600", isActive)} />Admin Usuários</>)}
