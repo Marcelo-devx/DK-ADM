@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { ReviewForm } from '../components/reviews/ReviewForm';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Star } from 'lucide-react';
+import { Star, ChevronLeft, ChevronRight } from 'lucide-react';
 import { formatBRL as formatCurrency } from '@/utils/currency';
 import { SalesPopupDisplay } from '@/components/SalesPopupDisplay';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -37,6 +37,8 @@ interface Review {
   order_id: number;
   rating: number;
 }
+
+const ITEMS_PER_PAGE = 10;
 
 const fetchOrders = async (userId: string) => {
   const { data: orders, error: ordersError } = await supabase
@@ -68,6 +70,7 @@ const MyOrdersPage = () => {
   const { user } = useUser();
   const [isReviewModalOpen, setReviewModalOpen] = useState(false);
   const [viewFilter, setViewFilter] = useState<"all" | "paid" | "canceled">("all");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const { data, isLoading, error } = useQuery<{ orders: Order[], reviews: Review[] }>({
     queryKey: ['orders', user?.id],
@@ -85,6 +88,18 @@ const MyOrdersPage = () => {
     }
     return orders;
   }, [data?.orders, viewFilter]);
+
+  const totalPages = Math.ceil(filteredOrders.length / ITEMS_PER_PAGE);
+
+  const paginatedOrders = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredOrders.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredOrders, currentPage]);
+
+  const handleFilterChange = (value: "all" | "paid" | "canceled") => {
+    setViewFilter(value);
+    setCurrentPage(1);
+  };
 
   const hasReview = (productId: number, orderId: number) => {
     return data?.reviews.some(r => r.product_id === productId && r.order_id === orderId);
@@ -119,7 +134,7 @@ const MyOrdersPage = () => {
           <h1 className="text-2xl md:text-3xl font-bold">Meus Pedidos</h1>
           <p className="text-sm text-muted-foreground">Acompanhe seus pedidos e avaliações.</p>
         </div>
-        <Select value={viewFilter} onValueChange={(value) => setViewFilter(value as "all" | "paid" | "canceled") }>
+        <Select value={viewFilter} onValueChange={handleFilterChange}>
           <SelectTrigger className="w-full md:w-[240px]">
             <SelectValue placeholder="Filtrar pedidos" />
           </SelectTrigger>
@@ -135,7 +150,7 @@ const MyOrdersPage = () => {
         {filteredOrders.length === 0 ? (
           <p className="rounded-2xl border bg-white p-6 text-sm text-muted-foreground">Você ainda não fez nenhum pedido.</p>
         ) : (
-          filteredOrders.map(order => {
+          paginatedOrders.map(order => {
             const canceled = isCanceledOrder(order.status);
             return (
               <Card
@@ -224,6 +239,58 @@ const MyOrdersPage = () => {
           })
         )}
       </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-8 gap-2">
+          <span className="text-sm text-muted-foreground">
+            Página {currentPage} de {totalPages} &mdash; {filteredOrders.length} pedido{filteredOrders.length !== 1 ? 's' : ''}
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Anterior
+            </Button>
+
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter(page => page === 1 || page === totalPages || Math.abs(page - currentPage) <= 1)
+              .reduce<(number | 'ellipsis')[]>((acc, page, idx, arr) => {
+                if (idx > 0 && page - (arr[idx - 1] as number) > 1) acc.push('ellipsis');
+                acc.push(page);
+                return acc;
+              }, [])
+              .map((item, idx) =>
+                item === 'ellipsis' ? (
+                  <span key={`ellipsis-${idx}`} className="px-2 text-muted-foreground">…</span>
+                ) : (
+                  <Button
+                    key={item}
+                    variant={currentPage === item ? 'default' : 'outline'}
+                    size="sm"
+                    className="w-9"
+                    onClick={() => setCurrentPage(item as number)}
+                  >
+                    {item}
+                  </Button>
+                )
+              )}
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+            >
+              Próximo
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
       
       <SalesPopupDisplay />
     </div>
