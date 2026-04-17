@@ -14,6 +14,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { ExtendedProduct } from "@/hooks/useProductData";
 import { Switch } from "@/components/ui/switch";
 import { SortDropdown } from "./SortDropdown";
+import { ProductMobileCard } from "./ProductMobileCard";
 
 interface SortState {
   column: string | null;
@@ -86,162 +87,192 @@ export const ProductTable = ({
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-      <Table>
-        <TableHeader className="bg-gray-50/50">
-          <TableRow>
-            <TableHead className="w-[64px]">Imagem</TableHead>
-            <TableHead className="w-[120px]">
-              <div className="flex items-center gap-2">
-                SKU
-                <SortDropdown 
-                  direction={sortState.column === 'sku' ? sortState.direction : null}
-                  onSortChange={(dir) => onSortChange('sku', dir)}
-                />
-              </div>
-            </TableHead>
-            <TableHead className="w-[80px]">
-              <div className="flex items-center gap-2">
-                Status
-                <SortDropdown 
-                  direction={sortState.column === 'status' ? sortState.direction : null}
-                  onSortChange={(dir) => onSortChange('status', dir)}
-                />
-              </div>
-            </TableHead>
-            <TableHead>
-              <div className="flex items-center gap-2">
-                Nome
-                <SortDropdown 
-                  direction={sortState.column === 'name' ? sortState.direction : null}
-                  onSortChange={(dir) => onSortChange('name', dir)}
-                />
-              </div>
-            </TableHead>
-            <TableHead>
-              <div className="flex items-center gap-2">
-                Categoria
-                <SortDropdown 
-                  direction={sortState.column === 'category' ? sortState.direction : null}
-                  onSortChange={(dir) => onSortChange('category', dir)}
-                />
-              </div>
-            </TableHead>
-            <TableHead>
-              <div className="flex items-center gap-2">
-                Custo
-                <SortDropdown 
-                  direction={sortState.column === 'cost' ? sortState.direction : null}
-                  onSortChange={(dir) => onSortChange('cost', dir)}
-                />
-              </div>
-            </TableHead>
-            <TableHead>
-              <div className="flex items-center gap-2">
-                Venda (Cartão de Crédito)
-                <SortDropdown 
-                  direction={sortState.column === 'price' ? sortState.direction : null}
-                  onSortChange={(dir) => onSortChange('price', dir)}
-                />
-              </div>
-            </TableHead>
-            <TableHead className="text-green-600">
-              <div className="flex items-center gap-2">
-                Pix
-                <SortDropdown 
-                  direction={sortState.column === 'pix_price' ? sortState.direction : null}
-                  onSortChange={(dir) => onSortChange('pix_price', dir)}
-                />
-              </div>
-            </TableHead>
-            <TableHead>
-              <div className="flex items-center gap-2">
-                Estoque Disponível
-                <SortDropdown 
-                  direction={sortState.column === 'stock' ? sortState.direction : null}
-                  onSortChange={(dir) => onSortChange('stock', dir)}
-                />
-              </div>
-            </TableHead>
-            <TableHead className="text-right">Ações</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {isLoading ? (
-            <TableRow><TableCell colSpan={10} className="text-center py-10"><RefreshCw className="h-6 w-6 animate-spin mx-auto text-muted-foreground" /></TableCell></TableRow>
-          ) : products && products.length > 0 ? (
-            products.map((product) => (
-              <TableRow key={product.id} className="hover:bg-gray-50/50 transition-colors">
-                <TableCell>{product.image_url ? <img src={product.image_url} alt={product.name} className="h-12 w-12 rounded-lg object-cover shadow-sm border" /> : <div className="h-12 w-12 rounded-lg bg-gray-100 flex items-center justify-center border border-dashed"><ImageOff className="h-5 w-5 text-gray-400" /></div>}</TableCell>
-                <TableCell className="font-mono text-[10px] font-black text-gray-500">#{product.sku || product.id}</TableCell>
-                <TableCell>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="flex items-center justify-center">
-                          <Switch 
-                            checked={product.is_visible} 
-                            onCheckedChange={(checked) => onToggleVisibility?.(product.id, checked)}
-                            className="scale-75 data-[state=checked]:bg-green-500"
-                          />
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>{product.is_visible ? "Publicado no site" : "Não publicado no site"}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </TableCell>
-                <TableCell className="font-bold text-xs truncate max-w-[200px] text-gray-800">{product.name}</TableCell>
-                <TableCell className="text-xs font-medium text-muted-foreground">{product.category || "N/A"}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">{getPriceDisplay(product, true)}</TableCell>
-                <TableCell className="text-xs font-bold text-gray-700">{getPriceDisplay(product)}</TableCell>
-                <TableCell className="text-xs font-black text-green-700">{product.pix_price ? formatCurrency(product.pix_price) : '-'}</TableCell>
-                <TableCell>
-                  <div className="flex flex-col gap-1">
-                      {/* Show sum of variant stock if present, otherwise product.stock_quantity */}
-                      {(() => {
-                        const variantTotal = Number(product.variant_stock_total || 0);
-                        const displayStock = variantTotal > 0 ? variantTotal : (product.stock_quantity || 0);
-                        return (
-                          <>
-                            <Badge variant={displayStock <= 5 ? "destructive" : "secondary"} className="h-5 text-[10px] w-fit font-black">
-                                {displayStock} un
-                            </Badge>
-                            {product.allocated_in_kits ? (
-                                <Badge variant="outline" className="h-5 text-[9px] w-fit bg-amber-50 text-amber-700 border-amber-200 gap-1 font-bold" title="Quantidade reservada em Kits">
-                                    <Lock className="w-2.5 h-2.5" /> + {product.allocated_in_kits} em Kits
-                                </Badge>
-                            ) : null}
-                          </>
-                        );
-                      })()}
-                  </div>
-                </TableCell>
-                <TableCell className="text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="hover:bg-primary/5">
-                        <MoreHorizontal className="h-4 w-4 text-primary" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                      <DropdownMenuItem onSelect={() => onEdit(product)}>
-                        <Pencil className="mr-2 h-4 w-4" /> Editar
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem className="text-red-600" onSelect={() => onDelete(product)}>
-                        <Trash2 className="mr-2 h-4 w-4" /> Remover
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-              </TableRow>
-            ))
-          ) : <TableRow><TableCell colSpan={10} className="text-center py-20 text-muted-foreground italic">Nenhum produto encontrado.</TableCell></TableRow>}
-        </TableBody>
-      </Table>
-    </div>
+    <>
+      {/* ── MOBILE: Card list ── */}
+      <div className="md:hidden">
+        {isLoading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="rounded-xl border bg-white p-3 h-24 animate-pulse bg-gray-100" />
+            ))}
+          </div>
+        ) : products && products.length > 0 ? (
+          <div>
+            {products.map((product) => (
+              <ProductMobileCard
+                key={product.id}
+                product={product}
+                onEdit={onEdit}
+                onDelete={onDelete}
+                onViewVariants={onViewVariants}
+                onToggleVisibility={onToggleVisibility}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl border shadow-sm p-8 text-center text-muted-foreground text-sm">
+            Nenhum produto encontrado.
+          </div>
+        )}
+      </div>
+
+      {/* ── DESKTOP: Table ── */}
+      <div className="hidden md:block bg-white rounded-xl shadow-sm border overflow-hidden">
+        <Table>
+          <TableHeader className="bg-gray-50/50">
+            <TableRow>
+              <TableHead className="w-[64px]">Imagem</TableHead>
+              <TableHead className="w-[120px]">
+                <div className="flex items-center gap-2">
+                  SKU
+                  <SortDropdown 
+                    direction={sortState.column === 'sku' ? sortState.direction : null}
+                    onSortChange={(dir) => onSortChange('sku', dir)}
+                  />
+                </div>
+              </TableHead>
+              <TableHead className="w-[80px]">
+                <div className="flex items-center gap-2">
+                  Status
+                  <SortDropdown 
+                    direction={sortState.column === 'status' ? sortState.direction : null}
+                    onSortChange={(dir) => onSortChange('status', dir)}
+                  />
+                </div>
+              </TableHead>
+              <TableHead>
+                <div className="flex items-center gap-2">
+                  Nome
+                  <SortDropdown 
+                    direction={sortState.column === 'name' ? sortState.direction : null}
+                    onSortChange={(dir) => onSortChange('name', dir)}
+                  />
+                </div>
+              </TableHead>
+              <TableHead>
+                <div className="flex items-center gap-2">
+                  Categoria
+                  <SortDropdown 
+                    direction={sortState.column === 'category' ? sortState.direction : null}
+                    onSortChange={(dir) => onSortChange('category', dir)}
+                  />
+                </div>
+              </TableHead>
+              <TableHead>
+                <div className="flex items-center gap-2">
+                  Custo
+                  <SortDropdown 
+                    direction={sortState.column === 'cost' ? sortState.direction : null}
+                    onSortChange={(dir) => onSortChange('cost', dir)}
+                  />
+                </div>
+              </TableHead>
+              <TableHead>
+                <div className="flex items-center gap-2">
+                  Venda (Cartão de Crédito)
+                  <SortDropdown 
+                    direction={sortState.column === 'price' ? sortState.direction : null}
+                    onSortChange={(dir) => onSortChange('price', dir)}
+                  />
+                </div>
+              </TableHead>
+              <TableHead className="text-green-600">
+                <div className="flex items-center gap-2">
+                  Pix
+                  <SortDropdown 
+                    direction={sortState.column === 'pix_price' ? sortState.direction : null}
+                    onSortChange={(dir) => onSortChange('pix_price', dir)}
+                  />
+                </div>
+              </TableHead>
+              <TableHead>
+                <div className="flex items-center gap-2">
+                  Estoque Disponível
+                  <SortDropdown 
+                    direction={sortState.column === 'stock' ? sortState.direction : null}
+                    onSortChange={(dir) => onSortChange('stock', dir)}
+                  />
+                </div>
+              </TableHead>
+              <TableHead className="text-right">Ações</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              <TableRow><TableCell colSpan={10} className="text-center py-10"><RefreshCw className="h-6 w-6 animate-spin mx-auto text-muted-foreground" /></TableCell></TableRow>
+            ) : products && products.length > 0 ? (
+              products.map((product) => (
+                <TableRow key={product.id} className="hover:bg-gray-50/50 transition-colors">
+                  <TableCell>{product.image_url ? <img src={product.image_url} alt={product.name} className="h-12 w-12 rounded-lg object-cover shadow-sm border" /> : <div className="h-12 w-12 rounded-lg bg-gray-100 flex items-center justify-center border border-dashed"><ImageOff className="h-5 w-5 text-gray-400" /></div>}</TableCell>
+                  <TableCell className="font-mono text-[10px] font-black text-gray-500">#{product.sku || product.id}</TableCell>
+                  <TableCell>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex items-center justify-center">
+                            <Switch 
+                              checked={product.is_visible} 
+                              onCheckedChange={(checked) => onToggleVisibility?.(product.id, checked)}
+                              className="scale-75 data-[state=checked]:bg-green-500"
+                            />
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{product.is_visible ? "Publicado no site" : "Não publicado no site"}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </TableCell>
+                  <TableCell className="font-bold text-xs truncate max-w-[200px] text-gray-800">{product.name}</TableCell>
+                  <TableCell className="text-xs font-medium text-muted-foreground">{product.category || "N/A"}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{getPriceDisplay(product, true)}</TableCell>
+                  <TableCell className="text-xs font-bold text-gray-700">{getPriceDisplay(product)}</TableCell>
+                  <TableCell className="text-xs font-black text-green-700">{product.pix_price ? formatCurrency(product.pix_price) : '-'}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-1">
+                        {(() => {
+                          const variantTotal = Number(product.variant_stock_total || 0);
+                          const displayStock = variantTotal > 0 ? variantTotal : (product.stock_quantity || 0);
+                          return (
+                            <>
+                              <Badge variant={displayStock <= 5 ? "destructive" : "secondary"} className="h-5 text-[10px] w-fit font-black">
+                                  {displayStock} un
+                              </Badge>
+                              {product.allocated_in_kits ? (
+                                  <Badge variant="outline" className="h-5 text-[9px] w-fit bg-amber-50 text-amber-700 border-amber-200 gap-1 font-bold" title="Quantidade reservada em Kits">
+                                      <Lock className="w-2.5 h-2.5" /> + {product.allocated_in_kits} em Kits
+                                  </Badge>
+                              ) : null}
+                            </>
+                          );
+                        })()}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="hover:bg-primary/5">
+                          <MoreHorizontal className="h-4 w-4 text-primary" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Ações</DropdownMenuLabel>
+                        <DropdownMenuItem onSelect={() => onEdit(product)}>
+                          <Pencil className="mr-2 h-4 w-4" /> Editar
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem className="text-red-600" onSelect={() => onDelete(product)}>
+                          <Trash2 className="mr-2 h-4 w-4" /> Remover
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : <TableRow><TableCell colSpan={10} className="text-center py-20 text-muted-foreground italic">Nenhum produto encontrado.</TableCell></TableRow>}
+          </TableBody>
+        </Table>
+      </div>
+    </>
   );
 };
