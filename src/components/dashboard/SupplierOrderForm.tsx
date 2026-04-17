@@ -104,75 +104,70 @@ const OrderItemRow = memo(function OrderItemRow({
   }, [setValue, index]);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-12 gap-2 items-start border p-3 rounded-lg bg-gray-50 relative">
-      {/* Produto */}
-      <div className="md:col-span-8">
-        <FormField
-          control={control}
-          name={`items.${index}.product_id`}
-          render={() => (
-            <FormItem>
-              <FormLabel className="text-[11px]">Produto / Variação</FormLabel>
-              <ProductCombobox
-                value={comboValue}
-                selectedItem={selectedItem}
-                onSearch={onSearch}
-                onChange={handleChange}
-                onClear={handleClear}
-                placeholder="Buscar produto..."
-                allowWrap={true}
-              />
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-      </div>
-
-      {/* Quantidade */}
-      <div className="md:col-span-2">
-        <FormField
-          control={control}
-          name={`items.${index}.quantity`}
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-[11px]">Qtd</FormLabel>
-              <FormControl>
-                <Input type="number" min={1} className="h-8 text-sm px-2" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-      </div>
-
-      {/* Custo */}
-      <div className="md:col-span-1 min-w-[90px]">
-        <FormField
-          control={control}
-          name={`items.${index}.unit_cost`}
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-[11px]">Custo (R$)</FormLabel>
-              <FormControl>
-                <Input type="number" step="0.01" min={0.01} className="h-8 text-sm px-2" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-      </div>
-
-      {/* Remover */}
-      <div className="md:col-span-1 pt-5 flex items-center justify-center">
+    <div className="border p-3 rounded-xl bg-gray-50 space-y-2">
+      {/* Produto — linha inteira */}
+      <div className="flex items-start gap-2">
+        <div className="flex-1 min-w-0">
+          <FormField
+            control={control}
+            name={`items.${index}.product_id`}
+            render={() => (
+              <FormItem>
+                <FormLabel className="text-[11px] font-bold text-gray-500 uppercase">Produto / Variação</FormLabel>
+                <ProductCombobox
+                  value={comboValue}
+                  selectedItem={selectedItem}
+                  onSearch={onSearch}
+                  onChange={handleChange}
+                  onClear={handleClear}
+                  placeholder="Buscar produto..."
+                  allowWrap={true}
+                />
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+        {/* Botão remover — sempre visível no topo direito */}
         <Button
           type="button"
           variant="ghost"
           size="icon"
           onClick={onRemove}
-          className="text-red-500 hover:bg-red-50 h-8 w-8"
+          className="text-red-400 hover:bg-red-50 hover:text-red-600 h-8 w-8 mt-5 shrink-0"
         >
           <Trash2 className="h-4 w-4" />
         </Button>
+      </div>
+
+      {/* Qtd + Custo — lado a lado */}
+      <div className="grid grid-cols-2 gap-2">
+        <FormField
+          control={control}
+          name={`items.${index}.quantity`}
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-[11px] font-bold text-gray-500 uppercase">Quantidade</FormLabel>
+              <FormControl>
+                <Input type="number" min={1} className="h-10 text-sm font-bold" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={control}
+          name={`items.${index}.unit_cost`}
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-[11px] font-bold text-gray-500 uppercase">Custo Unit. (R$)</FormLabel>
+              <FormControl>
+                <Input type="number" step="0.01" min={0.01} className="h-10 text-sm font-bold" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
       </div>
     </div>
   );
@@ -366,23 +361,21 @@ export const SupplierOrderForm = ({
           )}
         />
 
-        {/* Total */}
-        <div className="flex items-center justify-between p-4 bg-primary/5 rounded-lg border border-primary/10">
-          <span className="text-lg font-bold">Total Estimado:</span>
-          <span className="text-2xl font-bold text-primary">
-            {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(total)}
-          </span>
-        </div>
+        {/* Total + Botão — sticky no mobile */}
+        <div className="sticky bottom-0 bg-white pt-3 pb-2 -mx-4 px-4 md:static md:mx-0 md:px-0 md:pb-0 md:pt-0 border-t md:border-none space-y-2">
+          <div className="flex items-center justify-between p-3 md:p-4 bg-primary/5 rounded-xl border border-primary/10">
+            <span className="text-sm md:text-lg font-bold">Total Estimado:</span>
+            <span className="text-xl md:text-2xl font-black text-primary">
+              {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(total)}
+            </span>
+          </div>
 
-        <Button type="submit" disabled={isSubmitting} className="w-full">
-          {isSubmitting
-            ? initialValues
-              ? "Atualizando Pedido..."
-              : "Criando Pedido..."
-            : initialValues
-            ? "Atualizar Pedido"
-            : "Salvar Pedido de Compra"}
-        </Button>
+          <Button type="submit" disabled={isSubmitting} className="w-full h-12 text-base font-bold rounded-xl">
+            {isSubmitting
+              ? initialValues ? "Atualizando..." : "Criando..."
+              : initialValues ? "✅ Atualizar Pedido" : "✅ Salvar Pedido de Compra"}
+          </Button>
+        </div>
 
         <LowStockPreviewModal
           isOpen={isLowStockModalOpen}
