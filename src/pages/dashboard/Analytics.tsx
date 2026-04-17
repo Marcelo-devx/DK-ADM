@@ -21,7 +21,7 @@ import {
 import {
   BarChart3, TrendingUp, TrendingDown, Users, DollarSign, Target,
   MapPin, Calendar, CheckCircle2, ShoppingCart, RefreshCw,
-  AlertCircle, Package, Tag, Clock, Truck, Star,
+  AlertCircle, Package, Tag, Clock, Truck, Star, QrCode, CreditCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -240,6 +240,30 @@ const AnalyticsPage = () => {
         <KpiCard title="Margem Bruta"  value={R(s.grossProfit ?? 0)}         sub={s.totalRevenueNoShip > 0 ? `${pct(((s.grossProfit ?? 0) / s.totalRevenueNoShip) * 100)} do líquido` : "—"} icon={TrendingUp} color="teal" />
         <KpiCard title="Ticket Médio"  value={R(s.avgTicket)}                sub="pedidos aprovados"                      icon={Target}       color="amber"  />
         <KpiCard title="Recorrentes"   value={String(s.recurringUsers ?? 0)} sub={`${s.newUsers ?? 0} novos`}             icon={Users}        color="purple" />
+      </div>
+
+      {/* Cards de Receita por Forma de Pagamento */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="bg-cyan-50 border border-cyan-100 rounded-xl p-4 flex items-center gap-4">
+          <div className="bg-cyan-100 p-3 rounded-xl shrink-0">
+            <QrCode className="w-5 h-5 text-cyan-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-cyan-500">Receita via Pix</p>
+            <p className="text-2xl font-black text-cyan-700 leading-tight">{R(s.pixRevenue ?? 0)}</p>
+            <p className="text-[11px] text-cyan-500 mt-0.5">{s.pixOrders ?? 0} pedidos · {s.totalRevenue > 0 ? pct(((s.pixRevenue ?? 0) / s.totalRevenue) * 100) : '0%'} do total</p>
+          </div>
+        </div>
+        <div className="bg-purple-50 border border-purple-100 rounded-xl p-4 flex items-center gap-4">
+          <div className="bg-purple-100 p-3 rounded-xl shrink-0">
+            <CreditCard className="w-5 h-5 text-purple-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-purple-500">Receita via Cartão</p>
+            <p className="text-2xl font-black text-purple-700 leading-tight">{R(s.cardRevenue ?? 0)}</p>
+            <p className="text-[11px] text-purple-500 mt-0.5">{s.cardOrders ?? 0} pedidos · {s.totalRevenue > 0 ? pct(((s.cardRevenue ?? 0) / s.totalRevenue) * 100) : '0%'} do total</p>
+          </div>
+        </div>
       </div>
 
       {/* Cards de Status dos Pedidos */}
