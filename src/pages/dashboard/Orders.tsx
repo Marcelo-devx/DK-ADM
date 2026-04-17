@@ -1083,8 +1083,33 @@ const OrdersPage = () => {
 
       {/* Bulk Action Bar */}
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-10 duration-300">
-          <div className="bg-primary text-white shadow-2xl rounded-2xl p-4 flex items-center gap-6 border-4 border-white">
+        <div className="fixed bottom-0 left-0 right-0 md:bottom-6 md:left-1/2 md:right-auto md:-translate-x-1/2 z-50 animate-in slide-in-from-bottom-10 duration-300 px-0 md:px-0">
+          {/* Mobile layout */}
+          <div className="md:hidden bg-primary text-white shadow-2xl border-t-4 border-white p-3">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <div className="bg-white/20 p-1.5 rounded-lg"><CheckboxIcon className="w-4 h-4" /></div>
+                <span className="font-black text-sm">{selectedIds.size} selecionados</span>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setSelectedIds(new Set())} className="h-8 w-8 hover:bg-white/10 text-white rounded-lg">
+                <X className="w-5 h-5" />
+              </Button>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <Button onClick={handleBulkValidate} disabled={isProcessingBulk} className="bg-green-600 hover:bg-green-700 font-bold h-10 rounded-xl text-xs px-2">
+                {isProcessingBulk ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-1" />} Pago
+              </Button>
+              <Button onClick={handleBulkPackaged} disabled={isProcessingBulk} className="bg-amber-500 hover:bg-amber-600 font-bold h-10 rounded-xl text-xs px-2">
+                {isProcessingBulk ? <Loader2 className="w-4 h-4 animate-spin" /> : <Package className="w-4 h-4 mr-1" />} Embalado
+              </Button>
+              <Button onClick={handleBulkDelivered} disabled={isProcessingBulk} className="bg-green-800 hover:bg-green-900 font-bold h-10 rounded-xl text-xs px-2">
+                {isProcessingBulk ? <Loader2 className="w-4 h-4 animate-spin" /> : <Truck className="w-4 h-4 mr-1" />} Entregue
+              </Button>
+            </div>
+          </div>
+
+          {/* Desktop layout */}
+          <div className="hidden md:flex bg-primary text-white shadow-2xl rounded-2xl p-4 items-center gap-6 border-4 border-white">
             <div className="flex items-center gap-3 pr-6 border-r border-white/20">
               <div className="bg-white/20 p-2 rounded-lg"><CheckboxIcon className="w-6 h-6" /></div>
               <div>
