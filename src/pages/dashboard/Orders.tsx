@@ -28,7 +28,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send, History, FileDown, Calendar, FilterX, ShieldCheck, ShieldX, CheckSquare, Plus, Search, Pencil, ChevronLeft, ChevronRight, XCircle, ChevronDown } from "lucide-react";
+import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send, History, FileDown, Calendar, FilterX, ShieldCheck, ShieldX, CheckSquare, Plus, Search, Pencil, ChevronLeft, ChevronRight, XCircle, ChevronDown, SlidersHorizontal } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { showSuccess, showError } from "@/utils/toast";
 import { OrderDetailModal } from "@/components/dashboard/OrderDetailModal";
@@ -298,6 +299,7 @@ const OrdersPage = () => {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [isProcessingBulk, setIsProcessingBulk] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   const [actionToConfirm, setActionToConfirm] = useState<{
     action: 'resend_confirmation' | 'send_password_reset' | 'delete_orders' | 'mark_as_recurrent' | 'cancel_fraud';
@@ -596,8 +598,177 @@ const OrdersPage = () => {
         </Card>
       </div>
 
-      {/* Filter Panel */}
-      <div className="bg-white rounded-xl border shadow-sm p-4 mb-4 space-y-3">
+      {/* ── MOBILE: compact action bar + filter sheet ── */}
+      <div className="md:hidden flex items-center gap-2 mb-3">
+        <Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
+          <SheetTrigger asChild>
+            <Button variant="outline" className={cn("flex-1 h-10 gap-2 font-semibold", hasActiveFilters && "border-blue-400 text-blue-700 bg-blue-50")}>
+              <SlidersHorizontal className="w-4 h-4" />
+              Filtros
+              {hasActiveFilters && (
+                <span className="bg-blue-600 text-white text-[10px] rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                  {[searchOrderId, searchCPF, searchClientName, searchEmail, startDate, endDate, readyToShipOnly ? "1" : ""].filter(Boolean).length
+                    + statusFilter.length + deliveryStatusFilter.length + paymentMethodFilter.length}
+                </span>
+              )}
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="bottom" className="h-[85vh] overflow-y-auto rounded-t-2xl">
+            <SheetHeader className="mb-4">
+              <SheetTitle className="flex items-center gap-2">
+                <SlidersHorizontal className="w-5 h-5" /> Filtros
+                {hasActiveFilters && (
+                  <button onClick={clearAllFilters} className="ml-auto text-xs text-red-500 hover:text-red-700 font-medium flex items-center gap-1">
+                    <FilterX className="w-3.5 h-3.5" /> Limpar tudo
+                  </button>
+                )}
+              </SheetTitle>
+            </SheetHeader>
+
+            <div className="space-y-4">
+              {/* ID + CPF */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">Pedido ID</label>
+                  <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-10 overflow-hidden">
+                    <span className="absolute left-3 text-xs text-gray-400 font-medium">#</span>
+                    <input type="text" placeholder="ID" value={searchOrderId}
+                      onChange={(e) => setSearchOrderId(e.target.value.replace(/\D/g, ""))}
+                      className="pl-6 pr-8 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0 font-mono" />
+                    {searchOrderId && <button onClick={() => setSearchOrderId("")} className="absolute right-2 text-gray-400"><X className="w-3 h-3" /></button>}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">CPF</label>
+                  <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-10 overflow-hidden">
+                    <input type="text" placeholder="CPF" value={searchCPF}
+                      onChange={(e) => setSearchCPF(e.target.value.replace(/\D/g, ""))}
+                      className="pl-3 pr-8 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0" />
+                    {searchCPF && <button onClick={() => setSearchCPF("")} className="absolute right-2 text-gray-400"><X className="w-3 h-3" /></button>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Nome */}
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">Nome do cliente</label>
+                <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-10 overflow-hidden">
+                  <input type="text" placeholder="Nome do cliente" value={searchClientName}
+                    onChange={(e) => setSearchClientName(e.target.value)}
+                    className="pl-3 pr-8 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0" />
+                  {searchClientName && <button onClick={() => setSearchClientName("")} className="absolute right-2 text-gray-400"><X className="w-3 h-3" /></button>}
+                </div>
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">Email</label>
+                <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-10 overflow-hidden">
+                  <Search className="absolute left-3 w-4 h-4 text-gray-400" />
+                  <input type="text" placeholder="Email do cliente" value={searchEmail}
+                    onChange={(e) => setSearchEmail(e.target.value)}
+                    className="pl-10 pr-8 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0" />
+                  {searchEmail && <button onClick={() => setSearchEmail("")} className="absolute right-2 text-gray-400"><X className="w-3 h-3" /></button>}
+                </div>
+              </div>
+
+              {/* Datas */}
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">Período</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-10 text-sm" />
+                  <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-10 text-sm" />
+                </div>
+              </div>
+
+              {/* Status Pedido */}
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-2 block">Status do Pedido</label>
+                <div className="flex flex-wrap gap-2">
+                  {["Pendente", "Aguardando Pagamento", "Pago", "Em preparo", "Finalizada", "Cancelado"].map(s => (
+                    <button key={s} onClick={() => toggleStatusFilter(s)}
+                      className={cn("px-3 py-1.5 rounded-full text-xs font-medium border transition-colors",
+                        statusFilter.includes(s) ? "bg-green-600 text-white border-green-600" : "bg-white text-gray-600 border-gray-200 hover:border-green-400")}>
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Status Entrega */}
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-2 block">Status de Entrega</label>
+                <div className="flex flex-wrap gap-2">
+                  {["Pendente", "Aguardando Coleta", "Aguardando Validação", "Embalado", "Despachado", "Entregue"].map(s => (
+                    <button key={s} onClick={() => toggleDeliveryStatusFilter(s)}
+                      className={cn("px-3 py-1.5 rounded-full text-xs font-medium border transition-colors",
+                        deliveryStatusFilter.includes(s) ? "bg-sky-600 text-white border-sky-600" : "bg-white text-gray-600 border-gray-200 hover:border-sky-400")}>
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Pagamento */}
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-2 block">Forma de Pagamento</label>
+                <div className="flex gap-2">
+                  {[{ value: "Pix", icon: QrCode }, { value: "Cartão", icon: CreditCard }].map(({ value, icon: Icon }) => (
+                    <button key={value} onClick={() => togglePaymentMethodFilter(value)}
+                      className={cn("flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium border transition-colors",
+                        paymentMethodFilter.includes(value) ? "bg-purple-600 text-white border-purple-600" : "bg-white text-gray-600 border-gray-200 hover:border-purple-400")}>
+                      <Icon className="w-4 h-4" />{value}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Prontos p/ Envio */}
+              <div>
+                <button onClick={() => { setReadyToShipOnly(!readyToShipOnly); setSelectedIds(new Set()); }}
+                  className={cn("w-full flex items-center gap-3 px-4 py-3 rounded-xl border font-medium text-sm transition-colors",
+                    readyToShipOnly ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-200 hover:border-blue-400")}>
+                  <Package className="w-4 h-4" /> Prontos p/ Envio
+                </button>
+              </div>
+
+              {/* Apply button */}
+              <Button className="w-full h-12 text-base font-bold bg-green-600 hover:bg-green-700 mt-2"
+                onClick={() => setMobileFiltersOpen(false)}>
+                Ver {totalCount} pedidos
+              </Button>
+            </div>
+          </SheetContent>
+        </Sheet>
+
+        <Button onClick={() => setIsCreateOrderOpen(true)} className="bg-green-600 hover:bg-green-700 font-bold h-10 px-4 gap-1.5 text-sm">
+          <Plus className="w-4 h-4" /> Criar
+        </Button>
+
+        <Button variant="outline" size="icon" className="h-10 w-10 shrink-0 text-green-700 border-green-200 hover:bg-green-50"
+          onClick={handleExportExcel} disabled={selectedIds.size === 0 || isExporting}>
+          {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
+        </Button>
+      </div>
+
+      {/* Mobile active filter chips */}
+      {hasActiveFilters && (
+        <div className="md:hidden flex flex-wrap items-center gap-1.5 mb-3">
+          {searchOrderId && <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2 py-0.5 text-xs"># {searchOrderId}<button onClick={() => setSearchOrderId("")}><X className="w-3 h-3 ml-0.5" /></button></span>}
+          {searchCPF && <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2 py-0.5 text-xs">CPF<button onClick={() => setSearchCPF("")}><X className="w-3 h-3 ml-0.5" /></button></span>}
+          {searchClientName && <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2 py-0.5 text-xs">{searchClientName}<button onClick={() => setSearchClientName("")}><X className="w-3 h-3 ml-0.5" /></button></span>}
+          {searchEmail && <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2 py-0.5 text-xs">Email<button onClick={() => setSearchEmail("")}><X className="w-3 h-3 ml-0.5" /></button></span>}
+          {startDate && <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-2 py-0.5 text-xs">De: {new Date(startDate + "T00:00:00").toLocaleDateString("pt-BR")}<button onClick={() => setStartDate("")}><X className="w-3 h-3 ml-0.5" /></button></span>}
+          {endDate && <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-2 py-0.5 text-xs">Até: {new Date(endDate + "T00:00:00").toLocaleDateString("pt-BR")}<button onClick={() => setEndDate("")}><X className="w-3 h-3 ml-0.5" /></button></span>}
+          {statusFilter.map(s => <span key={s} className="inline-flex items-center gap-1 bg-green-50 text-green-700 border border-green-200 rounded-full px-2 py-0.5 text-xs">{s}<button onClick={() => toggleStatusFilter(s)}><X className="w-3 h-3 ml-0.5" /></button></span>)}
+          {deliveryStatusFilter.map(s => <span key={s} className="inline-flex items-center gap-1 bg-sky-50 text-sky-700 border border-sky-200 rounded-full px-2 py-0.5 text-xs">{s}<button onClick={() => toggleDeliveryStatusFilter(s)}><X className="w-3 h-3 ml-0.5" /></button></span>)}
+          {paymentMethodFilter.map(s => <span key={s} className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-2 py-0.5 text-xs">{s}<button onClick={() => togglePaymentMethodFilter(s)}><X className="w-3 h-3 ml-0.5" /></button></span>)}
+          {readyToShipOnly && <span className="inline-flex items-center gap-1 bg-blue-600 text-white rounded-full px-2 py-0.5 text-xs">Prontos p/ Envio<button onClick={() => setReadyToShipOnly(false)}><X className="w-3 h-3 ml-0.5" /></button></span>}
+        </div>
+      )}
+
+      {/* ── DESKTOP: Filter Panel ── */}
+      <div className="hidden md:block bg-white rounded-xl border shadow-sm p-4 mb-4 space-y-3">
         {/* Row 1: Search fields */}
         <div className="flex flex-wrap items-center gap-2">
           {/* ID */}
