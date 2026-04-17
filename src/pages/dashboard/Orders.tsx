@@ -150,7 +150,7 @@ const getWhatsAppLink = (phone: string | null, message: string = "") => {
     return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 };
 
-const ORDERS_PER_PAGE = 50;
+const ORDERS_PER_PAGE = 100;
 
 const OrdersPage = () => {
   const queryClient = useQueryClient();
