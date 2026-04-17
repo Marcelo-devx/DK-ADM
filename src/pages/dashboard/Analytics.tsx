@@ -232,14 +232,57 @@ const AnalyticsPage = () => {
         </div>
       </div>
 
-      {/* KPIs */}
+      {/* KPIs Financeiros */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <KpiCard title="Faturamento"  value={R(s.totalRevenue)}           sub={`${s.totalOrders ?? 0} pedidos`}           icon={DollarSign}   color="blue"   />
-        <KpiCard title="Ticket Médio" value={R(s.avgTicket)}              sub="por pedido"                                 icon={Target}       color="green"  />
-        <KpiCard title="Aprovação"    value={pct(s.approvalRate)}         sub={`${s.approvedOrders ?? 0} aprovados`}       icon={CheckCircle2} color="teal"   />
-        <KpiCard title="Frete Total"  value={R(s.totalShipping)}          sub={`Média ${R(s.avgShipping)}`}                icon={Truck}        color="amber"  />
-        <KpiCard title="Descontos"    value={R(s.totalDiscount)}          sub={`${pct(s.couponUsageRate)} c/ cupom`}       icon={Tag}          color="rose"   />
+        <KpiCard title="Faturamento"  value={R(s.totalRevenue)}             sub={`${s.totalOrders ?? 0} pedidos`}         icon={DollarSign}   color="blue"   />
+        <KpiCard title="Ticket Médio" value={R(s.avgTicket)}                sub="pedidos aprovados"                       icon={Target}       color="green"  />
+        <KpiCard title="Aprovação"    value={pct(s.approvalRate)}           sub={`${s.approvedOrders ?? 0} aprovados`}    icon={CheckCircle2} color="teal"   />
+        <KpiCard title="Frete Total"  value={R(s.totalShipping)}            sub={`Média ${R(s.avgShipping)}`}             icon={Truck}        color="amber"  />
+        <KpiCard title="Descontos"    value={R(s.totalDiscount)}            sub={`${pct(s.couponUsageRate)} c/ cupom`}    icon={Tag}          color="rose"   />
         <KpiCard title="Recorrentes"  value={String(s.recurringUsers ?? 0)} sub={`${s.newUsers ?? 0} novos`}              icon={Users}        color="purple" />
+      </div>
+
+      {/* Cards de Status dos Pedidos */}
+      <div>
+        <h2 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+          <ShoppingCart className="w-4 h-4" /> Status dos Pedidos <span className="text-[10px] font-normal normal-case text-gray-400">(cancelados excluídos)</span>
+        </h2>
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+          {/* Status do Pedido */}
+          <div className="bg-green-50 border border-green-100 rounded-xl p-3 text-center">
+            <p className="text-2xl font-black text-green-700">{s.countPago ?? 0}</p>
+            <p className="text-[10px] font-bold text-green-600 uppercase tracking-wide mt-0.5">Pago</p>
+          </div>
+          <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-center">
+            <p className="text-2xl font-black text-emerald-700">{s.countFinalizada ?? 0}</p>
+            <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide mt-0.5">Finalizado</p>
+          </div>
+          <div className="bg-yellow-50 border border-yellow-100 rounded-xl p-3 text-center">
+            <p className="text-2xl font-black text-yellow-700">{s.countPendente ?? 0}</p>
+            <p className="text-[10px] font-bold text-yellow-600 uppercase tracking-wide mt-0.5">Pendente</p>
+          </div>
+          <div className="bg-orange-50 border border-orange-100 rounded-xl p-3 text-center">
+            <p className="text-2xl font-black text-orange-700">{s.countAguardando ?? 0}</p>
+            <p className="text-[10px] font-bold text-orange-600 uppercase tracking-wide mt-0.5">Aguardando</p>
+          </div>
+          {/* Status de Entrega */}
+          <div className="bg-sky-50 border border-sky-100 rounded-xl p-3 text-center">
+            <p className="text-2xl font-black text-sky-700">{s.countAguardandoColeta ?? 0}</p>
+            <p className="text-[10px] font-bold text-sky-600 uppercase tracking-wide mt-0.5">Ag. Coleta</p>
+          </div>
+          <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-center">
+            <p className="text-2xl font-black text-amber-700">{s.countEmbalado ?? 0}</p>
+            <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wide mt-0.5">Embalado</p>
+          </div>
+          <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-center">
+            <p className="text-2xl font-black text-blue-700">{s.countDespachado ?? 0}</p>
+            <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wide mt-0.5">Despachado</p>
+          </div>
+          <div className="bg-purple-50 border border-purple-100 rounded-xl p-3 text-center">
+            <p className="text-2xl font-black text-purple-700">{s.countEntregue ?? 0}</p>
+            <p className="text-[10px] font-bold text-purple-600 uppercase tracking-wide mt-0.5">Entregue</p>
+          </div>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -316,25 +359,30 @@ const AnalyticsPage = () => {
               </CardContent>
             </Card>
 
-            {/* Status dos pedidos */}
+            {/* Frete vs Descontos mini */}
             <Card className="border-none shadow-md">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Status dos Pedidos</CardTitle>
+                <CardTitle className="text-sm">Resumo Financeiro</CardTitle>
               </CardHeader>
               <CardContent>
-                {ordersByStatus.length > 0 ? (
-                  <div className="space-y-0">
-                    {ordersByStatus.map((st: any, i: number) => (
-                      <div key={st.name} className="flex items-center justify-between py-2 border-b last:border-0">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: C[i % C.length] }} />
-                          <span className="text-xs font-medium text-gray-700">{st.name}</span>
-                        </div>
-                        <Badge variant="secondary" className="text-[10px] font-bold">{st.value}</Badge>
-                      </div>
-                    ))}
+                <div className="space-y-3 mt-1">
+                  <div className="flex items-center justify-between py-2 border-b">
+                    <span className="text-xs font-medium text-gray-600">Faturamento Total</span>
+                    <span className="text-sm font-black text-blue-700">{R(s.totalRevenue)}</span>
                   </div>
-                ) : <EmptyChart msg="Sem dados de status" />}
+                  <div className="flex items-center justify-between py-2 border-b">
+                    <span className="text-xs font-medium text-gray-600">Ticket Médio</span>
+                    <span className="text-sm font-black text-green-700">{R(s.avgTicket)}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-2 border-b">
+                    <span className="text-xs font-medium text-gray-600">Frete Total</span>
+                    <span className="text-sm font-black text-amber-700">{R(s.totalShipping)}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-xs font-medium text-gray-600">Descontos</span>
+                    <span className="text-sm font-black text-rose-700">{R(s.totalDiscount)}</span>
+                  </div>
+                </div>
               </CardContent>
             </Card>
 
