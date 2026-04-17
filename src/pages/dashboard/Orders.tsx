@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send, History, FileDown, Calendar, FilterX, ShieldCheck, ShieldX, CheckSquare, Plus, Search, Pencil } from "lucide-react";
+import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send, History, FileDown, Calendar, FilterX, ShieldCheck, ShieldX, CheckSquare, Plus, Search, Pencil, ChevronLeft, ChevronRight } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { showSuccess, showError } from "@/utils/toast";
 import { OrderDetailModal } from "@/components/dashboard/OrderDetailModal";
@@ -83,7 +83,7 @@ const fetchOrders = async (): Promise<Order[]> => {
     .from("orders")
     .select("id, created_at, total_price, shipping_cost, coupon_discount, donation_amount, status, delivery_status, user_id, delivery_info, payment_method, shipping_address, order_items(item_id, item_type, name_at_purchase, quantity, price_at_purchase)")
     .order("created_at", { ascending: false })
-    .limit(300);
+    .limit(2000);
 
   if (ordersError) throw new Error(ordersError.message);
   if (!orders) return [];
@@ -144,6 +144,8 @@ const getWhatsAppLink = (phone: string | null, message: string = "") => {
     return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 };
 
+const ORDERS_PER_PAGE = 50;
+
 const OrdersPage = () => {
   const queryClient = useQueryClient();
   const { isAdmin, isGerenteGeral } = useUser();
@@ -188,6 +190,7 @@ const OrdersPage = () => {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [isProcessingBulk, setIsProcessingBulk] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const [actionToConfirm, setActionToConfirm] = useState<{
     action: 'resend_confirmation' | 'send_password_reset' | 'delete_orders' | 'mark_as_recurrent' | 'cancel_fraud';
@@ -343,6 +346,18 @@ const OrdersPage = () => {
       return true;
     }) || [];
   }, [orders, readyToShipOnly, startDate, endDate, debouncedOrderId, debouncedCPF, debouncedClientName, debouncedEmail, statusFilter, deliveryStatusFilter]);
+
+  const totalPages = Math.ceil(filteredOrders.length / ORDERS_PER_PAGE);
+
+  const paginatedOrders = useMemo(() => {
+    const start = (currentPage - 1) * ORDERS_PER_PAGE;
+    return filteredOrders.slice(start, start + ORDERS_PER_PAGE);
+  }, [filteredOrders, currentPage]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [readyToShipOnly, startDate, endDate, debouncedOrderId, debouncedCPF, debouncedClientName, debouncedEmail, statusFilter, deliveryStatusFilter]);
 
   const validatePaymentAndSetPendingMutation = useMutation({
     mutationFn: async (orderId: number) => {
@@ -972,8 +987,7 @@ const OrdersPage = () => {
       )}
 
       <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
-        {/* Container com scroll vertical fixo para a tabela */}
-        <div className="max-h-[calc(100vh-280px)] overflow-y-auto relative">
+        <div className="overflow-x-auto">
             <Table>
             <TableHeader className="sticky top-0 bg-white z-10 shadow-sm">
                 <TableRow>
@@ -996,7 +1010,7 @@ const OrdersPage = () => {
             <TableBody>
                 {isLoading ? (
                     <TableRow><TableCell colSpan={9}><Skeleton className="h-10 w-full" /></TableCell></TableRow>
-                ) : filteredOrders.map((order) => {
+                ) : paginatedOrders.map((order) => {
                     const isPaid = order.status === "Finalizada" || order.status === "Pago";
                     const needsManualValidation = order.status === 'Pago' && order.delivery_status === 'Aguardando Validação'; // Mantém para pedidos antigos
                     const isInRoute = order.delivery_status === "Despachado";
@@ -1288,6 +1302,59 @@ const OrdersPage = () => {
             </TableBody>
             </Table>
         </div>
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t bg-gray-50">
+            <span className="text-sm text-muted-foreground">
+              Mostrando {((currentPage - 1) * ORDERS_PER_PAGE) + 1}–{Math.min(currentPage * ORDERS_PER_PAGE, filteredOrders.length)} de {filteredOrders.length} pedidos
+            </span>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Anterior
+              </Button>
+
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(page => page === 1 || page === totalPages || Math.abs(page - currentPage) <= 2)
+                .reduce<(number | 'ellipsis')[]>((acc, page, idx, arr) => {
+                  if (idx > 0 && page - (arr[idx - 1] as number) > 1) acc.push('ellipsis');
+                  acc.push(page);
+                  return acc;
+                }, [])
+                .map((item, idx) =>
+                  item === 'ellipsis' ? (
+                    <span key={`ellipsis-${idx}`} className="px-2 text-muted-foreground text-sm">…</span>
+                  ) : (
+                    <Button
+                      key={item}
+                      variant={currentPage === item ? 'default' : 'outline'}
+                      size="sm"
+                      className="w-9"
+                      onClick={() => setCurrentPage(item as number)}
+                    >
+                      {item}
+                    </Button>
+                  )
+                )}
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Próximo
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       {selectedIds.size > 0 && (
