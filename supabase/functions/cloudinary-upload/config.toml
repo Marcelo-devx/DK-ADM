@@ -1,0 +1,2 @@
+[functions.cloudinary-upload]
+verify_jwt = false
