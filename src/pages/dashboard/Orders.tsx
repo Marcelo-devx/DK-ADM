@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { UseQueryOptions } from "@tanstack/react-query";
 import { supabase } from "../../integrations/supabase/client";
@@ -445,14 +445,22 @@ const OrdersPage = () => {
     },
   });
 
+  // Ref para garantir que a sincronização de delivery_status só rode uma vez por sessão
+  const hasSyncedDeliveryStatus = useRef(false);
+
   useEffect(() => {
-    if (!orders) return;
+    if (!orders || hasSyncedDeliveryStatus.current) return;
 
     const ordersToSync = orders.filter(
       (order) => (order.status === 'Pago' || order.status === 'Finalizada') && order.delivery_status === 'Pendente'
     );
 
-    if (ordersToSync.length === 0) return;
+    if (ordersToSync.length === 0) {
+      hasSyncedDeliveryStatus.current = true;
+      return;
+    }
+
+    hasSyncedDeliveryStatus.current = true;
 
     // Faz uma única atualização em lote em vez de uma mutation por pedido
     const ids = ordersToSync.map((o) => o.id);
