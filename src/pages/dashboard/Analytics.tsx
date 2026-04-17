@@ -235,7 +235,7 @@ const AnalyticsPage = () => {
       {/* KPIs Financeiros */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <KpiCard title="Fat. Bruto"    value={R(s.totalRevenue)}             sub={`${s.totalOrders ?? 0} pedidos`}        icon={DollarSign}   color="blue"   />
-        <KpiCard title="Fat. s/ Frete" value={R(s.totalRevenueNoShip ?? 0)} sub="produtos + descontos"                   icon={DollarSign}   color="green"  />
+        <KpiCard title="Fat. Líquido"   value={R(s.totalRevenueNoShip ?? 0)} sub="s/ frete e s/ descontos"               icon={DollarSign}   color="green"  />
         <KpiCard title="Ticket Médio"  value={R(s.avgTicket)}                sub="pedidos aprovados"                      icon={Target}       color="teal"   />
         <KpiCard title="Frete Total"   value={R(s.totalShipping)}            sub={`Média ${R(s.avgShipping)}`}            icon={Truck}        color="amber"  />
         <KpiCard title="Descontos"     value={R(s.totalDiscount)}            sub={`${pct(s.couponUsageRate)} c/ cupom`}   icon={Tag}          color="rose"   />
@@ -371,7 +371,7 @@ const AnalyticsPage = () => {
                     <span className="text-sm font-black text-blue-700">{R(s.totalRevenue)}</span>
                   </div>
                   <div className="flex items-center justify-between py-2 border-b">
-                    <span className="text-xs font-medium text-gray-600">Fat. s/ Frete</span>
+                    <span className="text-xs font-medium text-gray-600">Fat. Líquido (s/ frete e descontos)</span>
                     <span className="text-sm font-black text-green-700">{R(s.totalRevenueNoShip ?? 0)}</span>
                   </div>
                   <div className="flex items-center justify-between py-2 border-b">
