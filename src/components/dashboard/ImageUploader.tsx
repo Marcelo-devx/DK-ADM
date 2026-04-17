@@ -64,12 +64,26 @@ export const ImageUploader = ({
       try {
         console.log('[ImageUploader] Iniciando upload via Cloudinary...', { fileName: file.name, fileType: file.type, fileSize: file.size });
 
-        const { data, error } = await supabase.functions.invoke('cloudinary-upload', {
-          body: { image: base64data },
-        });
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
 
-        if (error) {
-          throw new Error(error.message || 'Falha na comunicação com o servidor.');
+        const response = await fetch(
+          'https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1/cloudinary-upload',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpybG96aGh2d3FmbWp0a212dWtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDU2NjQsImV4cCI6MjA2NzkyMTY2NH0.Do5c1-TKqpyZTJeX_hLbw1SU40CbwXfCIC-pPpcD_JM',
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ image: base64data }),
+          }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data?.error || `Erro ${response.status} no servidor.`);
         }
 
         if (data?.error) {
@@ -93,7 +107,6 @@ export const ImageUploader = ({
         onUploadError?.(errorMsg);
       } finally {
         setUploading(false);
-        // Reset input so same file can be re-selected
         event.target.value = '';
       }
     };
