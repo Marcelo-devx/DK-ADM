@@ -219,16 +219,16 @@ export const ProductForm = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       {!initialData && existingProducts.length > 0 && (
-        <div className="bg-primary/5 p-4 rounded-xl border border-primary/10 flex flex-col sm:flex-row items-center gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
-            <div className="flex items-center gap-3">
-                <div className="bg-primary/10 p-2 rounded-lg text-primary">
+        <div className="bg-primary/5 p-3 md:p-4 rounded-xl border border-primary/10 flex flex-col sm:flex-row items-center gap-3 md:gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+                <div className="bg-primary/10 p-2 rounded-lg text-primary shrink-0">
                     {isCloning ? <Loader2 className="h-5 w-5 animate-spin" /> : <Copy className="h-5 w-5" />}
                 </div>
                 <div>
                     <p className="text-sm font-bold text-primary">Clonar Produto Existente</p>
-                    <p className="text-[10px] text-muted-foreground uppercase font-medium">Os dados e variações serão copiados para um novo registro</p>
+                    <p className="text-[10px] text-muted-foreground uppercase font-medium">Os dados e variações serão copiados</p>
                 </div>
             </div>
             <div className="flex-1 w-full">
@@ -250,21 +250,23 @@ export const ProductForm = ({
 
       {variantsToClone.length > 0 && !initialData && (
           <div className="bg-blue-50 border border-blue-100 p-3 rounded-lg flex items-center gap-2 text-sm text-blue-700">
-              <Layers className="h-4 w-4" />
-              <span>Este produto será criado com <strong>{variantsToClone.length} variações</strong> copiadas do original (com estoque zerado).</span>
+              <Layers className="h-4 w-4 shrink-0" />
+              <span>Este produto será criado com <strong>{variantsToClone.length} variações</strong> copiadas (estoque zerado).</span>
           </div>
       )}
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit((values) => onSubmit(values, variantsToClone, selectedSubIds))} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <form onSubmit={form.handleSubmit((values) => onSubmit(values, variantsToClone, selectedSubIds))} className="space-y-4 md:space-y-6">
+
+          {/* Nome + SKU */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
               <FormField
               control={form.control}
               name="name"
               render={({ field }) => (
                   <FormItem>
-                  <FormLabel>Nome Principal</FormLabel>
-                  <FormControl><Input placeholder="Ex: Juice Zomo" {...field} /></FormControl>
+                  <FormLabel className="text-xs font-bold uppercase text-gray-500">Nome Principal</FormLabel>
+                  <FormControl><Input placeholder="Ex: Juice Zomo" {...field} className="h-11" /></FormControl>
                   <FormMessage />
                   </FormItem>
               )}
@@ -274,12 +276,12 @@ export const ProductForm = ({
                 name="sku"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>SKU (Código do Produto)</FormLabel>
+                    <FormLabel className="text-xs font-bold uppercase text-gray-500">SKU</FormLabel>
                     <div className="flex gap-2">
                       <FormControl>
-                        <Input placeholder="Gerado Automático" {...field} />
+                        <Input placeholder="Gerado Automático" {...field} className="h-11" />
                       </FormControl>
-                      <Button type="button" variant="outline" size="icon" onClick={handleRegenerateSku} title="Gerar novo código">
+                      <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={handleRegenerateSku} title="Gerar novo código">
                         <RefreshCw className="h-4 w-4" />
                       </Button>
                     </div>
@@ -289,19 +291,20 @@ export const ProductForm = ({
               />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Marca + Categoria */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
               <FormField
               control={form.control}
               name="brand"
               render={({ field }) => (
                   <FormItem>
-                  <FormLabel>Marca</FormLabel>
+                  <FormLabel className="text-xs font-bold uppercase text-gray-500">Marca</FormLabel>
                   <Select onValueChange={(val) => field.onChange(val === '__none' ? '' : val)} value={field.value} disabled={isLoadingBrands}>
-                                            <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
+                      <FormControl><SelectTrigger className="h-11"><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
                       <SelectContent>
-                                                  <SelectItem value="__none">Sem Marca</SelectItem>
-                                                {brands.map((brand) => (<SelectItem key={brand.id} value={brand.name}>{brand.name}</SelectItem>))}
-                                                </SelectContent>
+                          <SelectItem value="__none">Sem Marca</SelectItem>
+                          {brands.map((brand) => (<SelectItem key={brand.id} value={brand.name}>{brand.name}</SelectItem>))}
+                      </SelectContent>
                   </Select>
                   <FormMessage />
                   </FormItem>
@@ -313,15 +316,16 @@ export const ProductForm = ({
                 name="category"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Categoria Principal</FormLabel>
+                    <FormLabel className="text-xs font-bold uppercase text-gray-500">Categoria Principal</FormLabel>
                     <div className="flex items-center gap-2">
                       <Select onValueChange={(value) => { field.onChange(value === '__none' ? '' : value); }} value={field.value} disabled={isLoadingCategories}>
-                                              <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
+                          <FormControl><SelectTrigger className="h-11"><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
                         <SelectContent>
-                                                    <SelectItem value="__none">Sem Categoria</SelectItem>
-                                                {categories.map((c) => (<SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>))}</SelectContent>
+                            <SelectItem value="__none">Sem Categoria</SelectItem>
+                            {categories.map((c) => (<SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>))}
+                        </SelectContent>
                       </Select>
-                      <Button type="button" variant="outline" size="icon" onClick={() => setIsCategoryModalOpen(true)}><PlusCircle className="h-4 w-4" /></Button>
+                      <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => setIsCategoryModalOpen(true)}><PlusCircle className="h-4 w-4" /></Button>
                     </div>
                     <FormMessage />
                   </FormItem>
@@ -329,35 +333,31 @@ export const ProductForm = ({
               />
           </div>
 
-          {/* SUB-CATEGORIAS (MÚLTIPLAS) */}
-          <div className="space-y-3 bg-slate-50 p-4 rounded-xl border">
-            <Label className="flex items-center gap-2 text-primary font-bold">
+          {/* Sub-categorias */}
+          <div className="space-y-3 bg-slate-50 p-3 md:p-4 rounded-xl border">
+            <Label className="flex items-center gap-2 text-primary font-bold text-sm">
                 <ListChecks className="w-4 h-4" /> Sub-categorias vinculadas
             </Label>
             {!selectedCategoryName ? (
                 <p className="text-xs text-muted-foreground italic">Selecione uma categoria principal primeiro.</p>
             ) : filteredSubCategories.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
-                    Nenhuma subcategoria encontrada para "{selectedCategoryName}". 
-                    <br/><span className="text-[10px] opacity-70">(Verifique se as subcategorias estão criadas no menu Catálogo)</span>
+                    Nenhuma subcategoria para "{selectedCategoryName}".
                 </p>
             ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {filteredSubCategories.map(sc => {
                         const isSelected = selectedSubIds.includes(sc.id);
                         return (
                             <div 
                                 key={sc.id} 
-                                className={`flex items-center space-x-2 p-2 rounded border shadow-sm transition-all cursor-pointer ${isSelected ? 'bg-primary/5 border-primary' : 'bg-white hover:border-primary/50'}`}
-                                onClick={(e) => {
-                                    e.preventDefault(); 
-                                    handleSubToggle(sc.id);
-                                }}
+                                className={`flex items-center space-x-2 p-2.5 rounded-lg border shadow-sm transition-all cursor-pointer ${isSelected ? 'bg-primary/5 border-primary' : 'bg-white hover:border-primary/50'}`}
+                                onClick={(e) => { e.preventDefault(); handleSubToggle(sc.id); }}
                             >
-                                <div className={`w-4 h-4 flex items-center justify-center rounded border ${isSelected ? 'bg-primary border-primary text-white' : 'border-gray-300 bg-white'}`}>
+                                <div className={`w-4 h-4 flex items-center justify-center rounded border shrink-0 ${isSelected ? 'bg-primary border-primary text-white' : 'border-gray-300 bg-white'}`}>
                                     {isSelected && <CheckSquare className="w-3 h-3" />}
                                 </div>
-                                <span className={`text-xs font-medium select-none ${isSelected ? 'text-primary' : 'text-gray-700'}`}>
+                                <span className={`text-xs font-medium select-none leading-tight ${isSelected ? 'text-primary' : 'text-gray-700'}`}>
                                     {sc.name}
                                 </span>
                             </div>
@@ -367,13 +367,14 @@ export const ProductForm = ({
             )}
           </div>
 
+          {/* Descrição */}
           <FormField
             control={form.control}
             name="description"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Descrição Curta</FormLabel>
-                <FormControl><Textarea placeholder="Detalhes gerais..." {...field} /></FormControl>
+                <FormLabel className="text-xs font-bold uppercase text-gray-500">Descrição Curta</FormLabel>
+                <FormControl><Textarea placeholder="Detalhes gerais..." {...field} className="resize-none" rows={3} /></FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -381,33 +382,44 @@ export const ProductForm = ({
 
           <Separator />
 
-          <div className="bg-gray-50 p-4 rounded-lg space-y-4">
+          {/* Valores */}
+          <div className="bg-gray-50 p-3 md:p-4 rounded-xl border space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-bold uppercase text-gray-500">Valores Padrão / Base</p>
                 {(hasVariants || variantsToClone.length > 0) && (
-                    <Badge variant="secondary" className="text-[10px]">Usado como padrão para novas variações</Badge>
+                    <Badge variant="secondary" className="text-[10px]">Padrão para novas variações</Badge>
                 )}
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {/* Grid 2x2 no mobile, 4 colunas no desktop */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <FormField
                       control={form.control}
                       name="price"
                       render={({ field }) => (
-                      <FormItem><FormLabel>Venda</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>
+                      <FormItem>
+                        <FormLabel className="text-xs font-bold text-gray-600">💳 Venda</FormLabel>
+                        <FormControl><Input type="number" step="0.01" {...field} className="h-11 font-bold" /></FormControl>
+                      </FormItem>
                       )}
                   />
                   <FormField
                       control={form.control}
                       name="pix_price"
                       render={({ field }) => (
-                      <FormItem><FormLabel>Preço Pix</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>
+                      <FormItem>
+                        <FormLabel className="text-xs font-bold text-green-600">⚡ Pix</FormLabel>
+                        <FormControl><Input type="number" step="0.01" {...field} className="h-11 font-bold text-green-700" /></FormControl>
+                      </FormItem>
                       )}
                   />
                   <FormField
                       control={form.control}
                       name="cost_price"
                       render={({ field }) => (
-                      <FormItem><FormLabel>Custo</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl></FormItem>
+                      <FormItem>
+                        <FormLabel className="text-xs font-bold text-gray-600">📦 Custo</FormLabel>
+                        <FormControl><Input type="number" step="0.01" {...field} className="h-11" /></FormControl>
+                      </FormItem>
                       )}
                   />
                   <FormField
@@ -415,24 +427,27 @@ export const ProductForm = ({
                       name="stock_quantity"
                       render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Estoque</FormLabel>
+                        <FormLabel className="text-xs font-bold text-gray-600">🏷 Estoque</FormLabel>
                         <FormControl>
                             <Input 
                                 type="number" 
                                 {...field} 
                                 disabled={hasVariants} 
-                                className={hasVariants ? "bg-gray-100 opacity-50" : ""}
+                                className={`h-11 ${hasVariants ? "bg-gray-100 opacity-50" : ""}`}
                             />
                         </FormControl>
-                        {hasVariants && <span className="text-[10px] text-muted-foreground">Gerenciado por variação</span>}
+                        {hasVariants && <span className="text-[10px] text-muted-foreground">Por variação</span>}
                       </FormItem>
                       )}
                   />
               </div>
           </div>
 
-          <div className="border-t pt-6">
-              <h4 className="text-sm font-bold flex items-center gap-2 mb-4 text-primary"><Layers className="w-4 h-4" /> Configurações de Variações</h4>
+          {/* Variações */}
+          <div className="border-t pt-4 md:pt-6">
+              <h4 className="text-sm font-bold flex items-center gap-2 mb-3 md:mb-4 text-primary">
+                <Layers className="w-4 h-4" /> Configurações de Variações
+              </h4>
               
               {!initialData ? (
                   <div className="p-4 bg-gray-50 border rounded-lg text-center text-sm text-muted-foreground">
@@ -450,32 +465,44 @@ export const ProductForm = ({
               )}
           </div>
 
+          {/* Imagem */}
           <FormField
             control={form.control}
             name="image_url"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Imagem Principal</FormLabel>
+                <FormLabel className="text-xs font-bold uppercase text-gray-500">Imagem Principal</FormLabel>
                 <ImageUploader onUploadSuccess={(url) => field.onChange(url)} initialUrl={field.value} />
                 <FormMessage />
               </FormItem>
             )}
           />
 
+          {/* Visibilidade */}
           <FormField
             control={form.control}
             name="is_visible"
             render={({ field }) => (
-              <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm bg-white">
-                <FormLabel>Produto Visível no Site</FormLabel>
+              <FormItem className="flex flex-row items-center justify-between rounded-xl border p-4 shadow-sm bg-white">
+                <div>
+                  <FormLabel className="text-sm font-bold">Produto Visível no Site</FormLabel>
+                  <p className="text-xs text-muted-foreground mt-0.5">Aparece no catálogo para clientes</p>
+                </div>
                 <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
               </FormItem>
             )}
           />
 
-          <Button type="submit" disabled={isSubmitting} className="w-full h-12 text-lg font-bold">
-            {isSubmitting ? "Salvando..." : (initialData ? "Atualizar Cadastro" : "Criar Produto")}
-          </Button>
+          {/* Botão salvar — sticky no mobile */}
+          <div className="sticky bottom-0 bg-white pt-3 pb-2 -mx-4 px-4 md:static md:mx-0 md:px-0 md:pb-0 md:pt-0 border-t md:border-none">
+            <Button type="submit" disabled={isSubmitting} className="w-full h-12 text-base font-bold rounded-xl shadow-md">
+              {isSubmitting ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Salvando...</>
+              ) : (
+                initialData ? "✅ Atualizar Cadastro" : "✅ Criar Produto"
+              )}
+            </Button>
+          </div>
         </form>
       </Form>
 

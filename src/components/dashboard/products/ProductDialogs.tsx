@@ -97,31 +97,33 @@ export const ProductDialogs = ({
   return (
     <>
       <Dialog open={mode === 'create' || (mode === 'edit' && !!selectedProduct)} onOpenChange={(open) => !open && handleClose()}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{mode === 'edit' ? `Editar: ${selectedProduct?.name}` : "Adicionar Novo Produto"}</DialogTitle>
+        <DialogContent className="w-full max-w-4xl h-[100dvh] md:h-auto md:max-h-[90vh] overflow-y-auto p-0 md:p-6 rounded-none md:rounded-lg">
+          <DialogHeader className="px-4 pt-4 pb-2 md:px-0 md:pt-0 md:pb-0 border-b md:border-none sticky top-0 bg-white z-10 md:static">
+            <DialogTitle className="text-base md:text-lg">{mode === 'edit' ? `Editar: ${selectedProduct?.name}` : "Adicionar Novo Produto"}</DialogTitle>
           </DialogHeader>
-          <ProductForm 
-            onSubmit={handleFormSubmit} 
-            isSubmitting={addProductMutation.isPending || updateProductMutation.isPending} 
-            categories={categories || []} 
-            isLoadingCategories={false} 
-            subCategories={subCategories || []} 
-            isLoadingSubCategories={false} 
-            brands={brands || []} 
-            isLoadingBrands={false} 
-            initialData={selectedProduct ? { 
-                ...selectedProduct, 
-                sku: selectedProduct.sku || '', 
-                description: selectedProduct.description || '', 
-                category: selectedProduct.category || '', 
-                brand: selectedProduct.brand || '', 
-                image_url: selectedProduct.image_url || '', 
-                cost_price: selectedProduct.cost_price || 0, 
-                pix_price: selectedProduct.pix_price || 0 
-            } : undefined} 
-            existingProducts={products}
-          />
+          <div className="px-4 pb-6 md:px-0 md:pb-0">
+            <ProductForm 
+              onSubmit={handleFormSubmit} 
+              isSubmitting={addProductMutation.isPending || updateProductMutation.isPending} 
+              categories={categories || []} 
+              isLoadingCategories={false} 
+              subCategories={subCategories || []} 
+              isLoadingSubCategories={false} 
+              brands={brands || []} 
+              isLoadingBrands={false} 
+              initialData={selectedProduct ? { 
+                  ...selectedProduct, 
+                  sku: selectedProduct.sku || '', 
+                  description: selectedProduct.description || '', 
+                  category: selectedProduct.category || '', 
+                  brand: selectedProduct.brand || '', 
+                  image_url: selectedProduct.image_url || '', 
+                  cost_price: selectedProduct.cost_price || 0, 
+                  pix_price: selectedProduct.pix_price || 0 
+              } : undefined} 
+              existingProducts={products}
+            />
+          </div>
         </DialogContent>
       </Dialog>
 
