@@ -47,16 +47,21 @@ const fetchOrders = async (userId: string) => {
 
   if (ordersError) throw new Error(ordersError.message);
 
-  const orderIds = orders.map(o => o.id);
-  const { data: reviews, error: reviewsError } = await supabase
-    .from('reviews')
-    .select('product_id, order_id, rating')
-    .in('order_id', orderIds)
-    .eq('user_id', userId);
+  const orderIds = (orders || []).map(o => o.id);
   
-  if (reviewsError) console.error("Error fetching reviews:", reviewsError.message);
+  let reviews: Review[] = [];
+  if (orderIds.length > 0) {
+    const { data: reviewsData, error: reviewsError } = await supabase
+      .from('reviews')
+      .select('product_id, order_id, rating')
+      .in('order_id', orderIds)
+      .eq('user_id', userId);
+    
+    if (reviewsError) console.error("Error fetching reviews:", reviewsError.message);
+    reviews = reviewsData || [];
+  }
 
-  return { orders, reviews: reviews || [] };
+  return { orders: orders || [], reviews };
 };
 
 const MyOrdersPage = () => {
