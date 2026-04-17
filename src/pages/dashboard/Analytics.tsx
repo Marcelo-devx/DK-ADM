@@ -235,10 +235,10 @@ const AnalyticsPage = () => {
       {/* KPIs Financeiros */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <KpiCard title="Fat. Bruto"    value={R(s.totalRevenue)}             sub={`${s.totalOrders ?? 0} pedidos`}        icon={DollarSign}   color="blue"   />
-        <KpiCard title="Fat. Líquido"   value={R(s.totalRevenueNoShip ?? 0)} sub="s/ frete e s/ descontos"               icon={DollarSign}   color="green"  />
-        <KpiCard title="Ticket Médio"  value={R(s.avgTicket)}                sub="pedidos aprovados"                      icon={Target}       color="teal"   />
-        <KpiCard title="Frete Total"   value={R(s.totalShipping)}            sub={`Média ${R(s.avgShipping)}`}            icon={Truck}        color="amber"  />
-        <KpiCard title="Descontos"     value={R(s.totalDiscount)}            sub={`${pct(s.couponUsageRate)} c/ cupom`}   icon={Tag}          color="rose"   />
+        <KpiCard title="Fat. Líquido"  value={R(s.totalRevenueNoShip ?? 0)} sub="s/ frete e s/ descontos"                icon={DollarSign}   color="green"  />
+        <KpiCard title="Custo Total"   value={R(s.totalCost ?? 0)}           sub="CMV dos produtos"                       icon={TrendingDown} color="rose"   />
+        <KpiCard title="Margem Bruta"  value={R(s.grossProfit ?? 0)}         sub={s.totalRevenueNoShip > 0 ? `${pct(((s.grossProfit ?? 0) / s.totalRevenueNoShip) * 100)} do líquido` : "—"} icon={TrendingUp} color="teal" />
+        <KpiCard title="Ticket Médio"  value={R(s.avgTicket)}                sub="pedidos aprovados"                      icon={Target}       color="amber"  />
         <KpiCard title="Recorrentes"   value={String(s.recurringUsers ?? 0)} sub={`${s.newUsers ?? 0} novos`}             icon={Users}        color="purple" />
       </div>
 
@@ -365,26 +365,37 @@ const AnalyticsPage = () => {
                 <CardTitle className="text-sm">Resumo Financeiro</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3 mt-1">
+                <div className="space-y-0 mt-1">
                   <div className="flex items-center justify-between py-2 border-b">
                     <span className="text-xs font-medium text-gray-600">Fat. Bruto (c/ frete)</span>
                     <span className="text-sm font-black text-blue-700">{R(s.totalRevenue)}</span>
                   </div>
                   <div className="flex items-center justify-between py-2 border-b">
-                    <span className="text-xs font-medium text-gray-600">Fat. Líquido (s/ frete e descontos)</span>
+                    <span className="text-xs font-medium text-gray-500">− Frete</span>
+                    <span className="text-sm font-bold text-gray-500">− {R(s.totalShipping)}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-2 border-b">
+                    <span className="text-xs font-medium text-gray-500">− Descontos</span>
+                    <span className="text-sm font-bold text-gray-500">− {R(s.totalDiscount)}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-2 border-b bg-green-50 px-2 rounded-lg">
+                    <span className="text-xs font-bold text-green-700">= Fat. Líquido</span>
                     <span className="text-sm font-black text-green-700">{R(s.totalRevenueNoShip ?? 0)}</span>
                   </div>
                   <div className="flex items-center justify-between py-2 border-b">
-                    <span className="text-xs font-medium text-gray-600">Frete Total</span>
-                    <span className="text-sm font-black text-amber-700">{R(s.totalShipping)}</span>
+                    <span className="text-xs font-medium text-gray-500">− Custo (CMV)</span>
+                    <span className="text-sm font-bold text-rose-600">− {R(s.totalCost ?? 0)}</span>
                   </div>
-                  <div className="flex items-center justify-between py-2 border-b">
-                    <span className="text-xs font-medium text-gray-600">Ticket Médio</span>
-                    <span className="text-sm font-black text-teal-700">{R(s.avgTicket)}</span>
-                  </div>
-                  <div className="flex items-center justify-between py-2">
-                    <span className="text-xs font-medium text-gray-600">Descontos</span>
-                    <span className="text-sm font-black text-rose-700">{R(s.totalDiscount)}</span>
+                  <div className="flex items-center justify-between py-2 bg-teal-50 px-2 rounded-lg">
+                    <div>
+                      <span className="text-xs font-bold text-teal-700">= Margem Bruta</span>
+                      {s.totalRevenueNoShip > 0 && (
+                        <span className="ml-2 text-[10px] font-bold text-teal-500">
+                          {pct(((s.grossProfit ?? 0) / s.totalRevenueNoShip) * 100)}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-sm font-black text-teal-700">{R(s.grossProfit ?? 0)}</span>
                   </div>
                 </div>
               </CardContent>
