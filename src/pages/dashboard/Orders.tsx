@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { UseQueryOptions } from "@tanstack/react-query";
 import { supabase } from "../../integrations/supabase/client";
 import {
   Table,
@@ -79,687 +78,499 @@ interface Order {
   order_items: any[];
 }
 
-const fetchOrders = async (): Promise<Order[]> => {
-  const { data: orders, error: ordersError } = await supabase
-    .from("orders")
-    .select("id, created_at, total_price, shipping_cost, coupon_discount, donation_amount, status, delivery_status, user_id, delivery_info, payment_method, shipping_address, order_items(item_id, item_type, name_at_purchase, quantity, price_at_purchase)")
+interface OrdersResult {
+  orders: Order[];
+  totalCount: number;
+}
+
+interface Filters {
+  readyToShipOnly: boolean;
+  startDate: string;
+  endDate: string;
+  orderId: string;
+  cpf: string;
+  clientName: string;
+  email: string;
+  statusFilter: string[];
+  deliveryStatusFilter: string[];
+  paymentMethodFilter: string[];
+}
+
+const ORDERS_PER_PAGE = 100;
+
+// Busca server-side: só os pedidos da página atual com filtros aplicados no banco
+const fetchOrdersPage = async (page: number, filters: Filters): Promise<OrdersResult> => {
+  // 1. Resolve user_ids se filtrar por nome, email ou CPF (requer busca em profiles)
+  let filteredUserIds: string[] | null = null;
+
+  const needsProfileFilter = filters.clientName || filters.email || filters.cpf;
+  if (needsProfileFilter) {
+    let profileQuery = supabase
+      .from("profiles")
+      .select("id, first_name, last_name, email, phone, cpf_cnpj");
+
+    const { data: allProfiles } = await profileQuery;
+    if (!allProfiles) return { orders: [], totalCount: 0 };
+
+    const filtered = allProfiles.filter(p => {
+      if (filters.clientName) {
+        const term = filters.clientName.toLowerCase();
+        const full = `${(p.first_name || "").toLowerCase()} ${(p.last_name || "").toLowerCase()}`;
+        if (!full.includes(term)) return false;
+      }
+      if (filters.email) {
+        if (!(p.email || "").toLowerCase().includes(filters.email.toLowerCase())) return false;
+      }
+      if (filters.cpf) {
+        const cleanSearch = filters.cpf.replace(/\D/g, "");
+        const cleanCPF = (p.cpf_cnpj || "").replace(/\D/g, "");
+        if (!cleanCPF.includes(cleanSearch)) return false;
+      }
+      return true;
+    });
+
+    filteredUserIds = filtered.map(p => p.id);
+    if (filteredUserIds.length === 0) return { orders: [], totalCount: 0 };
+  }
+
+  // 2. Monta a query base com filtros diretos no banco
+  const buildQuery = (forCount = false) => {
+    let q = supabase.from("orders").select(
+      forCount
+        ? "id"
+        : "id, created_at, total_price, shipping_cost, coupon_discount, donation_amount, status, delivery_status, user_id, delivery_info, payment_method, shipping_address, order_items(item_id, item_type, name_at_purchase, quantity, price_at_purchase)",
+      forCount ? { count: "exact", head: true } : { count: "exact" }
+    );
+
+    if (filters.orderId) {
+      q = q.eq("id", parseInt(filters.orderId, 10));
+    }
+
+    if (filters.statusFilter.length > 0) {
+      q = q.in("status", filters.statusFilter);
+    }
+
+    if (filters.deliveryStatusFilter.length > 0) {
+      q = q.in("delivery_status", filters.deliveryStatusFilter);
+    }
+
+    if (filters.paymentMethodFilter.length > 0) {
+      // Pix = null ou contém 'pix'; Cartão = contém 'credit'/'card'/'cart'
+      if (filters.paymentMethodFilter.includes("Pix") && !filters.paymentMethodFilter.includes("Cartão")) {
+        q = q.or("payment_method.is.null,payment_method.ilike.%pix%");
+      } else if (filters.paymentMethodFilter.includes("Cartão") && !filters.paymentMethodFilter.includes("Pix")) {
+        q = q.or("payment_method.ilike.%credit%,payment_method.ilike.%card%,payment_method.ilike.%cart%");
+      }
+      // Se ambos selecionados, não filtra (mostra tudo)
+    }
+
+    if (filters.startDate) {
+      // Converte data local (YYYY-MM-DD) para início do dia em Brasília → UTC
+      q = q.gte("created_at", `${filters.startDate}T03:00:00.000Z`);
+    }
+    if (filters.endDate) {
+      q = q.lte("created_at", `${filters.endDate}T26:59:59.999Z`);
+    }
+
+    if (filters.readyToShipOnly) {
+      q = q.in("status", ["Finalizada", "Pago"]).in("delivery_status", ["Pendente", "Aguardando Coleta"]);
+    }
+
+    if (filteredUserIds !== null) {
+      q = q.in("user_id", filteredUserIds);
+    }
+
+    return q;
+  };
+
+  // 3. Conta total (para paginação)
+  const countQuery = buildQuery(true);
+  const { count, error: countError } = await countQuery;
+  if (countError) throw new Error(countError.message);
+
+  const totalCount = count ?? 0;
+  if (totalCount === 0) return { orders: [], totalCount: 0 };
+
+  // 4. Busca a página atual
+  const from = (page - 1) * ORDERS_PER_PAGE;
+  const to = from + ORDERS_PER_PAGE - 1;
+
+  const dataQuery = buildQuery(false)
     .order("created_at", { ascending: false })
-    .limit(2000);
+    .range(from, to);
 
+  const { data: orders, error: ordersError } = await dataQuery;
   if (ordersError) throw new Error(ordersError.message);
-  if (!orders) return [];
+  if (!orders || orders.length === 0) return { orders: [], totalCount };
 
-  const userIds = [...new Set(orders.map(o => o.user_id).filter(Boolean))];
-  let profiles: any[] = [];
+  // 5. Busca profiles dos pedidos retornados
+  const userIds = [...new Set(orders.map((o: any) => o.user_id).filter(Boolean))];
+  let profilesMap = new Map<string, any>();
+
   if (userIds.length > 0) {
-    const { data: profilesData, error: profilesError } = await supabase
+    const { data: profilesData } = await supabase
       .from("profiles")
       .select("id, first_name, last_name, email, phone, cpf_cnpj")
       .in("id", userIds);
 
-    if (profilesError) throw new Error(profilesError.message);
-    profiles = profilesData || [];
+    if (profilesData) {
+      profilesMap = new Map(profilesData.map(p => [p.id, p]));
+    }
   }
 
-  const profilesMap = new Map(profiles.map(p => [p.id, p]));
-
-  return orders.map(order => ({
+  const result: Order[] = orders.map((order: any) => ({
     ...order,
     profiles: profilesMap.get(order.user_id) || null,
-  })) as Order[];
+  }));
+
+  return { orders: result, totalCount };
 };
 
 // Função para verificar se o pedido caiu na próxima rota
 const checkIsNextRoute = (dateString: string) => {
   const orderDate = new Date(dateString);
   const day = orderDate.getDay();
-
   const cutoff = new Date(orderDate);
   cutoff.setSeconds(0);
   cutoff.setMilliseconds(0);
-
-  if (day === 0) {
-    return true;
-  } else if (day === 6) {
-    cutoff.setHours(12, 30, 0);
-  } else {
-    cutoff.setHours(14, 0, 0);
-  }
-
+  if (day === 0) return true;
+  else if (day === 6) cutoff.setHours(12, 30, 0);
+  else cutoff.setHours(14, 0, 0);
   return orderDate > cutoff;
 };
 
-// Helpers de WhatsApp
 const formatPhone = (phone: string | null) => {
-    if (!phone) return "-";
-    const cleaned = phone.replace(/\D/g, "");
-    if (cleaned.length === 11) {
-        return `(${cleaned.substring(0, 2)}) ${cleaned.substring(2, 7)}-${cleaned.substring(7)}`;
-    }
-    return phone;
+  if (!phone) return "-";
+  const cleaned = phone.replace(/\D/g, "");
+  if (cleaned.length === 11) return `(${cleaned.substring(0, 2)}) ${cleaned.substring(2, 7)}-${cleaned.substring(7)}`;
+  return phone;
 };
 
 const getWhatsAppLink = (phone: string | null, message: string = "") => {
-    if (!phone) return "#";
-    let cleanPhone = phone.replace(/\D/g, "");
-    // Adiciona o código do Brasil (+55) se o número não tiver código de país
-    // Números brasileiros têm 10 ou 11 dígitos (com DDD)
-    if (cleanPhone.length <= 11) {
-        cleanPhone = "55" + cleanPhone;
-    }
-    return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+  if (!phone) return "#";
+  let cleanPhone = phone.replace(/\D/g, "");
+  if (cleanPhone.length <= 11) cleanPhone = "55" + cleanPhone;
+  return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 };
-
-const ORDERS_PER_PAGE = 100;
 
 const OrdersPage = () => {
   const queryClient = useQueryClient();
   const { isAdmin, isGerenteGeral } = useUser();
   const canUseWhatsApp = isAdmin || isGerenteGeral;
+
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
   const [isCreateOrderOpen, setIsCreateOrderOpen] = useState(false);
   const [isEditOrderOpen, setIsEditOrderOpen] = useState(false);
-  
-  // States para Histórico do Cliente
   const [isClientHistoryOpen, setIsClientHistoryOpen] = useState(false);
   const [selectedClientForHistory, setSelectedClientForHistory] = useState<any>(null);
-  
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [readyToShipOnly, setReadyToShipOnly] = useState(false);
-  
-  // Estado para busca unificada
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
-  
-  // Estados para busca por campos específicos
+
+  // Filtros com inputs separados (com debounce)
   const [searchOrderId, setSearchOrderId] = useState("");
   const [searchCPF, setSearchCPF] = useState("");
   const [searchClientName, setSearchClientName] = useState("");
   const [searchEmail, setSearchEmail] = useState("");
-  
-  // Estados de debounce para cada campo
-  const [debouncedOrderId, setDebouncedOrderId] = useState("");
-  const [debouncedCPF, setDebouncedCPF] = useState("");
-  const [debouncedClientName, setDebouncedClientName] = useState("");
-  const [debouncedEmail, setDebouncedEmail] = useState("");
-  
-  // Filtros de Data
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  
-  // Filtros de Status (MULTI-SELECT)
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [deliveryStatusFilter, setDeliveryStatusFilter] = useState<string[]>([]);
   const [paymentMethodFilter, setPaymentMethodFilter] = useState<string[]>([]);
-  
+  const [readyToShipOnly, setReadyToShipOnly] = useState(false);
+
+  // Filtros debounced (aplicados na query)
+  const [debouncedFilters, setDebouncedFilters] = useState<Filters>({
+    readyToShipOnly: false,
+    startDate: "",
+    endDate: "",
+    orderId: "",
+    cpf: "",
+    clientName: "",
+    email: "",
+    statusFilter: [],
+    deliveryStatusFilter: [],
+    paymentMethodFilter: [],
+  });
+
+  const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [isProcessingBulk, setIsProcessingBulk] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
 
   const [actionToConfirm, setActionToConfirm] = useState<{
     action: 'resend_confirmation' | 'send_password_reset' | 'delete_orders' | 'mark_as_recurrent' | 'cancel_fraud';
     client: any;
   } | null>(null);
 
-  const { data: orders, isLoading, refetch, isRefetching, error } = useQuery<Order[], Error>( {
-    queryKey: ["ordersAdmin"],
-    queryFn: fetchOrders,
-    refetchInterval: 30000,
-    onError: (err: any) => {
-      console.error("[ordersAdmin] Erro ao buscar pedidos:", err);
-      showError(err?.message || "Erro ao carregar pedidos");
-    }
-  } as UseQueryOptions<Order[], Error>);
+  // Debounce: aplica filtros após 400ms de inatividade
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedFilters({
+        readyToShipOnly,
+        startDate,
+        endDate,
+        orderId: searchOrderId.trim(),
+        cpf: searchCPF.trim(),
+        clientName: searchClientName.trim(),
+        email: searchEmail.trim(),
+        statusFilter,
+        deliveryStatusFilter,
+        paymentMethodFilter,
+      });
+      setCurrentPage(1);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [readyToShipOnly, startDate, endDate, searchOrderId, searchCPF, searchClientName, searchEmail, statusFilter, deliveryStatusFilter, paymentMethodFilter]);
+
+  const queryKey = ["ordersAdmin", currentPage, debouncedFilters];
+
+  const { data, isLoading, refetch, isRefetching, error } = useQuery<OrdersResult, Error>({
+    queryKey,
+    queryFn: () => fetchOrdersPage(currentPage, debouncedFilters),
+    refetchInterval: 60000, // Reduzido para 60s (era 30s) — menos pressão no banco
+    keepPreviousData: true,
+  } as any);
+
+  const orders = data?.orders ?? [];
+  const totalCount = data?.totalCount ?? 0;
+  const totalPages = Math.ceil(totalCount / ORDERS_PER_PAGE);
 
   useEffect(() => {
-    if (error) {
-      console.error("[ordersAdmin] Erro na tela de pedidos:", error);
-    }
+    if (error) console.error("[ordersAdmin] Erro na tela de pedidos:", error);
   }, [error]);
 
-  // Debounce para busca
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      setSearch(searchInput.trim());
-    }, 500); // 500ms de delay
-
-    return () => clearTimeout(timeoutId);
-  }, [searchInput]);
-
-  // Debounces para campos de busca específicos
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      setDebouncedOrderId(searchOrderId.trim());
-    }, 300);
-    return () => clearTimeout(timeoutId);
-  }, [searchOrderId]);
-
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      setDebouncedCPF(searchCPF.trim());
-    }, 300);
-    return () => clearTimeout(timeoutId);
-  }, [searchCPF]);
-
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      setDebouncedClientName(searchClientName.trim());
-    }, 300);
-    return () => clearTimeout(timeoutId);
-  }, [searchClientName]);
-
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      setDebouncedEmail(searchEmail.trim());
-    }, 300);
-    return () => clearTimeout(timeoutId);
-  }, [searchEmail]);
-
-  // ADDING REALTIME SUBSCRIPTION
+  // Realtime: só invalida a página atual (não rebusca tudo)
   useEffect(() => {
     const channel = supabase
-      .channel('orders-updates')
-      .on(
-        'postgres_changes',
-        {
-          event: '*', // Escuta INSERT, UPDATE, DELETE
-          schema: 'public',
-          table: 'orders'
-        },
-        (payload) => {
-          console.log('[Realtime] Pedido atualizado:', payload);
-          // Invalida a query para refrescar a lista
-          queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
-        }
-      )
+      .channel("orders-updates")
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => {
+        queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
+      })
       .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [queryClient]);
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [queryClient]); // Recria se o queryClient mudar
-
-  const filteredOrders = useMemo(() => {
-    return orders?.filter(order => {
-      // Filtro de "Prontos para Envio"
-      if (readyToShipOnly) {
-          const isPaid = order.status === "Finalizada" || order.status === "Pago";
-          const isPendingDelivery = order.delivery_status === "Pendente" || order.delivery_status === "Aguardando Coleta";
-          if (!(isPaid && isPendingDelivery)) return false;
-      }
-
-      // Filtro de Status do Pedido (multi-select)
-      if (statusFilter.length > 0) {
-          if (!statusFilter.includes(order.status)) return false;
-      }
-
-      // Filtro de Status de Entrega (multi-select)
-      if (deliveryStatusFilter.length > 0) {
-          if (!deliveryStatusFilter.includes(order.delivery_status)) return false;
-      }
-
-      // Filtro de Forma de Pagamento (multi-select)
-      if (paymentMethodFilter.length > 0) {
-          const method = order.payment_method?.toLowerCase() || '';
-          const isPix = !order.payment_method || method.includes('pix');
-          const isCard = method.includes('credit') || method.includes('card') || method.includes('cart');
-          const matchesPix = paymentMethodFilter.includes('Pix') && isPix;
-          const matchesCard = paymentMethodFilter.includes('Cartão') && isCard;
-          if (!matchesPix && !matchesCard) return false;
-      }
-
-      // Filtro de Data — converte para horário de Brasília (America/Sao_Paulo) antes de comparar
-      if (startDate || endDate) {
-        const orderDateBR = new Date(order.created_at).toLocaleDateString("pt-BR", {
-          timeZone: "America/Sao_Paulo",
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-        });
-        // Converte de DD/MM/YYYY para YYYY-MM-DD para comparação
-        const [d, m, y] = orderDateBR.split("/");
-        const orderDateStr = `${y}-${m}-${d}`;
-
-        if (startDate && orderDateStr < startDate) return false;
-        if (endDate && orderDateStr > endDate) return false;
-      }
-
-      // Filtro por ID do Pedido (busca exata)
-      if (debouncedOrderId) {
-        if (order.id.toString() !== debouncedOrderId) return false;
-      }
-
-      // Filtro por CPF (busca parcial, remove formatação)
-      if (debouncedCPF) {
-        if (!order.profiles?.cpf_cnpj) return false;
-        const cleanCPF = order.profiles.cpf_cnpj.replace(/\D/g, "");
-        const cleanSearch = debouncedCPF.replace(/\D/g, "");
-        if (!cleanCPF.includes(cleanSearch)) return false;
-      }
-
-      // Filtro por Nome do Cliente (busca parcial, case-insensitive)
-      if (debouncedClientName) {
-        if (!order.profiles?.first_name && !order.profiles?.last_name) return false;
-        const searchTerm = debouncedClientName.toLowerCase();
-        const firstName = (order.profiles.first_name || "").toLowerCase();
-        const lastName = (order.profiles.last_name || "").toLowerCase();
-        const fullName = `${firstName} ${lastName}`;
-        if (!firstName.includes(searchTerm) && !lastName.includes(searchTerm) && !fullName.includes(searchTerm)) {
-          return false;
-        }
-      }
-
-      // Filtro por Email do Cliente (busca parcial, case-insensitive)
-      if (debouncedEmail) {
-        if (!order.profiles?.email) return false;
-        const emailLower = order.profiles.email.toLowerCase();
-        const searchTerm = debouncedEmail.toLowerCase();
-        if (!emailLower.includes(searchTerm)) return false;
-      }
-
-      return true;
-    }) || [];
-  }, [orders, readyToShipOnly, startDate, endDate, debouncedOrderId, debouncedCPF, debouncedClientName, debouncedEmail, statusFilter, deliveryStatusFilter, paymentMethodFilter]);
-
-  const totalPages = Math.ceil(filteredOrders.length / ORDERS_PER_PAGE);
-
-  const paginatedOrders = useMemo(() => {
-    const start = (currentPage - 1) * ORDERS_PER_PAGE;
-    return filteredOrders.slice(start, start + ORDERS_PER_PAGE);
-  }, [filteredOrders, currentPage]);
-
-  // Reset page when filters change
+  // Sincronização de delivery_status (só roda uma vez por sessão)
+  const hasSyncedDeliveryStatus = useRef(false);
   useEffect(() => {
-    setCurrentPage(1);
-  }, [readyToShipOnly, startDate, endDate, debouncedOrderId, debouncedCPF, debouncedClientName, debouncedEmail, statusFilter, deliveryStatusFilter, paymentMethodFilter]);
+    if (!orders.length || hasSyncedDeliveryStatus.current) return;
+    const toSync = orders.filter(o => (o.status === "Pago" || o.status === "Finalizada") && o.delivery_status === "Pendente");
+    if (toSync.length === 0) { hasSyncedDeliveryStatus.current = true; return; }
+    hasSyncedDeliveryStatus.current = true;
+    supabase.from("orders").update({ delivery_status: "Aguardando Coleta" })
+      .in("id", toSync.map(o => o.id))
+      .then(({ error }) => { if (!error) queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] }); });
+  }, [orders]);
 
-  const toggleStatusFilter = (value: string) => {
-    setStatusFilter(prev =>
-      prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
-    );
+  const toggleStatusFilter = (v: string) => setStatusFilter(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v]);
+  const toggleDeliveryStatusFilter = (v: string) => setDeliveryStatusFilter(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v]);
+  const togglePaymentMethodFilter = (v: string) => setPaymentMethodFilter(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v]);
+
+  const clearAllFilters = () => {
+    setStartDate(""); setEndDate(""); setStatusFilter([]); setDeliveryStatusFilter([]);
+    setPaymentMethodFilter([]); setSearchOrderId(""); setSearchCPF("");
+    setSearchClientName(""); setSearchEmail(""); setReadyToShipOnly(false);
   };
 
-  const toggleDeliveryStatusFilter = (value: string) => {
-    setDeliveryStatusFilter(prev =>
-      prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
-    );
-  };
+  const hasActiveFilters = startDate || endDate || statusFilter.length > 0 || deliveryStatusFilter.length > 0 ||
+    paymentMethodFilter.length > 0 || searchOrderId || searchCPF || searchClientName || searchEmail || readyToShipOnly;
 
-  const togglePaymentMethodFilter = (value: string) => {
-    setPaymentMethodFilter(prev =>
-      prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
-    );
-  };
-
+  // Mutations
   const validatePaymentAndSetPendingMutation = useMutation({
     mutationFn: async (orderId: number) => {
-      const { error } = await supabase
-        .from("orders")
+      const { error } = await supabase.from("orders")
         .update({ status: "Pago", delivery_status: "Aguardando Coleta" })
-        .eq("id", orderId)
-        .in("status", ["Pendente", "Aguardando Pagamento", "Aguardando Validação"]);
+        .eq("id", orderId).in("status", ["Pendente", "Aguardando Pagamento", "Aguardando Validação"]);
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
-      showSuccess("Pedido marcado como pago e envio liberado para coleta!");
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] }); showSuccess("Pedido marcado como pago!"); },
     onError: (err: any) => showError(err.message),
   });
 
   const cancelOrderForFraudMutation = useMutation({
     mutationFn: async (orderId: number) => {
-      // UPDATE direto — sem edge function, sem cold start
-      const { data: orderData, error: fetchError } = await supabase
-        .from('orders')
-        .select('status')
-        .eq('id', orderId)
-        .single();
-
+      const { data: orderData, error: fetchError } = await supabase.from("orders").select("status").eq("id", orderId).single();
       if (fetchError) throw new Error(fetchError.message);
-      const oldStatus = orderData?.status ?? 'Desconhecido';
-
-      const { error: updateError } = await supabase
-        .from('orders')
-        .update({ status: 'Cancelado' })
-        .eq('id', orderId);
-
+      const { error: updateError } = await supabase.from("orders").update({ status: "Cancelado" }).eq("id", orderId);
       if (updateError) throw new Error(updateError.message);
-
-      // Registra histórico (best-effort)
       const { data: { user } } = await supabase.auth.getUser();
-      await supabase.from('order_history').insert({
-        order_id: orderId,
-        field_name: 'status',
-        old_value: oldStatus,
-        new_value: 'Cancelado',
-        changed_by: user?.id ?? null,
-        change_type: 'cancel',
-        reason: 'Cancelado por suspeita de fraude.',
-      });
+      await supabase.from("order_history").insert({ order_id: orderId, field_name: "status", old_value: orderData?.status ?? "Desconhecido", new_value: "Cancelado", changed_by: user?.id ?? null, change_type: "cancel", reason: "Cancelado por suspeita de fraude." });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
-      showSuccess("Pedido cancelado com sucesso.");
-      setActionToConfirm(null);
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] }); showSuccess("Pedido cancelado."); setActionToConfirm(null); },
     onError: (err: any) => showError(err.message),
   });
 
   const updateDeliveryStatusMutation = useMutation({
-    mutationFn: async ({ orderId, status, info }: { orderId: number, status: string, info: string }) => {
-        const { error } = await supabase
-            .from('orders')
-            .update({ delivery_status: status, delivery_info: info })
-            .eq('id', orderId);
-        if (error) throw error;
+    mutationFn: async ({ orderId, status, info }: { orderId: number; status: string; info: string }) => {
+      const { error } = await supabase.from("orders").update({ delivery_status: status, delivery_info: info }).eq("id", orderId);
+      if (error) throw error;
     },
-    onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] }),
   });
 
   const finalizeOrderMutation = useMutation({
     mutationFn: async (orderId: number) => {
-        const { error } = await supabase
-            .from('orders')
-            .update({ status: 'Finalizada', delivery_status: 'Entregue', delivery_info: 'Finalizado em massa pelo painel' })
-            .eq('id', orderId);
-        if (error) throw error;
+      const { error } = await supabase.from("orders").update({ status: "Finalizada", delivery_status: "Entregue", delivery_info: "Finalizado em massa pelo painel" }).eq("id", orderId);
+      if (error) throw error;
     },
-    onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] }),
   });
-
-  // Ref para garantir que a sincronização de delivery_status só rode uma vez por sessão
-  const hasSyncedDeliveryStatus = useRef(false);
-
-  useEffect(() => {
-    if (!orders || hasSyncedDeliveryStatus.current) return;
-
-    const ordersToSync = orders.filter(
-      (order) => (order.status === 'Pago' || order.status === 'Finalizada') && order.delivery_status === 'Pendente'
-    );
-
-    if (ordersToSync.length === 0) {
-      hasSyncedDeliveryStatus.current = true;
-      return;
-    }
-
-    hasSyncedDeliveryStatus.current = true;
-
-    // Faz uma única atualização em lote em vez de uma mutation por pedido
-    const ids = ordersToSync.map((o) => o.id);
-    supabase
-      .from('orders')
-      .update({ delivery_status: 'Aguardando Coleta' })
-      .in('id', ids)
-      .then(({ error }) => {
-        if (!error) {
-          queryClient.invalidateQueries({ queryKey: ['ordersAdmin'] });
-        }
-      });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orders]);
 
   const deleteOrderMutation = useMutation({
     mutationFn: async (orderId: number) => {
       const { error } = await supabase.from("orders").delete().eq("id", orderId);
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
-      setIsDeleteAlertOpen(false);
-      showSuccess("Venda removida!");
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] }); setIsDeleteAlertOpen(false); showSuccess("Venda removida!"); },
     onError: (err: any) => showError(`Erro ao deletar: ${err.message}`),
   });
 
   const userActionMutation = useMutation({
     mutationFn: async ({ action, targetUserId }: { action: string; targetUserId: string }) => {
-      let functionName = '';
+      let functionName = "";
       let body: any = { targetUserId };
-
-      if (action === 'delete_orders') {
-        functionName = 'admin-delete-orders';
-      } else if (action === 'mark_as_recurrent') {
-        functionName = 'admin-mark-as-recurrent';
-      } else {
-        functionName = 'admin-user-actions';
-        body.action = action;
-        body.redirectTo = 'https://dk-l-andpage.vercel.app/login'; 
-      }
-
-      const { data, error } = await supabase.functions.invoke(functionName, {
-        body,
-      });
-      
-      if (error) {
-        if (error.context && typeof error.context.json === 'function') {
-            const errorJson = await error.context.json();
-            if (errorJson.details) throw new Error(errorJson.details);
-        }
-        throw new Error(error.message);
-      }
+      if (action === "delete_orders") functionName = "admin-delete-orders";
+      else if (action === "mark_as_recurrent") functionName = "admin-mark-as-recurrent";
+      else { functionName = "admin-user-actions"; body.action = action; body.redirectTo = "https://dk-l-andpage.vercel.app/login"; }
+      const { data, error } = await supabase.functions.invoke(functionName, { body });
+      if (error) throw new Error(error.message);
       return data;
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
-      showSuccess(data.message);
-      setActionToConfirm(null);
-    },
-    onError: (error: Error) => {
-      showError(`Erro: ${error.message}`);
-    },
+    onSuccess: (data) => { queryClient.invalidateQueries({ queryKey: ["clients"] }); showSuccess(data.message); setActionToConfirm(null); },
+    onError: (error: Error) => showError(`Erro: ${error.message}`),
   });
 
   const handleConfirmAction = () => {
-    if (actionToConfirm) {
-      if (actionToConfirm.action === 'cancel_fraud') {
-        cancelOrderForFraudMutation.mutate(actionToConfirm.client.id);
-      } else {
-        userActionMutation.mutate({
-          action: actionToConfirm.action,
-          targetUserId: actionToConfirm.client.id,
-        });
-      }
-    }
+    if (!actionToConfirm) return;
+    if (actionToConfirm.action === "cancel_fraud") cancelOrderForFraudMutation.mutate(actionToConfirm.client.id);
+    else userActionMutation.mutate({ action: actionToConfirm.action, targetUserId: actionToConfirm.client.id });
   };
 
   const handleBulkValidate = async () => {
     setIsProcessingBulk(true);
     let successCount = 0;
-    
     for (const id of Array.from(selectedIds)) {
-        const order = orders?.find(o => o.id === id);
-        const isEligible = order && ["Pendente", "Aguardando Pagamento", "Aguardando Validação"].includes(order.status);
-        if (isEligible) {
-            try {
-                await validatePaymentAndSetPendingMutation.mutateAsync(id);
-                successCount++;
-            } catch (e) {}
-        }
+      const order = orders.find(o => o.id === id);
+      if (order && ["Pendente", "Aguardando Pagamento", "Aguardando Validação"].includes(order.status)) {
+        try { await validatePaymentAndSetPendingMutation.mutateAsync(id); successCount++; } catch {}
+      }
     }
-    
-    setIsProcessingBulk(false);
-    setSelectedIds(new Set());
-    if (successCount > 0) showSuccess(`${successCount} pagamentos validados com sucesso!`);
-    else showError("Nenhum pedido elegível para marcação manual como pago foi processado.");
+    setIsProcessingBulk(false); setSelectedIds(new Set());
+    if (successCount > 0) showSuccess(`${successCount} pagamentos validados!`);
+    else showError("Nenhum pedido elegível.");
   };
 
   const handleBulkPackaged = async () => {
     setIsProcessingBulk(true);
     let successCount = 0;
-    
     for (const id of Array.from(selectedIds)) {
-        const order = orders?.find(o => o.id === id);
-        const isPaid = order && (order.status === "Finalizada" || order.status === "Pago");
-        if (isPaid && order.delivery_status !== 'Despachado' && order.delivery_status !== 'Entregue' && order.delivery_status !== 'Cancelado') {
-            try {
-                await updateDeliveryStatusMutation.mutateAsync({ orderId: id, status: 'Embalado', info: '' });
-                successCount++;
-            } catch (e) {}
-        }
+      const order = orders.find(o => o.id === id);
+      if (order && (order.status === "Finalizada" || order.status === "Pago") && !["Despachado", "Entregue", "Cancelado"].includes(order.delivery_status)) {
+        try { await updateDeliveryStatusMutation.mutateAsync({ orderId: id, status: "Embalado", info: "" }); successCount++; } catch {}
+      }
     }
-    
-    setIsProcessingBulk(false);
-    setSelectedIds(new Set());
+    setIsProcessingBulk(false); setSelectedIds(new Set());
     if (successCount > 0) showSuccess(`${successCount} pedidos marcados como embalados!`);
-    else showError("Nenhum pedido apto para ser marcado como embalado.");
+    else showError("Nenhum pedido apto.");
   };
 
   const handleBulkDelivered = async () => {
     setIsProcessingBulk(true);
     let successCount = 0;
-
     for (const id of Array.from(selectedIds)) {
-        const order = orders?.find(o => o.id === id);
-        const isEligible = order && (order.status === 'Pago' || order.status === 'Finalizada') && order.delivery_status !== 'Entregue' && order.delivery_status !== 'Cancelado';
-        if (isEligible) {
-            try {
-                await finalizeOrderMutation.mutateAsync(id);
-                successCount++;
-            } catch (e) {}
-        }
+      const order = orders.find(o => o.id === id);
+      if (order && (order.status === "Pago" || order.status === "Finalizada") && !["Entregue", "Cancelado"].includes(order.delivery_status)) {
+        try { await finalizeOrderMutation.mutateAsync(id); successCount++; } catch {}
+      }
     }
-
-    setIsProcessingBulk(false);
-    setSelectedIds(new Set());
-    if (successCount > 0) showSuccess(`${successCount} pedidos finalizados como entregues!`);
-    else showError("Nenhum pedido apto para ser finalizado (já finalizados ou cancelados).");
+    setIsProcessingBulk(false); setSelectedIds(new Set());
+    if (successCount > 0) showSuccess(`${successCount} pedidos finalizados!`);
+    else showError("Nenhum pedido apto.");
   };
 
   const handleExportExcel = async () => {
-    if (selectedIds.size === 0) {
-      showError("Selecione pelo menos um pedido para exportar.");
-      return;
-    }
-
+    if (selectedIds.size === 0) { showError("Selecione pelo menos um pedido."); return; }
     setIsExporting(true);
-
     try {
-      const ordersToExport = orders?.filter(o => selectedIds.has(o.id)) || [];
-      
-      // Coletar IDs dos produtos para buscar custo
+      const ordersToExport = orders.filter(o => selectedIds.has(o.id));
       const productIds = new Set<number>();
-      ordersToExport.forEach(order => {
-        order.order_items.forEach((item: any) => {
-          if (item.item_type === 'product' && item.item_id) {
-            productIds.add(item.item_id);
-          }
-        });
-      });
-
-      // Buscar custo dos produtos
+      ordersToExport.forEach(order => order.order_items.forEach((item: any) => { if (item.item_type === "product" && item.item_id) productIds.add(item.item_id); }));
       let costsMap = new Map<number, number>();
       if (productIds.size > 0) {
-        const { data: productsData } = await supabase
-          .from("products")
-          .select("id, cost_price")
-          .in("id", Array.from(productIds));
-        
-        productsData?.forEach((p: any) => {
-          costsMap.set(p.id, p.cost_price || 0);
-        });
+        const { data: productsData } = await supabase.from("products").select("id, cost_price").in("id", Array.from(productIds));
+        productsData?.forEach((p: any) => costsMap.set(p.id, p.cost_price || 0));
       }
-
       const rows: any[] = [];
-
       ordersToExport.forEach(order => {
-        // compute breakdown exactly like UI (items + shipping + donation - coupon)
-        const itemsSubtotalRawEx = (order.order_items || []).reduce((acc: number, it: any) => acc + (Number(it.price_at_purchase) || 0) * (Number(it.quantity) || 0), 0);
-        const shippingEx = Number(order.shipping_cost) || 0;
-        const donationEx = Number(order.donation_amount) || 0;
-        const couponEx = Number(order.coupon_discount) || 0;
-        const authoritativeTotalEx = itemsSubtotalRawEx + shippingEx + donationEx - couponEx;
-
+        const itemsSubtotal = (order.order_items || []).reduce((acc: number, it: any) => acc + (Number(it.price_at_purchase) || 0) * (Number(it.quantity) || 0), 0);
+        const shipping = Number(order.shipping_cost) || 0;
+        const donation = Number(order.donation_amount) || 0;
+        const coupon = Number(order.coupon_discount) || 0;
+        const total = itemsSubtotal + shipping + donation - coupon;
         order.order_items.forEach((item: any) => {
-            const unitCost = (item.item_type === 'product' && item.item_id) ? (costsMap.get(item.item_id) || 0) : 0;
-            const totalCost = unitCost * item.quantity;
-            const totalSale = (Number(item.price_at_purchase) || 0) * item.quantity;
-            const profit = totalSale - totalCost;
-
-            rows.push({
-                "Número do Pedido": order.id,
-                "Cliente": `${order.profiles?.first_name || ''} ${order.profiles?.last_name || ''}`.trim(),
-                "Data": new Date(order.created_at).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }),
-                "Produto": item.name_at_purchase,
-                "Quantidade": item.quantity,
-                "Custo Unitário": unitCost,
-                "Valor Total Venda": totalSale,
-                "Valor Total Custo": totalCost,
-                "Lucro": profit,
-                "Forma de Pagamento": order.payment_method || "Pix",
-                "Frete": shippingEx,
-                "Doação": donationEx,
-                "Total Pedido": authoritativeTotalEx
-            });
+          const unitCost = (item.item_type === "product" && item.item_id) ? (costsMap.get(item.item_id) || 0) : 0;
+          rows.push({
+            "Número do Pedido": order.id,
+            "Cliente": `${order.profiles?.first_name || ""} ${order.profiles?.last_name || ""}`.trim(),
+            "Data": new Date(order.created_at).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }),
+            "Produto": item.name_at_purchase,
+            "Quantidade": item.quantity,
+            "Custo Unitário": unitCost,
+            "Valor Total Venda": (Number(item.price_at_purchase) || 0) * item.quantity,
+            "Valor Total Custo": unitCost * item.quantity,
+            "Lucro": ((Number(item.price_at_purchase) || 0) * item.quantity) - (unitCost * item.quantity),
+            "Forma de Pagamento": order.payment_method || "Pix",
+            "Frete": shipping,
+            "Doação": donation,
+            "Total Pedido": total,
+          });
         });
       });
-
       const worksheet = XLSX.utils.json_to_sheet(rows);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "Vendas_Detalhadas");
-      XLSX.writeFile(workbook, `Vendas_Exportadas_${new Date().toLocaleDateString("pt-BR").replace(/\//g, '-')}.xlsx`);
-      
+      XLSX.writeFile(workbook, `Vendas_Exportadas_${new Date().toLocaleDateString("pt-BR").replace(/\//g, "-")}.xlsx`);
       showSuccess(`${rows.length} itens exportados!`);
     } catch (err) {
-      console.error(err);
-      showError("Erro ao gerar o arquivo Excel.");
+      console.error(err); showError("Erro ao gerar o arquivo Excel.");
     } finally {
       setIsExporting(false);
     }
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.size === filteredOrders.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filteredOrders.map(o => o.id)));
-    }
+    if (selectedIds.size === orders.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(orders.map(o => o.id)));
   };
 
   const toggleSelectOne = (id: number) => {
     const next = new Set(selectedIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
+    if (next.has(id)) next.delete(id); else next.add(id);
     setSelectedIds(next);
   };
 
   const formatCurrency = (val: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
-  const filteredOrdersCount = filteredOrders.length;
 
   const getPaymentMethodDetails = (method: string | null | undefined) => {
-    if (!method) return { label: 'Pix', icon: QrCode, style: "bg-cyan-50 text-cyan-700 border-cyan-200" };
-    
+    if (!method) return { label: "Pix", icon: QrCode, style: "bg-cyan-50 text-cyan-700 border-cyan-200" };
     const lower = method.toLowerCase();
-    if (lower.includes('pix')) {
-      return { label: 'Pix', icon: QrCode, style: "bg-cyan-50 text-cyan-700 border-cyan-200" };
-    }
-    if (lower.includes('credit') || lower.includes('card') || lower.includes('cart')) {
-      return { label: 'Cartão (MP)', icon: CreditCard, style: "bg-purple-50 text-purple-700 border-purple-200" };
-    }
+    if (lower.includes("pix")) return { label: "Pix", icon: QrCode, style: "bg-cyan-50 text-cyan-700 border-cyan-200" };
+    if (lower.includes("credit") || lower.includes("card") || lower.includes("cart")) return { label: "Cartão (MP)", icon: CreditCard, style: "bg-purple-50 text-purple-700 border-purple-200" };
     return { label: method, icon: DollarSign, style: "bg-gray-50 text-gray-700 border-gray-200" };
   };
 
-  if (isLoading) {
+  if (isLoading && !data) {
     return (
       <div className="relative pb-24">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-3xl font-bold flex items-center gap-2">
-            <DollarSign className="h-7 w-7 text-green-600" />
-            Vendas
+            <DollarSign className="h-7 w-7 text-green-600" /> Vendas
           </h1>
         </div>
         <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
           <div className="p-4 space-y-3">
-            {Array.from({ length: 10 }).map((_, i) => (
-              <Skeleton key={i} className="h-14 w-full rounded-lg" />
-            ))}
+            {Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}
           </div>
         </div>
       </div>
@@ -768,21 +579,19 @@ const OrdersPage = () => {
 
   return (
     <div className="relative pb-24">
-      {/* Header Row */}
+      {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <h1 className="text-3xl font-bold flex items-center gap-2">
-            <DollarSign className="h-7 w-7 text-green-600" />
-            Vendas
+            <DollarSign className="h-7 w-7 text-green-600" /> Vendas
           </h1>
           <Button variant="ghost" size="icon" onClick={() => refetch()} className={cn("h-8 w-8", isRefetching && "animate-spin")}>
             <RefreshCw className="h-4 w-4" />
           </Button>
         </div>
-
         <Card className="px-4 py-3 bg-white shadow-sm border flex items-center gap-2">
           <span className="text-sm text-muted-foreground font-medium">Pedidos</span>
-          <span className="text-2xl font-bold text-slate-900">{filteredOrdersCount}</span>
+          <span className="text-2xl font-bold text-slate-900">{totalCount}</span>
         </Card>
       </div>
 
@@ -790,294 +599,131 @@ const OrdersPage = () => {
       <div className="bg-white rounded-xl border shadow-sm p-4 mb-4 space-y-3">
         {/* Row 1: Search fields */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* ID do Pedido */}
+          {/* ID */}
           <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-9 overflow-hidden w-28">
             <span className="absolute left-3 text-xs text-gray-400 font-medium">#</span>
-            <input
-              type="text"
-              placeholder="ID"
-              value={searchOrderId}
+            <input type="text" placeholder="ID" value={searchOrderId}
               onChange={(e) => setSearchOrderId(e.target.value.replace(/\D/g, ""))}
-              className="pl-6 pr-3 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0 font-mono"
-            />
-            {searchOrderId && (
-              <button
-                onClick={() => setSearchOrderId("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            )}
+              className="pl-6 pr-3 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0 font-mono" />
+            {searchOrderId && <button onClick={() => setSearchOrderId("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500"><X className="w-3 h-3" /></button>}
           </div>
 
           {/* CPF */}
           <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-9 overflow-hidden w-36">
-            <input
-              type="text"
-              placeholder="CPF"
-              value={searchCPF}
+            <input type="text" placeholder="CPF" value={searchCPF}
               onChange={(e) => setSearchCPF(e.target.value.replace(/\D/g, ""))}
-              className="pl-3 pr-8 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0"
-            />
-            {searchCPF && (
-              <button
-                onClick={() => setSearchCPF("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            )}
+              className="pl-3 pr-8 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0" />
+            {searchCPF && <button onClick={() => setSearchCPF("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500"><X className="w-3 h-3" /></button>}
           </div>
 
-          {/* Nome do Cliente */}
+          {/* Nome */}
           <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-9 overflow-hidden flex-1 min-w-[200px]">
-            <input
-              type="text"
-              placeholder="Nome do cliente"
-              value={searchClientName}
+            <input type="text" placeholder="Nome do cliente" value={searchClientName}
               onChange={(e) => setSearchClientName(e.target.value)}
-              className="pl-3 pr-8 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0"
-            />
-            {searchClientName && (
-              <button
-                onClick={() => setSearchClientName("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            )}
+              className="pl-3 pr-8 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0" />
+            {searchClientName && <button onClick={() => setSearchClientName("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500"><X className="w-3 h-3" /></button>}
           </div>
 
           {/* Email */}
           <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-9 overflow-hidden flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Email do cliente"
-              value={searchEmail}
+            <input type="text" placeholder="Email do cliente" value={searchEmail}
               onChange={(e) => setSearchEmail(e.target.value)}
-              className="pl-10 pr-8 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0"
-            />
-            {searchEmail && (
-              <button
-                onClick={() => setSearchEmail("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            )}
+              className="pl-10 pr-8 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0" />
+            {searchEmail && <button onClick={() => setSearchEmail("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500"><X className="w-3 h-3" /></button>}
           </div>
         </div>
 
-        {/* Row 2: Date + Status filters + Clear */}
+        {/* Row 2: Date + Status + Actions */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Filtros de Data */}
-          <Input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="h-9 w-36 text-xs"
-          />
+          <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-9 w-36 text-xs" />
           <span className="text-muted-foreground text-xs">a</span>
-          <Input
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="h-9 w-36 text-xs"
-          />
+          <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-9 w-36 text-xs" />
 
-          {/* Status do Pedido - Multi-select */}
+          {/* Status Pedido */}
           <Popover>
             <PopoverTrigger asChild>
-              <button className={cn(
-                "h-9 px-3 text-xs border rounded-md flex items-center gap-2 bg-white hover:bg-gray-50 transition-colors",
-                statusFilter.length > 0 ? "border-green-400 text-green-700 bg-green-50" : "border-gray-200 text-gray-600"
-              )}>
-                <span>
-                  {statusFilter.length === 0
-                    ? "Status Pedido"
-                    : statusFilter.length === 1
-                    ? statusFilter[0]
-                    : `${statusFilter.length} status`}
-                </span>
-                {statusFilter.length > 0 && (
-                  <span className="bg-green-600 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold">
-                    {statusFilter.length}
-                  </span>
-                )}
+              <button className={cn("h-9 px-3 text-xs border rounded-md flex items-center gap-2 bg-white hover:bg-gray-50 transition-colors", statusFilter.length > 0 ? "border-green-400 text-green-700 bg-green-50" : "border-gray-200 text-gray-600")}>
+                <span>{statusFilter.length === 0 ? "Status Pedido" : statusFilter.length === 1 ? statusFilter[0] : `${statusFilter.length} status`}</span>
+                {statusFilter.length > 0 && <span className="bg-green-600 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold">{statusFilter.length}</span>}
                 <ChevronDown className="w-3 h-3 opacity-50" />
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-52 p-2" align="start">
               <div className="space-y-1">
-                {["Pendente", "Aguardando Pagamento", "Pago", "Em preparo", "Finalizada", "Cancelado"].map(status => (
-                  <label key={status} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer text-sm">
-                    <Checkbox
-                      checked={statusFilter.includes(status)}
-                      onCheckedChange={() => toggleStatusFilter(status)}
-                    />
-                    {status}
+                {["Pendente", "Aguardando Pagamento", "Pago", "Em preparo", "Finalizada", "Cancelado"].map(s => (
+                  <label key={s} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer text-sm">
+                    <Checkbox checked={statusFilter.includes(s)} onCheckedChange={() => toggleStatusFilter(s)} />{s}
                   </label>
                 ))}
-                {statusFilter.length > 0 && (
-                  <button
-                    onClick={() => setStatusFilter([])}
-                    className="w-full text-xs text-red-500 hover:text-red-700 pt-1 border-t mt-1 text-left px-2"
-                  >
-                    Limpar seleção
-                  </button>
-                )}
+                {statusFilter.length > 0 && <button onClick={() => setStatusFilter([])} className="w-full text-xs text-red-500 hover:text-red-700 pt-1 border-t mt-1 text-left px-2">Limpar seleção</button>}
               </div>
             </PopoverContent>
           </Popover>
 
-          {/* Status de Entrega - Multi-select */}
+          {/* Status Entrega */}
           <Popover>
             <PopoverTrigger asChild>
-              <button className={cn(
-                "h-9 px-3 text-xs border rounded-md flex items-center gap-2 bg-white hover:bg-gray-50 transition-colors",
-                deliveryStatusFilter.length > 0 ? "border-sky-400 text-sky-700 bg-sky-50" : "border-gray-200 text-gray-600"
-              )}>
-                <span>
-                  {deliveryStatusFilter.length === 0
-                    ? "Status Entrega"
-                    : deliveryStatusFilter.length === 1
-                    ? deliveryStatusFilter[0]
-                    : `${deliveryStatusFilter.length} status`}
-                </span>
-                {deliveryStatusFilter.length > 0 && (
-                  <span className="bg-sky-600 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold">
-                    {deliveryStatusFilter.length}
-                  </span>
-                )}
+              <button className={cn("h-9 px-3 text-xs border rounded-md flex items-center gap-2 bg-white hover:bg-gray-50 transition-colors", deliveryStatusFilter.length > 0 ? "border-sky-400 text-sky-700 bg-sky-50" : "border-gray-200 text-gray-600")}>
+                <span>{deliveryStatusFilter.length === 0 ? "Status Entrega" : deliveryStatusFilter.length === 1 ? deliveryStatusFilter[0] : `${deliveryStatusFilter.length} status`}</span>
+                {deliveryStatusFilter.length > 0 && <span className="bg-sky-600 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold">{deliveryStatusFilter.length}</span>}
                 <ChevronDown className="w-3 h-3 opacity-50" />
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-52 p-2" align="start">
               <div className="space-y-1">
-                {["Pendente", "Aguardando Coleta", "Aguardando Validação", "Embalado", "Despachado", "Entregue"].map(status => (
-                  <label key={status} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer text-sm">
-                    <Checkbox
-                      checked={deliveryStatusFilter.includes(status)}
-                      onCheckedChange={() => toggleDeliveryStatusFilter(status)}
-                    />
-                    {status}
+                {["Pendente", "Aguardando Coleta", "Aguardando Validação", "Embalado", "Despachado", "Entregue"].map(s => (
+                  <label key={s} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer text-sm">
+                    <Checkbox checked={deliveryStatusFilter.includes(s)} onCheckedChange={() => toggleDeliveryStatusFilter(s)} />{s}
                   </label>
                 ))}
-                {deliveryStatusFilter.length > 0 && (
-                  <button
-                    onClick={() => setDeliveryStatusFilter([])}
-                    className="w-full text-xs text-red-500 hover:text-red-700 pt-1 border-t mt-1 text-left px-2"
-                  >
-                    Limpar seleção
-                  </button>
-                )}
+                {deliveryStatusFilter.length > 0 && <button onClick={() => setDeliveryStatusFilter([])} className="w-full text-xs text-red-500 hover:text-red-700 pt-1 border-t mt-1 text-left px-2">Limpar seleção</button>}
               </div>
             </PopoverContent>
           </Popover>
 
-          {/* Forma de Pagamento - Multi-select */}
+          {/* Pagamento */}
           <Popover>
             <PopoverTrigger asChild>
-              <button className={cn(
-                "h-9 px-3 text-xs border rounded-md flex items-center gap-2 bg-white hover:bg-gray-50 transition-colors",
-                paymentMethodFilter.length > 0 ? "border-purple-400 text-purple-700 bg-purple-50" : "border-gray-200 text-gray-600"
-              )}>
-                <span>
-                  {paymentMethodFilter.length === 0
-                    ? "Pagamento"
-                    : paymentMethodFilter.length === 1
-                    ? paymentMethodFilter[0]
-                    : `${paymentMethodFilter.length} métodos`}
-                </span>
-                {paymentMethodFilter.length > 0 && (
-                  <span className="bg-purple-600 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold">
-                    {paymentMethodFilter.length}
-                  </span>
-                )}
+              <button className={cn("h-9 px-3 text-xs border rounded-md flex items-center gap-2 bg-white hover:bg-gray-50 transition-colors", paymentMethodFilter.length > 0 ? "border-purple-400 text-purple-700 bg-purple-50" : "border-gray-200 text-gray-600")}>
+                <span>{paymentMethodFilter.length === 0 ? "Pagamento" : paymentMethodFilter.length === 1 ? paymentMethodFilter[0] : `${paymentMethodFilter.length} métodos`}</span>
+                {paymentMethodFilter.length > 0 && <span className="bg-purple-600 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold">{paymentMethodFilter.length}</span>}
                 <ChevronDown className="w-3 h-3 opacity-50" />
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-44 p-2" align="start">
               <div className="space-y-1">
-                {[
-                  { value: "Pix", icon: QrCode },
-                  { value: "Cartão", icon: CreditCard },
-                ].map(({ value, icon: Icon }) => (
+                {[{ value: "Pix", icon: QrCode }, { value: "Cartão", icon: CreditCard }].map(({ value, icon: Icon }) => (
                   <label key={value} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer text-sm">
-                    <Checkbox
-                      checked={paymentMethodFilter.includes(value)}
-                      onCheckedChange={() => togglePaymentMethodFilter(value)}
-                    />
-                    <Icon className="w-3.5 h-3.5 text-gray-500" />
-                    {value}
+                    <Checkbox checked={paymentMethodFilter.includes(value)} onCheckedChange={() => togglePaymentMethodFilter(value)} />
+                    <Icon className="w-3.5 h-3.5 text-gray-500" />{value}
                   </label>
                 ))}
-                {paymentMethodFilter.length > 0 && (
-                  <button
-                    onClick={() => setPaymentMethodFilter([])}
-                    className="w-full text-xs text-red-500 hover:text-red-700 pt-1 border-t mt-1 text-left px-2"
-                  >
-                    Limpar seleção
-                  </button>
-                )}
+                {paymentMethodFilter.length > 0 && <button onClick={() => setPaymentMethodFilter([])} className="w-full text-xs text-red-500 hover:text-red-700 pt-1 border-t mt-1 text-left px-2">Limpar seleção</button>}
               </div>
             </PopoverContent>
           </Popover>
 
-          {(startDate || endDate || statusFilter.length > 0 || deliveryStatusFilter.length > 0 || paymentMethodFilter.length > 0 || searchOrderId || searchCPF || searchClientName || searchEmail) && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-9 text-xs text-red-500 hover:text-red-600 hover:bg-red-50"
-              onClick={() => {
-                setStartDate("");
-                setEndDate("");
-                setStatusFilter([]);
-                setDeliveryStatusFilter([]);
-                setPaymentMethodFilter([]);
-                setSearchOrderId("");
-                setSearchCPF("");
-                setSearchClientName("");
-                setSearchEmail("");
-              }}
-            >
-              <FilterX className="w-3 h-3 mr-1" />
-              Limpar filtros
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" className="h-9 text-xs text-red-500 hover:text-red-600 hover:bg-red-50" onClick={clearAllFilters}>
+              <FilterX className="w-3 h-3 mr-1" /> Limpar filtros
             </Button>
           )}
 
-          {/* Spacer */}
           <div className="flex-1" />
 
-          {/* Action Buttons */}
-          <Button
-            onClick={() => setIsCreateOrderOpen(true)}
-            className="bg-green-600 hover:bg-green-700 font-bold h-9 px-4 gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Criar Pedido Manual
+          <Button onClick={() => setIsCreateOrderOpen(true)} className="bg-green-600 hover:bg-green-700 font-bold h-9 px-4 gap-2">
+            <Plus className="w-4 h-4" /> Criar Pedido Manual
           </Button>
 
-          <Button
-            variant={readyToShipOnly ? "default" : "outline"}
-            size="sm"
+          <Button variant={readyToShipOnly ? "default" : "outline"} size="sm"
             className={cn("h-9 gap-2 text-xs", readyToShipOnly && "bg-blue-600")}
-            onClick={() => {
-              setReadyToShipOnly(!readyToShipOnly);
-              setSelectedIds(new Set());
-            }}
-          >
+            onClick={() => { setReadyToShipOnly(!readyToShipOnly); setSelectedIds(new Set()); }}>
             <Package className="w-4 h-4" /> Prontos p/ Envio
           </Button>
 
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9 gap-2 text-xs text-green-700 border-green-200 hover:bg-green-50"
-            onClick={handleExportExcel}
-            disabled={selectedIds.size === 0 || isExporting}
-          >
+          <Button variant="outline" size="sm" className="h-9 gap-2 text-xs text-green-700 border-green-200 hover:bg-green-50"
+            onClick={handleExportExcel} disabled={selectedIds.size === 0 || isExporting}>
             {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
             Exportar ({selectedIds.size})
           </Button>
@@ -1085,94 +731,30 @@ const OrdersPage = () => {
       </div>
 
       {/* Active Filter Chips */}
-      {(searchOrderId || searchCPF || searchClientName || searchEmail || startDate || endDate || statusFilter.length > 0 || deliveryStatusFilter.length > 0 || paymentMethodFilter.length > 0 || readyToShipOnly) && (
+      {hasActiveFilters && (
         <div className="flex flex-wrap items-center gap-2 mb-3 px-1">
           <span className="text-xs text-muted-foreground font-medium">Filtros ativos:</span>
-
-          {searchOrderId && (
-            <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
-              # ID: {searchOrderId}
-              <button onClick={() => setSearchOrderId("")} className="hover:text-blue-900 ml-0.5"><X className="w-3 h-3" /></button>
-            </span>
-          )}
-          {searchCPF && (
-            <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
-              CPF: {searchCPF}
-              <button onClick={() => setSearchCPF("")} className="hover:text-blue-900 ml-0.5"><X className="w-3 h-3" /></button>
-            </span>
-          )}
-          {searchClientName && (
-            <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
-              Nome: {searchClientName}
-              <button onClick={() => setSearchClientName("")} className="hover:text-blue-900 ml-0.5"><X className="w-3 h-3" /></button>
-            </span>
-          )}
-          {searchEmail && (
-            <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
-              Email: {searchEmail}
-              <button onClick={() => setSearchEmail("")} className="hover:text-blue-900 ml-0.5"><X className="w-3 h-3" /></button>
-            </span>
-          )}
-          {startDate && (
-            <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
-              De: {new Date(startDate + "T00:00:00").toLocaleDateString("pt-BR")}
-              <button onClick={() => setStartDate("")} className="hover:text-purple-900 ml-0.5"><X className="w-3 h-3" /></button>
-            </span>
-          )}
-          {endDate && (
-            <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
-              Até: {new Date(endDate + "T00:00:00").toLocaleDateString("pt-BR")}
-              <button onClick={() => setEndDate("")} className="hover:text-purple-900 ml-0.5"><X className="w-3 h-3" /></button>
-            </span>
-          )}
-          {statusFilter.map(s => (
-            <span key={s} className="inline-flex items-center gap-1 bg-green-50 text-green-700 border border-green-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
-              Status: {s}
-              <button onClick={() => toggleStatusFilter(s)} className="hover:text-green-900 ml-0.5"><X className="w-3 h-3" /></button>
-            </span>
-          ))}
-          {deliveryStatusFilter.map(s => (
-            <span key={s} className="inline-flex items-center gap-1 bg-sky-50 text-sky-700 border border-sky-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
-              Entrega: {s}
-              <button onClick={() => toggleDeliveryStatusFilter(s)} className="hover:text-sky-900 ml-0.5"><X className="w-3 h-3" /></button>
-            </span>
-          ))}
-          {paymentMethodFilter.map(s => (
-            <span key={s} className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
-              Pagamento: {s}
-              <button onClick={() => togglePaymentMethodFilter(s)} className="hover:text-purple-900 ml-0.5"><X className="w-3 h-3" /></button>
-            </span>
-          ))}
-          {readyToShipOnly && (
-            <span className="inline-flex items-center gap-1 bg-blue-600 text-white rounded-full px-2.5 py-0.5 text-xs font-medium">
-              Prontos p/ Envio
-              <button onClick={() => setReadyToShipOnly(false)} className="hover:opacity-80 ml-0.5"><X className="w-3 h-3" /></button>
-            </span>
-          )}
-
-          <button
-            onClick={() => {
-              setSearchOrderId(""); setSearchCPF(""); setSearchClientName(""); setSearchEmail("");
-              setStartDate(""); setEndDate(""); setStatusFilter([]); setDeliveryStatusFilter([]);
-              setPaymentMethodFilter([]); setReadyToShipOnly(false);
-            }}
-            className="text-xs text-red-500 hover:text-red-700 underline ml-1"
-          >
-            Limpar tudo
-          </button>
+          {searchOrderId && <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2.5 py-0.5 text-xs font-medium"># ID: {searchOrderId}<button onClick={() => setSearchOrderId("")} className="hover:text-blue-900 ml-0.5"><X className="w-3 h-3" /></button></span>}
+          {searchCPF && <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2.5 py-0.5 text-xs font-medium">CPF: {searchCPF}<button onClick={() => setSearchCPF("")} className="hover:text-blue-900 ml-0.5"><X className="w-3 h-3" /></button></span>}
+          {searchClientName && <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2.5 py-0.5 text-xs font-medium">Nome: {searchClientName}<button onClick={() => setSearchClientName("")} className="hover:text-blue-900 ml-0.5"><X className="w-3 h-3" /></button></span>}
+          {searchEmail && <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2.5 py-0.5 text-xs font-medium">Email: {searchEmail}<button onClick={() => setSearchEmail("")} className="hover:text-blue-900 ml-0.5"><X className="w-3 h-3" /></button></span>}
+          {startDate && <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-2.5 py-0.5 text-xs font-medium">De: {new Date(startDate + "T00:00:00").toLocaleDateString("pt-BR")}<button onClick={() => setStartDate("")} className="hover:text-purple-900 ml-0.5"><X className="w-3 h-3" /></button></span>}
+          {endDate && <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-2.5 py-0.5 text-xs font-medium">Até: {new Date(endDate + "T00:00:00").toLocaleDateString("pt-BR")}<button onClick={() => setEndDate("")} className="hover:text-purple-900 ml-0.5"><X className="w-3 h-3" /></button></span>}
+          {statusFilter.map(s => <span key={s} className="inline-flex items-center gap-1 bg-green-50 text-green-700 border border-green-200 rounded-full px-2.5 py-0.5 text-xs font-medium">Status: {s}<button onClick={() => toggleStatusFilter(s)} className="hover:text-green-900 ml-0.5"><X className="w-3 h-3" /></button></span>)}
+          {deliveryStatusFilter.map(s => <span key={s} className="inline-flex items-center gap-1 bg-sky-50 text-sky-700 border border-sky-200 rounded-full px-2.5 py-0.5 text-xs font-medium">Entrega: {s}<button onClick={() => toggleDeliveryStatusFilter(s)} className="hover:text-sky-900 ml-0.5"><X className="w-3 h-3" /></button></span>)}
+          {paymentMethodFilter.map(s => <span key={s} className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-2.5 py-0.5 text-xs font-medium">Pagamento: {s}<button onClick={() => togglePaymentMethodFilter(s)} className="hover:text-purple-900 ml-0.5"><X className="w-3 h-3" /></button></span>)}
+          {readyToShipOnly && <span className="inline-flex items-center gap-1 bg-blue-600 text-white rounded-full px-2.5 py-0.5 text-xs font-medium">Prontos p/ Envio<button onClick={() => setReadyToShipOnly(false)} className="hover:opacity-80 ml-0.5"><X className="w-3 h-3" /></button></span>}
+          <button onClick={clearAllFilters} className="text-xs text-red-500 hover:text-red-700 underline ml-1">Limpar tudo</button>
         </div>
       )}
 
-      <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
+      <div className={cn("bg-white rounded-lg border shadow-sm overflow-hidden", isRefetching && "opacity-80 transition-opacity")}>
         <div className="overflow-x-auto">
-            <Table>
+          <Table>
             <TableHeader className="sticky top-0 bg-white z-10 shadow-sm">
-                <TableRow>
+              <TableRow>
                 <TableHead className="w-12 text-center">
-                    <Checkbox 
-                    checked={filteredOrders.length > 0 && selectedIds.size === filteredOrders.length}
-                    onCheckedChange={toggleSelectAll}
-                    />
+                  <Checkbox checked={orders.length > 0 && selectedIds.size === orders.length} onCheckedChange={toggleSelectAll} />
                 </TableHead>
                 <TableHead>Pedido ID</TableHead>
                 <TableHead>Data</TableHead>
@@ -1182,449 +764,301 @@ const OrdersPage = () => {
                 <TableHead>Entrega</TableHead>
                 <TableHead>Pagamento</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
+              </TableRow>
             </TableHeader>
             <TableBody>
-                {isLoading ? (
-                    <TableRow><TableCell colSpan={9}><Skeleton className="h-10 w-full" /></TableCell></TableRow>
-                ) : paginatedOrders.map((order) => {
-                    const isPaid = order.status === "Finalizada" || order.status === "Pago";
-                    const needsManualValidation = order.status === 'Pago' && order.delivery_status === 'Aguardando Validação'; // Mantém para pedidos antigos
-                    const isInRoute = order.delivery_status === "Despachado";
-                    const isSelected = selectedIds.has(order.id);
-                    const isNextRoute = checkIsNextRoute(order.created_at);
-                    const paymentDetails = getPaymentMethodDetails(order.payment_method);
-                    const PaymentIcon = paymentDetails.icon;
-                    
-                    // Compute final total as: items subtotal + shipping + donation - coupon (explicit composition)
-                    // Fallback to total_price from DB when order_items is empty (e.g. logista RLS timing)
-                    const itemsSubtotalRaw = (order.order_items || []).reduce((acc: number, it: any) => acc + (Number(it.price_at_purchase) || 0) * (Number(it.quantity) || 0), 0);
-                    const shipping = Number(order.shipping_cost) || 0;
-                    const donation = Number(order.donation_amount) || 0;
-                    const coupon = Number(order.coupon_discount) || 0;
+              {orders.length === 0 && !isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
+                    Nenhum pedido encontrado com os filtros aplicados.
+                  </TableCell>
+                </TableRow>
+              ) : orders.map((order) => {
+                const isPaid = order.status === "Finalizada" || order.status === "Pago";
+                const needsManualValidation = order.status === "Pago" && order.delivery_status === "Aguardando Validação";
+                const isInRoute = order.delivery_status === "Despachado";
+                const isSelected = selectedIds.has(order.id);
+                const isNextRoute = checkIsNextRoute(order.created_at);
+                const paymentDetails = getPaymentMethodDetails(order.payment_method);
+                const PaymentIcon = paymentDetails.icon;
 
-                    const finalTotal = (order.order_items && order.order_items.length > 0)
-                      ? itemsSubtotalRaw + shipping + donation - coupon
-                      : Number(order.total_price) || 0;
-                    
-                    const phone = order.profiles?.phone;
-                    const name = order.profiles?.first_name || "Cliente";
+                const itemsSubtotalRaw = (order.order_items || []).reduce((acc: number, it: any) => acc + (Number(it.price_at_purchase) || 0) * (Number(it.quantity) || 0), 0);
+                const shipping = Number(order.shipping_cost) || 0;
+                const donation = Number(order.donation_amount) || 0;
+                const coupon = Number(order.coupon_discount) || 0;
+                const finalTotal = (order.order_items && order.order_items.length > 0) ? itemsSubtotalRaw + shipping + donation - coupon : Number(order.total_price) || 0;
 
-                    // Lógica de badge de status atualizada
-                    let statusBadge;
-                    if (order.status === 'Pago' && (order.delivery_status === 'Aguardando Coleta' || order.delivery_status === 'Pendente')) {
-                        statusBadge = (
-                            <Badge variant="secondary" className="bg-green-100 text-green-800">
-                                Pago
-                            </Badge>
-                        );
-                    } else if (needsManualValidation) {
-                        statusBadge = (
-                            <Badge variant="destructive" className="bg-orange-500 hover:bg-orange-600 gap-1">
-                                <ShieldCheck className="w-3 h-3" /> Aguardando Validação
-                            </Badge>
-                        );
-                    } else {
-                        statusBadge = (
-                            <Badge variant="secondary" className={cn("text-[10px] w-fit", isPaid && "bg-green-100 text-green-800")}>
-                                {order.status}
-                            </Badge>
-                        );
-                    }
+                const phone = order.profiles?.phone;
+                const name = order.profiles?.first_name || "Cliente";
 
-                    // Lógica de badge de entrega
-                    let deliveryBadge;
-                    const deliveryStatusLabel =
-                        order.status === 'Cancelado'
-                            ? 'Cancelado'
-                            : isPaid && order.delivery_status === 'Pendente'
-                                ? 'Aguardando Coleta'
-                                : order.delivery_status;
+                let statusBadge;
+                if (order.status === "Pago" && (order.delivery_status === "Aguardando Coleta" || order.delivery_status === "Pendente")) {
+                  statusBadge = <Badge variant="secondary" className="bg-green-100 text-green-800">Pago</Badge>;
+                } else if (needsManualValidation) {
+                  statusBadge = <Badge variant="destructive" className="bg-orange-500 hover:bg-orange-600 gap-1"><ShieldCheck className="w-3 h-3" /> Aguardando Validação</Badge>;
+                } else {
+                  statusBadge = <Badge variant="secondary" className={cn("text-[10px] w-fit", isPaid && "bg-green-100 text-green-800")}>{order.status}</Badge>;
+                }
 
-                    if (needsManualValidation) {
-                        deliveryBadge = <Badge variant="outline" className="text-gray-400 border-gray-200">Bloqueado</Badge>;
-                    } else {
-                        deliveryBadge = (
-                            <Badge variant="secondary" className={cn(
-                                "w-fit",
-                                deliveryStatusLabel === 'Cancelado' && "bg-red-100 text-red-800",
-                                deliveryStatusLabel === 'Entregue' && "bg-green-100 text-green-800",
-                                deliveryStatusLabel === 'Despachado' && "bg-blue-100 text-blue-800 animate-pulse",
-                                deliveryStatusLabel === 'Embalado' && "bg-amber-100 text-amber-800",
-                                deliveryStatusLabel === 'Aguardando Coleta' && "bg-sky-100 text-sky-800"
-                            )}>
-                                {deliveryStatusLabel}
-                            </Badge>
-                        );
-                    }
+                const deliveryStatusLabel = order.status === "Cancelado" ? "Cancelado" : isPaid && order.delivery_status === "Pendente" ? "Aguardando Coleta" : order.delivery_status;
+                let deliveryBadge;
+                if (needsManualValidation) {
+                  deliveryBadge = <Badge variant="outline" className="text-gray-400 border-gray-200">Bloqueado</Badge>;
+                } else {
+                  deliveryBadge = (
+                    <Badge variant="secondary" className={cn("w-fit",
+                      deliveryStatusLabel === "Cancelado" && "bg-red-100 text-red-800",
+                      deliveryStatusLabel === "Entregue" && "bg-green-100 text-green-800",
+                      deliveryStatusLabel === "Despachado" && "bg-blue-100 text-blue-800 animate-pulse",
+                      deliveryStatusLabel === "Embalado" && "bg-amber-100 text-amber-800",
+                      deliveryStatusLabel === "Aguardando Coleta" && "bg-sky-100 text-sky-800"
+                    )}>{deliveryStatusLabel}</Badge>
+                  );
+                }
 
-                    return (
-                    <TableRow key={order.id} className={cn(
-                        isSelected ? "bg-primary/5 border-l-4 border-l-primary" : 
-                        order.status === 'Cancelado' ? "bg-red-50/60 border-l-4 border-l-red-400" :
-                        needsManualValidation ? "bg-orange-50/40" : 
-                        (isNextRoute && order.delivery_status === 'Pendente') ? "bg-yellow-50/60 border-l-4 border-l-yellow-400" : ""
-                    )}>
-                        <TableCell className="text-center">
-                            <Checkbox 
-                                checked={isSelected}
-                                onCheckedChange={() => toggleSelectOne(order.id)}
-                            />
-                        </TableCell>
-                        <TableCell className="font-mono text-sm font-bold">
-                         <div className="flex items-center gap-1.5">
-                           <TooltipProvider>
-                             <Tooltip>
-                               <TooltipTrigger asChild>
-                                 <Button
-                                   variant="ghost"
-                                   size="icon"
-                                   className="h-6 w-6 text-blue-600 hover:bg-blue-50 rounded-full"
-                                   onClick={() => {
-                                     setSelectedClientForHistory({
-                                       id: order.user_id,
-                                       first_name: order.profiles?.first_name,
-                                       last_name: order.profiles?.last_name,
-                                       email: order.profiles?.email || "",
-                                       created_at: null,
-                                       force_pix_on_next_purchase: false,
-                                       order_count: 0,
-                                       completed_order_count: 0
-                                     });
-                                     setIsClientHistoryOpen(true);
-                                   }}
-                                 >
-                                   <History className="w-3 h-3" />
-                                 </Button>
-                               </TooltipTrigger>
-                               <TooltipContent>Histórico de Pedidos</TooltipContent>
-                             </Tooltip>
-                           </TooltipProvider>
-                           #{order.id}
-                         </div>
-                       </TableCell>
-                        <TableCell>
-                        <div className="flex flex-col">
-                            <span className="text-xs">{new Date(order.created_at).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}</span>
-                            <span className="text-[10px] text-muted-foreground">{new Date(order.created_at).toLocaleTimeString("pt-BR", { hour: '2-digit', minute: '2-digit', timeZone: "America/Sao_Paulo" })}</span>
-                            
-                            {isNextRoute && order.delivery_status === 'Pendente' && (
-                            <Badge variant="outline" className="mt-1 w-fit text-[9px] bg-yellow-100 text-yellow-800 border-yellow-300 gap-1 px-1">
-                                <CalendarClock className="w-3 h-3" /> Próx. Dia
-                            </Badge>
-                            )}
+                return (
+                  <TableRow key={order.id} className={cn(
+                    isSelected ? "bg-primary/5 border-l-4 border-l-primary" :
+                    order.status === "Cancelado" ? "bg-red-50/60 border-l-4 border-l-red-400" :
+                    needsManualValidation ? "bg-orange-50/40" :
+                    (isNextRoute && order.delivery_status === "Pendente") ? "bg-yellow-50/60 border-l-4 border-l-yellow-400" : ""
+                  )}>
+                    <TableCell className="text-center">
+                      <Checkbox checked={isSelected} onCheckedChange={() => toggleSelectOne(order.id)} />
+                    </TableCell>
+                    <TableCell className="font-mono text-sm font-bold">
+                      <div className="flex items-center gap-1.5">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-6 w-6 text-blue-600 hover:bg-blue-50 rounded-full"
+                                onClick={() => { setSelectedClientForHistory({ id: order.user_id, first_name: order.profiles?.first_name, last_name: order.profiles?.last_name, email: order.profiles?.email || "", created_at: null, force_pix_on_next_purchase: false, order_count: 0, completed_order_count: 0 }); setIsClientHistoryOpen(true); }}>
+                                <History className="w-3 h-3" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Histórico de Pedidos</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        #{order.id}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="text-xs">{new Date(order.created_at).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}</span>
+                        <span className="text-[10px] text-muted-foreground">{new Date(order.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}</span>
+                        {isNextRoute && order.delivery_status === "Pendente" && (
+                          <Badge variant="outline" className="mt-1 w-fit text-[9px] bg-yellow-100 text-yellow-800 border-yellow-300 gap-1 px-1">
+                            <CalendarClock className="w-3 h-3" /> Próx. Dia
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm text-gray-900">{order.profiles?.first_name} {order.profiles?.last_name}</span>
+                          {phone && canUseWhatsApp && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <a href={getWhatsAppLink(phone, `Olá ${name}, falando sobre o pedido #${order.id}...`)} target="_blank" rel="noreferrer" className="bg-green-100 p-1 rounded-full text-green-600 hover:bg-green-200 hover:scale-110 transition-all">
+                                    <MessageCircle className="w-3 h-3" />
+                                  </a>
+                                </TooltipTrigger>
+                                <TooltipContent>Abrir WhatsApp</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-6 w-6 text-blue-600 hover:bg-blue-50 rounded-full"
+                                  onClick={() => { setSelectedClientForHistory({ id: order.user_id, first_name: order.profiles?.first_name, last_name: order.profiles?.last_name, email: order.profiles?.email || "", created_at: null, force_pix_on_next_purchase: false, order_count: 0, completed_order_count: 0 }); setIsClientHistoryOpen(true); }}>
+                                  <History className="w-3 h-3" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Histórico de Pedidos</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         </div>
-                        </TableCell>
-                        <TableCell>
-                        <div className="flex flex-col gap-0.5">
-                            <div className="flex items-center gap-2">
-                                <span className="font-medium text-sm text-gray-900">{order.profiles?.first_name} {order.profiles?.last_name}</span>
+                        <span className="text-[11px] text-muted-foreground font-mono">{formatPhone(phone || "")}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-bold">{formatCurrency(finalTotal)}</TableCell>
+                    <TableCell>{statusBadge}</TableCell>
+                    <TableCell>{deliveryBadge}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={cn("gap-1 pr-3 w-fit", paymentDetails.style)}>
+                        <PaymentIcon className="w-3 h-3" />{paymentDetails.label}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        {needsManualValidation ? (
+                          <>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button size="icon" className="bg-green-600 hover:bg-green-700 h-8 w-8"
+                                    onClick={() => validatePaymentAndSetPendingMutation.mutate(order.id)}
+                                    disabled={validatePaymentAndSetPendingMutation.isPending}>
+                                    {validatePaymentAndSetPendingMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckSquare className="w-4 h-4" />}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Validar Comprovante e Liberar para Envio</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button size="icon" variant="destructive" className="h-8 w-8" onClick={() => setActionToConfirm({ action: "cancel_fraud", client: order })}>
+                                    <ShieldX className="w-4 h-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Cancelar Pedido (Suspeita de Fraude)</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </>
+                        ) : (
+                          <>
+                            {isInRoute && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button size="sm" variant="outline" className="text-green-600 border-green-200 bg-green-50 hover:bg-green-100 font-bold h-8 px-3 text-xs"
+                                      onClick={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: "Entregue", info: "Confirmado pelo painel" })}
+                                      disabled={updateDeliveryStatusMutation.isPending}>
+                                      <CheckCircle2 className="w-3 h-3 mr-1" /> Entregue
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Marcar pedido como entregue</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                            <Button variant="ghost" size="icon" onClick={() => { setSelectedOrder(order); setIsDetailModalOpen(true); }}><Eye className="h-4 w-4 text-primary" /></Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuLabel>Ações do Pedido</DropdownMenuLabel>
                                 {phone && canUseWhatsApp && (
-                                    <TooltipProvider>
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <a 
-                                                    href={getWhatsAppLink(phone, `Olá ${name}, falando sobre o pedido #${order.id}...`)} 
-                                                    target="_blank" 
-                                                    rel="noreferrer"
-                                                    className="bg-green-100 p-1 rounded-full text-green-600 hover:bg-green-200 hover:scale-110 transition-all"
-                                                >
-                                                    <MessageCircle className="w-3 h-3" />
-                                                </a>
-                                            </TooltipTrigger>
-                                            <TooltipContent>Abrir WhatsApp</TooltipContent>
-                                        </Tooltip>
-                                    </TooltipProvider>
+                                  <DropdownMenuItem asChild>
+                                    <a href={getWhatsAppLink(phone, `Olá ${name}, falando sobre o pedido #${order.id}...`)} target="_blank" rel="noreferrer" className="cursor-pointer text-green-600 font-medium">
+                                      <MessageCircle className="w-4 h-4 mr-2" /> Abrir WhatsApp
+                                    </a>
+                                  </DropdownMenuItem>
                                 )}
-                                {/* Botão de Histórico */}
-                                <TooltipProvider>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <Button 
-                                                variant="ghost" 
-                                                size="icon" 
-                                                className="h-6 w-6 text-blue-600 hover:bg-blue-50 rounded-full"
-                                                onClick={() => {
-                                                    setSelectedClientForHistory({
-                                                        id: order.user_id,
-                                                        first_name: order.profiles?.first_name,
-                                                        last_name: order.profiles?.last_name,
-                                                        email: order.profiles?.email || "", // Será carregado pelo modal
-                                                        created_at: null,
-                                                        force_pix_on_next_purchase: false,
-                                                        order_count: 0, 
-                                                        completed_order_count: 0
-                                                    });
-                                                    setIsClientHistoryOpen(true);
-                                                }}
-                                            >
-                                                <History className="w-3 h-3" />
-                                            </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>Histórico de Pedidos</TooltipContent>
-                                    </Tooltip>
-                                </TooltipProvider>
-                            </div>
-                            <span className="text-[11px] text-muted-foreground font-mono">{formatPhone(phone || "")}</span>
-                        </div>
-                        </TableCell>
-                        <TableCell className="font-bold">{formatCurrency(finalTotal)}</TableCell>
-                        <TableCell>
-                          {statusBadge}
-                        </TableCell>
-                        <TableCell>
-                            {deliveryBadge}
-                        </TableCell>
-                        <TableCell>
-                            <Badge variant="outline" className={cn("gap-1 pr-3 w-fit", paymentDetails.style)}>
-                                <PaymentIcon className="w-3 h-3" />
-                                {paymentDetails.label}
-                            </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                            {needsManualValidation ? (
-                                <>
-                                    <TooltipProvider>
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <Button 
-                                                    size="icon" 
-                                                    className="bg-green-600 hover:bg-green-700 h-8 w-8"
-                                                    onClick={() => validatePaymentAndSetPendingMutation.mutate(order.id)}
-                                                    disabled={validatePaymentAndSetPendingMutation.isPending && validatePaymentAndSetPendingMutation.variables === order.id}
-                                                >
-                                                    {validatePaymentAndSetPendingMutation.isPending && validatePaymentAndSetPendingMutation.variables === order.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckSquare className="w-4 h-4" />}
-                                                </Button>
-                                            </TooltipTrigger>
-                                            <TooltipContent><p>Validar Comprovante e Liberar para Envio</p></TooltipContent>
-                                        </Tooltip>
-                                    </TooltipProvider>
-                                    <TooltipProvider>
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <Button 
-                                                    size="icon" 
-                                                    variant="destructive" 
-                                                    className="h-8 w-8"
-                                                    onClick={() => setActionToConfirm({ action: 'cancel_fraud', client: order })}
-                                                >
-                                                    <ShieldX className="w-4 h-4" />
-                                                </Button>
-                                            </TooltipTrigger>
-                                            <TooltipContent><p>Cancelar Pedido (Suspeita de Fraude)</p></TooltipContent>
-                                        </Tooltip>
-                                    </TooltipProvider>
-                                </>
-                            ) : (
-                                <>
-                                    {isInRoute && (
-                                        <TooltipProvider>
-                                            <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                    <Button 
-                                                        size="sm" 
-                                                        variant="outline"
-                                                        className="text-green-600 border-green-200 bg-green-50 hover:bg-green-100 font-bold h-8 px-3 text-xs"
-                                                        onClick={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: 'Entregue', info: 'Confirmado pelo painel' })}
-                                                        disabled={updateDeliveryStatusMutation.isPending}
-                                                    >
-                                                        <CheckCircle2 className="w-3 h-3 mr-1" /> Entregue
-                                                    </Button>
-                                                </TooltipTrigger>
-                                                <TooltipContent>Marcar pedido como entregue</TooltipContent>
-                                            </Tooltip>
-                                        </TooltipProvider>
-                                    )}
-                                    
-                                    <Button variant="ghost" size="icon" onClick={() => { setSelectedOrder(order); setIsDetailModalOpen(true); }}><Eye className="h-4 w-4 text-primary" /></Button>
-                                    
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end">
-                                            <DropdownMenuLabel>Ações do Pedido</DropdownMenuLabel>
-                                            {phone && canUseWhatsApp && (
-                                                <DropdownMenuItem asChild>
-                                                    <a href={getWhatsAppLink(phone, `Olá ${name}, falando sobre o pedido #${order.id}...`)} target="_blank" rel="noreferrer" className="cursor-pointer text-green-600 font-medium">
-                                                        <MessageCircle className="w-4 h-4 mr-2" /> Abrir WhatsApp
-                                                    </a>
-                                                </DropdownMenuItem>
-                                            )}
-                                            <DropdownMenuItem onSelect={() => { setSelectedOrder(order); setIsLabelModalOpen(true); }} disabled={!isPaid}>
-                                                <Printer className="w-4 h-4 mr-2" /> Imprimir Etiqueta
-                                            </DropdownMenuItem>
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: 'Embalado', info: 'Marcado como embalado manualmente' })}>
-                                                <Package className="w-4 h-4 mr-2" /> Marcar como Embalado
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: 'Despachado', info: 'Despachado manualmente' })}>
-                                                <Truck className="w-4 h-4 mr-2" /> Marcar como Despachado
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: 'Entregue', info: 'Entregue manualmente' })}>
-                                                <CheckCircle2 className="w-4 h-4 mr-2" /> Marcar como Entregue
-                                            </DropdownMenuItem>
-                                            <DropdownMenuSeparator />
-                                            {order.status !== 'Cancelado' && (
-                                              <DropdownMenuItem onSelect={() => setActionToConfirm({ action: 'cancel_fraud', client: order })} className="text-orange-600 font-medium">
-                                                  <XCircle className="w-4 h-4 mr-2" /> Cancelar Pedido
-                                              </DropdownMenuItem>
-                                            )}
-                                            <DropdownMenuItem onSelect={() => { setSelectedOrder(order); setIsDeleteAlertOpen(true); }} className="text-red-600">
-                                                <Trash2 className="w-4 h-4 mr-2" /> Excluir Pedido
-                                            </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
-                                </>
-                            )}
-                        </div>
-                        </TableCell>
-                    </TableRow>
-                    );
-                })}
+                                <DropdownMenuItem onSelect={() => { setSelectedOrder(order); setIsLabelModalOpen(true); }} disabled={!isPaid}>
+                                  <Printer className="w-4 h-4 mr-2" /> Imprimir Etiqueta
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: "Embalado", info: "Marcado como embalado manualmente" })}>
+                                  <Package className="w-4 h-4 mr-2" /> Marcar como Embalado
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: "Despachado", info: "Despachado manualmente" })}>
+                                  <Truck className="w-4 h-4 mr-2" /> Marcar como Despachado
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: "Entregue", info: "Entregue manualmente" })}>
+                                  <CheckCircle2 className="w-4 h-4 mr-2" /> Marcar como Entregue
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                {order.status !== "Cancelado" && (
+                                  <DropdownMenuItem onSelect={() => setActionToConfirm({ action: "cancel_fraud", client: order })} className="text-orange-600 font-medium">
+                                    <XCircle className="w-4 h-4 mr-2" /> Cancelar Pedido
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem onSelect={() => { setSelectedOrder(order); setIsDeleteAlertOpen(true); }} className="text-red-600">
+                                  <Trash2 className="w-4 h-4 mr-2" /> Excluir Pedido
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
-            </Table>
+          </Table>
         </div>
 
-        {/* Pagination Controls */}
+        {/* Pagination */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t bg-gray-50">
             <span className="text-sm text-muted-foreground">
-              Mostrando {((currentPage - 1) * ORDERS_PER_PAGE) + 1}–{Math.min(currentPage * ORDERS_PER_PAGE, filteredOrders.length)} de {filteredOrders.length} pedidos
+              Mostrando {((currentPage - 1) * ORDERS_PER_PAGE) + 1}–{Math.min(currentPage * ORDERS_PER_PAGE, totalCount)} de {totalCount} pedidos
             </span>
             <div className="flex items-center gap-1">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-              >
-                <ChevronLeft className="h-4 w-4" />
-                Anterior
+              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
+                <ChevronLeft className="h-4 w-4" /> Anterior
               </Button>
-
               {Array.from({ length: totalPages }, (_, i) => i + 1)
                 .filter(page => page === 1 || page === totalPages || Math.abs(page - currentPage) <= 2)
-                .reduce<(number | 'ellipsis')[]>((acc, page, idx, arr) => {
-                  if (idx > 0 && page - (arr[idx - 1] as number) > 1) acc.push('ellipsis');
+                .reduce<(number | "ellipsis")[]>((acc, page, idx, arr) => {
+                  if (idx > 0 && page - (arr[idx - 1] as number) > 1) acc.push("ellipsis");
                   acc.push(page);
                   return acc;
                 }, [])
                 .map((item, idx) =>
-                  item === 'ellipsis' ? (
-                    <span key={`ellipsis-${idx}`} className="px-2 text-muted-foreground text-sm">…</span>
+                  item === "ellipsis" ? (
+                    <span key={`e-${idx}`} className="px-2 text-muted-foreground text-sm">…</span>
                   ) : (
-                    <Button
-                      key={item}
-                      variant={currentPage === item ? 'default' : 'outline'}
-                      size="sm"
-                      className="w-9"
-                      onClick={() => setCurrentPage(item as number)}
-                    >
+                    <Button key={item} variant={currentPage === item ? "default" : "outline"} size="sm" className="w-9" onClick={() => setCurrentPage(item as number)}>
                       {item}
                     </Button>
                   )
                 )}
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-              >
-                Próximo
-                <ChevronRight className="h-4 w-4" />
+              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
+                Próximo <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
           </div>
         )}
       </div>
 
+      {/* Bulk Action Bar */}
       {selectedIds.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-10 duration-300">
-            <div className="bg-primary text-white shadow-2xl rounded-2xl p-4 flex items-center gap-6 border-4 border-white">
-                <div className="flex items-center gap-3 pr-6 border-r border-white/20">
-                    <div className="bg-white/20 p-2 rounded-lg">
-                        <CheckboxIcon className="w-6 h-6" />
-                    </div>
-                    <div>
-                        <p className="text-lg font-black leading-none">{selectedIds.size}</p>
-                        <p className="text-[10px] uppercase font-bold opacity-70">Selecionados</p>
-                    </div>
-                </div>
-
-                <div className="flex gap-2">
-                    <Button 
-                        onClick={handleBulkValidate} 
-                        disabled={isProcessingBulk}
-                        className="bg-green-600 hover:bg-green-700 font-black h-12 px-6 rounded-xl shadow-lg"
-                    >
-                        {isProcessingBulk ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <CheckCircle2 className="w-5 h-5 mr-2" />}
-                        Marcar como Pago
-                    </Button>
-                    
-                    <Button 
-                        onClick={handleBulkPackaged} 
-                        disabled={isProcessingBulk}
-                        className="bg-amber-500 hover:bg-amber-600 font-black h-12 px-6 rounded-xl shadow-lg"
-                    >
-                        {isProcessingBulk ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Package className="w-5 h-5 mr-2" />}
-                        Marcar Embalados
-                    </Button>
-
-                    <Button 
-                        onClick={handleBulkDelivered} 
-                        disabled={isProcessingBulk}
-                        className="bg-green-800 hover:bg-green-900 font-black h-12 px-6 rounded-xl shadow-lg"
-                    >
-                        {isProcessingBulk ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Truck className="w-5 h-5 mr-2" />}
-                        Marcar Entregues
-                    </Button>
-                    
-                    <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        onClick={() => setSelectedIds(new Set())}
-                        className="h-12 w-12 hover:bg-white/10 text-white rounded-xl"
-                    >
-                        <X className="w-6 h-6" />
-                    </Button>
-                </div>
+          <div className="bg-primary text-white shadow-2xl rounded-2xl p-4 flex items-center gap-6 border-4 border-white">
+            <div className="flex items-center gap-3 pr-6 border-r border-white/20">
+              <div className="bg-white/20 p-2 rounded-lg"><CheckboxIcon className="w-6 h-6" /></div>
+              <div>
+                <p className="text-lg font-black leading-none">{selectedIds.size}</p>
+                <p className="text-[10px] uppercase font-bold opacity-70">Selecionados</p>
+              </div>
             </div>
+            <div className="flex gap-2">
+              <Button onClick={handleBulkValidate} disabled={isProcessingBulk} className="bg-green-600 hover:bg-green-700 font-black h-12 px-6 rounded-xl shadow-lg">
+                {isProcessingBulk ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <CheckCircle2 className="w-5 h-5 mr-2" />} Marcar como Pago
+              </Button>
+              <Button onClick={handleBulkPackaged} disabled={isProcessingBulk} className="bg-amber-500 hover:bg-amber-600 font-black h-12 px-6 rounded-xl shadow-lg">
+                {isProcessingBulk ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Package className="w-5 h-5 mr-2" />} Marcar Embalados
+              </Button>
+              <Button onClick={handleBulkDelivered} disabled={isProcessingBulk} className="bg-green-800 hover:bg-green-900 font-black h-12 px-6 rounded-xl shadow-lg">
+                {isProcessingBulk ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Truck className="w-5 h-5 mr-2" />} Marcar Entregues
+              </Button>
+              <Button variant="ghost" size="icon" onClick={() => setSelectedIds(new Set())} className="h-12 w-12 hover:bg-white/10 text-white rounded-xl">
+                <X className="w-6 h-6" />
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 
       {selectedOrder && <OrderDetailModal order={selectedOrder} isOpen={isDetailModalOpen} onClose={() => setIsDetailModalOpen(false)} />}
       {selectedOrder && <ShippingLabelModal order={selectedOrder} isOpen={isLabelModalOpen} onClose={() => { setIsLabelModalOpen(false); setSelectedOrder(null); }} />}
+      <ClientDetailsModal client={selectedClientForHistory} isOpen={isClientHistoryOpen} onClose={() => setIsClientHistoryOpen(false)} />
+      <CreateOrderModal isOpen={isCreateOrderOpen} onClose={() => setIsCreateOrderOpen(false)} />
 
-      {/* Modal de Histórico do Cliente */}
-      <ClientDetailsModal 
-        client={selectedClientForHistory} 
-        isOpen={isClientHistoryOpen} 
-        onClose={() => setIsClientHistoryOpen(false)} 
-      />
-
-      {/* Modal de Criação de Pedido Manual */}
-      <CreateOrderModal
-        isOpen={isCreateOrderOpen}
-        onClose={() => setIsCreateOrderOpen(false)}
-      />
-
-      {/* AlertDialog de exclusão de pedido */}
       <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir Pedido</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tem certeza que deseja excluir o pedido <strong>#{selectedOrder?.id}</strong>? O estoque dos produtos será devolvido automaticamente. Esta ação é irreversível.
-            </AlertDialogDescription>
+            <AlertDialogDescription>Tem certeza que deseja excluir o pedido <strong>#{selectedOrder?.id}</strong>? Esta ação é irreversível.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => selectedOrder && deleteOrderMutation.mutate(selectedOrder.id)}
-              disabled={deleteOrderMutation.isPending}
-              className="bg-red-600 hover:bg-red-700"
-            >
+            <AlertDialogAction onClick={() => selectedOrder && deleteOrderMutation.mutate(selectedOrder.id)} disabled={deleteOrderMutation.isPending} className="bg-red-600 hover:bg-red-700">
               {deleteOrderMutation.isPending ? "Excluindo..." : "Sim, Excluir"}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -1636,24 +1070,17 @@ const OrdersPage = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmar Ação</AlertDialogTitle>
             <AlertDialogDescription>
-              {actionToConfirm?.action === 'resend_confirmation'
-                ? `Você tem certeza que deseja reenviar o e-mail de confirmação para ${actionToConfirm?.client.email}?`
-                : actionToConfirm?.action === 'send_password_reset'
-                ? `Você tem certeza que deseja enviar um link de redefinição de senha para ${actionToConfirm?.client.email}?`
-                : actionToConfirm?.action === 'mark_as_recurrent'
-                ? `Você tem certeza que deseja marcar o cliente ${actionToConfirm?.client.email} como recorrente? Isso removerá a restrição de PIX e permitirá outros métodos de pagamento.`
-                : actionToConfirm?.action === 'cancel_fraud'
-                ? `Tem certeza que deseja cancelar o pedido #${actionToConfirm?.client.id}? O status será alterado para 'Cancelado' e o estoque será devolvido automaticamente.`
-                : `ATENÇÃO: Você está prestes a DELETAR PERMANENTEMENTE TODOS OS PEDIDOS do cliente ${actionToConfirm?.client.email}. Isso redefinirá o status de compra dele para 'Primeira Compra'. Esta ação é irreversível.`}
+              {actionToConfirm?.action === "resend_confirmation" ? `Reenviar e-mail de confirmação para ${actionToConfirm?.client.email}?`
+                : actionToConfirm?.action === "send_password_reset" ? `Enviar link de redefinição de senha para ${actionToConfirm?.client.email}?`
+                : actionToConfirm?.action === "mark_as_recurrent" ? `Marcar o cliente ${actionToConfirm?.client.email} como recorrente?`
+                : actionToConfirm?.action === "cancel_fraud" ? `Tem certeza que deseja cancelar o pedido #${actionToConfirm?.client.id}?`
+                : `ATENÇÃO: Deletar TODOS OS PEDIDOS do cliente ${actionToConfirm?.client.email}. Irreversível.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirmAction}
-              disabled={userActionMutation.isPending || cancelOrderForFraudMutation.isPending}
-              className={actionToConfirm?.action === 'cancel_fraud' || actionToConfirm?.action === 'delete_orders' ? "bg-red-600" : ""}
-            >
+            <AlertDialogAction onClick={handleConfirmAction} disabled={userActionMutation.isPending || cancelOrderForFraudMutation.isPending}
+              className={actionToConfirm?.action === "cancel_fraud" || actionToConfirm?.action === "delete_orders" ? "bg-red-600" : ""}>
               {userActionMutation.isPending || cancelOrderForFraudMutation.isPending ? "Executando..." : "Sim, Continuar"}
             </AlertDialogAction>
           </AlertDialogFooter>
