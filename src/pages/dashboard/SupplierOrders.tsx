@@ -2,8 +2,8 @@
 
 import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
+import { supabase } from "../../integrations/supabase/client";
+import { Button } from "../../components/ui/button";
 import {
   Table,
   TableBody,
@@ -33,6 +33,7 @@ import {
 import { SupplierOrderForm } from "@/components/dashboard/SupplierOrderForm";
 import { SupplierOrderDetailModal } from "@/components/dashboard/SupplierOrderDetailModal";
 import { SupplierOrderReceiveModal } from "@/components/dashboard/SupplierOrderReceiveModal";
+import { SupplierOrderMobileCard } from "@/components/dashboard/SupplierOrderMobileCard";
 import { showSuccess, showError } from "@/utils/toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -651,35 +652,39 @@ const SupplierOrdersPage = () => {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 pb-6">
+      {/* ── Header ── */}
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold flex items-center gap-2">
-          <Truck className="h-8 w-8 text-primary" /> Pedidos ao Fornecedor
+        <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
+          <Truck className="h-6 w-6 md:h-8 md:w-8 text-primary" />
+          <span className="hidden md:inline">Pedidos ao Fornecedor</span>
+          <span className="md:hidden">Fornecedor</span>
         </h1>
-        <div>
-          <Button onClick={openCreateOrder}>
-            <PlusCircle className="mr-2 h-4 w-4" /> Novo Pedido de Compra
-          </Button>
 
-          <Dialog
-            open={isOrderModalOpen}
-            onOpenChange={(open) => {
-              if (!open) {
-                setEditingOrderId(null);
-                setEditingInitialValues(null);
-                setEditingPreloadedItems([]);
-              }
-              setIsOrderModalOpen(open);
-            }}
-          >
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>
-                  {editingOrderId
-                    ? `Editar Pedido #${editingOrderId}`
-                    : "Criar Pedido para Fornecedor"}
-                </DialogTitle>
-              </DialogHeader>
+        <Button onClick={openCreateOrder} className="gap-2 font-bold">
+          <PlusCircle className="h-4 w-4" />
+          <span className="hidden md:inline">Novo Pedido de Compra</span>
+          <span className="md:hidden">Novo</span>
+        </Button>
+
+        <Dialog
+          open={isOrderModalOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              setEditingOrderId(null);
+              setEditingInitialValues(null);
+              setEditingPreloadedItems([]);
+            }
+            setIsOrderModalOpen(open);
+          }}
+        >
+          <DialogContent className="w-full max-w-4xl h-[100dvh] md:h-auto md:max-h-[90vh] overflow-y-auto p-0 md:p-6 rounded-none md:rounded-lg">
+            <DialogHeader className="px-4 pt-4 pb-3 md:px-0 md:pt-0 md:pb-0 border-b md:border-none sticky top-0 bg-white z-10 md:static">
+              <DialogTitle className="text-base md:text-lg">
+                {editingOrderId ? `Editar Pedido #${editingOrderId}` : "Criar Pedido para Fornecedor"}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="px-4 pb-6 md:px-0 md:pb-0">
               {isOrderModalOpen && (
                 <SupplierOrderForm
                   onSubmit={(v) =>
@@ -693,13 +698,41 @@ const SupplierOrdersPage = () => {
                   preloadedItems={editingPreloadedItems}
                 />
               )}
-            </DialogContent>
-          </Dialog>
-        </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
-      {/* Tabela de pedidos */}
-      <div className="bg-white p-4 rounded-lg border shadow-sm">
+      {/* ── MOBILE: Cards ── */}
+      <div className="md:hidden">
+        {isLoadingOrders ? (
+          <div className="space-y-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="rounded-xl border bg-white h-28 animate-pulse bg-gray-100" />
+            ))}
+          </div>
+        ) : orders && orders.length > 0 ? (
+          orders.map((order) => (
+            <SupplierOrderMobileCard
+              key={order.id}
+              order={order}
+              isDownloading={downloadingId === order.id}
+              onView={(o) => { setSelectedOrder(o); setIsDetailModalOpen(true); }}
+              onDownload={handleDownloadOrder}
+              onReceive={(o) => { setSelectedOrder(o); setIsReceiveModalOpen(true); }}
+              onEdit={openEditOrder}
+              onDelete={(o) => { setSelectedOrder(o); setIsDeleteAlertOpen(true); }}
+            />
+          ))
+        ) : (
+          <div className="bg-white rounded-xl border shadow-sm p-10 text-center text-muted-foreground text-sm">
+            Nenhum pedido ao fornecedor encontrado.
+          </div>
+        )}
+      </div>
+
+      {/* ── DESKTOP: Tabela ── */}
+      <div className="hidden md:block bg-white p-4 rounded-lg border shadow-sm">
         <Table>
           <TableHeader>
             <TableRow>
@@ -715,112 +748,54 @@ const SupplierOrdersPage = () => {
           <TableBody>
             {isLoadingOrders ? (
               <TableRow>
-                <TableCell colSpan={7}>
-                  <Skeleton className="h-8 w-full" />
-                </TableCell>
+                <TableCell colSpan={7}><Skeleton className="h-8 w-full" /></TableCell>
               </TableRow>
             ) : orders && orders.length > 0 ? (
               orders.map((order) => {
-                const diff =
-                  order.received_total_cost > 0
-                    ? order.received_total_cost - order.total_cost
-                    : 0;
+                const diff = order.received_total_cost > 0 ? order.received_total_cost - order.total_cost : 0;
                 const hasDivergence = Math.abs(diff) > 0.01;
                 return (
                   <TableRow key={order.id} className={cn(hasDivergence && "bg-orange-50/20")}>
                     <TableCell className="font-mono font-bold">#{order.id}</TableCell>
                     <TableCell>{order.supplier_name}</TableCell>
-                    <TableCell className="font-medium text-muted-foreground">
-                      {formatCurrency(order.total_cost)}
-                    </TableCell>
+                    <TableCell className="font-medium text-muted-foreground">{formatCurrency(order.total_cost)}</TableCell>
                     <TableCell>
                       {order.received_total_cost > 0 ? (
-                        <span
-                          className={cn(
-                            "font-bold",
-                            diff < 0 ? "text-orange-600" : "text-green-600"
-                          )}
-                        >
+                        <span className={cn("font-bold", diff < 0 ? "text-orange-600" : "text-green-600")}>
                           {formatCurrency(order.received_total_cost)}
                         </span>
-                      ) : (
-                        "-"
-                      )}
+                      ) : "-"}
                     </TableCell>
                     <TableCell>
                       {hasDivergence ? (
-                        <span
-                          className={cn(
-                            "font-bold",
-                            diff < 0 ? "text-red-600" : "text-blue-600"
-                          )}
-                        >
+                        <span className={cn("font-bold", diff < 0 ? "text-red-600" : "text-blue-600")}>
                           {formatCurrency(diff)}
                         </span>
-                      ) : (
-                        "-"
-                      )}
+                      ) : "-"}
                     </TableCell>
                     <TableCell>{getStatusBadge(order.status)}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            setSelectedOrder(order);
-                            setIsDetailModalOpen(true);
-                          }}
-                          title="Ver Detalhes"
-                        >
+                        <Button variant="ghost" size="icon" onClick={() => { setSelectedOrder(order); setIsDetailModalOpen(true); }} title="Ver Detalhes">
                           <Eye className="h-4 w-4 text-primary" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDownloadOrder(order)}
-                          disabled={downloadingId === order.id}
-                          title="Baixar PDF"
-                        >
-                          {downloadingId === order.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <FileDown className="h-4 w-4 text-muted-foreground" />
-                          )}
+                        <Button variant="ghost" size="icon" onClick={() => handleDownloadOrder(order)} disabled={downloadingId === order.id} title="Baixar PDF">
+                          {downloadingId === order.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4 text-muted-foreground" />}
                         </Button>
                         {order.status === "Pendente" && (
                           <>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-green-600 border-green-200 hover:bg-green-50"
-                              onClick={() => {
-                                setSelectedOrder(order);
-                                setIsReceiveModalOpen(true);
-                              }}
-                            >
+                            <Button size="sm" variant="outline" className="text-green-600 border-green-200 hover:bg-green-50"
+                              onClick={() => { setSelectedOrder(order); setIsReceiveModalOpen(true); }}>
                               <CheckCircle2 className="h-4 w-4 mr-1" /> Conferir
                             </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-primary border-primary/20 hover:bg-primary/5"
-                              onClick={() => openEditOrder(order)}
-                            >
+                            <Button size="sm" variant="outline" className="text-primary border-primary/20 hover:bg-primary/5"
+                              onClick={() => openEditOrder(order)}>
                               <Pencil className="h-4 w-4 mr-1" /> Editar
                             </Button>
                           </>
                         )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-red-500 hover:bg-red-50"
-                          onClick={() => {
-                            setSelectedOrder(order);
-                            setIsDeleteAlertOpen(true);
-                          }}
-                          title="Excluir Pedido"
-                        >
+                        <Button variant="ghost" size="icon" className="text-red-500 hover:bg-red-50"
+                          onClick={() => { setSelectedOrder(order); setIsDeleteAlertOpen(true); }} title="Excluir Pedido">
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
@@ -830,9 +805,7 @@ const SupplierOrdersPage = () => {
               })
             ) : (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-10">
-                  Nenhum pedido.
-                </TableCell>
+                <TableCell colSpan={7} className="text-center py-10">Nenhum pedido.</TableCell>
               </TableRow>
             )}
           </TableBody>
@@ -850,10 +823,8 @@ const SupplierOrdersPage = () => {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-red-600 hover:bg-red-700"
-              onClick={() => deleteOrderMutation.mutate(selectedOrder.id)}
-            >
+            <AlertDialogAction className="bg-red-600 hover:bg-red-700"
+              onClick={() => deleteOrderMutation.mutate(selectedOrder.id)}>
               Excluir
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -861,11 +832,7 @@ const SupplierOrdersPage = () => {
       </AlertDialog>
 
       {selectedOrder && (
-        <SupplierOrderDetailModal
-          order={selectedOrder}
-          isOpen={isDetailModalOpen}
-          onClose={() => setIsDetailModalOpen(false)}
-        />
+        <SupplierOrderDetailModal order={selectedOrder} isOpen={isDetailModalOpen} onClose={() => setIsDetailModalOpen(false)} />
       )}
       {selectedOrder && (
         <SupplierOrderReceiveModal
@@ -873,11 +840,7 @@ const SupplierOrdersPage = () => {
           isOpen={isReceiveModalOpen}
           onClose={() => setIsReceiveModalOpen(false)}
           onConfirm={(itemsToProcess) =>
-            updateStatusMutation.mutate({
-              id: selectedOrder.id,
-              status: "Recebido",
-              itemsToProcess,
-            })
+            updateStatusMutation.mutate({ id: selectedOrder.id, status: "Recebido", itemsToProcess })
           }
           isSubmitting={updateStatusMutation.isPending}
         />
