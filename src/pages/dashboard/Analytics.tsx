@@ -234,12 +234,12 @@ const AnalyticsPage = () => {
 
       {/* KPIs Financeiros */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <KpiCard title="Faturamento"  value={R(s.totalRevenue)}             sub={`${s.totalOrders ?? 0} pedidos`}         icon={DollarSign}   color="blue"   />
-        <KpiCard title="Ticket Médio" value={R(s.avgTicket)}                sub="pedidos aprovados"                       icon={Target}       color="green"  />
-        <KpiCard title="Aprovação"    value={pct(s.approvalRate)}           sub={`${s.approvedOrders ?? 0} aprovados`}    icon={CheckCircle2} color="teal"   />
-        <KpiCard title="Frete Total"  value={R(s.totalShipping)}            sub={`Média ${R(s.avgShipping)}`}             icon={Truck}        color="amber"  />
-        <KpiCard title="Descontos"    value={R(s.totalDiscount)}            sub={`${pct(s.couponUsageRate)} c/ cupom`}    icon={Tag}          color="rose"   />
-        <KpiCard title="Recorrentes"  value={String(s.recurringUsers ?? 0)} sub={`${s.newUsers ?? 0} novos`}              icon={Users}        color="purple" />
+        <KpiCard title="Fat. Bruto"    value={R(s.totalRevenue)}             sub={`${s.totalOrders ?? 0} pedidos`}        icon={DollarSign}   color="blue"   />
+        <KpiCard title="Fat. s/ Frete" value={R(s.totalRevenueNoShip ?? 0)} sub="produtos + descontos"                   icon={DollarSign}   color="green"  />
+        <KpiCard title="Ticket Médio"  value={R(s.avgTicket)}                sub="pedidos aprovados"                      icon={Target}       color="teal"   />
+        <KpiCard title="Frete Total"   value={R(s.totalShipping)}            sub={`Média ${R(s.avgShipping)}`}            icon={Truck}        color="amber"  />
+        <KpiCard title="Descontos"     value={R(s.totalDiscount)}            sub={`${pct(s.couponUsageRate)} c/ cupom`}   icon={Tag}          color="rose"   />
+        <KpiCard title="Recorrentes"   value={String(s.recurringUsers ?? 0)} sub={`${s.newUsers ?? 0} novos`}             icon={Users}        color="purple" />
       </div>
 
       {/* Cards de Status dos Pedidos */}
@@ -367,16 +367,20 @@ const AnalyticsPage = () => {
               <CardContent>
                 <div className="space-y-3 mt-1">
                   <div className="flex items-center justify-between py-2 border-b">
-                    <span className="text-xs font-medium text-gray-600">Faturamento Total</span>
+                    <span className="text-xs font-medium text-gray-600">Fat. Bruto (c/ frete)</span>
                     <span className="text-sm font-black text-blue-700">{R(s.totalRevenue)}</span>
                   </div>
                   <div className="flex items-center justify-between py-2 border-b">
-                    <span className="text-xs font-medium text-gray-600">Ticket Médio</span>
-                    <span className="text-sm font-black text-green-700">{R(s.avgTicket)}</span>
+                    <span className="text-xs font-medium text-gray-600">Fat. s/ Frete</span>
+                    <span className="text-sm font-black text-green-700">{R(s.totalRevenueNoShip ?? 0)}</span>
                   </div>
                   <div className="flex items-center justify-between py-2 border-b">
                     <span className="text-xs font-medium text-gray-600">Frete Total</span>
                     <span className="text-sm font-black text-amber-700">{R(s.totalShipping)}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-2 border-b">
+                    <span className="text-xs font-medium text-gray-600">Ticket Médio</span>
+                    <span className="text-sm font-black text-teal-700">{R(s.avgTicket)}</span>
                   </div>
                   <div className="flex items-center justify-between py-2">
                     <span className="text-xs font-medium text-gray-600">Descontos</span>
