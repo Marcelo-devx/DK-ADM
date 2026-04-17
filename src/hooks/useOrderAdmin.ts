@@ -320,16 +320,41 @@ export const useOrderAdmin = () => {
     },
   });
 
-  // Cancelar pedido
+  // Cancelar pedido — UPDATE direto no banco (sem edge function, sem cold start)
   const cancelOrderMutation = useMutation({
-    mutationFn: async ({ orderId, reason, returnStock }: { orderId: number; reason: string; returnStock: boolean }) => {
-      const { data, error } = await supabase.functions.invoke('admin-cancel-order', {
-        body: { orderId, reason, returnStock },
+    mutationFn: async ({ orderId, reason }: { orderId: number; reason: string; returnStock?: boolean }) => {
+      // 1. Busca status atual para registrar no histórico
+      const { data: orderData, error: fetchError } = await supabase
+        .from('orders')
+        .select('status')
+        .eq('id', orderId)
+        .single();
+
+      if (fetchError) throw new Error(fetchError.message);
+
+      const oldStatus = orderData?.status ?? 'Desconhecido';
+
+      // 2. Atualiza o status para Cancelado (a RLS permite adm/gerente_geral/gerente)
+      const { error: updateError } = await supabase
+        .from('orders')
+        .update({ status: 'Cancelado' })
+        .eq('id', orderId);
+
+      if (updateError) throw new Error(updateError.message);
+
+      // 3. Registra no histórico (best-effort, não bloqueia em caso de erro)
+      const { data: { user } } = await supabase.auth.getUser();
+      await supabase.from('order_history').insert({
+        order_id: orderId,
+        field_name: 'status',
+        old_value: oldStatus,
+        new_value: 'Cancelado',
+        changed_by: user?.id ?? null,
+        change_type: 'cancel',
+        reason: reason,
       });
 
-      if (error) throw new Error(error.message);
-      if (data?.error) throw new Error(data.error);
-      return data;
+      return { success: true, orderId };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['adminOrder'] });

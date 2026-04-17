@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send, History, FileDown, Calendar, FilterX, ShieldCheck, ShieldX, CheckSquare, Plus, Search, Pencil, ChevronLeft, ChevronRight } from "lucide-react";
+import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send, History, FileDown, Calendar, FilterX, ShieldCheck, ShieldX, CheckSquare, Plus, Search, Pencil, ChevronLeft, ChevronRight, XCircle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { showSuccess, showError } from "@/utils/toast";
 import { OrderDetailModal } from "@/components/dashboard/OrderDetailModal";
@@ -377,14 +377,34 @@ const OrdersPage = () => {
 
   const cancelOrderForFraudMutation = useMutation({
     mutationFn: async (orderId: number) => {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-      const { data, error } = await supabase.functions.invoke('admin-cancel-order', {
-        body: { orderId, reason: "Cancelado por suspeita de fraude.", returnStock: true },
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      // UPDATE direto — sem edge function, sem cold start
+      const { data: orderData, error: fetchError } = await supabase
+        .from('orders')
+        .select('status')
+        .eq('id', orderId)
+        .single();
+
+      if (fetchError) throw new Error(fetchError.message);
+      const oldStatus = orderData?.status ?? 'Desconhecido';
+
+      const { error: updateError } = await supabase
+        .from('orders')
+        .update({ status: 'Cancelado' })
+        .eq('id', orderId);
+
+      if (updateError) throw new Error(updateError.message);
+
+      // Registra histórico (best-effort)
+      const { data: { user } } = await supabase.auth.getUser();
+      await supabase.from('order_history').insert({
+        order_id: orderId,
+        field_name: 'status',
+        old_value: oldStatus,
+        new_value: 'Cancelado',
+        changed_by: user?.id ?? null,
+        change_type: 'cancel',
+        reason: 'Cancelado por suspeita de fraude.',
       });
-      if (error) throw new Error(error.message);
-      if (data?.error) throw new Error(data.error);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
@@ -1287,6 +1307,11 @@ const OrdersPage = () => {
                                                 <CheckCircle2 className="w-4 h-4 mr-2" /> Marcar como Entregue
                                             </DropdownMenuItem>
                                             <DropdownMenuSeparator />
+                                            {order.status !== 'Cancelado' && (
+                                              <DropdownMenuItem onSelect={() => setActionToConfirm({ action: 'cancel_fraud', client: order })} className="text-orange-600 font-medium">
+                                                  <XCircle className="w-4 h-4 mr-2" /> Cancelar Pedido
+                                              </DropdownMenuItem>
+                                            )}
                                             <DropdownMenuItem onSelect={() => { setSelectedOrder(order); setIsDeleteAlertOpen(true); }} className="text-red-600">
                                                 <Trash2 className="w-4 h-4 mr-2" /> Excluir Pedido
                                             </DropdownMenuItem>
@@ -1461,7 +1486,7 @@ const OrdersPage = () => {
                 : actionToConfirm?.action === 'mark_as_recurrent'
                 ? `Você tem certeza que deseja marcar o cliente ${actionToConfirm?.client.email} como recorrente? Isso removerá a restrição de PIX e permitirá outros métodos de pagamento.`
                 : actionToConfirm?.action === 'cancel_fraud'
-                ? `Tem certeza que deseja cancelar o pedido #${actionToConfirm?.client.id} por suspeita de fraude? O status será alterado para 'Cancelado'.`
+                ? `Tem certeza que deseja cancelar o pedido #${actionToConfirm?.client.id}? O status será alterado para 'Cancelado' e o estoque será devolvido automaticamente.`
                 : `ATENÇÃO: Você está prestes a DELETAR PERMANENTEMENTE TODOS OS PEDIDOS do cliente ${actionToConfirm?.client.email}. Isso redefinirá o status de compra dele para 'Primeira Compra'. Esta ação é irreversível.`}
             </AlertDialogDescription>
           </AlertDialogHeader>

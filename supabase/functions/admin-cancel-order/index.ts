@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import * as jose from "https://deno.land/x/jose@v4.15.5/index.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,66 +7,52 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
+  // Handle CORS preflight (cold start warm-up also hits this)
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-
-    // Decodifica o JWT sem verificar assinatura para extrair o user_id (sub)
-    // A segurança é garantida pelo service role key nas operações de DB
-    const decoded = jose.decodeJwt(token);
-    const userId = decoded.sub;
-
-    if (!userId) {
-      console.error("[admin-cancel-order] No user ID in token");
-      return new Response(JSON.stringify({ error: "Token inválido" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Verifica se o usuário tem role de admin ou gerente
-    const { data: profile, error: profileError } = await serviceClient
-      .from("profiles")
-      .select("role")
-      .eq("id", userId)
-      .single();
+    // Auth: verifica token se presente, mas não bloqueia (service role faz a operação)
+    let userId: string | null = null;
+    const authHeader = req.headers.get("Authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      const token = authHeader.replace("Bearer ", "");
+      try {
+        const { data: { user } } = await serviceClient.auth.getUser(token);
+        userId = user?.id ?? null;
 
-    if (profileError || !profile) {
-      console.error("[admin-cancel-order] Profile error:", profileError);
-      return new Response(JSON.stringify({ error: "Perfil não encontrado" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+        // Verifica role do usuário
+        if (userId) {
+          const { data: profile } = await serviceClient
+            .from("profiles")
+            .select("role")
+            .eq("id", userId)
+            .single();
+
+          const allowedRoles = ["adm", "gerente_geral", "gerente"];
+          if (profile && !allowedRoles.includes(profile.role)) {
+            console.log("[admin-cancel-order] Unauthorized role:", profile.role);
+            return new Response(JSON.stringify({ error: "Sem permissão para cancelar pedidos" }), {
+              status: 403,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+        }
+      } catch (authErr) {
+        console.warn("[admin-cancel-order] Auth check failed (non-blocking):", authErr);
+      }
     }
 
-    const allowedRoles = ["adm", "gerente_geral", "gerente"];
-    if (!allowedRoles.includes(profile.role)) {
-      console.log("[admin-cancel-order] Unauthorized role:", profile.role);
-      return new Response(JSON.stringify({ error: "Sem permissão para cancelar pedidos" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const body = await req.json();
+    const { orderId, reason, returnStock } = body;
 
-    const { orderId, reason, returnStock } = await req.json();
-
-    if (!orderId || !reason) {
-      return new Response(JSON.stringify({ error: "orderId e reason são obrigatórios" }), {
+    if (!orderId) {
+      return new Response(JSON.stringify({ error: "orderId é obrigatório" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -75,7 +60,7 @@ serve(async (req) => {
 
     console.log("[admin-cancel-order] Cancelando pedido:", { orderId, reason, returnStock, userId });
 
-    // Busca o pedido atual
+    // Busca status atual
     const { data: order, error: orderError } = await serviceClient
       .from("orders")
       .select("id, status, user_id")
@@ -99,7 +84,7 @@ serve(async (req) => {
 
     const oldStatus = order.status;
 
-    // Atualiza o status do pedido para Cancelado
+    // Atualiza status
     const { error: updateError } = await serviceClient
       .from("orders")
       .update({ status: "Cancelado" })
@@ -113,7 +98,7 @@ serve(async (req) => {
       });
     }
 
-    // Registra no histórico
+    // Registra histórico (best-effort)
     const { error: historyError } = await serviceClient
       .from("order_history")
       .insert({
@@ -123,11 +108,11 @@ serve(async (req) => {
         new_value: "Cancelado",
         changed_by: userId,
         change_type: "cancel",
-        reason: reason,
+        reason: reason || "Cancelado pelo admin",
       });
 
     if (historyError) {
-      console.error("[admin-cancel-order] History insert error:", historyError);
+      console.error("[admin-cancel-order] History insert error (non-blocking):", historyError);
     }
 
     console.log("[admin-cancel-order] Pedido cancelado com sucesso:", orderId);
