@@ -1,74 +1,54 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Lightbulb, Package, Target, UserMinus, Plus, ArrowRight,
-  Sparkles, Crown, Wallet, RefreshCw, AlertTriangle,
-  TrendingUp, TrendingDown, Clock, BarChart4, AlertOctagon,
-  Hourglass, Brain, Calculator, Search,
+  Lightbulb, Package, Target, UserMinus, Plus,
+  Sparkles, Crown, Wallet, RefreshCw,
+  TrendingUp, TrendingDown, Clock, BarChart4,
+  AlertOctagon, Hourglass, Brain, Calculator, Search,
   Database, Binary, Rocket, ShoppingCart, Users, Activity,
-  ChevronRight, Zap, Eye
+  ChevronRight, Zap, AlertTriangle,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { RetentionCampaignModal } from "@/components/dashboard/RetentionCampaignModal";
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+const formatCurrency = (val: number) =>
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val ?? 0);
+
+function useMetaflowData() {
+  return useQuery({
+    queryKey: ["metaflow-insights-v3"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_metaflow_insights");
+      if (error) throw new Error(error.message);
+      return data as any;
+    },
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+}
+
 const MetaflowInsightsPage = () => {
   const navigate = useNavigate();
   const [isRetentionModalOpen, setIsRetentionModalOpen] = useState(false);
+  const { data: insights, isLoading, refetch, isRefetching, isError, error } = useMetaflowData();
 
-  const { data: insights, isLoading, refetch, isRefetching, isError, error, failureCount } = useQuery({
-    queryKey: ["actionable-insights-final"],
-    queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(
-        "https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1/actionable-insights",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpybG96aGh2d3FmbWp0a212dWtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDU2NjQsImV4cCI6MjA2NzkyMTY2NH0.Do5c1-TKqpyZTJeX_hLbw1SU40CbwXfCIC-pPpcD_JM",
-            "Authorization": `Bearer ${session?.access_token ?? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpybG96aGh2d3FmbWp0a212dWtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDU2NjQsImV4cCI6MjA2NzkyMTY2NH0.Do5c1-TKqpyZTJeX_hLbw1SU40CbwXfCIC-pPpcD_JM"}`,
-          },
-          body: JSON.stringify({}),
-        }
-      );
-      if (!res.ok) {
-        const errText = await res.text().catch(() => res.statusText);
-        throw new Error(`Erro ${res.status}: ${errText}`);
-      }
-      const data = await res.json();
-      if (data?.error) throw new Error(data.error);
-      return data;
-    },
-    retry: 2,
-    retryDelay: (attempt) => Math.min(3000 * 2 ** attempt, 15000),
-    staleTime: 5 * 60 * 1000,        // dados válidos por 5 min
-    refetchInterval: 10 * 60 * 1000,  // refetch a cada 10 min
-    refetchOnWindowFocus: false,       // não refetch ao focar a janela
-  });
-
-  const formatCurrency = (val: number) =>
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
-
-  const handleCreateKit = (productA: string, idA: number, productB: string, idB: number) => {
+  const handleCreateKit = (productA: string, productB: string) => {
     navigate("/dashboard/promotions", {
       state: {
         suggestedName: `Kit ${productA} + ${productB}`,
         suggestedDescription: `Combo especial contendo ${productA} e ${productB}. Economize levando os dois!`,
-        suggestedProductIds: [idA, idB]
-      }
+      },
     });
-  };
-
-  const handleRecoverClient = () => {
-    setIsRetentionModalOpen(true);
   };
 
   if (isLoading) {
@@ -81,16 +61,6 @@ const MetaflowInsightsPage = () => {
             <Skeleton className="h-4 w-72" />
           </div>
         </div>
-        {failureCount > 0 && (
-          <div className="flex flex-col items-center gap-1 py-2">
-            <p className="text-xs text-center text-muted-foreground animate-pulse">
-              Processando dados... ({failureCount}/2 tentativas)
-            </p>
-            <p className="text-[11px] text-center text-gray-400">
-              O servidor pode demorar até 30s para iniciar após inatividade.
-            </p>
-          </div>
-        )}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}
         </div>
@@ -110,10 +80,7 @@ const MetaflowInsightsPage = () => {
         <div className="text-center">
           <p className="text-base font-bold text-gray-800">Erro ao carregar insights</p>
           <p className="text-sm text-muted-foreground mt-1 max-w-sm">
-            {(error as any)?.message || "Não foi possível conectar ao servidor de análise."}
-          </p>
-          <p className="text-xs text-gray-400 mt-2 max-w-sm">
-            Isso pode ocorrer quando há um grande volume de dados sendo processado. Aguarde alguns segundos e tente novamente.
+            {(error as any)?.message || "Não foi possível conectar ao banco de dados."}
           </p>
         </div>
         <Button onClick={() => refetch()} variant="outline" className="rounded-xl">
@@ -125,20 +92,18 @@ const MetaflowInsightsPage = () => {
 
   const inventoryItems = insights?.inventory || [];
   const outOfStockItems = inventoryItems.filter((item: any) => item.current_stock === 0);
-  const lowStockItems = inventoryItems.filter((item: any) => item.current_stock > 0);
-
-  const totalAlerts = inventoryItems.length;
-  const churnCount = insights?.churn?.length || 0;
-  const crossSellCount = insights?.associations?.length || 0;
+  const lowStockItems   = inventoryItems.filter((item: any) => item.current_stock > 0);
+  const totalAlerts     = inventoryItems.length;
+  const churnCount      = insights?.churn?.length || 0;
+  const crossSellCount  = insights?.associations?.length || 0;
   const trendingUpCount = insights?.trends?.up?.length || 0;
 
   const InventoryItemRow = ({ item }: { item: any }) => {
-    const isStagnant = item.status_type === 'stagnant_low';
+    const isStagnant = item.status_type === "stagnant_low";
     const isOut = item.current_stock === 0;
-
     return (
       <div className={cn(
-        "flex items-center justify-between p-3 rounded-xl border transition-all group hover:shadow-sm",
+        "flex items-center justify-between p-3 rounded-xl border transition-all hover:shadow-sm",
         isOut
           ? "border-red-100 bg-gradient-to-r from-red-50/50 to-transparent"
           : "border-gray-100 bg-gradient-to-r from-orange-50/30 to-transparent"
@@ -230,40 +195,16 @@ const MetaflowInsightsPage = () => {
 
       {/* KPI CARDS */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard
-          icon={AlertOctagon}
-          label="Alertas de Estoque"
-          value={totalAlerts}
-          color="bg-orange-500"
-          bg="bg-orange-50/50 border-orange-100"
-        />
-        <StatCard
-          icon={UserMinus}
-          label="Clientes em Risco"
-          value={churnCount}
-          color="bg-rose-500"
-          bg="bg-rose-50/50 border-rose-100"
-        />
-        <StatCard
-          icon={ShoppingCart}
-          label="Combos Sugeridos"
-          value={crossSellCount}
-          color="bg-blue-500"
-          bg="bg-blue-50/50 border-blue-100"
-        />
-        <StatCard
-          icon={TrendingUp}
-          label="Produtos em Alta"
-          value={trendingUpCount}
-          color="bg-green-500"
-          bg="bg-green-50/50 border-green-100"
-        />
+        <StatCard icon={AlertOctagon} label="Alertas de Estoque" value={totalAlerts}    color="bg-orange-500" bg="bg-orange-50/50 border-orange-100" />
+        <StatCard icon={UserMinus}    label="Clientes em Risco"  value={churnCount}     color="bg-rose-500"   bg="bg-rose-50/50 border-rose-100" />
+        <StatCard icon={ShoppingCart} label="Combos Sugeridos"   value={crossSellCount} color="bg-blue-500"   bg="bg-blue-50/50 border-blue-100" />
+        <StatCard icon={TrendingUp}   label="Produtos em Alta"   value={trendingUpCount} color="bg-green-500" bg="bg-green-50/50 border-green-100" />
       </div>
 
       {/* MAIN GRID */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
-        {/* COLUNA 1: ESTOQUE */}
+        {/* ESTOQUE */}
         <Card className="border border-gray-100 shadow-sm rounded-2xl overflow-hidden flex flex-col">
           <div className="h-1 bg-gradient-to-r from-orange-400 to-red-500" />
           <CardHeader className="pb-3">
@@ -326,7 +267,7 @@ const MetaflowInsightsPage = () => {
           </CardContent>
         </Card>
 
-        {/* COLUNA 2: CROSS-SELL */}
+        {/* CROSS-SELL */}
         <Card className="border border-gray-100 shadow-sm rounded-2xl overflow-hidden flex flex-col">
           <div className="h-1 bg-gradient-to-r from-blue-400 to-indigo-500" />
           <CardHeader className="pb-3">
@@ -346,11 +287,11 @@ const MetaflowInsightsPage = () => {
             </div>
           </CardHeader>
           <CardContent className="flex-1 space-y-3 max-h-[400px] overflow-y-auto">
-            {insights?.associations?.length > 0 ? (
+            {(insights?.associations ?? []).length > 0 ? (
               insights.associations.map((pair: any, i: number) => (
                 <div
                   key={i}
-                  className="p-4 rounded-xl bg-gradient-to-br from-blue-50/50 to-indigo-50/30 border border-blue-100 hover:border-blue-300 hover:shadow-sm transition-all group"
+                  className="p-4 rounded-xl bg-gradient-to-br from-blue-50/50 to-indigo-50/30 border border-blue-100 hover:border-blue-300 hover:shadow-sm transition-all"
                 >
                   <div className="flex items-start gap-2 mb-3">
                     <div className="flex-1 min-w-0">
@@ -371,7 +312,7 @@ const MetaflowInsightsPage = () => {
                       size="sm"
                       variant="ghost"
                       className="h-6 text-[11px] px-2 font-bold text-blue-700 hover:bg-blue-100 rounded-lg"
-                      onClick={() => handleCreateKit(pair.product_a, pair.product_a_id, pair.product_b, pair.product_b_id)}
+                      onClick={() => handleCreateKit(pair.product_a, pair.product_b)}
                     >
                       Criar Kit <ChevronRight className="w-3 h-3 ml-0.5" />
                     </Button>
@@ -390,7 +331,7 @@ const MetaflowInsightsPage = () => {
           </CardContent>
         </Card>
 
-        {/* COLUNA 3: RETENÇÃO */}
+        {/* RETENÇÃO */}
         <Card className="border border-gray-100 shadow-sm rounded-2xl overflow-hidden flex flex-col">
           <div className="h-1 bg-gradient-to-r from-rose-400 to-pink-500" />
           <CardHeader className="pb-3">
@@ -410,16 +351,16 @@ const MetaflowInsightsPage = () => {
             </div>
           </CardHeader>
           <CardContent className="flex-1 space-y-3 max-h-[400px] overflow-y-auto">
-            {insights?.churn?.length > 0 ? (
+            {(insights?.churn ?? []).length > 0 ? (
               insights.churn.map((client: any, i: number) => (
                 <div
                   key={i}
-                  className="flex items-center justify-between p-3 rounded-xl border border-rose-100 bg-gradient-to-r from-rose-50/40 to-transparent hover:border-rose-200 hover:shadow-sm transition-all group"
+                  className="flex items-center justify-between p-3 rounded-xl border border-rose-100 bg-gradient-to-r from-rose-50/40 to-transparent hover:border-rose-200 hover:shadow-sm transition-all"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center shrink-0">
                       <span className="text-xs font-black text-rose-600">
-                        {client.customer_name?.charAt(0) || '?'}
+                        {client.customer_name?.charAt(0) || "?"}
                       </span>
                     </div>
                     <div className="min-w-0">
@@ -432,7 +373,7 @@ const MetaflowInsightsPage = () => {
                     <Button
                       variant="link"
                       className="h-4 p-0 text-[10px] text-blue-600 font-bold"
-                      onClick={() => handleRecoverClient()}
+                      onClick={() => setIsRetentionModalOpen(true)}
                     >
                       Recuperar
                     </Button>
@@ -469,29 +410,29 @@ const MetaflowInsightsPage = () => {
             </div>
           </CardHeader>
           <CardContent className="pt-5 h-[260px]">
-            {insights?.peak_hours ? (
+            {(insights?.peak_hours ?? []).some((h: any) => h.orders > 0) ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={insights.peak_hours} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                   <XAxis
                     dataKey="hour"
-                    tick={{ fontSize: 9, fill: '#9ca3af' }}
+                    tick={{ fontSize: 9, fill: "#9ca3af" }}
                     axisLine={false}
                     tickLine={false}
                     interval={2}
                   />
                   <Tooltip
-                    cursor={{ fill: '#f3f4f6', radius: 4 }}
+                    cursor={{ fill: "#f3f4f6", radius: 4 }}
                     contentStyle={{
-                      borderRadius: '12px',
-                      border: 'none',
-                      boxShadow: '0 4px 20px -2px rgb(0 0 0 / 0.15)',
-                      fontSize: '12px',
-                      fontWeight: 600
+                      borderRadius: "12px",
+                      border: "none",
+                      boxShadow: "0 4px 20px -2px rgb(0 0 0 / 0.15)",
+                      fontSize: "12px",
+                      fontWeight: 600,
                     }}
-                    formatter={(value: any) => [`${value} pedidos`, 'Volume']}
+                    formatter={(value: any) => [`${value} pedidos`, "Volume"]}
                   />
                   <Bar dataKey="orders" radius={[6, 6, 0, 0]} barSize={16}>
-                    {insights.peak_hours.map((entry: any, index: number) => (
+                    {(insights.peak_hours ?? []).map((entry: any, index: number) => (
                       <Cell
                         key={`cell-${index}`}
                         fill={entry.orders > 5 ? "#7c3aed" : entry.orders > 2 ? "#a78bfa" : "#ede9fe"}
@@ -533,12 +474,12 @@ const MetaflowInsightsPage = () => {
                 <span className="text-xs font-black text-green-700 uppercase tracking-wide">Em Alta</span>
               </div>
               <div className="space-y-2">
-                {insights?.trends?.up?.length > 0 ? (
+                {(insights?.trends?.up ?? []).length > 0 ? (
                   insights.trends.up.map((item: any, i: number) => (
                     <div key={i} className="flex items-center justify-between gap-2 py-1.5 border-b border-green-50 last:border-0">
                       <span className="text-xs font-medium text-gray-700 truncate flex-1" title={item.name}>{item.name}</span>
                       <span className="text-[10px] font-black text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full shrink-0">
-                        +{item.growth.toFixed(0)}%
+                        +{Number(item.growth).toFixed(0)}%
                       </span>
                     </div>
                   ))
@@ -555,12 +496,12 @@ const MetaflowInsightsPage = () => {
                 <span className="text-xs font-black text-red-700 uppercase tracking-wide">Esfriando</span>
               </div>
               <div className="space-y-2">
-                {insights?.trends?.down?.length > 0 ? (
+                {(insights?.trends?.down ?? []).length > 0 ? (
                   insights.trends.down.map((item: any, i: number) => (
                     <div key={i} className="flex items-center justify-between gap-2 py-1.5 border-b border-red-50 last:border-0">
                       <span className="text-xs font-medium text-gray-700 truncate flex-1" title={item.name}>{item.name}</span>
                       <span className="text-[10px] font-black text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full shrink-0">
-                        {item.growth.toFixed(0)}%
+                        {Number(item.growth).toFixed(0)}%
                       </span>
                     </div>
                   ))
@@ -590,7 +531,7 @@ const MetaflowInsightsPage = () => {
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            {insights?.vips?.length > 0 ? (
+            {(insights?.vips ?? []).length > 0 ? (
               <div className="divide-y divide-gray-50">
                 {insights.vips.map((vip: any, i: number) => (
                   <div key={i} className="flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50/50 transition-colors">
@@ -601,7 +542,7 @@ const MetaflowInsightsPage = () => {
                           i === 2 ? "bg-orange-100 text-orange-600" :
                             "bg-blue-50 text-blue-500"
                     )}>
-                      {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
+                      {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `#${i + 1}`}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold text-gray-900 truncate">
@@ -610,7 +551,7 @@ const MetaflowInsightsPage = () => {
                       <p className="text-[10px] text-muted-foreground">Cliente Fidelidade</p>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="text-sm font-black text-blue-700">{vip.points?.toLocaleString('pt-BR')} pts</p>
+                      <p className="text-sm font-black text-blue-700">{vip.points?.toLocaleString("pt-BR")} pts</p>
                       <p className="text-[10px] text-gray-400">saldo</p>
                     </div>
                   </div>
@@ -639,23 +580,23 @@ const MetaflowInsightsPage = () => {
             </div>
           </CardHeader>
           <CardContent className="pt-5 space-y-4">
-            {insights?.profitability?.length > 0 ? (
+            {(insights?.profitability ?? []).length > 0 ? (
               insights.profitability.map((brand: any, i: number) => {
                 const maxVal = insights.profitability[0]?.value || 1;
-                const pct = Math.round((brand.value / maxVal) * 100);
+                const pctVal = Math.round((brand.value / maxVal) * 100);
                 return (
                   <div key={i} className="space-y-1.5">
                     <div className="flex justify-between items-center">
-                      <span className="text-sm font-semibold text-gray-700">{brand.name || 'Sem Marca'}</span>
+                      <span className="text-sm font-semibold text-gray-700">{brand.name || "Sem Marca"}</span>
                       <span className="text-sm font-black text-green-700">{formatCurrency(brand.value)}</span>
                     </div>
                     <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
                       <div
                         className="bg-gradient-to-r from-green-400 to-emerald-500 h-full rounded-full transition-all duration-700"
-                        style={{ width: `${pct}%` }}
+                        style={{ width: `${pctVal}%` }}
                       />
                     </div>
-                    <p className="text-[10px] text-gray-400">{pct}% do top</p>
+                    <p className="text-[10px] text-gray-400">{pctVal}% do top</p>
                   </div>
                 );
               })
@@ -677,12 +618,12 @@ const MetaflowInsightsPage = () => {
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
           {[
-            { n: 1, icon: Database, color: "text-slate-600", bg: "bg-slate-50 border-slate-100", title: "Coleta", desc: "Cada venda, cliente e estoque é registrado automaticamente." },
-            { n: 2, icon: Binary, color: "text-blue-600", bg: "bg-blue-50 border-blue-100", title: "Processamento", desc: "O sistema varre milhões de linhas em segundos." },
-            { n: 3, icon: Calculator, color: "text-purple-600", bg: "bg-purple-50 border-purple-100", title: "Análise", desc: "Algoritmos calculam médias, tendências e frequências." },
-            { n: 4, icon: Search, color: "text-orange-600", bg: "bg-orange-50 border-orange-100", title: "Detecção", desc: "Padrões são identificados: quem sumiu, o que combina." },
-            { n: 5, icon: Lightbulb, color: "text-yellow-600", bg: "bg-yellow-50 border-yellow-100", title: "Insight", desc: "Dados brutos viram sugestões acionáveis." },
-            { n: 6, icon: Rocket, color: "text-green-600", bg: "bg-green-50 border-green-100", title: "Resultado", desc: "Você age com precisão e gera mais lucro." },
+            { n: 1, icon: Database,   color: "text-slate-600",  bg: "bg-slate-50 border-slate-100",   title: "Coleta",        desc: "Cada venda, cliente e estoque é registrado automaticamente." },
+            { n: 2, icon: Binary,     color: "text-blue-600",   bg: "bg-blue-50 border-blue-100",     title: "Processamento", desc: "O banco processa os dados diretamente com SQL otimizado." },
+            { n: 3, icon: Calculator, color: "text-purple-600", bg: "bg-purple-50 border-purple-100", title: "Análise",       desc: "Algoritmos calculam médias, tendências e frequências." },
+            { n: 4, icon: Search,     color: "text-orange-600", bg: "bg-orange-50 border-orange-100", title: "Detecção",      desc: "Padrões são identificados: quem sumiu, o que combina." },
+            { n: 5, icon: Lightbulb,  color: "text-yellow-600", bg: "bg-yellow-50 border-yellow-100", title: "Insight",       desc: "Dados brutos viram sugestões acionáveis." },
+            { n: 6, icon: Rocket,     color: "text-green-600",  bg: "bg-green-50 border-green-100",   title: "Resultado",     desc: "Você age com precisão e gera mais lucro." },
           ].map(({ n, icon: Icon, color, bg, title, desc }) => (
             <div key={n} className={cn("relative p-4 rounded-2xl border text-center hover:shadow-md transition-all group", bg)}>
               <div className="absolute top-2 right-2.5 text-[10px] font-black opacity-20 text-gray-400">#{n}</div>

@@ -14,19 +14,17 @@ import {
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, AreaChart, Area, LineChart, Line, ComposedChart,
 } from "recharts";
 import {
   BarChart3, TrendingUp, TrendingDown, Users, DollarSign, Target,
-  Zap, MapPin, Calendar, CheckCircle2, ShoppingCart, RefreshCw,
-  AlertCircle, CreditCard, Package, Tag, Clock, Truck, Star,
+  MapPin, Calendar, CheckCircle2, ShoppingCart, RefreshCw,
+  AlertCircle, Package, Tag, Clock, Truck, Star,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// ─── Paleta ──────────────────────────────────────────────────────────────────
 const C = ["#3b82f6","#10b981","#f59e0b","#ef4444","#8b5cf6","#64748b","#ec4899","#14b8a6","#f97316","#06b6d4"];
 
 const PERIODS = [
@@ -38,22 +36,10 @@ const PERIODS = [
   { value: "24m", label: "Últimos 24 meses" },
 ];
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 const R = (v: number) =>
-  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v ?? 0);
 
-const pct = (v: number) => `${v.toFixed(1)}%`;
-
-const periodLabel = (p: string) => PERIODS.find(x => x.value === p)?.label ?? p;
-
-// ─── Componentes base ─────────────────────────────────────────────────────────
-
-const EmptyChart = ({ msg = "Sem dados para o período" }: { msg?: string }) => (
-  <div className="flex flex-col items-center justify-center h-full gap-2 text-center">
-    <BarChart3 className="w-8 h-8 text-gray-200" />
-    <p className="text-xs text-muted-foreground">{msg}</p>
-  </div>
-);
+const pct = (v: number) => `${(v ?? 0).toFixed(1)}%`;
 
 const tooltipStyle = {
   borderRadius: "10px",
@@ -62,7 +48,13 @@ const tooltipStyle = {
   fontSize: 12,
 };
 
-// KPI grande com ícone colorido
+const EmptyChart = ({ msg = "Sem dados para o período" }: { msg?: string }) => (
+  <div className="flex flex-col items-center justify-center h-full gap-2 text-center">
+    <BarChart3 className="w-8 h-8 text-gray-200" />
+    <p className="text-xs text-muted-foreground">{msg}</p>
+  </div>
+);
+
 const KpiCard = ({
   title, value, sub, icon: Icon, color = "blue", delta,
 }: {
@@ -102,15 +94,6 @@ const KpiCard = ({
   );
 };
 
-// Mini stat inline
-const MiniStat = ({ label, value, color = "text-gray-900" }: { label: string; value: string; color?: string }) => (
-  <div className="flex items-center justify-between py-2 border-b last:border-0">
-    <span className="text-xs text-muted-foreground">{label}</span>
-    <span className={cn("text-xs font-bold", color)}>{value}</span>
-  </div>
-);
-
-// Barra de progresso simples
 const ProgressBar = ({ value, max, color = "#3b82f6" }: { value: number; max: number; color?: string }) => (
   <div className="w-full bg-gray-100 rounded-full h-1.5 mt-1">
     <div
@@ -120,7 +103,6 @@ const ProgressBar = ({ value, max, color = "#3b82f6" }: { value: number; max: nu
   </div>
 );
 
-// Skeleton de loading
 const AnalyticsSkeleton = () => (
   <div className="space-y-6 p-2">
     <div className="flex items-center justify-between">
@@ -134,63 +116,46 @@ const AnalyticsSkeleton = () => (
       <Skeleton className="h-72 lg:col-span-2" />
       <Skeleton className="h-72" />
     </div>
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <Skeleton className="h-64" />
-      <Skeleton className="h-64" />
-    </div>
   </div>
 );
+
+// ─── Hook: busca os 4 RPCs em paralelo ───────────────────────────────────────
+function useAnalyticsData(period: string) {
+  return useQuery({
+    queryKey: ["analytics-v3", period],
+    queryFn: async () => {
+      const [summaryRes, monthlyRes, productsRes, demoRes] = await Promise.all([
+        supabase.rpc("get_analytics_summary", { p_period: period }),
+        supabase.rpc("get_analytics_monthly",  { p_period: period }),
+        supabase.rpc("get_analytics_products", { p_period: period }),
+        supabase.rpc("get_analytics_demographics", { p_period: period }),
+      ]);
+
+      if (summaryRes.error) throw new Error(summaryRes.error.message);
+      if (monthlyRes.error) throw new Error(monthlyRes.error.message);
+      if (productsRes.error) throw new Error(productsRes.error.message);
+      if (demoRes.error) throw new Error(demoRes.error.message);
+
+      return {
+        summary:  summaryRes.data  as any,
+        monthly:  monthlyRes.data  as any[] ?? [],
+        products: productsRes.data as any,
+        demo:     demoRes.data     as any,
+      };
+    },
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+}
 
 // ─── Página principal ─────────────────────────────────────────────────────────
 const AnalyticsPage = () => {
   const [period, setPeriod] = useState("12m");
+  const { data, isLoading, isError, error, refetch, isFetching } = useAnalyticsData(period);
 
-  const { data: bi, isLoading, isError, error, refetch, isFetching, failureCount } = useQuery({
-    queryKey: ["bi-v2", period],
-    queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(
-        "https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1/analytics-bi",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpybG96aGh2d3FmbWp0a212dWtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDU2NjQsImV4cCI6MjA2NzkyMTY2NH0.Do5c1-TKqpyZTJeX_hLbw1SU40CbwXfCIC-pPpcD_JM",
-            "Authorization": `Bearer ${session?.access_token ?? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpybG96aGh2d3FmbWp0a212dWtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDU2NjQsImV4cCI6MjA2NzkyMTY2NH0.Do5c1-TKqpyZTJeX_hLbw1SU40CbwXfCIC-pPpcD_JM"}`,
-          },
-          body: JSON.stringify({ period }),
-        }
-      );
-      if (!res.ok) {
-        const errText = await res.text().catch(() => res.statusText);
-        throw new Error(`Erro ${res.status}: ${errText}`);
-      }
-      const data = await res.json();
-      if (data?.error) throw new Error(data.error);
-      return data;
-    },
-    retry: 2,
-    retryDelay: (attempt) => Math.min(3000 * 2 ** attempt, 15000),
-    staleTime: 5 * 60 * 1000,       // dados válidos por 5 min — evita refetch desnecessário
-    refetchInterval: 10 * 60 * 1000, // refetch a cada 10 min (não 5)
-    refetchOnWindowFocus: false,      // não refetch ao focar a janela
-  });
-
-  if (isLoading) return (
-    <div className="space-y-3">
-      <AnalyticsSkeleton />
-      {failureCount > 0 && (
-        <div className="flex flex-col items-center gap-2 py-4">
-          <p className="text-xs text-center text-muted-foreground animate-pulse">
-            Inicializando servidor de analytics... ({failureCount}/2 tentativas)
-          </p>
-          <p className="text-[11px] text-center text-gray-400">
-            O servidor pode demorar até 30s para iniciar após inatividade.
-          </p>
-        </div>
-      )}
-    </div>
-  );
+  if (isLoading) return <AnalyticsSkeleton />;
 
   if (isError) {
     return (
@@ -201,9 +166,6 @@ const AnalyticsPage = () => {
             {(error as Error)?.message || "Erro desconhecido ao carregar analytics."}
           </AlertDescription>
         </Alert>
-        <p className="text-xs text-muted-foreground">
-          Isso pode acontecer quando há um grande volume de dados sendo processado. Aguarde alguns segundos e tente novamente.
-        </p>
         <Button onClick={() => refetch()} variant="outline" size="sm" className="gap-2">
           <RefreshCw className="w-4 h-4" /> Tentar novamente
         </Button>
@@ -211,36 +173,47 @@ const AnalyticsPage = () => {
     );
   }
 
-  // ── Dados com fallbacks ───────────────────────────────────────────────────
-  const s = bi?.summary ?? {
-    totalRevenue: 0, totalOrders: 0, approvedOrders: 0, approvalRate: 0,
-    avgTicket: 0, totalShipping: 0, avgShipping: 0, totalDiscount: 0,
-    newUsers: 0, recurringUsers: 0, couponUsageRate: 0, withCoupon: 0, withoutCoupon: 0,
-  };
-  const monthly          = bi?.monthly          ?? [];
-  const topProducts      = bi?.topProducts      ?? [];
-  const topProductsByQty = bi?.topProductsByQty ?? [];
-  const ordersByStatus   = bi?.ordersByStatus   ?? [];
-  const paymentMethods   = bi?.paymentMethods   ?? [];
-  const hourlyHeatmap    = bi?.hourlyHeatmap     ?? [];
-  const weekdayHeatmap   = bi?.weekdayHeatmap    ?? [];
-  const demo             = bi?.demographics      ?? { gender: [], regions: [], tiers: [], retention: [], couponUsage: [] };
+  const s = data?.summary ?? {};
+  const monthly          = data?.monthly ?? [];
+  const topProducts      = data?.products?.byRevenue ?? [];
+  const topProductsByQty = data?.products?.byQty ?? [];
+  const demo             = data?.demo ?? {};
+  const ordersByStatus   = demo.ordersByStatus ?? [];
+  const paymentMethods   = demo.paymentMethods ?? [];
+  const hourlyHeatmap    = demo.hourlyHeatmap ?? [];
+  const weekdayHeatmap   = demo.weekdayHeatmap ?? [];
+
+  // Preencher horas faltantes (0-23)
+  const fullHourly = Array.from({ length: 24 }, (_, h) => {
+    const label = `${String(h).padStart(2, "0")}h`;
+    const found = hourlyHeatmap.find((x: any) => x.hour_brt === h || x.label === label);
+    return found ?? { hour_brt: h, label, orders: 0, revenue: 0 };
+  });
+
+  // Preencher dias faltantes (0-6)
+  const dayNames = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+  const fullWeekday = Array.from({ length: 7 }, (_, d) => {
+    const found = weekdayHeatmap.find((x: any) => x.dow === d);
+    return found ?? { dow: d, name: dayNames[d], orders: 0, revenue: 0 };
+  });
 
   const hasTimeline = monthly.some((m: any) => m.orders > 0);
   const maxRegionOrders = Math.max(...(demo.regions ?? []).map((r: any) => r.orders), 1);
-  const maxHour = Math.max(...hourlyHeatmap.map((h: any) => h.orders), 1);
+  const maxHour = Math.max(...fullHourly.map((h: any) => h.orders), 1);
+
+  const periodLabel = PERIODS.find(p => p.value === period)?.label ?? period;
 
   return (
     <div className="space-y-6 pb-24">
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-black text-gray-900 flex items-center gap-2">
             <BarChart3 className="w-6 h-6 text-blue-600" /> Inteligência de Negócio
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {periodLabel(period)} · {s.totalOrders} pedidos analisados
+            {periodLabel} · {s.totalOrders ?? 0} pedidos analisados
           </p>
         </div>
         <div className="flex items-center gap-2 bg-white border rounded-xl px-3 py-2 shadow-sm">
@@ -259,17 +232,17 @@ const AnalyticsPage = () => {
         </div>
       </div>
 
-      {/* ── KPIs ───────────────────────────────────────────────────────────── */}
+      {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <KpiCard title="Faturamento"    value={R(s.totalRevenue)}          sub={`${s.totalOrders} pedidos`}                icon={DollarSign}   color="blue"   />
-        <KpiCard title="Ticket Médio"   value={R(s.avgTicket)}             sub="por pedido"                                icon={Target}       color="green"  />
-        <KpiCard title="Aprovação"      value={pct(s.approvalRate)}        sub={`${s.approvedOrders} aprovados`}           icon={CheckCircle2} color="teal"   />
-        <KpiCard title="Frete Total"    value={R(s.totalShipping)}         sub={`Média ${R(s.avgShipping)}`}               icon={Truck}        color="amber"  />
-        <KpiCard title="Descontos"      value={R(s.totalDiscount)}         sub={`${pct(s.couponUsageRate)} c/ cupom`}      icon={Tag}          color="rose"   />
-        <KpiCard title="Recorrentes"    value={s.recurringUsers.toString()} sub={`${s.newUsers} novos`}                    icon={Users}        color="purple" />
+        <KpiCard title="Faturamento"  value={R(s.totalRevenue)}           sub={`${s.totalOrders ?? 0} pedidos`}           icon={DollarSign}   color="blue"   />
+        <KpiCard title="Ticket Médio" value={R(s.avgTicket)}              sub="por pedido"                                 icon={Target}       color="green"  />
+        <KpiCard title="Aprovação"    value={pct(s.approvalRate)}         sub={`${s.approvedOrders ?? 0} aprovados`}       icon={CheckCircle2} color="teal"   />
+        <KpiCard title="Frete Total"  value={R(s.totalShipping)}          sub={`Média ${R(s.avgShipping)}`}                icon={Truck}        color="amber"  />
+        <KpiCard title="Descontos"    value={R(s.totalDiscount)}          sub={`${pct(s.couponUsageRate)} c/ cupom`}       icon={Tag}          color="rose"   />
+        <KpiCard title="Recorrentes"  value={String(s.recurringUsers ?? 0)} sub={`${s.newUsers ?? 0} novos`}              icon={Users}        color="purple" />
       </div>
 
-      {/* ── Tabs ───────────────────────────────────────────────────────────── */}
+      {/* Tabs */}
       <Tabs defaultValue="vendas" className="space-y-5">
         <TabsList className="bg-gray-100 p-1 rounded-xl h-auto flex-wrap gap-1">
           <TabsTrigger value="vendas"    className="rounded-lg font-semibold text-xs px-4 py-2">📈 Vendas</TabsTrigger>
@@ -279,12 +252,8 @@ const AnalyticsPage = () => {
           <TabsTrigger value="tempo"     className="rounded-lg font-semibold text-xs px-4 py-2">⏰ Horários</TabsTrigger>
         </TabsList>
 
-        {/* ════════════════════════════════════════════════════════════════════
-            ABA VENDAS
-        ════════════════════════════════════════════════════════════════════ */}
+        {/* ── ABA VENDAS ── */}
         <TabsContent value="vendas" className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-
-          {/* Faturamento + Pedidos (ComposedChart) */}
           <Card className="border-none shadow-md">
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Faturamento & Volume de Pedidos</CardTitle>
@@ -313,7 +282,6 @@ const AnalyticsPage = () => {
           </Card>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-
             {/* Taxa de aprovação */}
             <Card className="border-none shadow-md">
               <CardHeader className="pb-2">
@@ -343,7 +311,7 @@ const AnalyticsPage = () => {
                 <div className="mt-3 p-3 bg-green-50 rounded-xl">
                   <p className="text-xs font-bold text-green-700">Taxa no período</p>
                   <p className="text-2xl font-black text-green-700">{pct(s.approvalRate)}</p>
-                  <p className="text-[11px] text-green-600">{s.approvedOrders} de {s.totalOrders} pedidos</p>
+                  <p className="text-[11px] text-green-600">{s.approvedOrders ?? 0} de {s.totalOrders ?? 0} pedidos</p>
                 </div>
               </CardContent>
             </Card>
@@ -352,18 +320,17 @@ const AnalyticsPage = () => {
             <Card className="border-none shadow-md">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm">Status dos Pedidos</CardTitle>
-                <CardDescription className="text-xs">Todos os pedidos do período</CardDescription>
               </CardHeader>
               <CardContent>
                 {ordersByStatus.length > 0 ? (
                   <div className="space-y-0">
-                    {ordersByStatus.map((s: any, i: number) => (
-                      <div key={s.name} className="flex items-center justify-between py-2 border-b last:border-0">
+                    {ordersByStatus.map((st: any, i: number) => (
+                      <div key={st.name} className="flex items-center justify-between py-2 border-b last:border-0">
                         <div className="flex items-center gap-2">
                           <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: C[i % C.length] }} />
-                          <span className="text-xs font-medium text-gray-700">{s.name}</span>
+                          <span className="text-xs font-medium text-gray-700">{st.name}</span>
                         </div>
-                        <Badge variant="secondary" className="text-[10px] font-bold">{s.value}</Badge>
+                        <Badge variant="secondary" className="text-[10px] font-bold">{st.value}</Badge>
                       </div>
                     ))}
                   </div>
@@ -399,11 +366,10 @@ const AnalyticsPage = () => {
             </Card>
           </div>
 
-          {/* Frete e descontos ao longo do tempo */}
+          {/* Frete vs Descontos */}
           <Card className="border-none shadow-md">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">Frete vs. Descontos ao Longo do Tempo</CardTitle>
-              <CardDescription className="text-xs">Comparativo de custos de frete e descontos aplicados.</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-52">
@@ -429,19 +395,14 @@ const AnalyticsPage = () => {
           </Card>
         </TabsContent>
 
-        {/* ════════════════════════════════════════════════════════════════════
-            ABA PRODUTOS
-        ════════════════════════════════════════════════════════════════════ */}
+        {/* ── ABA PRODUTOS ── */}
         <TabsContent value="produtos" className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-            {/* Top por receita */}
             <Card className="border-none shadow-md">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <DollarSign className="w-4 h-4 text-blue-600" /> Top 10 por Receita
                 </CardTitle>
-                <CardDescription className="text-xs">Produtos que mais geraram faturamento.</CardDescription>
               </CardHeader>
               <CardContent>
                 {topProducts.length > 0 ? (
@@ -462,13 +423,11 @@ const AnalyticsPage = () => {
               </CardContent>
             </Card>
 
-            {/* Top por quantidade */}
             <Card className="border-none shadow-md">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <Package className="w-4 h-4 text-purple-600" /> Top 10 por Quantidade
                 </CardTitle>
-                <CardDescription className="text-xs">Produtos mais vendidos em unidades.</CardDescription>
               </CardHeader>
               <CardContent>
                 {topProductsByQty.length > 0 ? (
@@ -490,7 +449,6 @@ const AnalyticsPage = () => {
             </Card>
           </div>
 
-          {/* Tabela top 10 */}
           {topProducts.length > 0 && (
             <Card className="border-none shadow-md">
               <CardHeader className="pb-2">
@@ -524,28 +482,27 @@ const AnalyticsPage = () => {
           )}
         </TabsContent>
 
-        {/* ════════════════════════════════════════════════════════════════════
-            ABA CLIENTES
-        ════════════════════════════════════════════════════════════════════ */}
+        {/* ── ABA CLIENTES ── */}
         <TabsContent value="clientes" className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-
-            {/* Novos vs Recorrentes */}
+            {/* Fidelização */}
             <Card className="border-none shadow-md">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm">Fidelização</CardTitle>
-                <CardDescription className="text-xs">Novos vs. clientes recorrentes.</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="h-44">
-                  {demo.retention.some((r: any) => r.value > 0) ? (
+                  {(s.newUsers > 0 || s.recurringUsers > 0) ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
-                        <Pie data={demo.retention} innerRadius={45} outerRadius={70}
-                          paddingAngle={4} dataKey="value">
-                          {demo.retention.map((_: any, i: number) => (
-                            <Cell key={i} fill={C[i % C.length]} />
-                          ))}
+                        <Pie
+                          data={[
+                            { name: "Novos", value: s.newUsers ?? 0 },
+                            { name: "Recorrentes", value: s.recurringUsers ?? 0 },
+                          ]}
+                          innerRadius={45} outerRadius={70} paddingAngle={4} dataKey="value">
+                          <Cell fill="#3b82f6" />
+                          <Cell fill="#10b981" />
                         </Pie>
                         <Tooltip contentStyle={tooltipStyle} />
                         <Legend iconSize={8} iconType="circle"
@@ -556,11 +513,11 @@ const AnalyticsPage = () => {
                 </div>
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   <div className="bg-blue-50 rounded-lg p-2 text-center">
-                    <p className="text-lg font-black text-blue-700">{s.newUsers}</p>
+                    <p className="text-lg font-black text-blue-700">{s.newUsers ?? 0}</p>
                     <p className="text-[10px] text-blue-600 font-medium">Novos</p>
                   </div>
                   <div className="bg-green-50 rounded-lg p-2 text-center">
-                    <p className="text-lg font-black text-green-700">{s.recurringUsers}</p>
+                    <p className="text-lg font-black text-green-700">{s.recurringUsers ?? 0}</p>
                     <p className="text-[10px] text-green-600 font-medium">Recorrentes</p>
                   </div>
                 </div>
@@ -574,7 +531,7 @@ const AnalyticsPage = () => {
               </CardHeader>
               <CardContent>
                 <div className="h-44">
-                  {demo.gender.length > 0 ? (
+                  {(demo.gender ?? []).length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie data={demo.gender} cx="50%" cy="50%" outerRadius={70}
@@ -597,15 +554,18 @@ const AnalyticsPage = () => {
             <Card className="border-none shadow-md">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm">Uso de Cupons</CardTitle>
-                <CardDescription className="text-xs">Pedidos com e sem desconto.</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="h-44">
-                  {demo.couponUsage.some((c: any) => c.value > 0) ? (
+                  {(s.withCoupon > 0 || s.withoutCoupon > 0) ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
-                        <Pie data={demo.couponUsage} innerRadius={45} outerRadius={70}
-                          paddingAngle={4} dataKey="value">
+                        <Pie
+                          data={[
+                            { name: "Com Cupom", value: s.withCoupon ?? 0 },
+                            { name: "Sem Cupom", value: s.withoutCoupon ?? 0 },
+                          ]}
+                          innerRadius={45} outerRadius={70} paddingAngle={4} dataKey="value">
                           <Cell fill="#10b981" />
                           <Cell fill="#e5e7eb" />
                         </Pie>
@@ -625,8 +585,8 @@ const AnalyticsPage = () => {
             </Card>
           </div>
 
-          {/* Tiers de fidelidade */}
-          {demo.tiers.length > 0 && (
+          {/* Tiers */}
+          {(demo.tiers ?? []).length > 0 && (
             <Card className="border-none shadow-md">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
@@ -653,26 +613,20 @@ const AnalyticsPage = () => {
               </CardContent>
             </Card>
           )}
-
         </TabsContent>
 
-        {/* ════════════════════════════════════════════════════════════════════
-            ABA LOGÍSTICA
-        ════════════════════════════════════════════════════════════════════ */}
+        {/* ── ABA LOGÍSTICA ── */}
         <TabsContent value="logistica" className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
-            {/* Gráfico de regiões */}
             <Card className="lg:col-span-2 border-none shadow-md">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <MapPin className="w-4 h-4 text-blue-600" /> Pedidos por Estado
                 </CardTitle>
-                <CardDescription className="text-xs">Baseado nos endereços de entrega.</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="h-80">
-                  {demo.regions.length > 0 ? (
+                  {(demo.regions ?? []).length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={demo.regions} layout="vertical" margin={{ left: 0, right: 60 }}>
                         <XAxis type="number" hide />
@@ -690,13 +644,12 @@ const AnalyticsPage = () => {
               </CardContent>
             </Card>
 
-            {/* Lista de regiões com receita */}
             <Card className="border-none shadow-md">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm">Receita por Estado</CardTitle>
               </CardHeader>
               <CardContent>
-                {demo.regions.length > 0 ? (
+                {(demo.regions ?? []).length > 0 ? (
                   <div className="space-y-0">
                     {demo.regions.slice(0, 10).map((r: any, i: number) => (
                       <div key={r.name} className="py-2 border-b last:border-0">
@@ -719,49 +672,29 @@ const AnalyticsPage = () => {
             </Card>
           </div>
 
-          {/* Métricas de frete */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card className="border-none shadow-md">
-              <CardContent className="pt-5">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-2 bg-amber-50 rounded-lg"><Truck className="w-4 h-4 text-amber-600" /></div>
-                  <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Frete Total</p>
-                </div>
-                <p className="text-2xl font-black text-gray-900">{R(s.totalShipping)}</p>
-                <p className="text-xs text-muted-foreground mt-1">no período selecionado</p>
-              </CardContent>
-            </Card>
-            <Card className="border-none shadow-md">
-              <CardContent className="pt-5">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-2 bg-blue-50 rounded-lg"><Target className="w-4 h-4 text-blue-600" /></div>
-                  <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Frete Médio</p>
-                </div>
-                <p className="text-2xl font-black text-gray-900">{R(s.avgShipping)}</p>
-                <p className="text-xs text-muted-foreground mt-1">por pedido</p>
-              </CardContent>
-            </Card>
-            <Card className="border-none shadow-md">
-              <CardContent className="pt-5">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-2 bg-purple-50 rounded-lg"><ShoppingCart className="w-4 h-4 text-purple-600" /></div>
-                  <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Frete / Receita</p>
-                </div>
-                <p className="text-2xl font-black text-gray-900">
-                  {s.totalRevenue > 0 ? pct((s.totalShipping / s.totalRevenue) * 100) : "0%"}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">representação do frete na receita</p>
-              </CardContent>
-            </Card>
+            {[
+              { label: "Frete Total", value: R(s.totalShipping), sub: "no período", icon: Truck, color: "amber" },
+              { label: "Frete Médio", value: R(s.avgShipping), sub: "por pedido", icon: Target, color: "blue" },
+              {
+                label: "Frete / Receita",
+                value: s.totalRevenue > 0 ? pct((s.totalShipping / s.totalRevenue) * 100) : "0%",
+                sub: "representação do frete",
+                icon: ShoppingCart,
+                color: "purple",
+              },
+            ].map(({ label, value, sub, icon: Icon, color }) => (
+              <Card key={label} className="border-none shadow-md">
+                <CardContent className="pt-5">
+                  <KpiCard title={label} value={value} sub={sub} icon={Icon} color={color} />
+                </CardContent>
+              </Card>
+            ))}
           </div>
         </TabsContent>
 
-        {/* ════════════════════════════════════════════════════════════════════
-            ABA HORÁRIOS
-        ════════════════════════════════════════════════════════════════════ */}
+        {/* ── ABA HORÁRIOS ── */}
         <TabsContent value="tempo" className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-
-          {/* Heatmap por hora */}
           <Card className="border-none shadow-md">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
@@ -773,18 +706,17 @@ const AnalyticsPage = () => {
             </CardHeader>
             <CardContent>
               <div className="h-56">
-                {hourlyHeatmap.some((h: any) => h.orders > 0) ? (
+                {fullHourly.some((h: any) => h.orders > 0) ? (
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={hourlyHeatmap} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                    <BarChart data={fullHourly} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                       <XAxis dataKey="label" axisLine={false} tickLine={false}
                         tick={{ fontSize: 9, fontWeight: 600 }} interval={1} />
                       <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
                       <Tooltip contentStyle={tooltipStyle}
-                        formatter={(v: number, name: string) =>
-                          [name === "orders" ? v : R(v), name === "orders" ? "Pedidos" : "Receita"]} />
+                        formatter={(v: number) => [v, "Pedidos"]} />
                       <Bar dataKey="orders" radius={[3,3,0,0]} barSize={18}>
-                        {hourlyHeatmap.map((h: any, i: number) => (
+                        {fullHourly.map((h: any, i: number) => (
                           <Cell key={i}
                             fill={`rgba(59,130,246,${0.15 + (h.orders / maxHour) * 0.85})`} />
                         ))}
@@ -793,10 +725,9 @@ const AnalyticsPage = () => {
                   </ResponsiveContainer>
                 ) : <EmptyChart msg="Sem dados de horário" />}
               </div>
-              {/* Top 3 horários */}
-              {hourlyHeatmap.some((h: any) => h.orders > 0) && (
+              {fullHourly.some((h: any) => h.orders > 0) && (
                 <div className="mt-4 flex gap-3">
-                  {[...hourlyHeatmap]
+                  {[...fullHourly]
                     .sort((a: any, b: any) => b.orders - a.orders)
                     .slice(0, 3)
                     .map((h: any, i: number) => (
@@ -815,30 +746,25 @@ const AnalyticsPage = () => {
             </CardContent>
           </Card>
 
-          {/* Heatmap por dia da semana */}
           <Card className="border-none shadow-md">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-purple-600" /> Pedidos por Dia da Semana
               </CardTitle>
-              <CardDescription className="text-xs">
-                Descubra os dias mais movimentados para planejar estoque e equipe.
-              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-52">
-                {weekdayHeatmap.some((d: any) => d.orders > 0) ? (
+                {fullWeekday.some((d: any) => d.orders > 0) ? (
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={weekdayHeatmap} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                    <BarChart data={fullWeekday} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                       <XAxis dataKey="name" axisLine={false} tickLine={false}
                         tick={{ fontSize: 11, fontWeight: 700 }} />
                       <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
                       <Tooltip contentStyle={tooltipStyle}
-                        formatter={(v: number, name: string) =>
-                          [name === "orders" ? v : R(v), name === "orders" ? "Pedidos" : "Receita"]} />
+                        formatter={(v: number) => [v, "Pedidos"]} />
                       <Bar dataKey="orders" radius={[5,5,0,0]} barSize={40}>
-                        {weekdayHeatmap.map((d: any, i: number) => (
+                        {fullWeekday.map((d: any, i: number) => (
                           <Cell key={i} fill={C[i % C.length]} />
                         ))}
                       </Bar>
