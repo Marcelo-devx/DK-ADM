@@ -54,6 +54,7 @@ import { Input } from "@/components/ui/input";
 import * as XLSX from 'xlsx';
 import { Card } from "@/components/ui/card";
 import { useUser } from "@/hooks/useUser";
+import { OrderMobileCard } from "@/components/dashboard/OrderMobileCard";
 
 interface Order {
   id: number;
@@ -748,7 +749,71 @@ const OrdersPage = () => {
         </div>
       )}
 
-      <div className={cn("bg-white rounded-lg border shadow-sm overflow-hidden", isRefetching && "opacity-80 transition-opacity")}>
+      {/* ── MOBILE: Card list (visible only on small screens) ── */}
+      <div className={cn("md:hidden space-y-0", isRefetching && "opacity-80 transition-opacity")}>
+        {/* Select all bar */}
+        {orders.length > 0 && (
+          <div className="flex items-center gap-2 px-1 py-2 mb-1">
+            <Checkbox checked={orders.length > 0 && selectedIds.size === orders.length} onCheckedChange={toggleSelectAll} />
+            <span className="text-xs text-muted-foreground">Selecionar todos ({orders.length})</span>
+          </div>
+        )}
+        {orders.length === 0 && !isLoading ? (
+          <div className="bg-white rounded-xl border shadow-sm p-8 text-center text-muted-foreground text-sm">
+            Nenhum pedido encontrado com os filtros aplicados.
+          </div>
+        ) : orders.map((order) => (
+          <OrderMobileCard
+            key={order.id}
+            order={order}
+            isSelected={selectedIds.has(order.id)}
+            onToggleSelect={toggleSelectOne}
+            onOpenDetail={(o) => { setSelectedOrder(o); setIsDetailModalOpen(true); }}
+            onOpenLabel={(o) => { setSelectedOrder(o); setIsLabelModalOpen(true); }}
+            onOpenClientHistory={(o) => {
+              setSelectedClientForHistory({
+                id: o.user_id,
+                first_name: o.profiles?.first_name,
+                last_name: o.profiles?.last_name,
+                email: o.profiles?.email || "",
+                created_at: null,
+                force_pix_on_next_purchase: false,
+                order_count: 0,
+                completed_order_count: 0,
+              });
+              setIsClientHistoryOpen(true);
+            }}
+            onValidatePayment={(id) => validatePaymentAndSetPendingMutation.mutate(id)}
+            onCancelFraud={(o) => setActionToConfirm({ action: "cancel_fraud", client: o })}
+            onUpdateDeliveryStatus={(id, status, info) => updateDeliveryStatusMutation.mutate({ orderId: id, status, info })}
+            onDeleteOrder={(o) => { setSelectedOrder(o); setIsDeleteAlertOpen(true); }}
+            isValidating={validatePaymentAndSetPendingMutation.isPending}
+            canUseWhatsApp={canUseWhatsApp}
+            checkIsNextRoute={checkIsNextRoute}
+            formatCurrency={formatCurrency}
+            formatPhone={formatPhone}
+            getWhatsAppLink={getWhatsAppLink}
+          />
+        ))}
+
+        {/* Mobile Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-1 py-3 mt-2">
+            <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
+              <ChevronLeft className="h-4 w-4" /> Anterior
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              {currentPage} / {totalPages}
+            </span>
+            <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
+              Próximo <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* ── DESKTOP: Table (hidden on small screens) ── */}
+      <div className={cn("hidden md:block bg-white rounded-lg border shadow-sm overflow-hidden", isRefetching && "opacity-80 transition-opacity")}>
         <div className="overflow-x-auto">
           <Table>
             <TableHeader className="sticky top-0 bg-white z-10 shadow-sm">
