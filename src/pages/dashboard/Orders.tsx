@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send, History, FileDown, Calendar, FilterX, ShieldCheck, ShieldX, CheckSquare, Plus, Search, Pencil, ChevronLeft, ChevronRight, XCircle } from "lucide-react";
+import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send, History, FileDown, Calendar, FilterX, ShieldCheck, ShieldX, CheckSquare, Plus, Search, Pencil, ChevronLeft, ChevronRight, XCircle, ChevronDown } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { showSuccess, showError } from "@/utils/toast";
 import { OrderDetailModal } from "@/components/dashboard/OrderDetailModal";
@@ -48,6 +48,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -188,9 +189,9 @@ const OrdersPage = () => {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   
-  // Filtros de Status (NOVOS)
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [deliveryStatusFilter, setDeliveryStatusFilter] = useState("all");
+  // Filtros de Status (MULTI-SELECT)
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [deliveryStatusFilter, setDeliveryStatusFilter] = useState<string[]>([]);
   
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [isProcessingBulk, setIsProcessingBulk] = useState(false);
@@ -289,14 +290,14 @@ const OrdersPage = () => {
           if (!(isPaid && isPendingDelivery)) return false;
       }
 
-      // Filtro de Status do Pedido
-      if (statusFilter && statusFilter !== "all") {
-          if (order.status !== statusFilter) return false;
+      // Filtro de Status do Pedido (multi-select)
+      if (statusFilter.length > 0) {
+          if (!statusFilter.includes(order.status)) return false;
       }
 
-      // Filtro de Status de Entrega
-      if (deliveryStatusFilter && deliveryStatusFilter !== "all") {
-          if (order.delivery_status !== deliveryStatusFilter) return false;
+      // Filtro de Status de Entrega (multi-select)
+      if (deliveryStatusFilter.length > 0) {
+          if (!deliveryStatusFilter.includes(order.delivery_status)) return false;
       }
 
       // Filtro de Data — converte para horário de Brasília (America/Sao_Paulo) antes de comparar
@@ -363,6 +364,18 @@ const OrdersPage = () => {
   useEffect(() => {
     setCurrentPage(1);
   }, [readyToShipOnly, startDate, endDate, debouncedOrderId, debouncedCPF, debouncedClientName, debouncedEmail, statusFilter, deliveryStatusFilter]);
+
+  const toggleStatusFilter = (value: string) => {
+    setStatusFilter(prev =>
+      prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
+    );
+  };
+
+  const toggleDeliveryStatusFilter = (value: string) => {
+    setDeliveryStatusFilter(prev =>
+      prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
+    );
+  };
 
   const validatePaymentAndSetPendingMutation = useMutation({
     mutationFn: async (orderId: number) => {
@@ -856,39 +869,97 @@ const OrdersPage = () => {
             className="h-9 w-36 text-xs"
           />
 
-          {/* Status do Pedido */}
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="h-9 w-44 text-xs">
-              <SelectValue placeholder="Status Pedido" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os status</SelectItem>
-              <SelectItem value="Pendente">Pendente</SelectItem>
-              <SelectItem value="Aguardando Pagamento">Aguardando Pagamento</SelectItem>
-              <SelectItem value="Pago">Pago</SelectItem>
-              <SelectItem value="Em preparo">Em preparo</SelectItem>
-              <SelectItem value="Finalizada">Finalizada</SelectItem>
-              <SelectItem value="Cancelado">Cancelado</SelectItem>
-            </SelectContent>
-          </Select>
+          {/* Status do Pedido - Multi-select */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className={cn(
+                "h-9 px-3 text-xs border rounded-md flex items-center gap-2 bg-white hover:bg-gray-50 transition-colors",
+                statusFilter.length > 0 ? "border-green-400 text-green-700 bg-green-50" : "border-gray-200 text-gray-600"
+              )}>
+                <span>
+                  {statusFilter.length === 0
+                    ? "Status Pedido"
+                    : statusFilter.length === 1
+                    ? statusFilter[0]
+                    : `${statusFilter.length} status`}
+                </span>
+                {statusFilter.length > 0 && (
+                  <span className="bg-green-600 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold">
+                    {statusFilter.length}
+                  </span>
+                )}
+                <ChevronDown className="w-3 h-3 opacity-50" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-52 p-2" align="start">
+              <div className="space-y-1">
+                {["Pendente", "Aguardando Pagamento", "Pago", "Em preparo", "Finalizada", "Cancelado"].map(status => (
+                  <label key={status} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer text-sm">
+                    <Checkbox
+                      checked={statusFilter.includes(status)}
+                      onCheckedChange={() => toggleStatusFilter(status)}
+                    />
+                    {status}
+                  </label>
+                ))}
+                {statusFilter.length > 0 && (
+                  <button
+                    onClick={() => setStatusFilter([])}
+                    className="w-full text-xs text-red-500 hover:text-red-700 pt-1 border-t mt-1 text-left px-2"
+                  >
+                    Limpar seleção
+                  </button>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
 
-          {/* Status de Entrega */}
-          <Select value={deliveryStatusFilter} onValueChange={setDeliveryStatusFilter}>
-            <SelectTrigger className="h-9 w-48 text-xs">
-              <SelectValue placeholder="Status Entrega" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os status</SelectItem>
-              <SelectItem value="Pendente">Pendente</SelectItem>
-              <SelectItem value="Aguardando Coleta">Aguardando Coleta</SelectItem>
-              <SelectItem value="Aguardando Validação">Aguardando Validação</SelectItem>
-              <SelectItem value="Embalado">Embalado</SelectItem>
-              <SelectItem value="Despachado">Despachado</SelectItem>
-              <SelectItem value="Entregue">Entregue</SelectItem>
-            </SelectContent>
-          </Select>
+          {/* Status de Entrega - Multi-select */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className={cn(
+                "h-9 px-3 text-xs border rounded-md flex items-center gap-2 bg-white hover:bg-gray-50 transition-colors",
+                deliveryStatusFilter.length > 0 ? "border-sky-400 text-sky-700 bg-sky-50" : "border-gray-200 text-gray-600"
+              )}>
+                <span>
+                  {deliveryStatusFilter.length === 0
+                    ? "Status Entrega"
+                    : deliveryStatusFilter.length === 1
+                    ? deliveryStatusFilter[0]
+                    : `${deliveryStatusFilter.length} status`}
+                </span>
+                {deliveryStatusFilter.length > 0 && (
+                  <span className="bg-sky-600 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold">
+                    {deliveryStatusFilter.length}
+                  </span>
+                )}
+                <ChevronDown className="w-3 h-3 opacity-50" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-52 p-2" align="start">
+              <div className="space-y-1">
+                {["Pendente", "Aguardando Coleta", "Aguardando Validação", "Embalado", "Despachado", "Entregue"].map(status => (
+                  <label key={status} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer text-sm">
+                    <Checkbox
+                      checked={deliveryStatusFilter.includes(status)}
+                      onCheckedChange={() => toggleDeliveryStatusFilter(status)}
+                    />
+                    {status}
+                  </label>
+                ))}
+                {deliveryStatusFilter.length > 0 && (
+                  <button
+                    onClick={() => setDeliveryStatusFilter([])}
+                    className="w-full text-xs text-red-500 hover:text-red-700 pt-1 border-t mt-1 text-left px-2"
+                  >
+                    Limpar seleção
+                  </button>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
 
-          {(startDate || endDate || statusFilter !== "all" || deliveryStatusFilter !== "all" || searchOrderId || searchCPF || searchClientName || searchEmail) && (
+          {(startDate || endDate || statusFilter.length > 0 || deliveryStatusFilter.length > 0 || searchOrderId || searchCPF || searchClientName || searchEmail) && (
             <Button
               variant="ghost"
               size="sm"
@@ -896,8 +967,8 @@ const OrdersPage = () => {
               onClick={() => {
                 setStartDate("");
                 setEndDate("");
-                setStatusFilter("all");
-                setDeliveryStatusFilter("all");
+                setStatusFilter([]);
+                setDeliveryStatusFilter([]);
                 setSearchOrderId("");
                 setSearchCPF("");
                 setSearchClientName("");
@@ -947,7 +1018,7 @@ const OrdersPage = () => {
       </div>
 
       {/* Active Filter Chips */}
-      {(searchOrderId || searchCPF || searchClientName || searchEmail || startDate || endDate || statusFilter !== "all" || deliveryStatusFilter !== "all" || readyToShipOnly) && (
+      {(searchOrderId || searchCPF || searchClientName || searchEmail || startDate || endDate || statusFilter.length > 0 || deliveryStatusFilter.length > 0 || readyToShipOnly) && (
         <div className="flex flex-wrap items-center gap-2 mb-3 px-1">
           <span className="text-xs text-muted-foreground font-medium">Filtros ativos:</span>
 
@@ -987,18 +1058,18 @@ const OrdersPage = () => {
               <button onClick={() => setEndDate("")} className="hover:text-purple-900 ml-0.5"><X className="w-3 h-3" /></button>
             </span>
           )}
-          {statusFilter !== "all" && (
-            <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 border border-green-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
-              Status: {statusFilter}
-              <button onClick={() => setStatusFilter("all")} className="hover:text-green-900 ml-0.5"><X className="w-3 h-3" /></button>
+          {statusFilter.map(s => (
+            <span key={s} className="inline-flex items-center gap-1 bg-green-50 text-green-700 border border-green-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
+              Status: {s}
+              <button onClick={() => toggleStatusFilter(s)} className="hover:text-green-900 ml-0.5"><X className="w-3 h-3" /></button>
             </span>
-          )}
-          {deliveryStatusFilter !== "all" && (
-            <span className="inline-flex items-center gap-1 bg-sky-50 text-sky-700 border border-sky-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
-              Entrega: {deliveryStatusFilter}
-              <button onClick={() => setDeliveryStatusFilter("all")} className="hover:text-sky-900 ml-0.5"><X className="w-3 h-3" /></button>
+          ))}
+          {deliveryStatusFilter.map(s => (
+            <span key={s} className="inline-flex items-center gap-1 bg-sky-50 text-sky-700 border border-sky-200 rounded-full px-2.5 py-0.5 text-xs font-medium">
+              Entrega: {s}
+              <button onClick={() => toggleDeliveryStatusFilter(s)} className="hover:text-sky-900 ml-0.5"><X className="w-3 h-3" /></button>
             </span>
-          )}
+          ))}
           {readyToShipOnly && (
             <span className="inline-flex items-center gap-1 bg-blue-600 text-white rounded-full px-2.5 py-0.5 text-xs font-medium">
               Prontos p/ Envio
@@ -1009,7 +1080,7 @@ const OrdersPage = () => {
           <button
             onClick={() => {
               setSearchOrderId(""); setSearchCPF(""); setSearchClientName(""); setSearchEmail("");
-              setStartDate(""); setEndDate(""); setStatusFilter("all"); setDeliveryStatusFilter("all");
+              setStartDate(""); setEndDate(""); setStatusFilter([]); setDeliveryStatusFilter([]);
               setReadyToShipOnly(false);
             }}
             className="text-xs text-red-500 hover:text-red-700 underline ml-1"
