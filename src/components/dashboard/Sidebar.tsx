@@ -126,9 +126,11 @@ const Sidebar = () => {
 
       {/* CATÁLOGO */}
       <p className={sectionTitleClass}>Catálogo</p>
-      <NavLink to="/dashboard/supplier-orders" className={navLinkClass}>
-        {({ isActive }) => (<><ShoppingCart className={iconClass("text-amber-600", isActive)} />Pedidos Fornecedor</>)}
-      </NavLink>
+      {!isGerente && (
+        <NavLink to="/dashboard/supplier-orders" className={navLinkClass}>
+          {({ isActive }) => (<><ShoppingCart className={iconClass("text-amber-600", isActive)} />Pedidos Fornecedor</>)}
+        </NavLink>
+      )}
       <NavLink to="/dashboard/products" className={navLinkClass}>
         {({ isActive }) => (<><Package className={iconClass("text-blue-600", isActive)} />Produtos</>)}
       </NavLink>
@@ -280,9 +282,11 @@ const Sidebar = () => {
       <NavLink to="/dashboard/print-labels" className={navLinkClass}>
         {({ isActive }) => (<><Printer className={iconClass("text-indigo-600", isActive)} />Imprimir Etiquetas</>)}
       </NavLink>
-      <NavLink to="/dashboard/supplier-orders" className={navLinkClass}>
-        {({ isActive }) => (<><ShoppingCart className={iconClass("text-amber-600", isActive)} />Pedidos Fornecedor</>)}
-      </NavLink>
+      {!isGerente && (
+        <NavLink to="/dashboard/supplier-orders" className={navLinkClass}>
+          {({ isActive }) => (<><ShoppingCart className={iconClass("text-amber-600", isActive)} />Pedidos Fornecedor</>)}
+        </NavLink>
+      )}
 
       {/* CLIENTES */}
       <p className={sectionTitleClass}>Clientes</p>
