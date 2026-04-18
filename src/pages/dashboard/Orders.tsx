@@ -305,6 +305,7 @@ const OrdersPage = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [exportByDayOpen, setExportByDayOpen] = useState(false);
+  const [exportByDayOpenMobile, setExportByDayOpenMobile] = useState(false);
   const [exportByDayDate, setExportByDayDate] = useState(() => {
     const today = new Date();
     return today.toISOString().split("T")[0];
@@ -555,6 +556,7 @@ const OrdersPage = () => {
     if (!exportByDayDate) { showError("Selecione uma data."); return; }
     setIsExporting(true);
     setExportByDayOpen(false);
+    setExportByDayOpenMobile(false);
     try {
       // Fetch all orders for the selected day (Brasília timezone)
       const startUTC = `${exportByDayDate}T03:00:00.000Z`;
@@ -840,7 +842,7 @@ const OrdersPage = () => {
           {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
         </Button>
 
-        <Popover open={exportByDayOpen} onOpenChange={setExportByDayOpen}>
+        <Popover open={exportByDayOpenMobile} onOpenChange={setExportByDayOpenMobile}>
           <PopoverTrigger asChild>
             <Button variant="outline" size="icon" className="h-10 w-10 shrink-0 text-green-700 border-green-200 hover:bg-green-50" disabled={isExporting}>
               <Calendar className="w-4 h-4" />
@@ -870,7 +872,7 @@ const OrdersPage = () => {
                   variant="outline"
                   size="sm"
                   className="flex-1 h-9 text-xs"
-                  onClick={() => setExportByDayOpen(false)}>
+                  onClick={() => setExportByDayOpenMobile(false)}>
                   Cancelar
                 </Button>
                 <Button
