@@ -372,7 +372,7 @@ const Sidebar = () => {
           fullMenu
         ) : isLogistica ? (
           <>
-            <p className={sectionTitleClass}>Logística</p>
+            {!isGerente && <p className={sectionTitleClass}>Logística</p>}
             <NavLink to="/dashboard/orders" className={navLinkClass}>
               {({ isActive }) => (<><DollarSign className={iconClass("text-green-600", isActive)} />Pedidos (Clientes)</>)}
             </NavLink>
