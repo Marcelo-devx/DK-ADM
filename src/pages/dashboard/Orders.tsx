@@ -604,11 +604,13 @@ const OrdersPage = () => {
     setExportByDayOpen(false);
     setExportByDayOpenMobile(false);
     try {
-      // Fetch all orders for the selected day (Brasília timezone)
+      // Fetch all orders for the selected day (Brasília timezone UTC-3)
+      // Dia selecionado começa às 00:00 BRT = 03:00 UTC
+      // Dia selecionado termina às 23:59:59 BRT = 02:59:59 UTC do dia seguinte
+      const [year, month, day] = exportByDayDate.split("-").map(Number);
       const startUTC = `${exportByDayDate}T03:00:00.000Z`;
-      const endDateObj = new Date(`${exportByDayDate}T00:00:00`);
-      endDateObj.setDate(endDateObj.getDate() + 1);
-      const nextDay = endDateObj.toISOString().split("T")[0];
+      const nextDayDate = new Date(Date.UTC(year, month - 1, day + 1));
+      const nextDay = nextDayDate.toISOString().split("T")[0];
       const endUTC = `${nextDay}T02:59:59.999Z`;
 
       const { data: dayOrders, error: dayError } = await supabase
