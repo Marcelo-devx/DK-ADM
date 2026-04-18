@@ -280,6 +280,9 @@ const Sidebar = () => {
       <NavLink to="/dashboard/print-labels" className={navLinkClass}>
         {({ isActive }) => (<><Printer className={iconClass("text-indigo-600", isActive)} />Imprimir Etiquetas</>)}
       </NavLink>
+      <NavLink to="/dashboard/supplier-orders" className={navLinkClass}>
+        {({ isActive }) => (<><ShoppingCart className={iconClass("text-amber-600", isActive)} />Pedidos Fornecedor</>)}
+      </NavLink>
 
       {/* CLIENTES */}
       <p className={sectionTitleClass}>Clientes</p>
