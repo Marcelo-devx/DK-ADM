@@ -846,27 +846,41 @@ const OrdersPage = () => {
               <Calendar className="w-4 h-4" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-64 p-3" align="end">
+          <PopoverContent
+            className="w-72 p-4"
+            align="end"
+            onInteractOutside={(e) => e.preventDefault()}
+            onFocusOutside={(e) => e.preventDefault()}
+          >
             <div className="space-y-3">
               <div>
                 <p className="text-sm font-semibold text-gray-800 mb-1 flex items-center gap-1.5">
                   <Calendar className="w-4 h-4 text-green-600" /> Exportar por dia
                 </p>
-                <p className="text-xs text-muted-foreground">Exporta todos os pedidos do dia selecionado automaticamente.</p>
+                <p className="text-xs text-muted-foreground">Escolha o dia e exporte todos os pedidos automaticamente.</p>
               </div>
-              <Input
+              <input
                 type="date"
                 value={exportByDayDate}
                 onChange={(e) => setExportByDayDate(e.target.value)}
-                className="h-9 text-sm"
+                className="w-full h-9 px-3 text-sm border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
               />
-              <Button
-                className="w-full h-9 bg-green-600 hover:bg-green-700 text-sm font-bold gap-2"
-                onClick={handleExportByDay}
-                disabled={!exportByDayDate || isExporting}>
-                {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
-                Exportar dia
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 h-9 text-xs"
+                  onClick={() => setExportByDayOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button
+                  className="flex-1 h-9 bg-green-600 hover:bg-green-700 text-sm font-bold gap-1"
+                  onClick={handleExportByDay}
+                  disabled={!exportByDayDate || isExporting}>
+                  {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
+                  Exportar
+                </Button>
+              </div>
             </div>
           </PopoverContent>
         </Popover>
@@ -1031,27 +1045,41 @@ const OrdersPage = () => {
                   <ChevronDown className="w-3.5 h-3.5" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-64 p-3" align="end">
+              <PopoverContent
+                className="w-72 p-4"
+                align="end"
+                onInteractOutside={(e) => e.preventDefault()}
+                onFocusOutside={(e) => e.preventDefault()}
+              >
                 <div className="space-y-3">
                   <div>
                     <p className="text-sm font-semibold text-gray-800 mb-1 flex items-center gap-1.5">
                       <Calendar className="w-4 h-4 text-green-600" /> Exportar por dia
                     </p>
-                    <p className="text-xs text-muted-foreground">Exporta todos os pedidos do dia selecionado automaticamente, sem precisar selecionar.</p>
+                    <p className="text-xs text-muted-foreground">Escolha o dia e exporte todos os pedidos automaticamente.</p>
                   </div>
-                  <Input
+                  <input
                     type="date"
                     value={exportByDayDate}
                     onChange={(e) => setExportByDayDate(e.target.value)}
-                    className="h-9 text-sm"
+                    className="w-full h-9 px-3 text-sm border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
                   />
-                  <Button
-                    className="w-full h-9 bg-green-600 hover:bg-green-700 text-sm font-bold gap-2"
-                    onClick={handleExportByDay}
-                    disabled={!exportByDayDate || isExporting}>
-                    {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
-                    Exportar dia
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 h-9 text-xs"
+                      onClick={() => setExportByDayOpen(false)}>
+                      Cancelar
+                    </Button>
+                    <Button
+                      className="flex-1 h-9 bg-green-600 hover:bg-green-700 text-sm font-bold gap-1"
+                      onClick={handleExportByDay}
+                      disabled={!exportByDayDate || isExporting}>
+                      {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
+                      Exportar
+                    </Button>
+                  </div>
                 </div>
               </PopoverContent>
             </Popover>
