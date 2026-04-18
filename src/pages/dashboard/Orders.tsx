@@ -389,6 +389,67 @@ const OrdersPage = () => {
   const hasActiveFilters = startDate || endDate || statusFilter.length > 0 || deliveryStatusFilter.length > 0 ||
     paymentMethodFilter.length > 0 || searchOrderId || searchCPF || searchClientName || searchEmail || readyToShipOnly;
 
+  // Local state for mobile filters — only applied when user taps "Ver pedidos"
+  const [mobileSearchOrderId, setMobileSearchOrderId] = useState("");
+  const [mobileSearchCPF, setMobileSearchCPF] = useState("");
+  const [mobileSearchClientName, setMobileSearchClientName] = useState("");
+  const [mobileSearchEmail, setMobileSearchEmail] = useState("");
+  const [mobileStartDate, setMobileStartDate] = useState("");
+  const [mobileEndDate, setMobileEndDate] = useState("");
+  const [mobileStatusFilter, setMobileStatusFilter] = useState<string[]>([]);
+  const [mobileDeliveryStatusFilter, setMobileDeliveryStatusFilter] = useState<string[]>([]);
+  const [mobilePaymentMethodFilter, setMobilePaymentMethodFilter] = useState<string[]>([]);
+  const [mobileReadyToShipOnly, setMobileReadyToShipOnly] = useState(false);
+
+  // Sync mobile state when sheet opens
+  const handleOpenMobileFilters = (open: boolean) => {
+    if (open) {
+      setMobileSearchOrderId(searchOrderId);
+      setMobileSearchCPF(searchCPF);
+      setMobileSearchClientName(searchClientName);
+      setMobileSearchEmail(searchEmail);
+      setMobileStartDate(startDate);
+      setMobileEndDate(endDate);
+      setMobileStatusFilter([...statusFilter]);
+      setMobileDeliveryStatusFilter([...deliveryStatusFilter]);
+      setMobilePaymentMethodFilter([...paymentMethodFilter]);
+      setMobileReadyToShipOnly(readyToShipOnly);
+    }
+    setMobileFiltersOpen(open);
+  };
+
+  const applyMobileFilters = () => {
+    setSearchOrderId(mobileSearchOrderId);
+    setSearchCPF(mobileSearchCPF);
+    setSearchClientName(mobileSearchClientName);
+    setSearchEmail(mobileSearchEmail);
+    setStartDate(mobileStartDate);
+    setEndDate(mobileEndDate);
+    setStatusFilter(mobileStatusFilter);
+    setDeliveryStatusFilter(mobileDeliveryStatusFilter);
+    setPaymentMethodFilter(mobilePaymentMethodFilter);
+    setReadyToShipOnly(mobileReadyToShipOnly);
+    setMobileFiltersOpen(false);
+  };
+
+  const clearMobileFilters = () => {
+    setMobileSearchOrderId(""); setMobileSearchCPF(""); setMobileSearchClientName("");
+    setMobileSearchEmail(""); setMobileStartDate(""); setMobileEndDate("");
+    setMobileStatusFilter([]); setMobileDeliveryStatusFilter([]);
+    setMobilePaymentMethodFilter([]); setMobileReadyToShipOnly(false);
+  };
+
+  const toggleMobileStatusFilter = (v: string) => setMobileStatusFilter(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v]);
+  const toggleMobileDeliveryStatusFilter = (v: string) => setMobileDeliveryStatusFilter(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v]);
+  const toggleMobilePaymentMethodFilter = (v: string) => setMobilePaymentMethodFilter(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v]);
+
+  const hasMobileActiveFilters = mobileSearchOrderId || mobileSearchCPF || mobileSearchClientName || mobileSearchEmail ||
+    mobileStartDate || mobileEndDate || mobileStatusFilter.length > 0 || mobileDeliveryStatusFilter.length > 0 ||
+    mobilePaymentMethodFilter.length > 0 || mobileReadyToShipOnly;
+
+  const mobileFilterCount = [mobileSearchOrderId, mobileSearchCPF, mobileSearchClientName, mobileSearchEmail, mobileStartDate, mobileEndDate, mobileReadyToShipOnly ? "1" : ""].filter(Boolean).length
+    + mobileStatusFilter.length + mobileDeliveryStatusFilter.length + mobilePaymentMethodFilter.length;
+
   // Mutations
   const validatePaymentAndSetPendingMutation = useMutation({
     mutationFn: async (orderId: number) => {
@@ -785,7 +846,7 @@ const OrdersPage = () => {
 
       {/* ── MOBILE: compact action bar + filter sheet ── */}
       <div className="md:hidden flex items-center gap-2 mb-3">
-        <Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
+        <Sheet open={mobileFiltersOpen} onOpenChange={handleOpenMobileFilters}>
           <SheetTrigger asChild>
             <Button variant="outline" className={cn("flex-1 h-10 gap-2 font-semibold", hasActiveFilters && "border-blue-400 text-blue-700 bg-blue-50")}>
               <SlidersHorizontal className="w-4 h-4" />
@@ -802,8 +863,8 @@ const OrdersPage = () => {
             <SheetHeader className="mb-4">
               <SheetTitle className="flex items-center gap-2">
                 <SlidersHorizontal className="w-5 h-5" /> Filtros
-                {hasActiveFilters && (
-                  <button onClick={clearAllFilters} className="ml-auto text-xs text-red-500 hover:text-red-700 font-medium flex items-center gap-1">
+                {hasMobileActiveFilters && (
+                  <button onClick={clearMobileFilters} className="ml-auto text-xs text-red-500 hover:text-red-700 font-medium flex items-center gap-1">
                     <FilterX className="w-3.5 h-3.5" /> Limpar tudo
                   </button>
                 )}
@@ -817,19 +878,19 @@ const OrdersPage = () => {
                   <label className="text-xs font-medium text-gray-500 mb-1 block">Pedido ID</label>
                   <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-10 overflow-hidden">
                     <span className="absolute left-3 text-xs text-gray-400 font-medium">#</span>
-                    <input type="text" placeholder="ID" value={searchOrderId}
-                      onChange={(e) => setSearchOrderId(e.target.value.replace(/\D/g, ""))}
+                    <input type="text" placeholder="ID" value={mobileSearchOrderId}
+                      onChange={(e) => setMobileSearchOrderId(e.target.value.replace(/\D/g, ""))}
                       className="pl-6 pr-8 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0 font-mono" />
-                    {searchOrderId && <button onClick={() => setSearchOrderId("")} className="absolute right-2 text-gray-400"><X className="w-3 h-3" /></button>}
+                    {mobileSearchOrderId && <button onClick={() => setMobileSearchOrderId("")} className="absolute right-2 text-gray-400"><X className="w-3 h-3" /></button>}
                   </div>
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-500 mb-1 block">CPF</label>
                   <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-10 overflow-hidden">
-                    <input type="text" placeholder="CPF" value={searchCPF}
-                      onChange={(e) => setSearchCPF(e.target.value.replace(/\D/g, ""))}
+                    <input type="text" placeholder="CPF" value={mobileSearchCPF}
+                      onChange={(e) => setMobileSearchCPF(e.target.value.replace(/\D/g, ""))}
                       className="pl-3 pr-8 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0" />
-                    {searchCPF && <button onClick={() => setSearchCPF("")} className="absolute right-2 text-gray-400"><X className="w-3 h-3" /></button>}
+                    {mobileSearchCPF && <button onClick={() => setMobileSearchCPF("")} className="absolute right-2 text-gray-400"><X className="w-3 h-3" /></button>}
                   </div>
                 </div>
               </div>
@@ -838,10 +899,10 @@ const OrdersPage = () => {
               <div>
                 <label className="text-xs font-medium text-gray-500 mb-1 block">Nome do cliente</label>
                 <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-10 overflow-hidden">
-                  <input type="text" placeholder="Nome do cliente" value={searchClientName}
-                    onChange={(e) => setSearchClientName(e.target.value)}
+                  <input type="text" placeholder="Nome do cliente" value={mobileSearchClientName}
+                    onChange={(e) => setMobileSearchClientName(e.target.value)}
                     className="pl-3 pr-8 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0" />
-                  {searchClientName && <button onClick={() => setSearchClientName("")} className="absolute right-2 text-gray-400"><X className="w-3 h-3" /></button>}
+                  {mobileSearchClientName && <button onClick={() => setMobileSearchClientName("")} className="absolute right-2 text-gray-400"><X className="w-3 h-3" /></button>}
                 </div>
               </div>
 
@@ -850,10 +911,10 @@ const OrdersPage = () => {
                 <label className="text-xs font-medium text-gray-500 mb-1 block">Email</label>
                 <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-10 overflow-hidden">
                   <Search className="absolute left-3 w-4 h-4 text-gray-400" />
-                  <input type="text" placeholder="Email do cliente" value={searchEmail}
-                    onChange={(e) => setSearchEmail(e.target.value)}
+                  <input type="text" placeholder="Email do cliente" value={mobileSearchEmail}
+                    onChange={(e) => setMobileSearchEmail(e.target.value)}
                     className="pl-10 pr-8 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0" />
-                  {searchEmail && <button onClick={() => setSearchEmail("")} className="absolute right-2 text-gray-400"><X className="w-3 h-3" /></button>}
+                  {mobileSearchEmail && <button onClick={() => setMobileSearchEmail("")} className="absolute right-2 text-gray-400"><X className="w-3 h-3" /></button>}
                 </div>
               </div>
 
@@ -861,8 +922,8 @@ const OrdersPage = () => {
               <div>
                 <label className="text-xs font-medium text-gray-500 mb-1 block">Período</label>
                 <div className="grid grid-cols-2 gap-3">
-                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-10 text-sm" />
-                  <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-10 text-sm" />
+                  <Input type="date" value={mobileStartDate} onChange={(e) => setMobileStartDate(e.target.value)} className="h-10 text-sm" />
+                  <Input type="date" value={mobileEndDate} onChange={(e) => setMobileEndDate(e.target.value)} className="h-10 text-sm" />
                 </div>
               </div>
 
@@ -871,9 +932,9 @@ const OrdersPage = () => {
                 <label className="text-xs font-medium text-gray-500 mb-2 block">Status do Pedido</label>
                 <div className="flex flex-wrap gap-2">
                   {["Pendente", "Aguardando Pagamento", "Pago", "Em preparo", "Finalizada", "Cancelado"].map(s => (
-                    <button key={s} onClick={() => toggleStatusFilter(s)}
+                    <button key={s} onClick={() => toggleMobileStatusFilter(s)}
                       className={cn("px-3 py-1.5 rounded-full text-xs font-medium border transition-colors",
-                        statusFilter.includes(s) ? "bg-green-600 text-white border-green-600" : "bg-white text-gray-600 border-gray-200 hover:border-green-400")}>
+                        mobileStatusFilter.includes(s) ? "bg-green-600 text-white border-green-600" : "bg-white text-gray-600 border-gray-200 hover:border-green-400")}>
                       {s}
                     </button>
                   ))}
@@ -885,9 +946,9 @@ const OrdersPage = () => {
                 <label className="text-xs font-medium text-gray-500 mb-2 block">Status de Entrega</label>
                 <div className="flex flex-wrap gap-2">
                   {["Pendente", "Aguardando Coleta", "Aguardando Validação", "Embalado", "Despachado", "Entregue"].map(s => (
-                    <button key={s} onClick={() => toggleDeliveryStatusFilter(s)}
+                    <button key={s} onClick={() => toggleMobileDeliveryStatusFilter(s)}
                       className={cn("px-3 py-1.5 rounded-full text-xs font-medium border transition-colors",
-                        deliveryStatusFilter.includes(s) ? "bg-sky-600 text-white border-sky-600" : "bg-white text-gray-600 border-gray-200 hover:border-sky-400")}>
+                        mobileDeliveryStatusFilter.includes(s) ? "bg-sky-600 text-white border-sky-600" : "bg-white text-gray-600 border-gray-200 hover:border-sky-400")}>
                       {s}
                     </button>
                   ))}
@@ -899,9 +960,9 @@ const OrdersPage = () => {
                 <label className="text-xs font-medium text-gray-500 mb-2 block">Forma de Pagamento</label>
                 <div className="flex gap-2">
                   {[{ value: "Pix", icon: QrCode }, { value: "Cartão", icon: CreditCard }].map(({ value, icon: Icon }) => (
-                    <button key={value} onClick={() => togglePaymentMethodFilter(value)}
+                    <button key={value} onClick={() => toggleMobilePaymentMethodFilter(value)}
                       className={cn("flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium border transition-colors",
-                        paymentMethodFilter.includes(value) ? "bg-purple-600 text-white border-purple-600" : "bg-white text-gray-600 border-gray-200 hover:border-purple-400")}>
+                        mobilePaymentMethodFilter.includes(value) ? "bg-purple-600 text-white border-purple-600" : "bg-white text-gray-600 border-gray-200 hover:border-purple-400")}>
                       <Icon className="w-4 h-4" />{value}
                     </button>
                   ))}
@@ -910,17 +971,17 @@ const OrdersPage = () => {
 
               {/* Prontos p/ Envio */}
               <div>
-                <button onClick={() => { setReadyToShipOnly(!readyToShipOnly); setSelectedIds(new Set()); }}
+                <button onClick={() => setMobileReadyToShipOnly(!mobileReadyToShipOnly)}
                   className={cn("w-full flex items-center gap-3 px-4 py-3 rounded-xl border font-medium text-sm transition-colors",
-                    readyToShipOnly ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-200 hover:border-blue-400")}>
+                    mobileReadyToShipOnly ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-200 hover:border-blue-400")}>
                   <Package className="w-4 h-4" /> Prontos p/ Envio
                 </button>
               </div>
 
               {/* Apply button */}
               <Button className="w-full h-12 text-base font-bold bg-green-600 hover:bg-green-700 mt-2"
-                onClick={() => setMobileFiltersOpen(false)}>
-                Ver {totalCount} pedidos
+                onClick={applyMobileFilters}>
+                Ver pedidos
               </Button>
             </div>
           </SheetContent>
