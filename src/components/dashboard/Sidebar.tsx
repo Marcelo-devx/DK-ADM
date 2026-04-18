@@ -356,7 +356,7 @@ const Sidebar = () => {
       {isGerente && !isAdmin && !isGerenteGeral && (
         <span className="mx-6 mt-1 mb-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 text-[10px] font-bold uppercase tracking-wider">
           <Crown className="w-3 h-3" />
-          Gerente Logística
+          Gerente
         </span>
       )}
 
@@ -376,9 +376,11 @@ const Sidebar = () => {
             <NavLink to="/dashboard/orders" className={navLinkClass}>
               {({ isActive }) => (<><DollarSign className={iconClass("text-green-600", isActive)} />Pedidos (Clientes)</>)}
             </NavLink>
-            <NavLink to="/dashboard/supplier-orders" className={navLinkClass}>
-              {({ isActive }) => (<><ShoppingCart className={iconClass("text-amber-600", isActive)} />Pedidos Fornecedor</>)}
-            </NavLink>
+            {!isGerente && (
+              <NavLink to="/dashboard/supplier-orders" className={navLinkClass}>
+                {({ isActive }) => (<><ShoppingCart className={iconClass("text-amber-600", isActive)} />Pedidos Fornecedor</>)}
+              </NavLink>
+            )}
             <NavLink to="/dashboard/spoke-export" className={navLinkClass}>
               {({ isActive }) => (<><FileOutput className={iconClass("text-green-600", isActive)} />Exportar Rotas</>)}
             </NavLink>
