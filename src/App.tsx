@@ -2,7 +2,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useUser } from "@/hooks/useUser";
 import { SessionContextProvider } from "./components/SessionContextProvider";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
@@ -60,6 +61,13 @@ import RelatorioEntradaEstoque from "./pages/dashboard/RelatorioEntradaEstoque";
 import InvestigarUsuario from "./pages/dashboard/InvestigarUsuario";
 import ReativarPedidos from "./pages/dashboard/ReativarPedidos";
 
+const DashboardIndex = () => {
+  const { isGerente, isGerenteGeral, isAdmin, loading } = useUser();
+  if (loading) return null;
+  if (isGerente && !isGerenteGeral && !isAdmin) return <Navigate to="/dashboard/orders" replace />;
+  return <Dashboard />;
+};
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -91,7 +99,7 @@ const App = () => (
             <Route path="/club-dk" element={<ClubDK />} />
             
             <Route path="/dashboard" element={<DashboardLayout />}>
-              <Route index element={<Dashboard />} />
+              <Route index element={<DashboardIndex />} />
               <Route path="products" element={<Products />} />
               <Route path="orders" element={<Orders />} />
               <Route path="clients" element={<Clients />} />
