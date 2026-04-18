@@ -508,12 +508,53 @@ const OrdersPage = () => {
     try {
       const ordersToExport = orders.filter(o => selectedIds.has(o.id));
       const productIds = new Set<number>();
-      ordersToExport.forEach(order => order.order_items.forEach((item: any) => { if (item.item_type === "product" && item.item_id) productIds.add(item.item_id); }));
+      const promotionIds = new Set<number>();
+      ordersToExport.forEach(order => order.order_items.forEach((item: any) => {
+        if (item.item_type === "product" && item.item_id) productIds.add(item.item_id);
+        if (item.item_type === "promotion" && item.item_id) promotionIds.add(item.item_id);
+      }));
+
       let costsMap = new Map<number, number>();
       if (productIds.size > 0) {
         const { data: productsData } = await supabase.from("products").select("id, cost_price").in("id", Array.from(productIds));
         productsData?.forEach((p: any) => costsMap.set(p.id, p.cost_price || 0));
       }
+
+      // Fetch promotion costs: sum of (product cost × quantity) for each promotion item
+      let promotionCostsMap = new Map<number, number>();
+      if (promotionIds.size > 0) {
+        const { data: promoItems } = await supabase
+          .from("promotion_items")
+          .select("promotion_id, product_id, variant_id, quantity")
+          .in("promotion_id", Array.from(promotionIds));
+
+        if (promoItems && promoItems.length > 0) {
+          const promoProductIds = [...new Set(promoItems.map((pi: any) => pi.product_id).filter(Boolean))];
+          const promoVariantIds = [...new Set(promoItems.map((pi: any) => pi.variant_id).filter(Boolean))];
+
+          let promoProductCosts = new Map<number, number>();
+          if (promoProductIds.length > 0) {
+            const { data: ppData } = await supabase.from("products").select("id, cost_price").in("id", promoProductIds);
+            ppData?.forEach((p: any) => promoProductCosts.set(p.id, p.cost_price || 0));
+          }
+
+          let promoVariantCosts = new Map<string, number>();
+          if (promoVariantIds.length > 0) {
+            const { data: pvData } = await supabase.from("product_variants").select("id, cost_price").in("id", promoVariantIds);
+            pvData?.forEach((v: any) => promoVariantCosts.set(v.id, v.cost_price || 0));
+          }
+
+          // Group by promotion_id and sum costs
+          promoItems.forEach((pi: any) => {
+            const unitCost = pi.variant_id
+              ? (promoVariantCosts.get(pi.variant_id) || promoProductCosts.get(pi.product_id) || 0)
+              : promoProductCosts.get(pi.product_id) || 0;
+            const prev = promotionCostsMap.get(pi.promotion_id) || 0;
+            promotionCostsMap.set(pi.promotion_id, prev + unitCost * (pi.quantity || 1));
+          });
+        }
+      }
+
       const rows: any[] = [];
       ordersToExport.forEach(order => {
         const itemsSubtotal = (order.order_items || []).reduce((acc: number, it: any) => acc + (Number(it.price_at_purchase) || 0) * (Number(it.quantity) || 0), 0);
@@ -522,7 +563,12 @@ const OrdersPage = () => {
         const coupon = Number(order.coupon_discount) || 0;
         const total = itemsSubtotal + shipping + donation - coupon;
         order.order_items.forEach((item: any) => {
-          const unitCost = (item.item_type === "product" && item.item_id) ? (costsMap.get(item.item_id) || 0) : 0;
+          let unitCost = 0;
+          if (item.item_type === "product" && item.item_id) {
+            unitCost = costsMap.get(item.item_id) || 0;
+          } else if (item.item_type === "promotion" && item.item_id) {
+            unitCost = promotionCostsMap.get(item.item_id) || 0;
+          }
           rows.push({
             "Número do Pedido": order.id,
             "Cliente": `${order.profiles?.first_name || ""} ${order.profiles?.last_name || ""}`.trim(),
@@ -585,13 +631,52 @@ const OrdersPage = () => {
 
       const ordersWithProfiles = dayOrders.map((o: any) => ({ ...o, profiles: profilesMap.get(o.user_id) || null }));
 
-      // Fetch costs
+      // Fetch product costs
       const productIds = new Set<number>();
-      ordersWithProfiles.forEach((order: any) => order.order_items.forEach((item: any) => { if (item.item_type === "product" && item.item_id) productIds.add(item.item_id); }));
+      const promotionIds = new Set<number>();
+      ordersWithProfiles.forEach((order: any) => order.order_items.forEach((item: any) => {
+        if (item.item_type === "product" && item.item_id) productIds.add(item.item_id);
+        if (item.item_type === "promotion" && item.item_id) promotionIds.add(item.item_id);
+      }));
+
       let costsMap = new Map<number, number>();
       if (productIds.size > 0) {
         const { data: productsData } = await supabase.from("products").select("id, cost_price").in("id", Array.from(productIds));
         productsData?.forEach((p: any) => costsMap.set(p.id, p.cost_price || 0));
+      }
+
+      // Fetch promotion costs: sum of (product cost × quantity) for each promotion item
+      let promotionCostsMap = new Map<number, number>();
+      if (promotionIds.size > 0) {
+        const { data: promoItems } = await supabase
+          .from("promotion_items")
+          .select("promotion_id, product_id, variant_id, quantity")
+          .in("promotion_id", Array.from(promotionIds));
+
+        if (promoItems && promoItems.length > 0) {
+          const promoProductIds = [...new Set(promoItems.map((pi: any) => pi.product_id).filter(Boolean))];
+          const promoVariantIds = [...new Set(promoItems.map((pi: any) => pi.variant_id).filter(Boolean))];
+
+          let promoProductCosts = new Map<number, number>();
+          if (promoProductIds.length > 0) {
+            const { data: ppData } = await supabase.from("products").select("id, cost_price").in("id", promoProductIds);
+            ppData?.forEach((p: any) => promoProductCosts.set(p.id, p.cost_price || 0));
+          }
+
+          let promoVariantCosts = new Map<string, number>();
+          if (promoVariantIds.length > 0) {
+            const { data: pvData } = await supabase.from("product_variants").select("id, cost_price").in("id", promoVariantIds);
+            pvData?.forEach((v: any) => promoVariantCosts.set(v.id, v.cost_price || 0));
+          }
+
+          promoItems.forEach((pi: any) => {
+            const unitCost = pi.variant_id
+              ? (promoVariantCosts.get(pi.variant_id) || promoProductCosts.get(pi.product_id) || 0)
+              : promoProductCosts.get(pi.product_id) || 0;
+            const prev = promotionCostsMap.get(pi.promotion_id) || 0;
+            promotionCostsMap.set(pi.promotion_id, prev + unitCost * (pi.quantity || 1));
+          });
+        }
       }
 
       const rows: any[] = [];
@@ -602,7 +687,12 @@ const OrdersPage = () => {
         const coupon = Number(order.coupon_discount) || 0;
         const total = itemsSubtotal + shipping + donation - coupon;
         order.order_items.forEach((item: any) => {
-          const unitCost = (item.item_type === "product" && item.item_id) ? (costsMap.get(item.item_id) || 0) : 0;
+          let unitCost = 0;
+          if (item.item_type === "product" && item.item_id) {
+            unitCost = costsMap.get(item.item_id) || 0;
+          } else if (item.item_type === "promotion" && item.item_id) {
+            unitCost = promotionCostsMap.get(item.item_id) || 0;
+          }
           rows.push({
             "Número do Pedido": order.id,
             "Cliente": `${order.profiles?.first_name || ""} ${order.profiles?.last_name || ""}`.trim(),
