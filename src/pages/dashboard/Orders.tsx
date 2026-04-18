@@ -171,7 +171,11 @@ const fetchOrdersPage = async (page: number, filters: Filters): Promise<OrdersRe
       q = q.gte("created_at", `${filters.startDate}T03:00:00.000Z`);
     }
     if (filters.endDate) {
-      q = q.lte("created_at", `${filters.endDate}T26:59:59.999Z`);
+      // Fim do dia em Brasília (UTC-3): 23:59:59 BRT = 02:59:59 UTC do dia seguinte
+      const endDateObj = new Date(`${filters.endDate}T00:00:00`);
+      endDateObj.setDate(endDateObj.getDate() + 1);
+      const nextDay = endDateObj.toISOString().split("T")[0];
+      q = q.lte("created_at", `${nextDay}T02:59:59.999Z`);
     }
 
     if (filters.readyToShipOnly) {
