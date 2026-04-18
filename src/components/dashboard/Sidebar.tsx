@@ -76,8 +76,8 @@ const Sidebar = () => {
   const iconClass = (color: string, isActive: boolean) =>
     cn("w-4 h-4 mr-3 transition-colors", isActive ? "text-primary" : color);
 
-  // gerente_geral and gerente have full access menu
-  const isFullAccess = isAdmin || isGerenteGeral || isGerente;
+  // gerente_geral has full admin access
+  const isFullAccess = isAdmin || isGerenteGeral;
 
   const fullMenu = isAdmin ? (
     <>
