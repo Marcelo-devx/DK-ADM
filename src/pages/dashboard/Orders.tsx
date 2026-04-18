@@ -304,6 +304,11 @@ const OrdersPage = () => {
   const [isProcessingBulk, setIsProcessingBulk] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [exportByDayOpen, setExportByDayOpen] = useState(false);
+  const [exportByDayDate, setExportByDayDate] = useState(() => {
+    const today = new Date();
+    return today.toISOString().split("T")[0];
+  });
 
   const [actionToConfirm, setActionToConfirm] = useState<{
     action: 'resend_confirmation' | 'send_password_reset' | 'delete_orders' | 'mark_as_recurrent' | 'cancel_fraud';
@@ -546,6 +551,87 @@ const OrdersPage = () => {
     }
   };
 
+  const handleExportByDay = async () => {
+    if (!exportByDayDate) { showError("Selecione uma data."); return; }
+    setIsExporting(true);
+    setExportByDayOpen(false);
+    try {
+      // Fetch all orders for the selected day (Brasília timezone)
+      const startUTC = `${exportByDayDate}T03:00:00.000Z`;
+      const endDateObj = new Date(`${exportByDayDate}T00:00:00`);
+      endDateObj.setDate(endDateObj.getDate() + 1);
+      const nextDay = endDateObj.toISOString().split("T")[0];
+      const endUTC = `${nextDay}T02:59:59.999Z`;
+
+      const { data: dayOrders, error: dayError } = await supabase
+        .from("orders")
+        .select("id, created_at, total_price, shipping_cost, coupon_discount, donation_amount, status, delivery_status, user_id, delivery_info, payment_method, shipping_address, order_items(item_id, item_type, name_at_purchase, quantity, price_at_purchase)")
+        .gte("created_at", startUTC)
+        .lte("created_at", endUTC)
+        .order("created_at", { ascending: false });
+
+      if (dayError) throw new Error(dayError.message);
+      if (!dayOrders || dayOrders.length === 0) { showError("Nenhum pedido encontrado nesta data."); return; }
+
+      // Fetch profiles
+      const userIds = [...new Set(dayOrders.map((o: any) => o.user_id).filter(Boolean))];
+      let profilesMap = new Map<string, any>();
+      if (userIds.length > 0) {
+        const { data: profilesData } = await supabase.from("profiles").select("id, first_name, last_name, email, phone, cpf_cnpj").in("id", userIds);
+        if (profilesData) profilesMap = new Map(profilesData.map(p => [p.id, p]));
+      }
+
+      const ordersWithProfiles = dayOrders.map((o: any) => ({ ...o, profiles: profilesMap.get(o.user_id) || null }));
+
+      // Fetch costs
+      const productIds = new Set<number>();
+      ordersWithProfiles.forEach((order: any) => order.order_items.forEach((item: any) => { if (item.item_type === "product" && item.item_id) productIds.add(item.item_id); }));
+      let costsMap = new Map<number, number>();
+      if (productIds.size > 0) {
+        const { data: productsData } = await supabase.from("products").select("id, cost_price").in("id", Array.from(productIds));
+        productsData?.forEach((p: any) => costsMap.set(p.id, p.cost_price || 0));
+      }
+
+      const rows: any[] = [];
+      ordersWithProfiles.forEach((order: any) => {
+        const itemsSubtotal = (order.order_items || []).reduce((acc: number, it: any) => acc + (Number(it.price_at_purchase) || 0) * (Number(it.quantity) || 0), 0);
+        const shipping = Number(order.shipping_cost) || 0;
+        const donation = Number(order.donation_amount) || 0;
+        const coupon = Number(order.coupon_discount) || 0;
+        const total = itemsSubtotal + shipping + donation - coupon;
+        order.order_items.forEach((item: any) => {
+          const unitCost = (item.item_type === "product" && item.item_id) ? (costsMap.get(item.item_id) || 0) : 0;
+          rows.push({
+            "Número do Pedido": order.id,
+            "Cliente": `${order.profiles?.first_name || ""} ${order.profiles?.last_name || ""}`.trim(),
+            "Data": new Date(order.created_at).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }),
+            "Produto": item.name_at_purchase,
+            "Quantidade": item.quantity,
+            "Custo Unitário": unitCost,
+            "Valor Total Venda": (Number(item.price_at_purchase) || 0) * item.quantity,
+            "Valor Total Custo": unitCost * item.quantity,
+            "Lucro": ((Number(item.price_at_purchase) || 0) * item.quantity) - (unitCost * item.quantity),
+            "Forma de Pagamento": order.payment_method || "Pix",
+            "Frete": shipping,
+            "Doação": donation,
+            "Total Pedido": total,
+          });
+        });
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(rows);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Vendas_Detalhadas");
+      const dateLabel = new Date(exportByDayDate + "T00:00:00").toLocaleDateString("pt-BR").replace(/\//g, "-");
+      XLSX.writeFile(workbook, `Vendas_${dateLabel}.xlsx`);
+      showSuccess(`${ordersWithProfiles.length} pedidos exportados do dia ${dateLabel}!`);
+    } catch (err) {
+      console.error(err); showError("Erro ao gerar o arquivo Excel.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const toggleSelectAll = () => {
     if (selectedIds.size === orders.length) setSelectedIds(new Set());
     else setSelectedIds(new Set(orders.map(o => o.id)));
@@ -753,6 +839,37 @@ const OrdersPage = () => {
           onClick={handleExportExcel} disabled={selectedIds.size === 0 || isExporting}>
           {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
         </Button>
+
+        <Popover open={exportByDayOpen} onOpenChange={setExportByDayOpen}>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="icon" className="h-10 w-10 shrink-0 text-green-700 border-green-200 hover:bg-green-50" disabled={isExporting}>
+              <Calendar className="w-4 h-4" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-64 p-3" align="end">
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm font-semibold text-gray-800 mb-1 flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4 text-green-600" /> Exportar por dia
+                </p>
+                <p className="text-xs text-muted-foreground">Exporta todos os pedidos do dia selecionado automaticamente.</p>
+              </div>
+              <Input
+                type="date"
+                value={exportByDayDate}
+                onChange={(e) => setExportByDayDate(e.target.value)}
+                className="h-9 text-sm"
+              />
+              <Button
+                className="w-full h-9 bg-green-600 hover:bg-green-700 text-sm font-bold gap-2"
+                onClick={handleExportByDay}
+                disabled={!exportByDayDate || isExporting}>
+                {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
+                Exportar dia
+              </Button>
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Mobile active filter chips */}
