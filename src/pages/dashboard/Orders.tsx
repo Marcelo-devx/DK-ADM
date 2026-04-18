@@ -616,6 +616,7 @@ const OrdersPage = () => {
         .select("id, created_at, total_price, shipping_cost, coupon_discount, donation_amount, status, delivery_status, user_id, delivery_info, payment_method, shipping_address, order_items(item_id, item_type, name_at_purchase, quantity, price_at_purchase)")
         .gte("created_at", startUTC)
         .lte("created_at", endUTC)
+        .neq("status", "Cancelado")
         .order("created_at", { ascending: false });
 
       if (dayError) throw new Error(dayError.message);
