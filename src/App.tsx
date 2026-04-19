@@ -64,7 +64,8 @@ import ReativarPedidos from "./pages/dashboard/ReativarPedidos";
 const DashboardIndex = () => {
   const { isGerente, isGerenteGeral, isAdmin, loading } = useUser();
   if (loading) return null;
-  if (isGerente && !isGerenteGeral && !isAdmin) return <Navigate to="/dashboard/orders" replace />;
+  if (isGerenteGeral) return <Navigate to="/dashboard/orders" replace />;
+  if (isGerente && !isAdmin) return <Navigate to="/dashboard/orders" replace />;
   return <Dashboard />;
 };
 
