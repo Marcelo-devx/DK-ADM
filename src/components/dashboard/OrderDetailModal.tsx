@@ -174,7 +174,7 @@ export const OrderDetailModal = ({ order, isOpen, onClose }: OrderDetailModalPro
 
                     {/* Info */}
                     <div className="flex-1 min-w-0 flex flex-col justify-between gap-1">
-                      <p className="font-bold text-base text-gray-900 leading-tight line-clamp-2">
+                      <p className="font-bold text-base text-gray-900 leading-snug break-words">
                         {item.name_at_purchase}
                       </p>
 
