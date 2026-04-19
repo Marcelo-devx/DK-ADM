@@ -135,6 +135,100 @@ export const OrderDetailModal = ({ order, isOpen, onClose }: OrderDetailModalPro
             </div>
           )}
 
+          {/* ── Itens do Pedido ── versão mobile-first ── */}
+          <div>
+            <h3 className="font-bold mb-3 flex items-center gap-2 text-sm uppercase text-muted-foreground tracking-wider">
+              <Package className="w-4 h-4" />
+              Itens do Pedido
+              {items && (
+                <span className="ml-1 bg-primary/10 text-primary text-xs font-bold px-2 py-0.5 rounded-full">
+                  {items.reduce((acc, i) => acc + i.quantity, 0)} un.
+                </span>
+              )}
+            </h3>
+
+            {isLoadingItems ? (
+              <div className="space-y-3">
+                <Skeleton className="h-24 w-full rounded-xl" />
+                <Skeleton className="h-24 w-full rounded-xl" />
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {items?.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex gap-4 bg-white border-2 border-gray-100 rounded-2xl p-3 shadow-sm"
+                  >
+                    {/* Imagem grande */}
+                    <div className="h-20 w-20 sm:h-24 sm:w-24 rounded-xl border bg-gray-50 flex items-center justify-center overflow-hidden shrink-0">
+                      {item.image_url_at_purchase ? (
+                        <img
+                          src={item.image_url_at_purchase}
+                          alt={item.name_at_purchase}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <Package className="h-10 w-10 text-gray-300" />
+                      )}
+                    </div>
+
+                    {/* Info */}
+                    <div className="flex-1 min-w-0 flex flex-col justify-between gap-1">
+                      <p className="font-bold text-base text-gray-900 leading-tight line-clamp-2">
+                        {item.name_at_purchase}
+                      </p>
+
+                      {item.variant && (
+                        <div className="flex flex-wrap gap-1.5 mt-0.5">
+                          {item.variant.flavors?.name && (
+                            <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 border border-green-200 text-xs font-semibold px-2 py-0.5 rounded-full">
+                              🍃 {item.variant.flavors.name}
+                            </span>
+                          )}
+                          {item.variant.color && (
+                            <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 border border-purple-200 text-xs font-semibold px-2 py-0.5 rounded-full">
+                              🎨 {item.variant.color}
+                            </span>
+                          )}
+                          {item.variant.volume_ml && (
+                            <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 text-xs font-semibold px-2 py-0.5 rounded-full">
+                              💧 {item.variant.volume_ml}ml
+                            </span>
+                          )}
+                          {item.variant.ohms && (
+                            <span className="inline-flex items-center gap-1 bg-yellow-50 text-yellow-700 border border-yellow-200 text-xs font-semibold px-2 py-0.5 rounded-full">
+                              ⚡ {item.variant.ohms}Ω
+                            </span>
+                          )}
+                          {item.variant.size && (
+                            <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-700 border border-gray-200 text-xs font-semibold px-2 py-0.5 rounded-full">
+                              📐 {item.variant.size}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between mt-1 gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="bg-primary text-white text-sm font-black px-3 py-1 rounded-full min-w-[2.5rem] text-center">
+                            {item.quantity}x
+                          </span>
+                          <span className="text-sm text-muted-foreground font-medium">
+                            {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(item.price_at_purchase)}
+                          </span>
+                        </div>
+                        <span className="text-lg font-black text-gray-900">
+                          {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(item.quantity * item.price_at_purchase)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── Dados do Cliente + Endereço ── */}
           <div className="grid md:grid-cols-2 gap-4">
             <div className="border rounded-lg p-4 bg-gray-50/50 space-y-3">
                 <h4 className="text-sm font-bold flex items-center gap-2 text-gray-700">
@@ -177,104 +271,6 @@ export const OrderDetailModal = ({ order, isOpen, onClose }: OrderDetailModalPro
                     <p className="text-xs font-mono">CEP: {order.shipping_address.cep}</p>
                 </div>
             </div>
-          </div>
-
-          {/* ── Itens do Pedido ── versão mobile-first ── */}
-          <div>
-            <h3 className="font-bold mb-3 flex items-center gap-2 text-sm uppercase text-muted-foreground tracking-wider">
-              <Package className="w-4 h-4" />
-              Itens do Pedido
-              {items && (
-                <span className="ml-1 bg-primary/10 text-primary text-xs font-bold px-2 py-0.5 rounded-full">
-                  {items.reduce((acc, i) => acc + i.quantity, 0)} un.
-                </span>
-              )}
-            </h3>
-
-            {isLoadingItems ? (
-              <div className="space-y-3">
-                <Skeleton className="h-24 w-full rounded-xl" />
-                <Skeleton className="h-24 w-full rounded-xl" />
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {items?.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex gap-4 bg-white border-2 border-gray-100 rounded-2xl p-3 shadow-sm"
-                  >
-                    {/* Imagem grande */}
-                    <div className="h-20 w-20 sm:h-24 sm:w-24 rounded-xl border bg-gray-50 flex items-center justify-center overflow-hidden shrink-0">
-                      {item.image_url_at_purchase ? (
-                        <img
-                          src={item.image_url_at_purchase}
-                          alt={item.name_at_purchase}
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <Package className="h-10 w-10 text-gray-300" />
-                      )}
-                    </div>
-
-                    {/* Info */}
-                    <div className="flex-1 min-w-0 flex flex-col justify-between gap-1">
-                      {/* Nome */}
-                      <p className="font-bold text-base text-gray-900 leading-tight line-clamp-2">
-                        {item.name_at_purchase}
-                      </p>
-
-                      {/* Variantes em pills */}
-                      {item.variant && (
-                        <div className="flex flex-wrap gap-1.5 mt-0.5">
-                          {item.variant.flavors?.name && (
-                            <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 border border-green-200 text-xs font-semibold px-2 py-0.5 rounded-full">
-                              🍃 {item.variant.flavors.name}
-                            </span>
-                          )}
-                          {item.variant.color && (
-                            <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 border border-purple-200 text-xs font-semibold px-2 py-0.5 rounded-full">
-                              🎨 {item.variant.color}
-                            </span>
-                          )}
-                          {item.variant.volume_ml && (
-                            <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 text-xs font-semibold px-2 py-0.5 rounded-full">
-                              💧 {item.variant.volume_ml}ml
-                            </span>
-                          )}
-                          {item.variant.ohms && (
-                            <span className="inline-flex items-center gap-1 bg-yellow-50 text-yellow-700 border border-yellow-200 text-xs font-semibold px-2 py-0.5 rounded-full">
-                              ⚡ {item.variant.ohms}Ω
-                            </span>
-                          )}
-                          {item.variant.size && (
-                            <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-700 border border-gray-200 text-xs font-semibold px-2 py-0.5 rounded-full">
-                              📐 {item.variant.size}
-                            </span>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Quantidade + Preço unitário + Total */}
-                      <div className="flex items-center justify-between mt-1 gap-2">
-                        <div className="flex items-center gap-2">
-                          {/* Badge de quantidade grande */}
-                          <span className="bg-primary text-white text-sm font-black px-3 py-1 rounded-full min-w-[2.5rem] text-center">
-                            {item.quantity}x
-                          </span>
-                          <span className="text-sm text-muted-foreground font-medium">
-                            {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(item.price_at_purchase)}
-                          </span>
-                        </div>
-                        {/* Total do item em destaque */}
-                        <span className="text-lg font-black text-gray-900">
-                          {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(item.quantity * item.price_at_purchase)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
 
           <div className="flex justify-end">
