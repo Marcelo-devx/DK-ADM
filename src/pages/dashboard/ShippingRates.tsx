@@ -42,8 +42,6 @@ import {
   X,
   CheckCircle2,
   XCircle,
-  Package,
-  ChevronDown,
 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Switch } from "@/components/ui/switch";
