@@ -53,7 +53,7 @@ import { useSidebar } from "./DashboardLayout";
 const Sidebar = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isLogistica, isAdmin, isGerente, isGerenteGeral } = useUser();
+  const { isLogistica, isAdmin, isGerente, isGerenteGeral, isCatalogo } = useUser();
   const { sidebarOpen, setSidebarOpen } = useSidebar();
 
   useEffect(() => {
@@ -367,6 +367,13 @@ const Sidebar = () => {
         </span>
       )}
 
+      {isCatalogo && (
+        <span className="mx-6 mt-1 mb-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold uppercase tracking-wider">
+          <Package className="w-3 h-3" />
+          Catálogo
+        </span>
+      )}
+
       <nav className="flex-1 overflow-y-auto px-3 pb-6 space-y-1 custom-scrollbar">
         {isFullAccess ? (
           fullMenu
@@ -386,6 +393,13 @@ const Sidebar = () => {
             </NavLink>
             <NavLink to="/dashboard/print-labels" className={navLinkClass}>
               {({ isActive }) => (<><Printer className={iconClass("text-indigo-600", isActive)} />Imprimir Etiquetas</>)}
+            </NavLink>
+          </>
+        ) : isCatalogo ? (
+          <>
+            <p className={sectionTitleClass}>Catálogo</p>
+            <NavLink to="/dashboard/products" className={navLinkClass}>
+              {({ isActive }) => (<><Package className={iconClass("text-blue-600", isActive)} />Produtos</>)}
             </NavLink>
           </>
         ) : (

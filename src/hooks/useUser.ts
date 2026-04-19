@@ -24,6 +24,7 @@ export const useUser = () => {
   const [isLogistica, setIsLogistica] = useState(false);
   const [isGerente, setIsGerente] = useState(false);
   const [isGerenteGeral, setIsGerenteGeral] = useState(false);
+  const [isCatalogo, setIsCatalogo] = useState(false);
   const [role, setRole] = useState<string>('user');
 
   const userId = user?.id;
@@ -33,6 +34,7 @@ export const useUser = () => {
     setIsLogistica(false);
     setIsGerente(false);
     setIsGerenteGeral(false);
+    setIsCatalogo(false);
     setRole('user');
     setProfile(null);
   };
@@ -74,6 +76,7 @@ export const useUser = () => {
         setIsGerenteGeral(data.role === 'gerente_geral');
         setIsGerente(data.role === 'gerente' || data.role === 'gerente_geral');
         setIsLogistica(data.role === 'logistica' || data.role === 'gerente' || data.role === 'gerente_geral');
+        setIsCatalogo(data.role === 'catalogo');
       }
     } catch (e: any) {
       const isNetworkError =
@@ -99,5 +102,5 @@ export const useUser = () => {
     fetchUserProfile();
   }, [fetchUserProfile]);
 
-  return { user, profile, loading, isAdmin, isLogistica, isGerente, isGerenteGeral, role };
+  return { user, profile, loading, isAdmin, isLogistica, isGerente, isGerenteGeral, isCatalogo, role };
 };

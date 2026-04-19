@@ -45,6 +45,10 @@ const GERENTE_GERAL_ALLOWED_ROUTES = [
   "/dashboard/reativar-pedidos",
 ];
 
+const CATALOGO_ALLOWED_ROUTES = [
+  "/dashboard/products",
+];
+
 interface SidebarContextType {
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
@@ -58,7 +62,7 @@ const SidebarContext = createContext<SidebarContextType>({
 export const useSidebar = () => useContext(SidebarContext);
 
 const DashboardLayout = () => {
-  const { loading, isAdmin, isLogistica, isGerente, isGerenteGeral, user } = useUser();
+  const { loading, isAdmin, isLogistica, isGerente, isGerenteGeral, isCatalogo, user } = useUser();
   const navigate = useNavigate();
   const location = useLocation();
   const session = useSession();
@@ -73,9 +77,18 @@ const DashboardLayout = () => {
         return;
       }
 
-      if (!isAdmin && !isLogistica && !isGerente && !isGerenteGeral) {
+      if (!isAdmin && !isLogistica && !isGerente && !isGerenteGeral && !isCatalogo) {
         navigate("/", { replace: true });
         return;
+      }
+
+      if (isCatalogo && !isAdmin) {
+        const currentPath = location.pathname;
+        const isAllowed = CATALOGO_ALLOWED_ROUTES.some((r) => currentPath.startsWith(r));
+        if (!isAllowed) {
+          navigate("/dashboard/products", { replace: true });
+          return;
+        }
       }
 
       if (isGerenteGeral && !isAdmin) {
@@ -101,7 +114,7 @@ const DashboardLayout = () => {
         }
       }
     }
-  }, [loading, isAdmin, isLogistica, isGerente, isGerenteGeral, user?.id, navigate, sessionAccessToken, location.pathname, session]);
+  }, [loading, isAdmin, isLogistica, isGerente, isGerenteGeral, isCatalogo, user?.id, navigate, sessionAccessToken, location.pathname, session]);
 
   useEffect(() => {
     checkAuth();
