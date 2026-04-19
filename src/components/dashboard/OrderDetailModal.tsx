@@ -144,13 +144,10 @@ export const OrderDetailModal = ({ order, isOpen, onClose }: OrderDetailModalPro
                     <div className="font-medium text-base">
                         {customer?.first_name || order.profiles?.first_name} {customer?.last_name || order.profiles?.last_name}
                     </div>
-
-                    {/* NEW: mostrar email do cliente, preferindo customer.email */}
                     <div className="flex items-center gap-2 text-muted-foreground">
                         <Mail className="h-3 w-3" />
                         <span>{customer?.email || order.profiles?.email || "Não informado"}</span>
                     </div>
-
                     {customer?.cpf_cnpj && (
                         <div className="flex items-center gap-2 text-muted-foreground">
                             <Fingerprint className="h-3 w-3" /> 
@@ -182,56 +179,98 @@ export const OrderDetailModal = ({ order, isOpen, onClose }: OrderDetailModalPro
             </div>
           </div>
 
+          {/* ── Itens do Pedido ── versão mobile-first ── */}
           <div>
-            <h3 className="font-semibold mb-2 flex items-center gap-2 text-sm uppercase text-muted-foreground tracking-wider">
-                Itens do Pedido
+            <h3 className="font-bold mb-3 flex items-center gap-2 text-sm uppercase text-muted-foreground tracking-wider">
+              <Package className="w-4 h-4" />
+              Itens do Pedido
+              {items && (
+                <span className="ml-1 bg-primary/10 text-primary text-xs font-bold px-2 py-0.5 rounded-full">
+                  {items.reduce((acc, i) => acc + i.quantity, 0)} un.
+                </span>
+              )}
             </h3>
+
             {isLoadingItems ? (
-              <div className="space-y-2">
-                  <Skeleton className="h-16 w-full" />
-                  <Skeleton className="h-16 w-full" />
+              <div className="space-y-3">
+                <Skeleton className="h-24 w-full rounded-xl" />
+                <Skeleton className="h-24 w-full rounded-xl" />
               </div>
             ) : (
-              <div className="border rounded-lg overflow-hidden">
-                {items?.map((item, index) => (
-                  <div key={item.id} className={`flex items-center justify-between p-3 bg-white ${index !== items.length - 1 ? 'border-b' : ''}`} >
-                    <div className="flex items-center gap-4">
-                      <div className="h-12 w-12 rounded-md border bg-gray-50 flex items-center justify-center overflow-hidden shrink-0">
-                          {item.image_url_at_purchase ? (
-                              <img src={item.image_url_at_purchase} alt={item.name_at_purchase} className="h-full w-full object-cover" />
-                          ) : (
-                              <Package className="h-6 w-6 text-gray-300" />
+              <div className="space-y-3">
+                {items?.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex gap-4 bg-white border-2 border-gray-100 rounded-2xl p-3 shadow-sm"
+                  >
+                    {/* Imagem grande */}
+                    <div className="h-20 w-20 sm:h-24 sm:w-24 rounded-xl border bg-gray-50 flex items-center justify-center overflow-hidden shrink-0">
+                      {item.image_url_at_purchase ? (
+                        <img
+                          src={item.image_url_at_purchase}
+                          alt={item.name_at_purchase}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <Package className="h-10 w-10 text-gray-300" />
+                      )}
+                    </div>
+
+                    {/* Info */}
+                    <div className="flex-1 min-w-0 flex flex-col justify-between gap-1">
+                      {/* Nome */}
+                      <p className="font-bold text-base text-gray-900 leading-tight line-clamp-2">
+                        {item.name_at_purchase}
+                      </p>
+
+                      {/* Variantes em pills */}
+                      {item.variant && (
+                        <div className="flex flex-wrap gap-1.5 mt-0.5">
+                          {item.variant.flavors?.name && (
+                            <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 border border-green-200 text-xs font-semibold px-2 py-0.5 rounded-full">
+                              🍃 {item.variant.flavors.name}
+                            </span>
                           )}
-                      </div>
-                      <div>
-                        <p className="font-medium text-sm line-clamp-1">{item.name_at_purchase}</p>
-                        {item.variant && (
-                          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
-                            {item.variant.flavors?.name && (
-                              <span className="text-xs text-primary font-semibold">🍃 {item.variant.flavors.name}</span>
-                            )}
-                            {item.variant.color && (
-                              <span className="text-xs text-muted-foreground">🎨 {item.variant.color}</span>
-                            )}
-                            {item.variant.volume_ml && (
-                              <span className="text-xs text-muted-foreground">💧 {item.variant.volume_ml}ml</span>
-                            )}
-                            {item.variant.ohms && (
-                              <span className="text-xs text-muted-foreground">⚡ {item.variant.ohms}Ω</span>
-                            )}
-                            {item.variant.size && (
-                              <span className="text-xs text-muted-foreground">📐 {item.variant.size}</span>
-                            )}
-                          </div>
-                        )}
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {item.quantity} un. x {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(item.price_at_purchase)}
-                        </p>
+                          {item.variant.color && (
+                            <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 border border-purple-200 text-xs font-semibold px-2 py-0.5 rounded-full">
+                              🎨 {item.variant.color}
+                            </span>
+                          )}
+                          {item.variant.volume_ml && (
+                            <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 text-xs font-semibold px-2 py-0.5 rounded-full">
+                              💧 {item.variant.volume_ml}ml
+                            </span>
+                          )}
+                          {item.variant.ohms && (
+                            <span className="inline-flex items-center gap-1 bg-yellow-50 text-yellow-700 border border-yellow-200 text-xs font-semibold px-2 py-0.5 rounded-full">
+                              ⚡ {item.variant.ohms}Ω
+                            </span>
+                          )}
+                          {item.variant.size && (
+                            <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-700 border border-gray-200 text-xs font-semibold px-2 py-0.5 rounded-full">
+                              📐 {item.variant.size}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Quantidade + Preço unitário + Total */}
+                      <div className="flex items-center justify-between mt-1 gap-2">
+                        <div className="flex items-center gap-2">
+                          {/* Badge de quantidade grande */}
+                          <span className="bg-primary text-white text-sm font-black px-3 py-1 rounded-full min-w-[2.5rem] text-center">
+                            {item.quantity}x
+                          </span>
+                          <span className="text-sm text-muted-foreground font-medium">
+                            {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(item.price_at_purchase)}
+                          </span>
+                        </div>
+                        {/* Total do item em destaque */}
+                        <span className="text-lg font-black text-gray-900">
+                          {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(item.quantity * item.price_at_purchase)}
+                        </span>
                       </div>
                     </div>
-                    <p className="font-bold text-sm">
-                      {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(item.quantity * item.price_at_purchase)}
-                    </p>
                   </div>
                 ))}
               </div>
@@ -248,24 +287,19 @@ export const OrderDetailModal = ({ order, isOpen, onClose }: OrderDetailModalPro
                     <span className="text-muted-foreground">Frete:</span>
                     <span>{new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(order.shipping_cost)}</span>
                 </div>
-                
-                {/* LINHA DA DOAÇÃO ADICIONADA AQUI */}
                 {order.donation_amount > 0 && (
                     <div className="flex justify-between text-rose-600 text-sm font-bold animate-in fade-in slide-in-from-left-2">
                         <span className="flex items-center gap-1"><Heart className="w-3 h-3 fill-rose-600" /> Doação Solidária:</span>
                         <span>{new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(order.donation_amount)}</span>
                     </div>
                 )}
-
                 {order.coupon_discount > 0 && (
                     <div className="flex justify-between text-green-600 text-sm font-medium">
                         <span className="flex items-center gap-1"><Ticket className="w-3 h-3" /> Desconto:</span>
                         <span>- {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(order.coupon_discount)}</span>
                     </div>
                 )}
-
                 <Separator className="my-2" />
-                
                 <div className="flex justify-between items-center">
                     <span className="font-bold text-base">Total Pago:</span>
                     <span className="text-xl font-black text-primary">
