@@ -152,24 +152,26 @@ export const useOrderAdmin = () => {
       })) as Order[];
     }
 
-    // Caso contrário, busca por nome do cliente
+    // Caso contrário, busca por email ou nome do cliente
     const searchTerm = trimmedQuery.toLowerCase();
-    
+
     const { data: profiles, error: profilesError } = await supabase
       .from('profiles')
-      .select('id, first_name, last_name, phone, cpf_cnpj');
+      .select('id, first_name, last_name, phone, cpf_cnpj, email');
 
     if (profilesError) throw profilesError;
     if (!profiles) return [];
 
-    // Filtra profiles pelo nome
+    // Filtra profiles pelo nome ou email
     const matchingProfiles = profiles.filter(p => {
       const firstName = (p.first_name || '').toLowerCase();
       const lastName = (p.last_name || '').toLowerCase();
       const fullName = `${firstName} ${lastName}`;
+      const email = (p.email || '').toLowerCase();
       return firstName.includes(searchTerm) ||
              lastName.includes(searchTerm) ||
-             fullName.includes(searchTerm);
+             fullName.includes(searchTerm) ||
+             email.includes(searchTerm);
     });
 
     if (matchingProfiles.length === 0) return [];

@@ -183,7 +183,7 @@ export default function OrderAdminPage() {
         <div className="relative flex-1 max-w-lg">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por ID, CPF ou Nome do cliente..."
+            placeholder="Buscar por ID, CPF, Nome ou Email do cliente..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSearch()}
