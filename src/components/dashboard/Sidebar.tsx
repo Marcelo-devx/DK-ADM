@@ -294,6 +294,12 @@ const Sidebar = () => {
         {({ isActive }) => (<><Package className={iconClass("text-blue-600", isActive)} />Produtos</>)}
       </NavLink>
 
+      {/* LOGÍSTICA */}
+      <p className={sectionTitleClass}>Logística</p>
+      <NavLink to="/dashboard/shipping-rates" className={navLinkClass}>
+        {({ isActive }) => (<><Bike className={iconClass("text-indigo-600", isActive)} />Fretes e Taxa</>)}
+      </NavLink>
+
       {/* CLIENTES */}
       <p className={sectionTitleClass}>Clientes</p>
       <NavLink to="/dashboard/clients" className={navLinkClass}>
