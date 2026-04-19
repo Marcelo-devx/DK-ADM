@@ -3,29 +3,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  RefreshCw,
-  Search,
-  CheckCircle2,
-  Package,
-  AlertTriangle,
-  StickyNote,
-  Loader2,
-  ShoppingBag,
-  X,
+  RefreshCw, Search, CheckCircle2, Package, AlertTriangle,
+  StickyNote, Loader2, ShoppingBag, X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -61,7 +48,6 @@ export default function ReativarPedidos() {
   const [searchId, setSearchId] = useState("");
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<number | null>(null);
-
   const [reativarDialog, setReativarDialog] = useState<Order | null>(null);
   const [obsDialog, setObsDialog] = useState<Order | null>(null);
   const [obsText, setObsText] = useState("");
@@ -114,10 +100,7 @@ export default function ReativarPedidos() {
 
   async function handleSearch() {
     const id = parseInt(searchId.trim());
-    if (isNaN(id)) {
-      toast.error("Digite um número de pedido válido");
-      return;
-    }
+    if (isNaN(id)) { toast.error("Digite um número de pedido válido"); return; }
     await loadOrders([id]);
     setSearchId("");
   }
@@ -129,14 +112,9 @@ export default function ReativarPedidos() {
   async function reativarPedido(order: Order) {
     setActionLoading(order.id);
     try {
-      // Uma única chamada RPC — atômica, sem N roundtrips
-      const { data, error } = await supabase.rpc("reativar_pedido", {
-        p_order_id: order.id,
-      });
-
+      const { data, error } = await supabase.rpc("reativar_pedido", { p_order_id: order.id });
       if (error) throw new Error(error.message);
       if (data && !data.success) throw new Error(data.error || "Erro ao reativar");
-
       toast.success(`✅ Pedido #${order.id} reativado como "Pago" e estoque deduzido!`);
       await loadOrders([order.id]);
     } catch (err: any) {
@@ -148,23 +126,14 @@ export default function ReativarPedidos() {
   }
 
   async function salvarObservacao(order: Order) {
-    if (!obsText.trim()) {
-      toast.error("Digite uma observação");
-      return;
-    }
+    if (!obsText.trim()) { toast.error("Digite uma observação"); return; }
     setActionLoading(order.id);
     try {
       const novaObs = order.delivery_info
         ? `${order.delivery_info} | ${obsText.trim()}`
         : obsText.trim();
-
-      const { error } = await supabase
-        .from("orders")
-        .update({ delivery_info: novaObs })
-        .eq("id", order.id);
-
+      const { error } = await supabase.from("orders").update({ delivery_info: novaObs }).eq("id", order.id);
       if (error) throw error;
-
       toast.success(`✅ Observação adicionada ao pedido #${order.id}!`);
       await loadOrders([order.id]);
     } catch (err: any) {
@@ -176,26 +145,18 @@ export default function ReativarPedidos() {
     }
   }
 
-  function formatCurrency(val: number) {
-    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
-  }
+  const formatCurrency = (val: number) =>
+    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
 
-  function formatDate(dateString: string) {
-    return new Date(dateString).toLocaleDateString("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }
+  const formatDate = (d: string) =>
+    new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-10">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold flex items-center gap-2">
-          <RefreshCw className="h-7 w-7 text-primary" />
+        <h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-2">
+          <RefreshCw className="h-6 w-6 sm:h-7 sm:w-7 text-primary shrink-0" />
           Reativar Pedidos Cancelados
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
@@ -205,7 +166,7 @@ export default function ReativarPedidos() {
 
       {/* Busca */}
       <div className="flex gap-3 items-center">
-        <div className="relative flex-1 max-w-sm">
+        <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Buscar pedido por ID..."
@@ -215,7 +176,7 @@ export default function ReativarPedidos() {
             className="pl-9"
           />
         </div>
-        <Button onClick={handleSearch} disabled={loading}>
+        <Button onClick={handleSearch} disabled={loading} className="shrink-0">
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Buscar"}
         </Button>
       </div>
@@ -223,86 +184,89 @@ export default function ReativarPedidos() {
       {/* Loading inicial */}
       {loading && orders.length === 0 && (
         <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
-          <Loader2 className="h-5 w-5 animate-spin" />
-          Carregando pedidos...
+          <Loader2 className="h-5 w-5 animate-spin" /> Carregando pedidos...
         </div>
       )}
 
       {/* Cards dos pedidos */}
       <div className="grid gap-4">
         {orders.map((order) => (
-          <Card key={order.id} className="border shadow-sm">
-            <CardHeader className="pb-3">
-              <div className="flex items-start justify-between gap-4 flex-wrap">
-                <div className="flex items-center gap-3 flex-wrap">
-                  <CardTitle className="text-xl">Pedido #{order.id}</CardTitle>
-                  <span
-                    className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
-                      STATUS_COLORS[order.status] || "bg-gray-100 text-gray-700 border-gray-200"
-                    }`}
-                  >
+          <Card key={order.id} className="border shadow-sm overflow-hidden">
+            <CardHeader className="pb-3 p-4 sm:p-6">
+
+              {/* Linha 1: número + status + botão fechar */}
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+                  <span className="text-lg sm:text-xl font-bold">Pedido #{order.id}</span>
+                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${STATUS_COLORS[order.status] || "bg-gray-100 text-gray-700 border-gray-200"}`}>
                     {order.status}
                   </span>
-                  {order.status === "Cancelado" && (
-                    <span className="flex items-center gap-1 text-xs text-red-600 font-medium">
-                      <AlertTriangle className="h-3.5 w-3.5" />
-                      Estoque já foi devolvido
-                    </span>
-                  )}
-                  {order.status === "Pago" && (
-                    <span className="flex items-center gap-1 text-xs text-green-600 font-medium">
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                      Reativado com sucesso
-                    </span>
-                  )}
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="text-right">
-                    <div className="text-lg font-bold">{formatCurrency(Number(order.total_price))}</div>
-                    <div className="text-xs text-muted-foreground">{formatDate(order.created_at)}</div>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-muted-foreground hover:text-foreground"
-                    onClick={() => removeOrder(order.id)}
-                    title="Remover da lista"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
+                <Button
+                  variant="ghost" size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
+                  onClick={() => removeOrder(order.id)}
+                  title="Remover da lista"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
               </div>
 
+              {/* Linha 2: valor + data */}
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-xl font-bold text-gray-900">
+                  {formatCurrency(Number(order.total_price))}
+                </span>
+                <span className="text-xs text-muted-foreground">{formatDate(order.created_at)}</span>
+              </div>
+
+              {/* Avisos de status */}
+              {order.status === "Cancelado" && (
+                <div className="flex items-center gap-1.5 text-xs text-red-600 font-medium mt-1">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  Estoque já foi devolvido
+                </div>
+              )}
+              {order.status === "Pago" && (
+                <div className="flex items-center gap-1.5 text-xs text-green-600 font-medium mt-1">
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                  Reativado com sucesso
+                </div>
+              )}
+
+              {/* Observação */}
               {order.delivery_info && (
                 <div className="mt-2 flex items-start gap-2 text-sm bg-yellow-50 border border-yellow-200 rounded-md px-3 py-2">
                   <StickyNote className="h-4 w-4 text-yellow-600 mt-0.5 shrink-0" />
-                  <span className="text-yellow-800">{order.delivery_info}</span>
+                  <span className="text-yellow-800 break-words min-w-0">{order.delivery_info}</span>
                 </div>
               )}
             </CardHeader>
 
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 p-4 sm:p-6 pt-0">
               {/* Itens do pedido */}
               <div>
                 <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground mb-2">
-                  <Package className="h-4 w-4" />
+                  <Package className="h-4 w-4 shrink-0" />
                   Itens do pedido
                 </div>
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   {order.items.length === 0 ? (
                     <p className="text-sm text-muted-foreground italic">Nenhum item encontrado</p>
                   ) : (
                     order.items.map((item) => (
                       <div
                         key={item.id}
-                        className="flex items-center justify-between text-sm bg-slate-50 rounded-md px-3 py-2"
+                        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-sm bg-slate-50 rounded-md px-3 py-2.5"
                       >
-                        <div className="flex items-center gap-2">
-                          <ShoppingBag className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <span className="font-medium">{item.name_at_purchase}</span>
+                        {/* Nome do produto */}
+                        <div className="flex items-start gap-2 min-w-0">
+                          <ShoppingBag className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                          <span className="font-medium break-words">{item.name_at_purchase}</span>
                         </div>
-                        <div className="flex items-center gap-3 shrink-0">
-                          <span className="text-muted-foreground">
+                        {/* Preço + quantidade */}
+                        <div className="flex items-center gap-3 shrink-0 pl-5 sm:pl-0">
+                          <span className="text-muted-foreground text-xs sm:text-sm">
                             {formatCurrency(Number(item.price_at_purchase))}
                           </span>
                           <Badge variant="outline" className="text-xs">
@@ -316,12 +280,12 @@ export default function ReativarPedidos() {
               </div>
 
               {/* Ações */}
-              <div className="flex gap-2 flex-wrap pt-2 border-t">
+              <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t">
                 {order.status === "Cancelado" && (
                   <Button
                     onClick={() => setReativarDialog(order)}
                     disabled={actionLoading === order.id}
-                    className="gap-2 bg-green-600 hover:bg-green-700 text-white"
+                    className="gap-2 bg-green-600 hover:bg-green-700 text-white w-full sm:w-auto"
                   >
                     {actionLoading === order.id ? (
                       <><Loader2 className="h-4 w-4 animate-spin" /> Reativando...</>
@@ -335,15 +299,15 @@ export default function ReativarPedidos() {
                   variant="outline"
                   onClick={() => { setObsDialog(order); setObsText(""); }}
                   disabled={actionLoading === order.id}
-                  className="gap-2"
+                  className="gap-2 w-full sm:w-auto"
                 >
                   <StickyNote className="h-4 w-4" />
                   {order.delivery_info ? "Editar Observação" : "Adicionar Observação"}
                 </Button>
 
                 {order.status !== "Cancelado" && (
-                  <div className="flex items-center gap-1.5 text-sm text-green-600 font-medium ml-auto">
-                    <CheckCircle2 className="h-4 w-4" />
+                  <div className="flex items-center gap-1.5 text-sm text-green-600 font-medium sm:ml-auto">
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
                     Pedido ativo — pronto para a rota
                   </div>
                 )}
@@ -365,12 +329,8 @@ export default function ReativarPedidos() {
               <div className="space-y-3">
                 <p>Esta ação irá:</p>
                 <ul className="list-disc list-inside space-y-1 text-sm">
-                  <li>
-                    Mudar o status de <strong>Cancelado</strong> → <strong>Pago</strong>
-                  </li>
-                  <li>
-                    <strong>Deduzir o estoque</strong> dos {reativarDialog?.items.length} item(s) do pedido
-                  </li>
+                  <li>Mudar o status de <strong>Cancelado</strong> → <strong>Pago</strong></li>
+                  <li><strong>Deduzir o estoque</strong> dos {reativarDialog?.items.length} item(s) do pedido</li>
                 </ul>
                 <div className="bg-amber-50 border border-amber-200 rounded-md p-3 text-sm text-amber-800 flex gap-2">
                   <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
@@ -381,10 +341,7 @@ export default function ReativarPedidos() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => reativarDialog && reativarPedido(reativarDialog)}
-              className="bg-green-600 hover:bg-green-700"
-            >
+            <AlertDialogAction onClick={() => reativarDialog && reativarPedido(reativarDialog)} className="bg-green-600 hover:bg-green-700">
               Sim, reativar como Pago
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -418,9 +375,7 @@ export default function ReativarPedidos() {
                     className="resize-none"
                   />
                   {obsDialog?.delivery_info && (
-                    <p className="text-xs text-muted-foreground">
-                      Será adicionado ao final da observação existente.
-                    </p>
+                    <p className="text-xs text-muted-foreground">Será adicionado ao final da observação existente.</p>
                   )}
                 </div>
               </div>
@@ -428,10 +383,7 @@ export default function ReativarPedidos() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => obsDialog && salvarObservacao(obsDialog)}
-              disabled={!obsText.trim()}
-            >
+            <AlertDialogAction onClick={() => obsDialog && salvarObservacao(obsDialog)} disabled={!obsText.trim()}>
               Salvar Observação
             </AlertDialogAction>
           </AlertDialogFooter>
