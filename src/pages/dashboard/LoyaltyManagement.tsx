@@ -22,13 +22,13 @@ export default function LoyaltyManagementPage() {
       </div>
 
       <Tabs defaultValue="bonus" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 lg:grid-cols-6 bg-slate-100 p-1">
-            <TabsTrigger value="bonus">Regras de Pontuação</TabsTrigger>
-            <TabsTrigger value="tiers">Níveis</TabsTrigger>
-            <TabsTrigger value="redemption">Regras de Resgate</TabsTrigger>
-            <TabsTrigger value="user-coupons">Resgates Feitos</TabsTrigger>
-            <TabsTrigger value="manual">Ajuste Manual</TabsTrigger>
-            <TabsTrigger value="history">Extrato Geral</TabsTrigger>
+        <TabsList className="flex flex-wrap h-auto gap-1 bg-slate-100 p-1 rounded-lg">
+            <TabsTrigger value="bonus" className="flex-1 min-w-[calc(50%-4px)] text-xs sm:text-sm">Pontuação</TabsTrigger>
+            <TabsTrigger value="tiers" className="flex-1 min-w-[calc(50%-4px)] text-xs sm:text-sm">Níveis</TabsTrigger>
+            <TabsTrigger value="redemption" className="flex-1 min-w-[calc(50%-4px)] text-xs sm:text-sm">Resgate</TabsTrigger>
+            <TabsTrigger value="user-coupons" className="flex-1 min-w-[calc(50%-4px)] text-xs sm:text-sm">Resgates Feitos</TabsTrigger>
+            <TabsTrigger value="manual" className="flex-1 min-w-[calc(50%-4px)] text-xs sm:text-sm">Ajuste Manual</TabsTrigger>
+            <TabsTrigger value="history" className="flex-1 min-w-[calc(50%-4px)] text-xs sm:text-sm">Extrato Geral</TabsTrigger>
         </TabsList>
 
         <TabsContent value="bonus">
