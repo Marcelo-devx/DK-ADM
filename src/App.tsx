@@ -62,9 +62,8 @@ import InvestigarUsuario from "./pages/dashboard/InvestigarUsuario";
 import ReativarPedidos from "./pages/dashboard/ReativarPedidos";
 
 const DashboardIndex = () => {
-  const { isGerente, isGerenteGeral, isAdmin, isCatalogo, loading } = useUser();
+  const { isGerente, isGerenteGeral, isAdmin, loading } = useUser();
   if (loading) return null;
-  if (isCatalogo) return <Navigate to="/dashboard/products" replace />;
   if (isGerente && !isGerenteGeral && !isAdmin) return <Navigate to="/dashboard/orders" replace />;
   return <Dashboard />;
 };
