@@ -271,35 +271,7 @@ const DashboardPage = () => {
         </Card>
       </div>
 
-      {/* Estoque crítico — oculto no mobile */}
-      {criticalItems.length > 0 && (
-        <Card className="hidden md:block border-orange-200 bg-orange-50/30">
-          <CardHeader className="pb-2 pt-4 px-4">
-            <CardTitle className="text-sm flex items-center gap-2 text-orange-700">
-              <AlertTriangle className="w-4 h-4" /> Estoque Crítico ({criticalItems.length} itens)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4">
-            <div className="space-y-2">
-              {criticalItems.slice(0, 10).map((item, i) => (
-                <div key={i} className="flex items-center justify-between gap-2 py-1.5 border-b border-orange-100 last:border-0">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold text-gray-800 truncate">{item.name}</p>
-                    {item.hasVariants && item.variants.length > 0 && (
-                      <p className="text-[10px] text-muted-foreground truncate">
-                        {item.variants.map((v: any) => formatVariantSpec(v)).join(", ")}
-                      </p>
-                    )}
-                  </div>
-                  <Badge variant={item.stock === 0 ? "destructive" : "outline"} className={cn("shrink-0 text-xs font-bold", item.stock > 0 && "text-orange-600 border-orange-300 bg-orange-50")}>
-                    {item.stock === 0 ? "ESGOTADO" : `${item.stock} un`}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Estoque crítico removido */}
     </div>
   );
 };
