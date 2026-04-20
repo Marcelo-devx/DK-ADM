@@ -271,9 +271,9 @@ const DashboardPage = () => {
         </Card>
       </div>
 
-      {/* Estoque crítico */}
+      {/* Estoque crítico — oculto no mobile */}
       {criticalItems.length > 0 && (
-        <Card className="border-orange-200 bg-orange-50/30">
+        <Card className="hidden md:block border-orange-200 bg-orange-50/30">
           <CardHeader className="pb-2 pt-4 px-4">
             <CardTitle className="text-sm flex items-center gap-2 text-orange-700">
               <AlertTriangle className="w-4 h-4" /> Estoque Crítico ({criticalItems.length} itens)
