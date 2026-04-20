@@ -236,10 +236,12 @@ export const ProductForm = ({
                     <SelectTrigger className="bg-white">
                         <SelectValue placeholder="Selecione um produto para copiar..." />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="max-w-[calc(100vw-3rem)]">
                         {existingProducts.map(p => (
-                            <SelectItem key={p.id} value={String(p.id)}>
-                                {p.name} {p.brand ? `(${p.brand})` : ''}
+                            <SelectItem key={p.id} value={String(p.id)} className="max-w-full">
+                                <span className="block truncate">
+                                    {p.name} {p.brand ? `(${p.brand})` : ''}
+                                </span>
                             </SelectItem>
                         ))}
                     </SelectContent>
