@@ -73,32 +73,48 @@ serve(async (req) => {
   const from = page * pageSize;
   const to = from + pageSize - 1;
 
-  const SELECTED_FIELDS =
-    "id, first_name, last_name, cpf_cnpj, email, phone, date_of_birth, gender, " +
-    "cep, street, number, complement, neighborhood, city, state, " +
-    "force_pix_on_next_purchase, is_credit_card_enabled, " +
-    "is_blocked, created_at, role";
+  const term = searchTerm.trim();
 
-  // Query de contagem
-  let countQuery = supabaseAdmin
-    .from("profiles")
-    .select("id", { count: "exact", head: true });
+  let countResult: { count: number | null; error: any };
+  let dataResult: { data: any[] | null; error: any };
 
-  // Query de dados
-  let dataQuery = supabaseAdmin
-    .from("profiles")
-    .select(SELECTED_FIELDS)
-    .order("created_at", { ascending: false })
-    .range(from, to);
+  if (term) {
+    // Busca com termo: usa SQL direto para suportar nome completo concatenado
+    const likeTerm = `%${term}%`;
 
-  if (searchTerm.trim()) {
-    const term = searchTerm.trim();
-    const filter = `cpf_cnpj.ilike.%${term}%,email.ilike.%${term}%,first_name.ilike.%${term}%,last_name.ilike.%${term}%,phone.ilike.%${term}%`;
-    countQuery = countQuery.or(filter);
-    dataQuery = dataQuery.or(filter);
+    const countQuery = await supabaseAdmin.rpc("search_profiles_count", {
+      search_term: likeTerm,
+    });
+
+    const dataQuery = await supabaseAdmin.rpc("search_profiles_paginated", {
+      search_term: likeTerm,
+      page_from: from,
+      page_to: to,
+    });
+
+    countResult = { count: countQuery.data ?? 0, error: countQuery.error };
+    dataResult = { data: dataQuery.data ?? [], error: dataQuery.error };
+  } else {
+    // Sem termo: listagem normal paginada
+    const [cRes, dRes] = await Promise.all([
+      supabaseAdmin
+        .from("profiles")
+        .select("id", { count: "exact", head: true }),
+      supabaseAdmin
+        .from("profiles")
+        .select(
+          "id, first_name, last_name, cpf_cnpj, email, phone, date_of_birth, gender, " +
+          "cep, street, number, complement, neighborhood, city, state, " +
+          "force_pix_on_next_purchase, is_credit_card_enabled, " +
+          "is_blocked, created_at, role"
+        )
+        .order("created_at", { ascending: false })
+        .range(from, to),
+    ]);
+
+    countResult = { count: cRes.count, error: cRes.error };
+    dataResult = { data: dRes.data, error: dRes.error };
   }
-
-  const [countResult, dataResult] = await Promise.all([countQuery, dataQuery]);
 
   if (countResult.error) {
     console.error("[admin-list-users] Count error:", countResult.error);
@@ -116,7 +132,7 @@ serve(async (req) => {
     });
   }
 
-  console.log(`[admin-list-users] Returning ${dataResult.data?.length} users, total: ${countResult.count}`);
+  console.log(`[admin-list-users] term="${term}" page=${page} returning ${dataResult.data?.length} users, total: ${countResult.count}`);
 
   return new Response(
     JSON.stringify({
