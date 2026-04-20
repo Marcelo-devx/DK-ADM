@@ -22,13 +22,13 @@ const ClubDKAdminPage: React.FC = () => {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="tiers" className="w-full">
-            <TabsList className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-4">
-              <TabsTrigger value="tiers">Níveis</TabsTrigger>
-              <TabsTrigger value="redemption">Regras de Resgate</TabsTrigger>
-              <TabsTrigger value="manual">Ajuste Manual</TabsTrigger>
-              <TabsTrigger value="history">Histórico</TabsTrigger>
-              <TabsTrigger value="bonus">Regras de Bônus</TabsTrigger>
-              <TabsTrigger value="user-coupons">Cupons de Usuário</TabsTrigger>
+            <TabsList className="flex flex-wrap h-auto gap-1 bg-slate-100 p-1 rounded-lg mb-4">
+              <TabsTrigger value="tiers" className="flex-1 min-w-[calc(50%-4px)] text-xs sm:text-sm">Níveis</TabsTrigger>
+              <TabsTrigger value="redemption" className="flex-1 min-w-[calc(50%-4px)] text-xs sm:text-sm">Regras de Resgate</TabsTrigger>
+              <TabsTrigger value="manual" className="flex-1 min-w-[calc(50%-4px)] text-xs sm:text-sm">Ajuste Manual</TabsTrigger>
+              <TabsTrigger value="history" className="flex-1 min-w-[calc(50%-4px)] text-xs sm:text-sm">Histórico</TabsTrigger>
+              <TabsTrigger value="bonus" className="flex-1 min-w-[calc(50%-4px)] text-xs sm:text-sm">Regras de Bônus</TabsTrigger>
+              <TabsTrigger value="user-coupons" className="flex-1 min-w-[calc(50%-4px)] text-xs sm:text-sm">Cupons de Usuário</TabsTrigger>
             </TabsList>
 
             <TabsContent value="tiers"><TiersTab /></TabsContent>

@@ -439,7 +439,32 @@ export default function BulkAddPoints() {
             {/* Tabela detalhada */}
             <div>
               <p className="text-sm font-medium mb-2">Detalhes por cliente</p>
-              <div className="border rounded-md overflow-x-auto max-h-80">
+
+              {/* Mobile: cards */}
+              <div className="md:hidden space-y-2 max-h-80 overflow-y-auto">
+                {previewRows.map((row, i) => (
+                  <div key={i} className={`rounded-xl border p-3 space-y-1.5 ${row.status === 'invalid' || row.status === 'not_found' ? 'opacity-50 bg-gray-50' : 'bg-white'}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-mono text-xs text-gray-700 truncate flex-1">{row.email}</p>
+                      {row.status === 'will_replace' && <Badge variant="outline" className="border-orange-400 text-orange-600 bg-orange-50 shrink-0 text-[10px]">Substituir</Badge>}
+                      {row.status === 'will_add' && <Badge variant="outline" className="border-blue-400 text-blue-600 bg-blue-50 shrink-0 text-[10px]">Adicionar</Badge>}
+                      {row.status === 'not_found' && <Badge variant="outline" className="border-yellow-400 text-yellow-600 bg-yellow-50 shrink-0 text-[10px]">Não encontrado</Badge>}
+                      {row.status === 'invalid' && <Badge variant="outline" className="border-red-400 text-red-600 bg-red-50 shrink-0 text-[10px]">Inválido</Badge>}
+                    </div>
+                    {(row.status === 'will_replace' || row.status === 'will_add') && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="text-muted-foreground">{row.currentPoints} pts</span>
+                        <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                        <span className="font-bold text-green-700">{row.newPoints} pts</span>
+                      </div>
+                    )}
+                    {row.error && <p className="text-xs text-red-500">{row.error}</p>}
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop: tabela */}
+              <div className="hidden md:block border rounded-md overflow-x-auto max-h-80">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -461,15 +486,9 @@ export default function BulkAddPoints() {
                           {row.status === 'invalid' && <Badge variant="outline" className="border-red-400 text-red-600 bg-red-50">Inválido</Badge>}
                         </TableCell>
                         <TableCell className="font-mono text-xs">{row.email}</TableCell>
-                        <TableCell className="text-right font-medium">
-                          {row.status === 'will_replace' || row.status === 'will_add' ? row.currentPoints : '—'}
-                        </TableCell>
-                        <TableCell className="text-center text-muted-foreground">
-                          {(row.status === 'will_replace' || row.status === 'will_add') && <ArrowRight className="h-3 w-3 inline" />}
-                        </TableCell>
-                        <TableCell className="text-right font-bold text-green-700">
-                          {row.status === 'will_replace' || row.status === 'will_add' ? row.newPoints : '—'}
-                        </TableCell>
+                        <TableCell className="text-right font-medium">{row.status === 'will_replace' || row.status === 'will_add' ? row.currentPoints : '—'}</TableCell>
+                        <TableCell className="text-center text-muted-foreground">{(row.status === 'will_replace' || row.status === 'will_add') && <ArrowRight className="h-3 w-3 inline" />}</TableCell>
+                        <TableCell className="text-right font-bold text-green-700">{row.status === 'will_replace' || row.status === 'will_add' ? row.newPoints : '—'}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{row.error ?? ''}</TableCell>
                       </TableRow>
                     ))}
@@ -527,6 +546,8 @@ export default function BulkAddPoints() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+
+            {/* Cards de contagem */}
             <div className="grid grid-cols-3 gap-3">
               <div className="rounded-lg border bg-green-50 p-4 text-center">
                 <div className="text-3xl font-bold text-green-700">{finalResults.filter(r => r.status === 'success').length}</div>
@@ -547,7 +568,29 @@ export default function BulkAddPoints() {
               Baixar Relatório CSV
             </Button>
 
-            <div className="border rounded-md overflow-x-auto max-h-80">
+            {/* Mobile: cards resultado */}
+            <div className="md:hidden space-y-2 max-h-80 overflow-y-auto">
+              {finalResults.map((r, i) => (
+                <div key={i} className="rounded-xl border p-3 space-y-1 bg-white">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-mono text-xs text-gray-700 truncate flex-1">{r.email}</p>
+                    <div className="shrink-0">
+                      {r.status === 'success' && <CheckCircle className="h-4 w-4 text-green-600" />}
+                      {r.status === 'failed' && <AlertCircle className="h-4 w-4 text-red-600" />}
+                      {r.status === 'not_found' && <AlertCircle className="h-4 w-4 text-yellow-500" />}
+                      {r.status === 'invalid' && <AlertCircle className="h-4 w-4 text-gray-400" />}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span className="font-bold text-gray-800">{r.newPoints} pts</span>
+                    {r.error && <span className="text-red-500">{r.error}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop: tabela resultado */}
+            <div className="hidden md:block border rounded-md overflow-x-auto max-h-80">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -574,6 +617,7 @@ export default function BulkAddPoints() {
                 </TableBody>
               </Table>
             </div>
+
           </CardContent>
         </Card>
       )}

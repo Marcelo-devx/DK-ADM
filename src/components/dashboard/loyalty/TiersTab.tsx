@@ -29,38 +29,68 @@ export const TiersTab = () => {
 
   return (
     <Card className="mt-6">
-        <CardHeader><CardTitle>Configuração de Níveis</CardTitle></CardHeader>
-        <CardContent>
-            <Table>
+      <CardHeader><CardTitle>Configuração de Níveis</CardTitle></CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <p className="text-center py-6 text-muted-foreground text-sm">Carregando...</p>
+        ) : (
+          <>
+            {/* ── Mobile: cards ── */}
+            <div className="md:hidden space-y-3">
+              {tiers?.map((tier) => (
+                <div key={tier.id} className="bg-white rounded-xl border-2 border-gray-100 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="font-bold text-base">{tier.name}</p>
+                    <Badge variant="outline" className="text-xs">Auto-salvar</Badge>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground font-semibold uppercase">Gasto Mín (R$)</p>
+                      <Input type="number" defaultValue={tier.min_spend} className="h-9"
+                        onBlur={(e) => updateTierMutation.mutate({ ...tier, min_spend: parseFloat(e.target.value) })} />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground font-semibold uppercase">Multiplicador</p>
+                      <Input type="number" step="0.1" defaultValue={tier.points_multiplier} className="h-9"
+                        onBlur={(e) => updateTierMutation.mutate({ ...tier, points_multiplier: parseFloat(e.target.value) })} />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* ── Desktop: tabela ── */}
+            <div className="hidden md:block">
+              <Table>
                 <TableHeader>
-                    <TableRow>
-                        <TableHead>Nível</TableHead>
-                        <TableHead>Gasto Mín (R$)</TableHead>
-                        <TableHead>Multiplicador</TableHead>
-                        <TableHead className="text-right">Ação</TableHead>
-                    </TableRow>
+                  <TableRow>
+                    <TableHead>Nível</TableHead>
+                    <TableHead>Gasto Mín (R$)</TableHead>
+                    <TableHead>Multiplicador</TableHead>
+                    <TableHead className="text-right">Ação</TableHead>
+                  </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {isLoading ? <TableRow><TableCell colSpan={4}>Carregando...</TableCell></TableRow> : 
-                     tiers?.map((tier) => (
-                        <TableRow key={tier.id}>
-                            <TableCell className="font-bold">{tier.name}</TableCell>
-                            <TableCell>
-                                <Input type="number" defaultValue={tier.min_spend} className="w-24 h-8" 
-                                    onBlur={(e) => updateTierMutation.mutate({...tier, min_spend: parseFloat(e.target.value)})}
-                                />
-                            </TableCell>
-                            <TableCell>
-                                <Input type="number" step="0.1" defaultValue={tier.points_multiplier} className="w-20 h-8" 
-                                    onBlur={(e) => updateTierMutation.mutate({...tier, points_multiplier: parseFloat(e.target.value)})}
-                                />
-                            </TableCell>
-                            <TableCell className="text-right"><Badge variant="outline">Auto-salvar</Badge></TableCell>
-                        </TableRow>
-                    ))}
+                  {tiers?.map((tier) => (
+                    <TableRow key={tier.id}>
+                      <TableCell className="font-bold">{tier.name}</TableCell>
+                      <TableCell>
+                        <Input type="number" defaultValue={tier.min_spend} className="w-24 h-8"
+                          onBlur={(e) => updateTierMutation.mutate({ ...tier, min_spend: parseFloat(e.target.value) })} />
+                      </TableCell>
+                      <TableCell>
+                        <Input type="number" step="0.1" defaultValue={tier.points_multiplier} className="w-20 h-8"
+                          onBlur={(e) => updateTierMutation.mutate({ ...tier, points_multiplier: parseFloat(e.target.value) })} />
+                      </TableCell>
+                      <TableCell className="text-right"><Badge variant="outline">Auto-salvar</Badge></TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
-            </Table>
-        </CardContent>
+              </Table>
+            </div>
+          </>
+        )}
+      </CardContent>
     </Card>
   );
 };
