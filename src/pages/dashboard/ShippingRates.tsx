@@ -681,8 +681,74 @@ export default function ShippingRatesPage() {
         )}
       </div>
 
-      {/* ── Tabela ── */}
-      <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+      {/* ── Mobile: cards ── */}
+      <div className="md:hidden space-y-3">
+        {isLoading ? (
+          Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="bg-white rounded-xl border p-4 animate-pulse h-24" />
+          ))
+        ) : filteredRates.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-12 text-muted-foreground bg-white rounded-xl border">
+            <MapPin className="w-8 h-8 opacity-30" />
+            <p className="font-medium">Nenhum local encontrado</p>
+            <p className="text-sm">Tente ajustar os filtros ou adicione um novo local.</p>
+          </div>
+        ) : (
+          filteredRates.map((rate) => (
+            <div
+              key={rate.id}
+              className={cn(
+                "bg-white rounded-xl border-2 shadow-sm p-4 space-y-3",
+                rate.is_active ? "border-gray-100" : "border-gray-100 opacity-60"
+              )}
+            >
+              {/* Bairro + ações */}
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <MapPin className="w-4 h-4 text-indigo-400 shrink-0" />
+                  <span className="font-bold text-gray-800 truncate">{rate.neighborhood}</span>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-blue-50" onClick={() => handleEdit(rate)}>
+                    <Pencil className="w-4 h-4 text-blue-600" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-red-50" onClick={() => { if (confirm("Excluir este local de entrega?")) deleteMutation.mutate(rate.id); }}>
+                    <Trash2 className="w-4 h-4 text-red-500" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Cidade + valor */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <Building2 className="w-3.5 h-3.5 shrink-0" />
+                  {rate.city}
+                </div>
+                <span className="font-bold text-green-700 text-lg">
+                  {formatCurrency(rate.price)}
+                </span>
+              </div>
+
+              {/* Status switch */}
+              <div className={cn(
+                "flex items-center justify-between p-2.5 rounded-lg border",
+                rate.is_active ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200"
+              )}>
+                <span className={cn("text-xs font-bold", rate.is_active ? "text-green-700" : "text-gray-500")}>
+                  {rate.is_active ? <span className="flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" />Ativo</span> : <span className="flex items-center gap-1"><XCircle className="w-3.5 h-3.5" />Inativo</span>}
+                </span>
+                <Switch
+                  checked={rate.is_active}
+                  onCheckedChange={(val) => toggleActiveMutation.mutate({ id: rate.id, status: val })}
+                />
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* ── Desktop: tabela ── */}
+      <div className="hidden md:block bg-white rounded-xl border shadow-sm overflow-hidden">
         <Table>
           <TableHeader className="bg-gray-50">
             <TableRow>
@@ -729,9 +795,7 @@ export default function ShippingRatesPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <span className="font-bold text-green-700 text-base">
-                      {formatCurrency(rate.price)}
-                    </span>
+                    <span className="font-bold text-green-700 text-base">{formatCurrency(rate.price)}</span>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
@@ -741,37 +805,18 @@ export default function ShippingRatesPage() {
                       />
                       <Badge
                         variant={rate.is_active ? "outline" : "secondary"}
-                        className={cn(
-                          "text-xs font-semibold",
-                          rate.is_active ? "text-green-700 border-green-300 bg-green-50" : "text-gray-500"
-                        )}
+                        className={cn("text-xs font-semibold", rate.is_active ? "text-green-700 border-green-300 bg-green-50" : "text-gray-500")}
                       >
-                        {rate.is_active ? (
-                          <><CheckCircle2 className="w-3 h-3 mr-1" />Ativo</>
-                        ) : (
-                          <><XCircle className="w-3 h-3 mr-1" />Inativo</>
-                        )}
+                        {rate.is_active ? <><CheckCircle2 className="w-3 h-3 mr-1" />Ativo</> : <><XCircle className="w-3 h-3 mr-1" />Inativo</>}
                       </Badge>
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleEdit(rate)}
-                        className="hover:bg-blue-50"
-                        title="Editar"
-                      >
+                      <Button variant="ghost" size="icon" onClick={() => handleEdit(rate)} className="hover:bg-blue-50" title="Editar">
                         <Pencil className="w-4 h-4 text-blue-600" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => { if (confirm("Excluir este local de entrega?")) deleteMutation.mutate(rate.id); }}
-                        className="hover:bg-red-50"
-                        title="Excluir"
-                      >
+                      <Button variant="ghost" size="icon" onClick={() => { if (confirm("Excluir este local de entrega?")) deleteMutation.mutate(rate.id); }} className="hover:bg-red-50" title="Excluir">
                         <Trash2 className="w-4 h-4 text-red-500" />
                       </Button>
                     </div>
