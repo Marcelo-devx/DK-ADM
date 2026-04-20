@@ -107,19 +107,18 @@ const fetchOrdersPage = async (page: number, filters: Filters): Promise<OrdersRe
 
   const needsProfileFilter = filters.clientName || filters.email || filters.cpf;
   if (needsProfileFilter) {
-    // Filtra diretamente no banco com ilike para evitar o limite de 1000 registros do Supabase
-    let profileQuery = supabase
-      .from("profiles")
-      .select("id");
+    // Filtra diretamente no banco com ilike — evita o limite de 1000 registros do Supabase
+    let profileQuery = supabase.from("profiles").select("id");
 
     if (filters.email) {
       profileQuery = profileQuery.ilike("email", `%${filters.email}%`);
-    } else if (filters.clientName) {
-      // Busca por nome: tenta primeiro_nome ou sobrenome
+    }
+    if (filters.clientName) {
       profileQuery = profileQuery.or(
         `first_name.ilike.%${filters.clientName}%,last_name.ilike.%${filters.clientName}%`
       );
-    } else if (filters.cpf) {
+    }
+    if (filters.cpf) {
       const cleanSearch = filters.cpf.replace(/\D/g, "");
       profileQuery = profileQuery.ilike("cpf_cnpj", `%${cleanSearch}%`);
     }
@@ -127,20 +126,7 @@ const fetchOrdersPage = async (page: number, filters: Filters): Promise<OrdersRe
     const { data: matchedProfiles } = await profileQuery;
     if (!matchedProfiles || matchedProfiles.length === 0) return { orders: [], totalCount: 0 };
 
-    // Se tiver múltiplos filtros (ex: nome + email), aplica filtro adicional no JS
-    let finalProfiles = matchedProfiles;
-    if (filters.clientName && filters.email) {
-      // Busca separada para email e intersecta
-      const { data: emailProfiles } = await supabase
-        .from("profiles")
-        .select("id")
-        .ilike("email", `%${filters.email}%`);
-      const emailIds = new Set((emailProfiles || []).map((p: any) => p.id));
-      finalProfiles = matchedProfiles.filter((p: any) => emailIds.has(p.id));
-    }
-
-    filteredUserIds = finalProfiles.map((p: any) => p.id);
-    if (filteredUserIds.length === 0) return { orders: [], totalCount: 0 };
+    filteredUserIds = matchedProfiles.map((p: any) => p.id);
   }
 
   // 2. Monta a query base com filtros diretos no banco
