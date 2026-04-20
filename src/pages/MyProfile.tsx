@@ -96,7 +96,7 @@ const MyProfilePage = () => {
     },
   });
 
-  const onSubmit = (values: ProfileFormValues) => {
+  const onSubmit = async (values: ProfileFormValues) => {
     let dataChanged = false;
     const formKeys = Object.keys(values) as (keyof ProfileFormValues)[];
 
@@ -109,12 +109,28 @@ const MyProfilePage = () => {
       }
     }
 
-    if (dataChanged) {
-      setFormData(values);
-      setConfirmAlertOpen(true);
-    } else {
+    if (!dataChanged) {
       showSuccess("Nenhuma alteração detectada.");
+      return;
     }
+
+    // Validar CPF duplicado: só bloqueia se o CPF pertence a OUTRO usuário
+    // Compara apenas dígitos para ignorar diferenças de formatação
+    const newCpf = (values.cpf_cnpj || "").replace(/\D/g, "").trim();
+    const currentCpf = (profile?.cpf_cnpj || "").replace(/\D/g, "").trim();
+
+    if (newCpf && newCpf !== currentCpf && newCpf.length >= 11) {
+      const { data: cpfExists, error: cpfCheckError } = await supabase
+        .rpc("check_cpf_exists", { cpf_input: newCpf, exclude_user_id: user!.id });
+
+      if (!cpfCheckError && cpfExists === true) {
+        showError("Este CPF/CNPJ já está cadastrado em outra conta. Verifique os dados e tente novamente.");
+        return;
+      }
+    }
+
+    setFormData(values);
+    setConfirmAlertOpen(true);
   };
 
   const handleConfirmUpdate = () => {
