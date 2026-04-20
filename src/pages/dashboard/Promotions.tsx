@@ -134,7 +134,8 @@ const PromotionsPage = () => {
   };
 
   const handleStatusChange = (promo: Promotion, newStatus: boolean) => {
-    upsertMutation.mutate({ ...promo, is_active: newStatus });
+    const { promotion_items, ...promoData } = promo;
+    upsertMutation.mutate({ ...promoData, is_active: newStatus });
   };
 
   const openEdit = (promo: Promotion) => { setSelectedPromotion(promo); setIsModalOpen(true); };
