@@ -12,6 +12,14 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // GET simples para keep-alive / health check
+  if (req.method === "GET") {
+    return new Response(JSON.stringify({ status: "ok", function: "admin-list-users" }), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   // Verificar autenticação
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) {

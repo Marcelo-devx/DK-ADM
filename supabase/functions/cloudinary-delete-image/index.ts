@@ -1,4 +1,5 @@
 // @ts-nocheck
+// v2 - force redeploy
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { v2 as cloudinary } from 'npm:cloudinary@^2.0.0';
 
@@ -23,9 +24,16 @@ if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
 }
 
 serve(async (req) => {
-  // Handle CORS preflight request
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
+  }
+
+  // GET simples para keep-alive / health check
+  if (req.method === 'GET') {
+    return new Response(
+      JSON.stringify({ status: 'ok', function: 'cloudinary-delete-image' }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   }
 
   try {

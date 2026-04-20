@@ -1,8 +1,9 @@
 // @ts-nocheck
+// v3 - sem npm:cloudinary, usa fetch nativo
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
 };
 
 function toHex(buffer: ArrayBuffer): string {
@@ -12,9 +13,16 @@ function toHex(buffer: ArrayBuffer): string {
 }
 
 Deno.serve(async (req: Request) => {
-  // Handle CORS preflight - must return 200 OK
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders });
+  }
+
+  // GET simples para keep-alive / health check
+  if (req.method === 'GET') {
+    return new Response(
+      JSON.stringify({ status: 'ok', function: 'cloudinary-upload' }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   }
 
   try {

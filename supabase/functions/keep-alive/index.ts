@@ -1,6 +1,6 @@
 // @ts-nocheck
+// v3 - usa GET para warm-up real (OPTIONS não executa o código da função)
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -9,9 +9,9 @@ const corsHeaders = {
 
 // Lista de todas as funções críticas que devem ser mantidas aquecidas
 const CRITICAL_FUNCTIONS = [
+  'cloudinary-upload',
   'cloudinary-usage',
   'cloudinary-list-images',
-  'cloudinary-upload',
   'cloudinary-delete-image',
   'create-mercadopago-pix',
   'create-mercadopago-preference',
@@ -36,10 +36,8 @@ const CRITICAL_FUNCTIONS = [
   'bulk-import-clients',
   'reset-user-password',
   'log-integration',
-  'dispatch-webhook',
   'forgot-password',
   'validate-token',
-  'generate-token',
   'validate-cep',
   'send-email-via-resend',
   'notify-password-change',
@@ -56,7 +54,7 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders })
   }
 
-  // Se for um ping simples (GET), apenas responde OK para confirmar que está vivo
+  // GET simples: confirma que o keep-alive está vivo
   if (req.method === 'GET') {
     console.log('[keep-alive] Ping recebido - função está ativa');
     return new Response(
@@ -65,7 +63,7 @@ serve(async (req) => {
     )
   }
 
-  // Se for POST, faz o warm-up de todas as funções críticas
+  // POST: faz o warm-up real de todas as funções críticas via GET
   console.log('[keep-alive] Iniciando warm-up de funções críticas...');
 
   const results: Record<string, string> = {};
@@ -75,13 +73,16 @@ serve(async (req) => {
       try {
         const url = `${SUPABASE_URL}/functions/v1/${fnName}`;
         const res = await fetch(url, {
-          method: 'OPTIONS',
+          method: 'GET',
           headers: {
             'apikey': SUPABASE_ANON_KEY,
             'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
           },
         });
-        results[fnName] = res.ok || res.status === 204 ? 'warm' : `status:${res.status}`;
+        // 200, 401, 403, 405 = função está deployada e respondendo (warm)
+        // 404 = função não existe / não deployada (cold/missing)
+        const isWarm = res.status !== 404 && res.status !== 0;
+        results[fnName] = isWarm ? `warm(${res.status})` : `COLD/MISSING(${res.status})`;
         console.log(`[keep-alive] ${fnName} -> ${results[fnName]}`);
       } catch (err) {
         results[fnName] = `error: ${err.message}`;
@@ -89,6 +90,11 @@ serve(async (req) => {
       }
     })
   );
+
+  const cold = Object.entries(results).filter(([, v]) => v.startsWith('COLD'));
+  if (cold.length > 0) {
+    console.warn('[keep-alive] Funções NÃO deployadas:', cold.map(([k]) => k).join(', '));
+  }
 
   console.log('[keep-alive] Warm-up concluído', results);
 
