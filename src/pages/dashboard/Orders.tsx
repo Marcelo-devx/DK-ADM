@@ -107,31 +107,39 @@ const fetchOrdersPage = async (page: number, filters: Filters): Promise<OrdersRe
 
   const needsProfileFilter = filters.clientName || filters.email || filters.cpf;
   if (needsProfileFilter) {
+    // Filtra diretamente no banco com ilike para evitar o limite de 1000 registros do Supabase
     let profileQuery = supabase
       .from("profiles")
-      .select("id, first_name, last_name, email, phone, cpf_cnpj");
+      .select("id");
 
-    const { data: allProfiles } = await profileQuery;
-    if (!allProfiles) return { orders: [], totalCount: 0 };
+    if (filters.email) {
+      profileQuery = profileQuery.ilike("email", `%${filters.email}%`);
+    } else if (filters.clientName) {
+      // Busca por nome: tenta primeiro_nome ou sobrenome
+      profileQuery = profileQuery.or(
+        `first_name.ilike.%${filters.clientName}%,last_name.ilike.%${filters.clientName}%`
+      );
+    } else if (filters.cpf) {
+      const cleanSearch = filters.cpf.replace(/\D/g, "");
+      profileQuery = profileQuery.ilike("cpf_cnpj", `%${cleanSearch}%`);
+    }
 
-    const filtered = allProfiles.filter(p => {
-      if (filters.clientName) {
-        const term = filters.clientName.toLowerCase();
-        const full = `${(p.first_name || "").toLowerCase()} ${(p.last_name || "").toLowerCase()}`;
-        if (!full.includes(term)) return false;
-      }
-      if (filters.email) {
-        if (!(p.email || "").toLowerCase().includes(filters.email.toLowerCase())) return false;
-      }
-      if (filters.cpf) {
-        const cleanSearch = filters.cpf.replace(/\D/g, "");
-        const cleanCPF = (p.cpf_cnpj || "").replace(/\D/g, "");
-        if (!cleanCPF.includes(cleanSearch)) return false;
-      }
-      return true;
-    });
+    const { data: matchedProfiles } = await profileQuery;
+    if (!matchedProfiles || matchedProfiles.length === 0) return { orders: [], totalCount: 0 };
 
-    filteredUserIds = filtered.map(p => p.id);
+    // Se tiver múltiplos filtros (ex: nome + email), aplica filtro adicional no JS
+    let finalProfiles = matchedProfiles;
+    if (filters.clientName && filters.email) {
+      // Busca separada para email e intersecta
+      const { data: emailProfiles } = await supabase
+        .from("profiles")
+        .select("id")
+        .ilike("email", `%${filters.email}%`);
+      const emailIds = new Set((emailProfiles || []).map((p: any) => p.id));
+      finalProfiles = matchedProfiles.filter((p: any) => emailIds.has(p.id));
+    }
+
+    filteredUserIds = finalProfiles.map((p: any) => p.id);
     if (filteredUserIds.length === 0) return { orders: [], totalCount: 0 };
   }
 
