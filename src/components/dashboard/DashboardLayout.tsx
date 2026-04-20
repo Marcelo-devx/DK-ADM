@@ -39,10 +39,20 @@ const GERENTE_GERAL_ALLOWED_ROUTES = [
   "/dashboard/promotions",
   "/dashboard/coupons",
   "/dashboard/manual-add-points",
+  "/dashboard/bulk-add-points",
   "/dashboard/user-admin",
   "/dashboard/investigar-usuario",
   "/dashboard/order-admin",
   "/dashboard/reativar-pedidos",
+  "/dashboard/import-clients",
+  "/dashboard/spoke-export",
+  "/dashboard/print-labels",
+  "/dashboard/delivery-routes",
+  "/dashboard/supplier-orders",
+  "/dashboard/price-management",
+  "/dashboard/xk9-relatorio-financeiro",
+  "/dashboard/relatorio-entrada-estoque",
+  "/dashboard/cleanup-orders",
 ];
 
 interface SidebarContextType {
