@@ -209,17 +209,17 @@ const AnalyticsPage = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-black text-gray-900 flex items-center gap-2">
-            <BarChart3 className="w-6 h-6 text-blue-600" /> Inteligência de Negócio
+          <h1 className="text-xl sm:text-2xl font-black text-gray-900 flex items-center gap-2">
+            <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" /> Inteligência de Negócio
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
             {periodLabel} · {s.totalOrders ?? 0} pedidos analisados
           </p>
         </div>
-        <div className="flex items-center gap-2 bg-white border rounded-xl px-3 py-2 shadow-sm">
+        <div className="flex items-center gap-2 bg-white border rounded-xl px-3 py-2 shadow-sm self-start sm:self-auto">
           <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
           <Select value={period} onValueChange={setPeriod}>
-            <SelectTrigger className="border-0 focus:ring-0 text-sm font-semibold text-gray-700 bg-transparent p-0 h-auto w-44">
+            <SelectTrigger className="border-0 focus:ring-0 text-sm font-semibold text-gray-700 bg-transparent p-0 h-auto w-36 sm:w-44">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -232,7 +232,7 @@ const AnalyticsPage = () => {
         </div>
       </div>
 
-      {/* KPIs Financeiros */}
+      {/* KPIs Financeiros — 2 colunas mobile, 3 md, 6 lg */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <KpiCard title="Fat. Bruto"    value={R(s.totalRevenue)}             sub={`${s.totalOrders ?? 0} pedidos`}        icon={DollarSign}   color="blue"   />
         <KpiCard title="Fat. Líquido"  value={R(s.totalRevenueNoShip ?? 0)} sub="s/ frete e s/ descontos"                icon={DollarSign}   color="green"  />
@@ -271,7 +271,7 @@ const AnalyticsPage = () => {
         <h2 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-2">
           <ShoppingCart className="w-4 h-4" /> Status dos Pedidos <span className="text-[10px] font-normal normal-case text-gray-400">(cancelados excluídos)</span>
         </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
           {/* Status do Pedido */}
           <div className="bg-green-50 border border-green-100 rounded-xl p-3 text-center">
             <p className="text-2xl font-black text-green-700">{s.countPago ?? 0}</p>
@@ -309,14 +309,14 @@ const AnalyticsPage = () => {
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* Tabs — flex-wrap para mobile */}
       <Tabs defaultValue="vendas" className="space-y-5">
-        <TabsList className="bg-gray-100 p-1 rounded-xl h-auto flex-wrap gap-1">
-          <TabsTrigger value="vendas"    className="rounded-lg font-semibold text-xs px-4 py-2">📈 Vendas</TabsTrigger>
-          <TabsTrigger value="produtos"  className="rounded-lg font-semibold text-xs px-4 py-2">📦 Produtos</TabsTrigger>
-          <TabsTrigger value="clientes"  className="rounded-lg font-semibold text-xs px-4 py-2">👥 Clientes</TabsTrigger>
-          <TabsTrigger value="logistica" className="rounded-lg font-semibold text-xs px-4 py-2">🗺️ Logística</TabsTrigger>
-          <TabsTrigger value="tempo"     className="rounded-lg font-semibold text-xs px-4 py-2">⏰ Horários</TabsTrigger>
+        <TabsList className="bg-gray-100 p-1 rounded-xl h-auto flex flex-wrap gap-1">
+          <TabsTrigger value="vendas"    className="rounded-lg font-semibold text-xs px-3 py-2 flex-1 min-w-[calc(50%-4px)] sm:flex-none">📈 Vendas</TabsTrigger>
+          <TabsTrigger value="produtos"  className="rounded-lg font-semibold text-xs px-3 py-2 flex-1 min-w-[calc(50%-4px)] sm:flex-none">📦 Produtos</TabsTrigger>
+          <TabsTrigger value="clientes"  className="rounded-lg font-semibold text-xs px-3 py-2 flex-1 min-w-[calc(50%-4px)] sm:flex-none">👥 Clientes</TabsTrigger>
+          <TabsTrigger value="logistica" className="rounded-lg font-semibold text-xs px-3 py-2 flex-1 min-w-[calc(50%-4px)] sm:flex-none">🗺️ Logística</TabsTrigger>
+          <TabsTrigger value="tempo"     className="rounded-lg font-semibold text-xs px-3 py-2 flex-1 min-w-[calc(50%-4px)] sm:flex-none">⏰ Horários</TabsTrigger>
         </TabsList>
 
         {/* ── ABA VENDAS ── */}

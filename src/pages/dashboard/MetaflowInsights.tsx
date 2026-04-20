@@ -159,24 +159,24 @@ const MetaflowInsightsPage = () => {
   );
 
   return (
-    <div className="space-y-8 pb-20">
+    <div className="space-y-6 pb-20">
 
       {/* HEADER */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-lg shadow-blue-200">
-            <Sparkles className="w-7 h-7 text-white" />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 sm:p-3 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-lg shadow-blue-200 shrink-0">
+            <Sparkles className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
           </div>
           <div>
-            <h1 className="text-2xl font-black text-gray-900 tracking-tight">
+            <h1 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight">
               Inteligência de Negócio
             </h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
+            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
               Análise em tempo real do comportamento de vendas
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 self-start sm:self-auto">
           <Button
             variant="outline"
             size="sm"
@@ -193,16 +193,16 @@ const MetaflowInsightsPage = () => {
         </div>
       </div>
 
-      {/* KPI CARDS */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {/* KPI CARDS — 2 colunas mobile, 4 desktop */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard icon={AlertOctagon} label="Alertas de Estoque" value={totalAlerts}    color="bg-orange-500" bg="bg-orange-50/50 border-orange-100" />
         <StatCard icon={UserMinus}    label="Clientes em Risco"  value={churnCount}     color="bg-rose-500"   bg="bg-rose-50/50 border-rose-100" />
         <StatCard icon={ShoppingCart} label="Combos Sugeridos"   value={crossSellCount} color="bg-blue-500"   bg="bg-blue-50/50 border-blue-100" />
         <StatCard icon={TrendingUp}   label="Produtos em Alta"   value={trendingUpCount} color="bg-green-500" bg="bg-green-50/50 border-green-100" />
       </div>
 
-      {/* MAIN GRID */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* MAIN GRID — 1 coluna mobile, 3 desktop */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
         {/* ESTOQUE */}
         <Card className="border border-gray-100 shadow-sm rounded-2xl overflow-hidden flex flex-col">
@@ -393,8 +393,8 @@ const MetaflowInsightsPage = () => {
         </Card>
       </div>
 
-      {/* SEGUNDA LINHA: HORÁRIOS + MOMENTUM */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* SEGUNDA LINHA: HORÁRIOS + MOMENTUM — 1 coluna mobile, 2 desktop */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
         {/* Horários de Pico */}
         <Card className="border border-gray-100 shadow-sm rounded-2xl overflow-hidden">
@@ -514,8 +514,8 @@ const MetaflowInsightsPage = () => {
         </Card>
       </div>
 
-      {/* TERCEIRA LINHA: VIPs + LUCRATIVIDADE */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* TERCEIRA LINHA: VIPs + LUCRATIVIDADE — 1 coluna mobile, 2 desktop */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
         {/* Top Clientes VIP */}
         <Card className="border border-gray-100 shadow-sm rounded-2xl overflow-hidden">
@@ -610,9 +610,9 @@ const MetaflowInsightsPage = () => {
         </Card>
       </div>
 
-      {/* PIPELINE EDUCATIVO */}
+      {/* PIPELINE EDUCATIVO — 2 colunas mobile, 3 sm, 6 xl */}
       <div className="mt-4">
-        <div className="flex items-center gap-2 mb-5">
+        <div className="flex items-center gap-2 mb-4">
           <Brain className="w-5 h-5 text-slate-500" />
           <h3 className="text-sm font-bold text-slate-600 uppercase tracking-wide">Como funciona o pipeline de dados?</h3>
         </div>
