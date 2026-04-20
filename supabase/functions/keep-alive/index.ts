@@ -33,6 +33,19 @@ const CRITICAL_FUNCTIONS = [
   'actionable-insights',
   'generate-sales-popups',
   'bulk-add-points',
+  'bulk-import-clients',
+  'reset-user-password',
+  'log-integration',
+  'dispatch-webhook',
+  'forgot-password',
+  'validate-token',
+  'generate-token',
+  'validate-cep',
+  'send-email-via-resend',
+  'notify-password-change',
+  'admin-delete-order',
+  'admin-block-user',
+  'admin-list-users',
 ];
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
