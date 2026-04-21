@@ -53,6 +53,7 @@ interface AuditRecord {
 interface TaxaState {
   percent: string;
   valor: string;
+  liquido: string;
   saving?: boolean;
   saved?: boolean;
 }
@@ -181,31 +182,49 @@ const AuditoriaCartao = () => {
       if (taxas[orderId] !== undefined) return taxas[orderId];
       const fromDb = pendingAuditMap[orderId];
       if (fromDb) {
+        const tv = Number(fromDb.taxa_valor);
+        const tp = Number(fromDb.taxa_percent);
+        const liq = Number(fromDb.valor_liquido);
         return {
-          percent: Number(fromDb.taxa_percent) > 0 ? String(fromDb.taxa_percent) : "",
-          valor: Number(fromDb.taxa_valor) > 0 ? String(fromDb.taxa_valor) : "",
+          percent: tp > 0 ? String(tp) : "",
+          valor: tv > 0 ? String(tv) : "",
+          liquido: liq > 0 ? String(liq) : "",
         };
       }
-      return { percent: "", valor: "" };
+      return { percent: "", valor: "", liquido: "" };
     },
     [taxas, pendingAuditMap]
   );
 
   const setTaxaPercent = useCallback((orderId: number, val: string, totalPrice: number) => {
     const pct = parseFloat(val.replace(",", "."));
-    const valorCalc = !isNaN(pct) ? ((pct / 100) * totalPrice).toFixed(2) : "";
+    const tv = !isNaN(pct) ? (pct / 100) * totalPrice : NaN;
+    const valorCalc = !isNaN(tv) ? tv.toFixed(2) : "";
+    const liquidoCalc = !isNaN(tv) ? (totalPrice - tv).toFixed(2) : "";
     setTaxas((prev) => ({
       ...prev,
-      [orderId]: { percent: val, valor: valorCalc, saved: false },
+      [orderId]: { percent: val, valor: valorCalc, liquido: liquidoCalc, saved: false },
     }));
   }, []);
 
   const setTaxaValor = useCallback((orderId: number, val: string, totalPrice: number) => {
     const v = parseFloat(val.replace(",", "."));
     const pctCalc = !isNaN(v) && totalPrice > 0 ? ((v / totalPrice) * 100).toFixed(4) : "";
+    const liquidoCalc = !isNaN(v) ? (totalPrice - v).toFixed(2) : "";
     setTaxas((prev) => ({
       ...prev,
-      [orderId]: { percent: pctCalc, valor: val, saved: false },
+      [orderId]: { percent: pctCalc, valor: val, liquido: liquidoCalc, saved: false },
+    }));
+  }, []);
+
+  const setTaxaLiquido = useCallback((orderId: number, val: string, totalPrice: number) => {
+    const liq = parseFloat(val.replace(",", "."));
+    const tv = !isNaN(liq) ? totalPrice - liq : NaN;
+    const valorCalc = !isNaN(tv) && tv >= 0 ? tv.toFixed(2) : "";
+    const pctCalc = !isNaN(tv) && tv >= 0 && totalPrice > 0 ? ((tv / totalPrice) * 100).toFixed(4) : "";
+    setTaxas((prev) => ({
+      ...prev,
+      [orderId]: { percent: pctCalc, valor: valorCalc, liquido: val, saved: false },
     }));
   }, []);
 
@@ -213,16 +232,18 @@ const AuditoriaCartao = () => {
 
   const saveTaxaMutation = useMutation({
     mutationFn: async ({ orderId, totalPrice }: { orderId: number; totalPrice: number }) => {
-      const t = taxas[orderId] || { percent: "", valor: "" };
+      const t = taxas[orderId] || { percent: "", valor: "", liquido: "" };
       const tv = parseFloat(t.valor.replace(",", ".")) || 0;
       const tp = parseFloat(t.percent.replace(",", ".")) || 0;
+      const liq = parseFloat(t.liquido.replace(",", "."));
+      const valorLiquido = !isNaN(liq) ? liq : totalPrice - tv;
       const { data: { user } } = await supabase.auth.getUser();
       const { error } = await supabase.from("credit_card_audits").upsert(
         {
           order_id: orderId,
           taxa_percent: tp,
           taxa_valor: tv,
-          valor_liquido: totalPrice - tv,
+          valor_liquido: valorLiquido,
           status: "pendente",
           conferido_por: user?.id || null,
         },
@@ -266,17 +287,16 @@ const AuditoriaCartao = () => {
       const price = Number(o.total_price);
       if (globalPercent) {
         const pct = parseFloat(globalPercent.replace(",", "."));
-        const valorCalc = !isNaN(pct) ? ((pct / 100) * price).toFixed(2) : "";
-        newTaxas[o.id] = { percent: globalPercent, valor: valorCalc, saved: false };
+        const tv = !isNaN(pct) ? (pct / 100) * price : 0;
+        newTaxas[o.id] = { percent: globalPercent, valor: tv.toFixed(2), liquido: (price - tv).toFixed(2), saved: false };
       } else if (globalValor) {
         const v = parseFloat(globalValor.replace(",", "."));
         const pctCalc = !isNaN(v) && price > 0 ? ((v / price) * 100).toFixed(4) : "";
-        newTaxas[o.id] = { percent: pctCalc, valor: globalValor, saved: false };
+        newTaxas[o.id] = { percent: pctCalc, valor: globalValor, liquido: (price - (v || 0)).toFixed(2), saved: false };
       }
     });
     setTaxas(newTaxas);
 
-    // Salva todos no banco após aplicar
     setTimeout(() => {
       filteredOrders.forEach((o) => {
         saveTaxaMutation.mutate({ orderId: o.id, totalPrice: Number(o.total_price) });
@@ -669,7 +689,7 @@ const AuditoriaCartao = () => {
                           <TableHead className="text-xs text-right">Valor Bruto</TableHead>
                           <TableHead className="text-xs text-center w-32">Taxa (%)</TableHead>
                           <TableHead className="text-xs text-center w-32">Taxa (R$)</TableHead>
-                          <TableHead className="text-xs text-right">Líquido</TableHead>
+                          <TableHead className="text-xs text-center w-32">Líquido (R$)</TableHead>
                           <TableHead className="text-xs text-center w-16">Salvo</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -678,11 +698,10 @@ const AuditoriaCartao = () => {
                           const t = getTaxa(order.id);
                           const price = Number(order.total_price);
                           const tv = parseFloat(t.valor.replace(",", ".")) || 0;
-                          const liquido = price - tv;
+                          const liquido = t.liquido !== "" ? parseFloat(t.liquido.replace(",", ".")) : price - tv;
                           const isSelected = selected.has(order.id);
                           const hasSavedInDb = !!pendingAuditMap[order.id];
                           const isSaving = t.saving;
-                          const isSaved = t.saved || (hasSavedInDb && !t.saved === undefined);
                           return (
                             <TableRow key={order.id} className={isSelected ? "bg-purple-50" : ""}>
                               <TableCell>
@@ -720,8 +739,17 @@ const AuditoriaCartao = () => {
                                   className="h-7 text-xs text-center w-full"
                                 />
                               </TableCell>
-                              <TableCell className={`text-right font-bold text-sm ${tv > 0 ? "text-green-700" : "text-muted-foreground"}`}>
-                                {fmt(liquido)}
+                              <TableCell>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={t.liquido}
+                                  onChange={(e) => setTaxaLiquido(order.id, e.target.value, price)}
+                                  onBlur={() => handleTaxaBlur(order.id, price)}
+                                  placeholder={fmt(price)}
+                                  className={`h-7 text-xs text-center w-full font-bold ${tv > 0 || t.liquido ? "text-green-700" : "text-muted-foreground"}`}
+                                />
                               </TableCell>
                               <TableCell className="text-center">
                                 {isSaving ? (
@@ -746,7 +774,7 @@ const AuditoriaCartao = () => {
                     const t = getTaxa(order.id);
                     const price = Number(order.total_price);
                     const tv = parseFloat(t.valor.replace(",", ".")) || 0;
-                    const liquido = price - tv;
+                    const liquido = t.liquido !== "" ? parseFloat(t.liquido.replace(",", ".")) : price - tv;
                     const isSelected = selected.has(order.id);
                     const hasSavedInDb = !!pendingAuditMap[order.id];
                     return (
@@ -762,7 +790,6 @@ const AuditoriaCartao = () => {
                           </div>
                           <div className="text-right">
                             <p className="font-bold text-sm">{fmt(price)}</p>
-                            {tv > 0 && <p className="text-xs text-green-700 font-semibold">Líq: {fmt(liquido)}</p>}
                             {hasSavedInDb && <p className="text-[10px] text-green-600">✓ salvo</p>}
                           </div>
                         </div>
@@ -789,6 +816,18 @@ const AuditoriaCartao = () => {
                               onBlur={() => handleTaxaBlur(order.id, price)}
                               placeholder="0,00"
                               className="h-7 text-xs text-center"
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-[10px] text-green-700 font-bold mb-1">Líquido R$</p>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={t.liquido}
+                              onChange={(e) => setTaxaLiquido(order.id, e.target.value, price)}
+                              onBlur={() => handleTaxaBlur(order.id, price)}
+                              placeholder={price.toFixed(2)}
+                              className="h-7 text-xs text-center text-green-700 font-bold"
                             />
                           </div>
                         </div>
