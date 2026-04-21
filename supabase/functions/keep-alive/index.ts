@@ -7,64 +7,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Apenas funções confirmadas como deployadas (retornam != 404)
 const CRITICAL_FUNCTIONS = [
-  // Pagamentos
-  'create-mercadopago-pix',
-  'create-mercadopago-preference',
-  'get-mercadopago-status',
-  'update-mercadopago-token',
-  'get-pagseguro-status',
-  'update-pagseguro-token',
-  'mp-webhook',
-  'verify-blockchain-tx',
-  // Pedidos
   'update-order-status',
   'get-order-details',
-  'admin-update-order',
-  'admin-cancel-order',
-  'admin-delete-order',
-  'admin-delete-orders',
-  'admin-get-order-history',
-  'cleanup-orders',
-  'test-auto-update-orders',
-  // Usuários / Admin
-  'get-users',
-  'get-users-emails',
-  'get-user-email',
-  'admin-create-user',
-  'admin-delete-user',
   'admin-list-users',
-  'admin-block-user',
-  'admin-user-actions',
-  'admin-mark-as-recurrent',
-  'create-client-by-admin',
-  'bulk-import-clients',
-  'n8n-create-client',
-  'n8n-list-clients',
-  // Webhooks / Integrações
-  'dispatch-webhook',
-  'n8n-webhook',
-  'n8n-receive-order',
-  'n8n-list-products',
-  'spoke-webhook',
-  'spoke-proxy',
-  'test-webhook-endpoint',
-  'api-config-manager',
-  // Cloudinary
   'cloudinary-upload',
   'cloudinary-list-images',
   'cloudinary-delete-image',
   'cloudinary-usage',
-  // Analytics / Relatórios
-  'analytics-bi',
-  'actionable-insights',
-  'generate-sales-popups',
-  // Pontos / Cupons
-  'bulk-add-points',
-  'admin-send-campaign',
-  // Catálogo
-  'catalog-api',
-  'bulk-product-upsert',
 ];
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
