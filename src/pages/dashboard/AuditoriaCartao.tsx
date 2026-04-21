@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfMonth } from "date-fns";
@@ -13,7 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import {
   CreditCard, ShieldAlert, RefreshCw, FileDown, CheckCircle2,
-  RotateCcw, TrendingDown, DollarSign, Percent, Search, Filter,
+  RotateCcw, TrendingDown, DollarSign, Percent, Search, Filter, Save,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
@@ -46,12 +46,15 @@ interface AuditRecord {
   taxa_valor: number;
   valor_liquido: number;
   conferido_em: string;
+  status: string;
   orders: Order | Order[] | null;
 }
 
 interface TaxaState {
   percent: string;
   valor: string;
+  saving?: boolean;
+  saved?: boolean;
 }
 
 // ─── Fetch helpers ────────────────────────────────────────────────────────────
@@ -72,7 +75,7 @@ const fetchCardOrders = async (startDate: string, endDate: string) => {
 const fetchAudits = async () => {
   const { data, error } = await supabase
     .from("credit_card_audits")
-    .select("id, order_id, taxa_percent, taxa_valor, valor_liquido, conferido_em, orders(id, created_at, total_price, payment_method, status, guest_email, user_id, shipping_address)")
+    .select("id, order_id, taxa_percent, taxa_valor, valor_liquido, conferido_em, status, orders(id, created_at, total_price, payment_method, status, guest_email, user_id, shipping_address)")
     .order("conferido_em", { ascending: false });
   if (error) throw error;
   return (data || []) as AuditRecord[];
@@ -106,11 +109,14 @@ const AuditoriaCartao = () => {
   const [globalPercent, setGlobalPercent] = useState("");
   const [globalValor, setGlobalValor] = useState("");
 
-  // Taxas individuais por pedido: { [orderId]: { percent, valor } }
+  // Taxas individuais por pedido: { [orderId]: TaxaState }
   const [taxas, setTaxas] = useState<Record<number, TaxaState>>({});
 
   // Seleção
   const [selected, setSelected] = useState<Set<number>>(new Set());
+
+  // Debounce timers para auto-save
+  const saveTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
 
   // ── Queries ──────────────────────────────────────────────────────────────────
 
@@ -124,10 +130,23 @@ const AuditoriaCartao = () => {
     queryKey: ["credit-card-audits"],
     queryFn: fetchAudits,
     staleTime: 0,
+    // Ao carregar audits, inicializa taxas locais com os valores do banco (status pendente)
+    select: (data) => {
+      return data;
+    },
   });
 
-  // IDs já conferidos
-  const auditedIds = useMemo(() => new Set(audits.map((a) => a.order_id)), [audits]);
+  // Inicializa taxas locais a partir dos registros pendentes do banco
+  const pendingAudits = useMemo(() => audits.filter((a) => a.status === "pendente"), [audits]);
+  const conferidoAudits = useMemo(() => audits.filter((a) => a.status === "conferido"), [audits]);
+
+  // IDs que já têm registro no banco (pendente ou conferido)
+  const auditedIds = useMemo(() => new Set(conferidoAudits.map((a) => a.order_id)), [conferidoAudits]);
+  const pendingAuditMap = useMemo(() => {
+    const map: Record<number, AuditRecord> = {};
+    pendingAudits.forEach((a) => { map[a.order_id] = a; });
+    return map;
+  }, [pendingAudits]);
 
   // Pedidos ainda não conferidos
   const pendingOrders = useMemo(
@@ -157,8 +176,19 @@ const AuditoriaCartao = () => {
   // ── Taxa helpers ──────────────────────────────────────────────────────────────
 
   const getTaxa = useCallback(
-    (orderId: number): TaxaState => taxas[orderId] || { percent: "", valor: "" },
-    [taxas]
+    (orderId: number): TaxaState => {
+      // Prioridade: estado local > banco (pendente)
+      if (taxas[orderId] !== undefined) return taxas[orderId];
+      const fromDb = pendingAuditMap[orderId];
+      if (fromDb) {
+        return {
+          percent: Number(fromDb.taxa_percent) > 0 ? String(fromDb.taxa_percent) : "",
+          valor: Number(fromDb.taxa_valor) > 0 ? String(fromDb.taxa_valor) : "",
+        };
+      }
+      return { percent: "", valor: "" };
+    },
+    [taxas, pendingAuditMap]
   );
 
   const setTaxaPercent = useCallback((orderId: number, val: string, totalPrice: number) => {
@@ -166,7 +196,7 @@ const AuditoriaCartao = () => {
     const valorCalc = !isNaN(pct) ? ((pct / 100) * totalPrice).toFixed(2) : "";
     setTaxas((prev) => ({
       ...prev,
-      [orderId]: { percent: val, valor: valorCalc },
+      [orderId]: { percent: val, valor: valorCalc, saved: false },
     }));
   }, []);
 
@@ -175,9 +205,59 @@ const AuditoriaCartao = () => {
     const pctCalc = !isNaN(v) && totalPrice > 0 ? ((v / totalPrice) * 100).toFixed(4) : "";
     setTaxas((prev) => ({
       ...prev,
-      [orderId]: { percent: pctCalc, valor: val },
+      [orderId]: { percent: pctCalc, valor: val, saved: false },
     }));
   }, []);
+
+  // ── Auto-save ao sair do campo (onBlur) ───────────────────────────────────────
+
+  const saveTaxaMutation = useMutation({
+    mutationFn: async ({ orderId, totalPrice }: { orderId: number; totalPrice: number }) => {
+      const t = taxas[orderId] || { percent: "", valor: "" };
+      const tv = parseFloat(t.valor.replace(",", ".")) || 0;
+      const tp = parseFloat(t.percent.replace(",", ".")) || 0;
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error } = await supabase.from("credit_card_audits").upsert(
+        {
+          order_id: orderId,
+          taxa_percent: tp,
+          taxa_valor: tv,
+          valor_liquido: totalPrice - tv,
+          status: "pendente",
+          conferido_por: user?.id || null,
+        },
+        { onConflict: "order_id" }
+      );
+      if (error) throw error;
+      return orderId;
+    },
+    onSuccess: (orderId) => {
+      setTaxas((prev) => ({
+        ...prev,
+        [orderId]: { ...prev[orderId], saved: true, saving: false },
+      }));
+      queryClient.invalidateQueries({ queryKey: ["credit-card-audits"] });
+    },
+    onError: (e: Error, { orderId }) => {
+      setTaxas((prev) => ({
+        ...prev,
+        [orderId]: { ...prev[orderId], saving: false },
+      }));
+      toast({ title: "Erro ao salvar taxa", description: e.message, variant: "destructive" });
+    },
+  });
+
+  const handleTaxaBlur = useCallback((orderId: number, totalPrice: number) => {
+    // Debounce: aguarda 600ms após o último blur para salvar
+    if (saveTimers.current[orderId]) clearTimeout(saveTimers.current[orderId]);
+    saveTimers.current[orderId] = setTimeout(() => {
+      setTaxas((prev) => ({
+        ...prev,
+        [orderId]: { ...prev[orderId], saving: true },
+      }));
+      saveTaxaMutation.mutate({ orderId, totalPrice });
+    }, 600);
+  }, [saveTaxaMutation, taxas]);
 
   const applyGlobalTaxa = () => {
     if (!globalPercent && !globalValor) return;
@@ -187,15 +267,23 @@ const AuditoriaCartao = () => {
       if (globalPercent) {
         const pct = parseFloat(globalPercent.replace(",", "."));
         const valorCalc = !isNaN(pct) ? ((pct / 100) * price).toFixed(2) : "";
-        newTaxas[o.id] = { percent: globalPercent, valor: valorCalc };
+        newTaxas[o.id] = { percent: globalPercent, valor: valorCalc, saved: false };
       } else if (globalValor) {
         const v = parseFloat(globalValor.replace(",", "."));
         const pctCalc = !isNaN(v) && price > 0 ? ((v / price) * 100).toFixed(4) : "";
-        newTaxas[o.id] = { percent: pctCalc, valor: globalValor };
+        newTaxas[o.id] = { percent: pctCalc, valor: globalValor, saved: false };
       }
     });
     setTaxas(newTaxas);
-    toast({ title: "Taxa aplicada a todos os pedidos filtrados!" });
+
+    // Salva todos no banco após aplicar
+    setTimeout(() => {
+      filteredOrders.forEach((o) => {
+        saveTaxaMutation.mutate({ orderId: o.id, totalPrice: Number(o.total_price) });
+      });
+    }, 100);
+
+    toast({ title: "Taxa aplicada e salva para todos os pedidos filtrados!" });
   };
 
   const handleGlobalPercentChange = (val: string) => {
@@ -236,13 +324,13 @@ const AuditoriaCartao = () => {
 
   const auditSummary = useMemo(() => {
     let totalBruto = 0, totalTaxas = 0;
-    audits.forEach((a) => {
+    conferidoAudits.forEach((a) => {
       const o = getAuditOrder(a);
       totalBruto += Number(o?.total_price || 0);
       totalTaxas += Number(a.taxa_valor);
     });
     return { totalBruto, totalTaxas, totalLiquido: totalBruto - totalTaxas };
-  }, [audits]);
+  }, [conferidoAudits]);
 
   // ── Seleção ───────────────────────────────────────────────────────────────────
 
@@ -278,6 +366,7 @@ const AuditoriaCartao = () => {
           taxa_percent: tp,
           taxa_valor: tv,
           valor_liquido: price - tv,
+          status: "conferido",
           conferido_por: user?.id || null,
         };
       });
@@ -288,14 +377,17 @@ const AuditoriaCartao = () => {
       queryClient.invalidateQueries({ queryKey: ["credit-card-audits"] });
       queryClient.invalidateQueries({ queryKey: ["auditoria-cartao-orders"] });
       setSelected(new Set());
-      toast({ title: `${selected.size} pedido(s) movido(s) para Conferidos!` });
+      toast({ title: `Pedidos movidos para Conferidos!` });
     },
     onError: (e: Error) => toast({ title: "Erro ao mover pedidos", description: e.message, variant: "destructive" }),
   });
 
   const devolver = useMutation({
     mutationFn: async (orderId: number) => {
-      const { error } = await supabase.from("credit_card_audits").delete().eq("order_id", orderId);
+      const { error } = await supabase
+        .from("credit_card_audits")
+        .update({ status: "pendente" })
+        .eq("order_id", orderId);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -330,7 +422,7 @@ const AuditoriaCartao = () => {
 
   const exportAuditCSV = () => {
     const header = ["ID Pedido", "Data Pedido", "Conferido Em", "Cliente", "Valor Bruto (R$)", "Taxa (%)", "Taxa (R$)", "Líquido (R$)"].join(";");
-    const rows = audits.map((a) => {
+    const rows = conferidoAudits.map((a) => {
       const o = getAuditOrder(a);
       return [
         a.order_id,
@@ -373,7 +465,7 @@ const AuditoriaCartao = () => {
           <h1 className="text-xl font-black tracking-tight">Auditoria Cartão de Crédito</h1>
         </div>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Pedidos finalizados/pagos com cartão. Calcule a taxa da operadora e marque como conferido.
+          Pedidos finalizados/pagos com cartão. As taxas digitadas são salvas automaticamente no banco para relatórios.
         </p>
       </div>
 
@@ -433,12 +525,18 @@ const AuditoriaCartao = () => {
             <TabsTrigger value="conferidos" className="gap-2">
               <CheckCircle2 className="w-3.5 h-3.5" />
               Conferidos
-              <Badge variant="secondary" className="ml-1 text-xs bg-green-100 text-green-800">{audits.length}</Badge>
+              <Badge variant="secondary" className="ml-1 text-xs bg-green-100 text-green-800">{conferidoAudits.length}</Badge>
             </TabsTrigger>
           </TabsList>
 
           {/* ── ABA: A CONFERIR ─────────────────────────────────────────────── */}
           <TabsContent value="a-conferir" className="space-y-4">
+
+            {/* Aviso auto-save */}
+            <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700">
+              <Save className="w-3.5 h-3.5 shrink-0" />
+              <span>As taxas são <strong>salvas automaticamente no banco</strong> ao sair de cada campo — ficam disponíveis para relatórios mesmo antes de conferir.</span>
+            </div>
 
             {/* Taxa padrão global */}
             <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 space-y-2">
@@ -473,7 +571,7 @@ const AuditoriaCartao = () => {
                   />
                 </div>
                 <Button size="sm" onClick={applyGlobalTaxa} className="h-8 bg-purple-600 hover:bg-purple-700">
-                  Aplicar a todos
+                  Aplicar e salvar todos
                 </Button>
               </div>
             </div>
@@ -552,7 +650,6 @@ const AuditoriaCartao = () => {
               </div>
             </div>
 
-            {/* Tabela desktop */}
             {filteredOrders.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground text-sm">
                 Nenhum pedido de cartão encontrado para o período.
@@ -573,6 +670,7 @@ const AuditoriaCartao = () => {
                           <TableHead className="text-xs text-center w-32">Taxa (%)</TableHead>
                           <TableHead className="text-xs text-center w-32">Taxa (R$)</TableHead>
                           <TableHead className="text-xs text-right">Líquido</TableHead>
+                          <TableHead className="text-xs text-center w-16">Salvo</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -582,6 +680,9 @@ const AuditoriaCartao = () => {
                           const tv = parseFloat(t.valor.replace(",", ".")) || 0;
                           const liquido = price - tv;
                           const isSelected = selected.has(order.id);
+                          const hasSavedInDb = !!pendingAuditMap[order.id];
+                          const isSaving = t.saving;
+                          const isSaved = t.saved || (hasSavedInDb && !t.saved === undefined);
                           return (
                             <TableRow key={order.id} className={isSelected ? "bg-purple-50" : ""}>
                               <TableCell>
@@ -602,6 +703,7 @@ const AuditoriaCartao = () => {
                                   max="100"
                                   value={t.percent}
                                   onChange={(e) => setTaxaPercent(order.id, e.target.value, price)}
+                                  onBlur={() => handleTaxaBlur(order.id, price)}
                                   placeholder="0,00"
                                   className="h-7 text-xs text-center w-full"
                                 />
@@ -613,12 +715,22 @@ const AuditoriaCartao = () => {
                                   min="0"
                                   value={t.valor}
                                   onChange={(e) => setTaxaValor(order.id, e.target.value, price)}
+                                  onBlur={() => handleTaxaBlur(order.id, price)}
                                   placeholder="0,00"
                                   className="h-7 text-xs text-center w-full"
                                 />
                               </TableCell>
                               <TableCell className={`text-right font-bold text-sm ${tv > 0 ? "text-green-700" : "text-muted-foreground"}`}>
                                 {fmt(liquido)}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                {isSaving ? (
+                                  <RefreshCw className="w-3 h-3 animate-spin text-blue-400 mx-auto" />
+                                ) : hasSavedInDb || t.saved ? (
+                                  <span title="Salvo no banco" className="text-green-500 text-xs">✓</span>
+                                ) : (
+                                  <span className="text-gray-300 text-xs">—</span>
+                                )}
                               </TableCell>
                             </TableRow>
                           );
@@ -636,6 +748,7 @@ const AuditoriaCartao = () => {
                     const tv = parseFloat(t.valor.replace(",", ".")) || 0;
                     const liquido = price - tv;
                     const isSelected = selected.has(order.id);
+                    const hasSavedInDb = !!pendingAuditMap[order.id];
                     return (
                       <div key={order.id} className={`rounded-xl border p-3 space-y-2 ${isSelected ? "bg-purple-50 border-purple-300" : "bg-white"}`}>
                         <div className="flex items-start justify-between gap-2">
@@ -650,6 +763,7 @@ const AuditoriaCartao = () => {
                           <div className="text-right">
                             <p className="font-bold text-sm">{fmt(price)}</p>
                             {tv > 0 && <p className="text-xs text-green-700 font-semibold">Líq: {fmt(liquido)}</p>}
+                            {hasSavedInDb && <p className="text-[10px] text-green-600">✓ salvo</p>}
                           </div>
                         </div>
                         <div className="flex gap-2">
@@ -660,6 +774,7 @@ const AuditoriaCartao = () => {
                               step="0.01"
                               value={t.percent}
                               onChange={(e) => setTaxaPercent(order.id, e.target.value, price)}
+                              onBlur={() => handleTaxaBlur(order.id, price)}
                               placeholder="0,00"
                               className="h-7 text-xs text-center"
                             />
@@ -671,6 +786,7 @@ const AuditoriaCartao = () => {
                               step="0.01"
                               value={t.valor}
                               onChange={(e) => setTaxaValor(order.id, e.target.value, price)}
+                              onBlur={() => handleTaxaBlur(order.id, price)}
                               placeholder="0,00"
                               className="h-7 text-xs text-center"
                             />
@@ -702,7 +818,7 @@ const AuditoriaCartao = () => {
                 </CardHeader>
                 <CardContent className="px-3 pb-3">
                   <p className="text-base font-black text-green-700">{fmt(auditSummary.totalBruto)}</p>
-                  <p className="text-[11px] text-muted-foreground">{audits.length} pedidos</p>
+                  <p className="text-[11px] text-muted-foreground">{conferidoAudits.length} pedidos</p>
                 </CardContent>
               </Card>
               <Card className="border-l-4 border-l-red-400">
@@ -729,7 +845,7 @@ const AuditoriaCartao = () => {
               </Button>
             </div>
 
-            {audits.length === 0 ? (
+            {conferidoAudits.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground text-sm">
                 Nenhum pedido conferido ainda. Selecione pedidos na aba "A Conferir" e mova para cá.
               </div>
@@ -753,7 +869,7 @@ const AuditoriaCartao = () => {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {audits.map((audit) => {
+                        {conferidoAudits.map((audit) => {
                           const o = getAuditOrder(audit);
                           const price = o ? Number(o.total_price) : 0;
                           return (
@@ -788,7 +904,7 @@ const AuditoriaCartao = () => {
 
                 {/* Mobile */}
                 <div className="md:hidden space-y-2">
-                  {audits.map((audit) => {
+                  {conferidoAudits.map((audit) => {
                     const o = getAuditOrder(audit);
                     const price = o ? Number(o.total_price) : 0;
                     return (
