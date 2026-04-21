@@ -10,7 +10,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Truck, CreditCard, QrCode, Ticket, User, Phone, MapPin, Fingerprint, Package, Heart, Mail } from "lucide-react";
+import { Truck, CreditCard, QrCode, Ticket, User, Phone, MapPin, Fingerprint, Package, Heart, Mail, Gift } from "lucide-react";
 
 interface Order {
   id: number;
@@ -84,6 +84,16 @@ const fetchCustomerProfile = async (userId: string) => {
   return data;
 };
 
+const fetchFreeShippingRules = async () => {
+  const { data, error } = await supabase
+    .from("free_shipping_rules")
+    .select("*")
+    .eq("is_active", true)
+    .order("min_order_value", { ascending: true });
+  if (error) return [];
+  return data as { id: number; shipping_price: number; min_order_value: number }[];
+};
+
 export const OrderDetailModal = ({ order, isOpen, onClose }: OrderDetailModalProps) => {
   const { data: items, isLoading: isLoadingItems } = useQuery<OrderItem[]>({
     queryKey: ["orderItems", order.id],
@@ -97,7 +107,18 @@ export const OrderDetailModal = ({ order, isOpen, onClose }: OrderDetailModalPro
     enabled: isOpen && !!order.user_id,
   });
 
+  const { data: freeShippingRules } = useQuery({
+    queryKey: ["freeShippingRules"],
+    queryFn: fetchFreeShippingRules,
+    enabled: isOpen && Number(order.shipping_cost) === 0,
+  });
+
   const subtotal = items?.reduce((acc, item) => acc + (Number(item.price_at_purchase) || 0) * (Number(item.quantity) || 0), 0) || 0;
+
+  // Verifica se o frete grátis foi por valor mínimo de compra
+  const freeShippingRule = Number(order.shipping_cost) === 0 && freeShippingRules
+    ? freeShippingRules.find(rule => subtotal >= Number(rule.min_order_value))
+    : null;
 
   // O total composto: subtotal dos itens + frete + doação - desconto de cupom
   const finalPaidTotal = subtotal + (Number(order.shipping_cost) || 0) + (Number(order.donation_amount) || 0) - (Number(order.coupon_discount) || 0);
@@ -281,7 +302,22 @@ export const OrderDetailModal = ({ order, isOpen, onClose }: OrderDetailModalPro
                 </div>
                 <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Frete:</span>
-                    <span>{new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(order.shipping_cost)}</span>
+                    <div className="flex items-center gap-2">
+                      {Number(order.shipping_cost) === 0 && freeShippingRule ? (
+                        <>
+                          <Badge className="bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 gap-1 text-xs font-semibold px-2 py-0.5">
+                            <Gift className="w-3 h-3" />
+                            Frete grátis — compra acima de {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(freeShippingRule.min_order_value)}
+                          </Badge>
+                          <span className="text-emerald-600 font-bold line-through text-xs text-muted-foreground">
+                            {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(freeShippingRule.shipping_price)}
+                          </span>
+                          <span className="text-emerald-700 font-bold">R$ 0,00</span>
+                        </>
+                      ) : (
+                        <span>{new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(order.shipping_cost)}</span>
+                      )}
+                    </div>
                 </div>
                 {order.donation_amount > 0 && (
                     <div className="flex justify-between text-rose-600 text-sm font-bold animate-in fade-in slide-in-from-left-2">
