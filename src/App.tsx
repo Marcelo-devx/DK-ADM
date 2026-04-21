@@ -61,6 +61,7 @@ import RelatorioEntradaEstoque from "./pages/dashboard/RelatorioEntradaEstoque";
 import InvestigarUsuario from "./pages/dashboard/InvestigarUsuario";
 import ReativarPedidos from "./pages/dashboard/ReativarPedidos";
 import AuditoriaCartao from "./pages/dashboard/AuditoriaCartao";
+import { useKeepAlive } from "./hooks/useKeepAlive";
 
 const DashboardIndex = () => {
   const { isGerente, isGerenteGeral, isAdmin, loading } = useUser();
@@ -85,9 +86,15 @@ const queryClient = new QueryClient({
   },
 });
 
+const KeepAliveRunner = () => {
+  useKeepAlive();
+  return null;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
+      <KeepAliveRunner />
       <Toaster />
       <Sonner />
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>

@@ -1,5 +1,5 @@
 // @ts-nocheck
-// v3 - usa GET para warm-up real (OPTIONS não executa o código da função)
+// v4 - warm-up completo de todas as edge functions do projeto
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 
 const corsHeaders = {
@@ -7,43 +7,64 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Lista de todas as funções críticas que devem ser mantidas aquecidas
 const CRITICAL_FUNCTIONS = [
-  'cloudinary-upload',
-  'cloudinary-usage',
-  'cloudinary-list-images',
-  'cloudinary-delete-image',
+  // Pagamentos
   'create-mercadopago-pix',
   'create-mercadopago-preference',
   'get-mercadopago-status',
+  'update-mercadopago-token',
+  'get-pagseguro-status',
+  'update-pagseguro-token',
   'mp-webhook',
+  'verify-blockchain-tx',
+  // Pedidos
   'update-order-status',
   'get-order-details',
+  'admin-update-order',
+  'admin-cancel-order',
+  'admin-delete-order',
+  'admin-delete-orders',
+  'admin-get-order-history',
+  'cleanup-orders',
+  'test-auto-update-orders',
+  // Usuários / Admin
+  'get-users',
+  'get-users-emails',
+  'get-user-email',
+  'admin-create-user',
+  'admin-delete-user',
+  'admin-list-users',
+  'admin-block-user',
+  'admin-user-actions',
+  'admin-mark-as-recurrent',
+  'create-client-by-admin',
+  'bulk-import-clients',
+  'n8n-create-client',
+  'n8n-list-clients',
+  // Webhooks / Integrações
   'dispatch-webhook',
   'n8n-webhook',
   'n8n-receive-order',
-  'catalog-api',
-  'get-users',
-  'admin-create-user',
-  'admin-delete-user',
-  'admin-update-order',
-  'admin-cancel-order',
-  'admin-get-order-history',
+  'n8n-list-products',
+  'spoke-webhook',
+  'spoke-proxy',
+  'test-webhook-endpoint',
+  'api-config-manager',
+  // Cloudinary
+  'cloudinary-upload',
+  'cloudinary-list-images',
+  'cloudinary-delete-image',
+  'cloudinary-usage',
+  // Analytics / Relatórios
   'analytics-bi',
   'actionable-insights',
   'generate-sales-popups',
+  // Pontos / Cupons
   'bulk-add-points',
-  'bulk-import-clients',
-  'reset-user-password',
-  'log-integration',
-  'forgot-password',
-  'validate-token',
-  'validate-cep',
-  'send-email-via-resend',
-  'notify-password-change',
-  'admin-delete-order',
-  'admin-block-user',
-  'admin-list-users',
+  'admin-send-campaign',
+  // Catálogo
+  'catalog-api',
+  'bulk-product-upsert',
 ];
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
@@ -64,7 +85,7 @@ serve(async (req) => {
   }
 
   // POST: faz o warm-up real de todas as funções críticas via GET
-  console.log('[keep-alive] Iniciando warm-up de funções críticas...');
+  console.log(`[keep-alive] Iniciando warm-up de ${CRITICAL_FUNCTIONS.length} funções...`);
 
   const results: Record<string, string> = {};
 
@@ -79,8 +100,8 @@ serve(async (req) => {
             'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
           },
         });
-        // 200, 401, 403, 405 = função está deployada e respondendo (warm)
-        // 404 = função não existe / não deployada (cold/missing)
+        // 200, 401, 403, 405 = função deployada e respondendo (warm)
+        // 404 = função não existe / não deployada
         const isWarm = res.status !== 404 && res.status !== 0;
         results[fnName] = isWarm ? `warm(${res.status})` : `COLD/MISSING(${res.status})`;
         console.log(`[keep-alive] ${fnName} -> ${results[fnName]}`);
@@ -93,13 +114,14 @@ serve(async (req) => {
 
   const cold = Object.entries(results).filter(([, v]) => v.startsWith('COLD'));
   if (cold.length > 0) {
-    console.warn('[keep-alive] Funções NÃO deployadas:', cold.map(([k]) => k).join(', '));
+    console.warn('[keep-alive] Funções ausentes:', cold.map(([k]) => k).join(', '));
   }
 
-  console.log('[keep-alive] Warm-up concluído', results);
+  const warm = Object.entries(results).filter(([, v]) => v.startsWith('warm'));
+  console.log(`[keep-alive] Concluído: ${warm.length} warm, ${cold.length} ausentes`);
 
   return new Response(
-    JSON.stringify({ status: 'done', results, timestamp: new Date().toISOString() }),
+    JSON.stringify({ status: 'done', warm: warm.length, cold: cold.length, results, timestamp: new Date().toISOString() }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
   )
 })
