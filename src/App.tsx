@@ -60,6 +60,7 @@ import RelatorioFinanceiro from "./pages/dashboard/RelatorioFinanceiro";
 import RelatorioEntradaEstoque from "./pages/dashboard/RelatorioEntradaEstoque";
 import InvestigarUsuario from "./pages/dashboard/InvestigarUsuario";
 import ReativarPedidos from "./pages/dashboard/ReativarPedidos";
+import AuditoriaCartao from "./pages/dashboard/AuditoriaCartao";
 
 const DashboardIndex = () => {
   const { isGerente, isGerenteGeral, isAdmin, loading } = useUser();
@@ -147,6 +148,7 @@ const App = () => (
               <Route path="relatorio-entrada-estoque" element={<RelatorioEntradaEstoque />} />
               <Route path="investigar-usuario" element={<InvestigarUsuario />} />
               <Route path="reativar-pedidos" element={<ReativarPedidos />} />
+              <Route path="auditoria-cartao" element={<AuditoriaCartao />} />
             </Route>
             
             <Route path="*" element={<NotFound />} />

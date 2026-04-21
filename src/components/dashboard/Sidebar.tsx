@@ -41,6 +41,7 @@ import {
   FileDown,
   Search,
   RefreshCw,
+  CreditCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -85,6 +86,9 @@ const Sidebar = () => {
       </NavLink>
       <NavLink to="/dashboard/xk9-relatorio-financeiro" className={navLinkClass}>
         {({ isActive }) => (<><FileSearch className={iconClass("text-emerald-600", isActive)} />Relatório Financeiro</>)}
+      </NavLink>
+      <NavLink to="/dashboard/auditoria-cartao" className={navLinkClass}>
+        {({ isActive }) => (<><CreditCard className={iconClass("text-purple-600", isActive)} />Auditoria Cartão</>)}
       </NavLink>
       <NavLink to="/dashboard/analytics" className={navLinkClass}>
         {({ isActive }) => (<><BarChart3 className={iconClass("text-slate-500", isActive)} />Analytics</>)}
@@ -247,6 +251,9 @@ const Sidebar = () => {
       </NavLink>
       <NavLink to="/dashboard/xk9-relatorio-financeiro" className={navLinkClass}>
         {({ isActive }) => (<><FileSearch className={iconClass("text-emerald-600", isActive)} />Relatório Financeiro</>)}
+      </NavLink>
+      <NavLink to="/dashboard/auditoria-cartao" className={navLinkClass}>
+        {({ isActive }) => (<><CreditCard className={iconClass("text-purple-600", isActive)} />Auditoria Cartão</>)}
       </NavLink>
 
     </>
