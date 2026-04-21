@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   User, MapPin, Phone, Calendar, Shield, Star,
   Mail, Award, CreditCard, History, Fingerprint,
-  ShoppingBag, Package, Wind, Palette, Ruler, Zap, HelpCircle,
+  ShoppingBag, Package, Wind, Palette, Ruler, Zap, HelpCircle, Gift,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -141,10 +141,25 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
     staleTime: 60_000,
   });
 
+  // ── QUERY 5: Regras de frete grátis ──────────────────────────────────────
+  const { data: freeShippingRules } = useQuery({
+    queryKey: ["freeShippingRules"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("free_shipping_rules")
+        .select("id, shipping_price, min_order_value")
+        .eq("is_active", true)
+        .order("min_order_value", { ascending: true });
+      if (error) return [];
+      return data as { id: number; shipping_price: number; min_order_value: number }[];
+    },
+    enabled: isOpen,
+    staleTime: 300_000,
+  });
+
   // ── Mapas de lookup ───────────────────────────────────────────────────────
   const specificVariantsMap = new Map((specificVariants ?? []).map((v: any) => [v.id, v]));
 
-  // product_id → variantes[]
   const candidatesByProduct = new Map<number, any[]>();
   (candidateVariants ?? []).forEach((v: any) => {
     const arr = candidatesByProduct.get(v.product_id) ?? [];
@@ -152,8 +167,6 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
     candidatesByProduct.set(v.product_id, arr);
   });
 
-  // Tenta identificar a variante pelo preço pago
-  // Retorna a variante se houver exatamente UMA com aquele preço (pix ou normal)
   const guessVariantByPrice = (productId: number, pricePaid: number): any | null => {
     const variants = candidatesByProduct.get(productId) ?? [];
     if (!variants.length) return null;
@@ -164,18 +177,13 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
     return matches.length === 1 ? matches[0] : null;
   };
 
-  // ── Enriquece itens com variante resolvida ────────────────────────────────
   const enrichedItems = (rawItems ?? []).map((item: any) => {
     let resolvedVariant: any | null = null;
-
     if (item.variant_id) {
-      // Pedido novo: variant_id salvo diretamente
       resolvedVariant = specificVariantsMap.get(item.variant_id) ?? null;
     } else if (item.item_id) {
-      // Pedido antigo: tenta identificar pelo preço
       resolvedVariant = guessVariantByPrice(item.item_id, item.price_at_purchase);
     }
-
     return { ...item, resolvedVariant };
   });
 
@@ -211,7 +219,6 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
     }
   };
 
-  // Renderiza os badges de atributos de uma variante
   const renderVariantBadges = (variant: any, identified: boolean) => {
     const attrs: { label: string; icon: React.ReactNode; color: string }[] = [];
 
@@ -432,6 +439,11 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                             ? itemsSubtotal + shipping + donation - coupon
                             : Number(order.total_price) || 0;
 
+                          // Verifica se o frete grátis foi por valor mínimo de compra
+                          const matchedFreeShippingRule = shipping === 0 && freeShippingRules
+                            ? freeShippingRules.find(r => itemsSubtotal >= Number(r.min_order_value))
+                            : null;
+
                           return (
                             <AccordionItem key={order.id} value={String(order.id)} className="border rounded-lg bg-white overflow-hidden shadow-sm">
                               <AccordionTrigger className="px-4 py-3 hover:bg-slate-50 hover:no-underline">
@@ -463,9 +475,19 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                                           <span className="font-medium">{formatCurrency(itemsSubtotal)}</span>
                                         </div>
                                       )}
-                                      <div className="flex justify-between gap-8">
-                                        <span className="text-xs text-muted-foreground">Frete</span>
-                                        <span className="font-medium">{formatCurrency(shipping)}</span>
+                                      <div className="flex justify-between gap-4 items-start">
+                                        <span className="text-xs text-muted-foreground shrink-0 pt-0.5">Frete</span>
+                                        {matchedFreeShippingRule ? (
+                                          <div className="flex flex-col items-end gap-1">
+                                            <Badge className="bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 gap-1 text-[10px] font-semibold px-2 py-0.5 h-auto whitespace-normal text-right leading-tight">
+                                              <Gift className="w-2.5 h-2.5 shrink-0" />
+                                              Frete grátis — compra acima de {formatCurrency(Number(matchedFreeShippingRule.min_order_value))}
+                                            </Badge>
+                                            <span className="text-emerald-700 font-bold text-xs">R$ 0,00</span>
+                                          </div>
+                                        ) : (
+                                          <span className="font-medium">{formatCurrency(shipping)}</span>
+                                        )}
                                       </div>
                                       {donation > 0 && (
                                         <div className="flex justify-between gap-8 text-rose-600 font-medium">
@@ -521,11 +543,10 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                                                 {item.name_at_purchase}
                                               </p>
 
-                                              {/* Variante resolvida (exata ou identificada pelo preço) */}
                                               {item.resolvedVariant ? (
                                                 renderVariantBadges(
                                                   item.resolvedVariant,
-                                                  !!item.variant_id // true = exata, false = identificada pelo preço
+                                                  !!item.variant_id
                                                 )
                                               ) : item.variant_id ? (
                                                 <div className="flex flex-wrap gap-1 mt-1.5">
