@@ -279,6 +279,12 @@ const OrdersPage = () => {
   const [paymentMethodFilter, setPaymentMethodFilter] = useState<string[]>([]);
   const [readyToShipOnly, setReadyToShipOnly] = useState(false);
 
+  // Desktop text input local state (only applied on Enter or button click)
+  const [desktopOrderId, setDesktopOrderId] = useState("");
+  const [desktopCPF, setDesktopCPF] = useState("");
+  const [desktopClientName, setDesktopClientName] = useState("");
+  const [desktopEmail, setDesktopEmail] = useState("");
+
   // Filtros debounced (aplicados na query)
   const [debouncedFilters, setDebouncedFilters] = useState<Filters>({
     readyToShipOnly: false,
@@ -378,6 +384,7 @@ const OrdersPage = () => {
     setStartDate(""); setEndDate(""); setStatusFilter([]); setDeliveryStatusFilter([]);
     setPaymentMethodFilter([]); setSearchOrderId(""); setSearchCPF("");
     setSearchClientName(""); setSearchEmail(""); setReadyToShipOnly(false);
+    setDesktopOrderId(""); setDesktopCPF(""); setDesktopClientName(""); setDesktopEmail("");
   };
 
   const hasActiveFilters = startDate || endDate || statusFilter.length > 0 || deliveryStatusFilter.length > 0 ||
@@ -803,6 +810,17 @@ const OrdersPage = () => {
     return { label: method, icon: DollarSign, style: "bg-gray-50 text-gray-700 border-gray-200" };
   };
 
+  const applyDesktopTextFilters = () => {
+    setSearchOrderId(desktopOrderId);
+    setSearchCPF(desktopCPF);
+    setSearchClientName(desktopClientName);
+    setSearchEmail(desktopEmail);
+  };
+
+  const handleDesktopTextKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") applyDesktopTextFilters();
+  };
+
   if (isLoading && !data) {
     return (
       <div className="relative pb-24">
@@ -1059,36 +1077,49 @@ const OrdersPage = () => {
           {/* ID */}
           <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-9 overflow-hidden w-28">
             <span className="absolute left-3 text-xs text-gray-400 font-medium">#</span>
-            <input type="text" placeholder="ID" value={searchOrderId}
-              onChange={(e) => setSearchOrderId(e.target.value.replace(/\D/g, ""))}
+            <input type="text" placeholder="ID" value={desktopOrderId}
+              onChange={(e) => setDesktopOrderId(e.target.value.replace(/\D/g, ""))}
+              onKeyDown={handleDesktopTextKeyDown}
               className="pl-6 pr-3 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0 font-mono" />
-            {searchOrderId && <button onClick={() => setSearchOrderId("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500"><X className="w-3 h-3" /></button>}
+            {desktopOrderId && <button onClick={() => { setDesktopOrderId(""); setSearchOrderId(""); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500"><X className="w-3 h-3" /></button>}
           </div>
 
           {/* CPF */}
           <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-9 overflow-hidden w-36">
-            <input type="text" placeholder="CPF" value={searchCPF}
-              onChange={(e) => setSearchCPF(e.target.value.replace(/\D/g, ""))}
+            <input type="text" placeholder="CPF" value={desktopCPF}
+              onChange={(e) => setDesktopCPF(e.target.value.replace(/\D/g, ""))}
+              onKeyDown={handleDesktopTextKeyDown}
               className="pl-3 pr-8 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0" />
-            {searchCPF && <button onClick={() => setSearchCPF("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500"><X className="w-3 h-3" /></button>}
+            {desktopCPF && <button onClick={() => { setDesktopCPF(""); setSearchCPF(""); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500"><X className="w-3 h-3" /></button>}
           </div>
 
           {/* Nome */}
           <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-9 overflow-hidden flex-1 min-w-[200px]">
-            <input type="text" placeholder="Nome do cliente" value={searchClientName}
-              onChange={(e) => setSearchClientName(e.target.value)}
+            <input type="text" placeholder="Nome do cliente" value={desktopClientName}
+              onChange={(e) => setDesktopClientName(e.target.value)}
+              onKeyDown={handleDesktopTextKeyDown}
               className="pl-3 pr-8 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0" />
-            {searchClientName && <button onClick={() => setSearchClientName("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500"><X className="w-3 h-3" /></button>}
+            {desktopClientName && <button onClick={() => { setDesktopClientName(""); setSearchClientName(""); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500"><X className="w-3 h-3" /></button>}
           </div>
 
           {/* Email */}
           <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg h-9 overflow-hidden flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input type="text" placeholder="Email do cliente" value={searchEmail}
-              onChange={(e) => setSearchEmail(e.target.value)}
+            <input type="text" placeholder="Email do cliente" value={desktopEmail}
+              onChange={(e) => setDesktopEmail(e.target.value)}
+              onKeyDown={handleDesktopTextKeyDown}
               className="pl-10 pr-8 py-2 bg-transparent border-none text-sm w-full focus:outline-none focus:ring-0" />
-            {searchEmail && <button onClick={() => setSearchEmail("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500"><X className="w-3 h-3" /></button>}
+            {desktopEmail && <button onClick={() => { setDesktopEmail(""); setSearchEmail(""); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500"><X className="w-3 h-3" /></button>}
           </div>
+
+          {/* Filtrar button */}
+          <Button
+            size="sm"
+            className="h-9 px-4 gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+            onClick={applyDesktopTextFilters}
+          >
+            <Search className="w-3.5 h-3.5" /> Filtrar
+          </Button>
         </div>
 
         {/* Row 2: Date + Status + Actions */}
