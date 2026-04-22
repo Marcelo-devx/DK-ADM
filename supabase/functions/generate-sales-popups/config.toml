@@ -1,0 +1,2 @@
+[functions.generate-sales-popups]
+verify_jwt = false

@@ -1,0 +1,2 @@
+[functions.get-users]
+verify_jwt = false

@@ -1,0 +1,2 @@
+[functions.create-mercadopago-pix]
+verify_jwt = false

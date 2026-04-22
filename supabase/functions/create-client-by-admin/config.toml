@@ -1,0 +1,2 @@
+[functions.create-client-by-admin]
+verify_jwt = false

@@ -1,0 +1,2 @@
+[functions.n8n-receive-order]
+verify_jwt = false

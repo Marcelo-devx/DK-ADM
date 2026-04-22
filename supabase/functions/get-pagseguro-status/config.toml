@@ -1,0 +1,2 @@
+[functions.get-pagseguro-status]
+verify_jwt = false

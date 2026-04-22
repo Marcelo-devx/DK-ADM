@@ -1,0 +1,2 @@
+[functions.get-order-details]
+verify_jwt = false

@@ -1,0 +1,2 @@
+[functions.test-auto-update-orders]
+verify_jwt = false

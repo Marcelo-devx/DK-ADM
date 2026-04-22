@@ -1,0 +1,2 @@
+[functions.n8n-create-client]
+verify_jwt = false

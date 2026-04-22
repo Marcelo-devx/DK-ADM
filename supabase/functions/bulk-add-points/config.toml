@@ -1,0 +1,2 @@
+[functions.bulk-add-points]
+verify_jwt = false

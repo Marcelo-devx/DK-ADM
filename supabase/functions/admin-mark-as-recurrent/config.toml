@@ -1,0 +1,2 @@
+[functions.admin-mark-as-recurrent]
+verify_jwt = false

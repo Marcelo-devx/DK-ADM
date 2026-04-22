@@ -1,0 +1,2 @@
+[functions.cloudinary-delete-image]
+verify_jwt = false

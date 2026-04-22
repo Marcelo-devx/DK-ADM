@@ -1,0 +1,2 @@
+[functions.admin-block-user]
+verify_jwt = false

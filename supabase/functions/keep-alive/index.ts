@@ -7,8 +7,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Apenas funções confirmadas como deployadas (retornam != 404)
+// Todas as funções do projeto — warm-up tenta todas e loga as ausentes
 const CRITICAL_FUNCTIONS = [
+  // ✅ Confirmadas warm
   'update-order-status',
   'get-order-details',
   'admin-list-users',
@@ -16,6 +17,51 @@ const CRITICAL_FUNCTIONS = [
   'cloudinary-list-images',
   'cloudinary-delete-image',
   'cloudinary-usage',
+  // Clientes / Admin
+  'create-client-by-admin',
+  'admin-user-actions',
+  'admin-delete-orders',
+  'admin-mark-as-recurrent',
+  'admin-create-user',
+  'admin-delete-user',
+  'admin-block-user',
+  'admin-update-order',
+  'admin-cancel-order',
+  'admin-delete-order',
+  'admin-get-order-history',
+  'admin-send-campaign',
+  'get-users',
+  'get-users-emails',
+  'get-user-email',
+  'bulk-import-clients',
+  'n8n-create-client',
+  // Pedidos / Webhooks
+  'cleanup-orders',
+  'dispatch-webhook',
+  'test-webhook-endpoint',
+  'n8n-webhook',
+  'n8n-receive-order',
+  'n8n-list-clients',
+  'n8n-list-products',
+  'spoke-webhook',
+  'spoke-proxy',
+  'mp-webhook',
+  'api-config-manager',
+  // Pagamentos
+  'create-mercadopago-pix',
+  'create-mercadopago-preference',
+  'get-mercadopago-status',
+  'update-mercadopago-token',
+  'get-pagseguro-status',
+  'update-pagseguro-token',
+  'verify-blockchain-tx',
+  // Analytics / Outros
+  'analytics-bi',
+  'actionable-insights',
+  'generate-sales-popups',
+  'bulk-add-points',
+  'bulk-product-upsert',
+  'catalog-api',
 ];
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';

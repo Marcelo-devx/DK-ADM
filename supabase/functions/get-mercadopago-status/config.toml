@@ -1,0 +1,2 @@
+[functions.get-mercadopago-status]
+verify_jwt = false

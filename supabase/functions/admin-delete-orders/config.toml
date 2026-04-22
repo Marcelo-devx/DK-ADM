@@ -1,0 +1,2 @@
+[functions.admin-delete-orders]
+verify_jwt = false

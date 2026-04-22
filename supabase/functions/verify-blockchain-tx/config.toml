@@ -1,0 +1,2 @@
+[functions.verify-blockchain-tx]
+verify_jwt = false

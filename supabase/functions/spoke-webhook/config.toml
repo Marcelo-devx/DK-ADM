@@ -1,0 +1,2 @@
+[functions.spoke-webhook]
+verify_jwt = false

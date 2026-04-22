@@ -1,0 +1,2 @@
+[functions.get-user-email]
+verify_jwt = false

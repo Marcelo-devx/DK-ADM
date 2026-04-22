@@ -1,0 +1,2 @@
+[functions.cloudinary-list-images]
+verify_jwt = false

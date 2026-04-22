@@ -1,0 +1,2 @@
+[functions.n8n-list-products]
+verify_jwt = false

@@ -1,0 +1,2 @@
+[functions.analytics-bi]
+verify_jwt = false

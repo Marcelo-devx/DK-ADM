@@ -1,0 +1,2 @@
+[functions.admin-cancel-order]
+verify_jwt = false
