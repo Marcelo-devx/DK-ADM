@@ -114,9 +114,19 @@ const fetchOrdersPage = async (page: number, filters: Filters): Promise<OrdersRe
       profileQuery = profileQuery.ilike("email", `%${filters.email}%`);
     }
     if (filters.clientName) {
-      profileQuery = profileQuery.or(
-        `first_name.ilike.%${filters.clientName}%,last_name.ilike.%${filters.clientName}%`
-      );
+      const nameParts = filters.clientName.trim().split(/\s+/);
+      if (nameParts.length >= 2) {
+        // Nome completo: busca primeiro nome no first_name E sobrenome no last_name (e vice-versa)
+        const first = nameParts[0];
+        const rest = nameParts.slice(1).join(" ");
+        profileQuery = profileQuery.or(
+          `and(first_name.ilike.%${first}%,last_name.ilike.%${rest}%),and(first_name.ilike.%${rest}%,last_name.ilike.%${first}%),first_name.ilike.%${filters.clientName}%,last_name.ilike.%${filters.clientName}%`
+        );
+      } else {
+        profileQuery = profileQuery.or(
+          `first_name.ilike.%${filters.clientName}%,last_name.ilike.%${filters.clientName}%`
+        );
+      }
     }
     if (filters.cpf) {
       const cleanSearch = filters.cpf.replace(/\D/g, "");
