@@ -18,8 +18,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, User, MapPin, Settings2, ShieldCheck } from "lucide-react";
+import { Loader2, User, MapPin, Settings2, ShieldCheck, Search } from "lucide-react";
 import { AdminUser, UpdateUserPayload } from "@/hooks/useUserAdmin";
+import { showError } from "@/utils/toast";
 
 interface UserEditModalProps {
   isOpen: boolean;
@@ -51,6 +52,7 @@ const EMPTY_FORM: UpdateUserPayload = {
 export function UserEditModal({ isOpen, onClose, user, onConfirm }: UserEditModalProps) {
   const [form, setForm] = useState<UpdateUserPayload>(EMPTY_FORM);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isFetchingCep, setIsFetchingCep] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -78,6 +80,38 @@ export function UserEditModal({ isOpen, onClose, user, onConfirm }: UserEditModa
 
   const set = (field: keyof UpdateUserPayload, value: any) =>
     setForm((prev) => ({ ...prev, [field]: value }));
+
+  const handleCepChange = (value: string) => {
+    set("cep", value);
+    const digits = value.replace(/\D/g, "");
+    if (digits.length === 8) {
+      fetchCep(digits);
+    }
+  };
+
+  const fetchCep = async (cep: string) => {
+    setIsFetchingCep(true);
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      const data = await res.json();
+      if (data.erro) {
+        showError("CEP não encontrado. Verifique e tente novamente.");
+        return;
+      }
+      setForm((prev) => ({
+        ...prev,
+        street: data.logradouro || prev.street,
+        neighborhood: data.bairro || prev.neighborhood,
+        city: data.localidade || prev.city,
+        state: data.uf || prev.state,
+        cep: data.cep || prev.cep,
+      }));
+    } catch {
+      showError("Erro ao buscar CEP. Verifique sua conexão.");
+    } finally {
+      setIsFetchingCep(false);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!user) return;
@@ -230,12 +264,30 @@ export function UserEditModal({ isOpen, onClose, user, onConfirm }: UserEditModa
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1">
                 <Label htmlFor="cep">CEP</Label>
-                <Input
-                  id="cep"
-                  value={form.cep ?? ""}
-                  onChange={(e) => set("cep", e.target.value)}
-                  placeholder="00000-000"
-                />
+                <div className="flex gap-2">
+                  <Input
+                    id="cep"
+                    value={form.cep ?? ""}
+                    onChange={(e) => handleCepChange(e.target.value)}
+                    placeholder="00000-000"
+                    maxLength={9}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    disabled={isFetchingCep || (form.cep ?? "").replace(/\D/g, "").length < 8}
+                    onClick={() => fetchCep((form.cep ?? "").replace(/\D/g, ""))}
+                    title="Buscar CEP"
+                  >
+                    {isFetchingCep ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Search className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">Digite o CEP para preencher automaticamente</p>
               </div>
               <div className="space-y-1 sm:col-span-2">
                 <Label htmlFor="street">Rua / Logradouro</Label>
