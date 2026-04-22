@@ -112,12 +112,13 @@ export const useProductData = () => {
   });
 
   const { data: subCategories } = useQuery({
-    queryKey: ["subCategories"],
+    queryKey: ["sub_categories"],
     queryFn: async () => {
         const { data, error } = await supabase.from("sub_categories").select("id, name, category_id").order("name");
         if (error) throw error;
         return data;
     },
+    staleTime: 0,
   });
 
   const { data: brands, isLoading: isLoadingBrands } = useQuery({
