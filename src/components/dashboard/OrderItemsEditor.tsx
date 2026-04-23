@@ -104,58 +104,68 @@ async function adjustStock(
 const searchProducts = async (term: string): Promise<SelectableItem[]> => {
   const results: SelectableItem[] = [];
 
-  let variantQuery = supabase
-    .from("product_variants")
-    .select("id, product_id, ohms, size, color, stock_quantity, cost_price, products(name, categories(name), brands(name))")
-    .order("stock_quantity", { ascending: false })
-    .limit(30);
+  // 1. Busca produtos pelo nome (ou todos se sem termo)
+  let productQuery = supabase
+    .from("products")
+    .select("id, name, stock_quantity, cost_price, price, pix_price")
+    .eq("is_visible", true)
+    .order("name", { ascending: true })
+    .limit(40);
 
-  if (term) variantQuery = variantQuery.ilike("products.name", `%${term}%`);
-
-  const { data: variants } = await variantQuery;
-  if (variants) {
-    variants.forEach((v: any) => {
-      if (!v.products) return;
-      const attrs = [v.ohms, v.size, v.color].filter(Boolean).join(" / ");
-      const name = attrs ? `${v.products.name} — ${attrs}` : v.products.name;
-      results.push({
-        id: v.product_id,
-        variant_id: v.id,
-        name,
-        stock_quantity: v.stock_quantity ?? 0,
-        cost_price: v.cost_price ?? null,
-        is_variant: true,
-        ohms: v.ohms,
-        size: v.size,
-        color: v.color,
-        category: v.products?.categories?.name ?? null,
-        brand: v.products?.brands?.name ?? null,
-      });
-    });
+  if (term.trim()) {
+    productQuery = productQuery.ilike("name", `%${term.trim()}%`);
   }
 
-  if (results.length < 10) {
-    let productQuery = supabase
-      .from("products")
-      .select("id, name, stock_quantity, cost_price, categories(name), brands(name)")
-      .order("stock_quantity", { ascending: false })
-      .limit(20);
-    if (term) productQuery = productQuery.ilike("name", `%${term}%`);
-    const { data: products } = await productQuery;
-    if (products) {
-      products.forEach((p: any) => {
-        if (!results.some((r) => r.id === p.id)) {
-          results.push({
-            id: p.id,
-            variant_id: null,
-            name: p.name,
-            stock_quantity: p.stock_quantity ?? 0,
-            cost_price: p.cost_price ?? null,
-            is_variant: false,
-            category: p.categories?.name ?? null,
-            brand: p.brands?.name ?? null,
-          });
-        }
+  const { data: products, error: prodError } = await productQuery;
+  if (prodError || !products || products.length === 0) return results;
+
+  const productIds = products.map((p: any) => p.id);
+  const productMap = new Map(products.map((p: any) => [p.id, p]));
+
+  // 2. Busca variantes desses produtos
+  const { data: variants } = await supabase
+    .from("product_variants")
+    .select("id, product_id, ohms, size, color, stock_quantity, cost_price, price, pix_price")
+    .in("product_id", productIds)
+    .eq("is_active", true)
+    .order("stock_quantity", { ascending: false });
+
+  // 3. Agrupa variantes por produto
+  const variantsByProduct = new Map<number, any[]>();
+  if (variants) {
+    for (const v of variants) {
+      if (!variantsByProduct.has(v.product_id)) variantsByProduct.set(v.product_id, []);
+      variantsByProduct.get(v.product_id)!.push(v);
+    }
+  }
+
+  // 4. Monta lista: se produto tem variantes, lista cada variante; senão, lista o produto base
+  for (const product of products) {
+    const pvs = variantsByProduct.get(product.id);
+    if (pvs && pvs.length > 0) {
+      for (const v of pvs) {
+        const attrs = [v.ohms, v.size, v.color].filter((a) => a && a.trim() !== "").join(" / ");
+        const name = attrs ? `${product.name} — ${attrs}` : product.name;
+        results.push({
+          id: product.id,
+          variant_id: v.id,
+          name,
+          stock_quantity: v.stock_quantity ?? 0,
+          cost_price: v.cost_price ?? product.cost_price ?? null,
+          is_variant: true,
+          ohms: v.ohms,
+          size: v.size,
+          color: v.color,
+        });
+      }
+    } else {
+      results.push({
+        id: product.id,
+        variant_id: null,
+        name: product.name,
+        stock_quantity: product.stock_quantity ?? 0,
+        cost_price: product.cost_price ?? null,
+        is_variant: false,
       });
     }
   }
