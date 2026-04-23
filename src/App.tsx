@@ -61,6 +61,7 @@ import RelatorioEntradaEstoque from "./pages/dashboard/RelatorioEntradaEstoque";
 import InvestigarUsuario from "./pages/dashboard/InvestigarUsuario";
 import ReativarPedidos from "./pages/dashboard/ReativarPedidos";
 import AuditoriaCartao from "./pages/dashboard/AuditoriaCartao";
+import AuditoriaPedidos from "./pages/dashboard/AuditoriaPedidos";
 import { useKeepAlive } from "./hooks/useKeepAlive";
 
 const DashboardIndex = () => {
@@ -156,6 +157,7 @@ const App = () => (
               <Route path="investigar-usuario" element={<InvestigarUsuario />} />
               <Route path="reativar-pedidos" element={<ReativarPedidos />} />
               <Route path="auditoria-cartao" element={<AuditoriaCartao />} />
+              <Route path="auditoria-pedidos" element={<AuditoriaPedidos />} />
             </Route>
             
             <Route path="*" element={<NotFound />} />

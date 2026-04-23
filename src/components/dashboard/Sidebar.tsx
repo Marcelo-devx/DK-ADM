@@ -17,6 +17,7 @@ import {
   Percent,
   Ticket,
   ShieldAlert,
+  ShieldCheck,
   FileEdit,
   X,
   Truck as TruckIcon,
@@ -254,6 +255,9 @@ const Sidebar = () => {
       </NavLink>
       <NavLink to="/dashboard/auditoria-cartao" className={navLinkClass}>
         {({ isActive }) => (<><CreditCard className={iconClass("text-purple-600", isActive)} />Auditoria Cartão</>)}
+      </NavLink>
+      <NavLink to="/dashboard/auditoria-pedidos" className={navLinkClass}>
+        {({ isActive }) => (<><ShieldCheck className={iconClass("text-orange-600", isActive)} />Auditoria Pedidos</>)}
       </NavLink>
 
     </>
