@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   User, MapPin, Phone, Calendar, Shield, Star,
   Mail, Award, CreditCard, History, Fingerprint,
-  ShoppingBag, Package, Wind, Palette, Ruler, Zap, HelpCircle, Gift,
+  ShoppingBag, Package, Wind, Palette, Ruler, Zap, HelpCircle, Gift, Tag,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -155,6 +155,35 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
     },
     enabled: isOpen,
     staleTime: 300_000,
+  });
+
+  // ── QUERY 6: Cupons usados nos pedidos ────────────────────────────────────
+  const { data: orderCoupons } = useQuery({
+    queryKey: ["clientOrderCoupons", client?.id, orderIds.join(",")],
+    queryFn: async () => {
+      if (!orderIds.length) return [];
+      const { data, error } = await supabase
+        .from("user_coupons")
+        .select("order_id, coupon_id, coupons(name, description, discount_value)")
+        .in("order_id", orderIds)
+        .eq("is_used", true);
+      if (error) return [];
+      return data ?? [];
+    },
+    enabled: !!client?.id && isOpen && orderIds.length > 0,
+    staleTime: 60_000,
+  });
+
+  // Mapa: order_id → dados do cupom
+  const orderCouponMap = new Map<number, { name: string; description: string | null; discount_value: number }>();
+  (orderCoupons ?? []).forEach((uc: any) => {
+    if (uc.order_id && uc.coupons) {
+      orderCouponMap.set(uc.order_id, {
+        name: uc.coupons.name,
+        description: uc.coupons.description,
+        discount_value: Number(uc.coupons.discount_value),
+      });
+    }
   });
 
   // ── Mapas de lookup ───────────────────────────────────────────────────────
@@ -495,12 +524,22 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
                                           <span>{formatCurrency(donation)}</span>
                                         </div>
                                       )}
-                                      {coupon > 0 && (
-                                        <div className="flex justify-between gap-8 text-green-600 font-medium">
-                                          <span className="text-xs">Desconto cupom</span>
-                                          <span>-{formatCurrency(coupon)}</span>
-                                        </div>
-                                      )}
+                                      {coupon > 0 && (() => {
+                                        const couponInfo = orderCouponMap.get(order.id);
+                                        return (
+                                          <div className="flex justify-between gap-8 text-green-600 font-medium">
+                                            <div className="flex flex-col gap-0.5">
+                                              <span className="text-xs">Desconto cupom</span>
+                                              {couponInfo && (
+                                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-50 border border-green-200 text-[10px] font-bold text-green-700 w-fit">
+                                                  <Tag className="w-2.5 h-2.5" /> {couponInfo.name}
+                                                </span>
+                                              )}
+                                            </div>
+                                            <span>-{formatCurrency(coupon)}</span>
+                                          </div>
+                                        );
+                                      })()}
                                       <div className="flex justify-between gap-8 pt-1 border-t font-bold">
                                         <span>Total</span>
                                         <span className="text-primary">{formatCurrency(orderTotal)}</span>
