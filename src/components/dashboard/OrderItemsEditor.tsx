@@ -1,11 +1,11 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { ProductCombobox, SelectableItem } from "@/components/dashboard/ProductCombobox";
-import { Trash2, Plus, Package, Loader2, Save } from "lucide-react";
+import { Trash2, Plus, Package, Loader2, Save, RefreshCw, AlertTriangle } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -19,6 +19,10 @@ interface OrderItem {
   name_at_purchase: string;
   image_url_at_purchase?: string | null;
   variant_id?: string | null;
+}
+
+interface EditableItem extends OrderItem {
+  _originalQuantity: number; // to compute stock diff
 }
 
 interface NewItem {
@@ -36,25 +40,79 @@ interface NewItem {
 interface OrderItemsEditorProps {
   orderId: number;
   initialItems: OrderItem[];
-  onClose?: () => void;
+  orderShippingCost: number;
+  orderCouponDiscount: number;
+  orderDonationAmount: number;
+  onSaved: (newTotal: number) => void;
 }
 
+// ── Fetch price for a product/variant ──────────────────────────────────────
+async function fetchItemPrice(item: SelectableItem): Promise<number> {
+  if (item.variant_id) {
+    const { data } = await supabase
+      .from("product_variants")
+      .select("pix_price, price")
+      .eq("id", item.variant_id)
+      .single();
+    if (data) return Number(data.pix_price ?? data.price ?? 0);
+  } else {
+    const { data } = await supabase
+      .from("products")
+      .select("pix_price, price")
+      .eq("id", item.id)
+      .single();
+    if (data) return Number(data.pix_price ?? data.price ?? 0);
+  }
+  return 0;
+}
+
+// ── Stock helpers ──────────────────────────────────────────────────────────
+async function adjustStock(
+  item_id: number | null,
+  variant_id: string | null,
+  delta: number // positive = add back, negative = deduct
+) {
+  if (delta === 0) return;
+  if (variant_id) {
+    const { data: v } = await supabase
+      .from("product_variants")
+      .select("stock_quantity")
+      .eq("id", variant_id)
+      .single();
+    if (v) {
+      await supabase
+        .from("product_variants")
+        .update({ stock_quantity: Math.max(0, v.stock_quantity + delta) })
+        .eq("id", variant_id);
+    }
+  } else if (item_id) {
+    const { data: p } = await supabase
+      .from("products")
+      .select("stock_quantity")
+      .eq("id", item_id)
+      .single();
+    if (p) {
+      await supabase
+        .from("products")
+        .update({ stock_quantity: Math.max(0, p.stock_quantity + delta) })
+        .eq("id", item_id);
+    }
+  }
+}
+
+// ── Product search ─────────────────────────────────────────────────────────
 const searchProducts = async (term: string): Promise<SelectableItem[]> => {
   const results: SelectableItem[] = [];
 
-  // Search variants first
   let variantQuery = supabase
     .from("product_variants")
     .select("id, product_id, ohms, size, color, stock_quantity, cost_price, products(name, categories(name), brands(name))")
     .order("stock_quantity", { ascending: false })
     .limit(30);
 
-  if (term) {
-    variantQuery = variantQuery.ilike("products.name", `%${term}%`);
-  }
+  if (term) variantQuery = variantQuery.ilike("products.name", `%${term}%`);
 
   const { data: variants } = await variantQuery;
-
   if (variants) {
     variants.forEach((v: any) => {
       if (!v.products) return;
@@ -76,24 +134,17 @@ const searchProducts = async (term: string): Promise<SelectableItem[]> => {
     });
   }
 
-  // If no variants found or no term, also search base products
   if (results.length < 10) {
     let productQuery = supabase
       .from("products")
       .select("id, name, stock_quantity, cost_price, categories(name), brands(name)")
       .order("stock_quantity", { ascending: false })
       .limit(20);
-
-    if (term) {
-      productQuery = productQuery.ilike("name", `%${term}%`);
-    }
-
+    if (term) productQuery = productQuery.ilike("name", `%${term}%`);
     const { data: products } = await productQuery;
     if (products) {
       products.forEach((p: any) => {
-        // Only add base product if it doesn't have variants already in results
-        const alreadyHasVariant = results.some((r) => r.id === p.id);
-        if (!alreadyHasVariant) {
+        if (!results.some((r) => r.id === p.id)) {
           results.push({
             id: p.id,
             variant_id: null,
@@ -112,36 +163,40 @@ const searchProducts = async (term: string): Promise<SelectableItem[]> => {
   return results;
 };
 
-export function OrderItemsEditor({ orderId, initialItems, onClose }: OrderItemsEditorProps) {
+// ── Component ──────────────────────────────────────────────────────────────
+export function OrderItemsEditor({
+  orderId,
+  initialItems,
+  orderShippingCost,
+  orderCouponDiscount,
+  orderDonationAmount,
+  onSaved,
+}: OrderItemsEditorProps) {
   const queryClient = useQueryClient();
-  const [items, setItems] = useState<OrderItem[]>(initialItems);
+
+  const [items, setItems] = useState<EditableItem[]>(
+    initialItems.map((it) => ({ ...it, _originalQuantity: it.quantity }))
+  );
   const [newItems, setNewItems] = useState<NewItem[]>([]);
   const [deletedIds, setDeletedIds] = useState<Set<number>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
+  const [loadingPriceTempId, setLoadingPriceTempId] = useState<string | null>(null);
 
-  const formatCurrency = (val: number) =>
+  const fmt = (val: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
 
-  // Existing items handlers
-  const updateExistingItem = (id: number, field: "quantity" | "price_at_purchase" | "name_at_purchase", value: any) => {
-    setItems((prev) =>
-      prev.map((it) => (it.id === id ? { ...it, [field]: value } : it))
-    );
+  // ── Existing items ────────────────────────────────────────────────────────
+  const updateItem = (id: number, field: "quantity" | "price_at_purchase" | "name_at_purchase", value: any) => {
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, [field]: value } : it)));
   };
 
-  const markForDeletion = (id: number) => {
+  const markForDeletion = (id: number) =>
     setDeletedIds((prev) => new Set([...prev, id]));
-  };
 
-  const unmarkForDeletion = (id: number) => {
-    setDeletedIds((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-  };
+  const unmarkForDeletion = (id: number) =>
+    setDeletedIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
 
-  // New items handlers
+  // ── New items ─────────────────────────────────────────────────────────────
   const addNewItem = () => {
     setNewItems((prev) => [
       ...prev,
@@ -159,31 +214,30 @@ export function OrderItemsEditor({ orderId, initialItems, onClose }: OrderItemsE
     ]);
   };
 
-  const updateNewItem = (tempId: string, field: string, value: any) => {
-    setNewItems((prev) =>
-      prev.map((it) => (it.tempId === tempId ? { ...it, [field]: value } : it))
-    );
-  };
+  const updateNewItem = (tempId: string, field: string, value: any) =>
+    setNewItems((prev) => prev.map((it) => (it.tempId === tempId ? { ...it, [field]: value } : it)));
 
-  const handleNewItemProductSelect = (tempId: string, comboValue: string, item: SelectableItem) => {
+  const handleNewItemSelect = async (tempId: string, comboValue: string, item: SelectableItem) => {
+    // Optimistically set name and clear price while fetching
     setNewItems((prev) =>
       prev.map((it) =>
         it.tempId === tempId
-          ? {
-              ...it,
-              comboValue,
-              selectedItem: item,
-              item_id: item.id,
-              variant_id: item.variant_id ?? null,
-              name_at_purchase: item.name,
-              price_at_purchase: 0,
-            }
+          ? { ...it, comboValue, selectedItem: item, item_id: item.id, variant_id: item.variant_id ?? null, name_at_purchase: item.name, price_at_purchase: 0 }
           : it
       )
     );
+    setLoadingPriceTempId(tempId);
+    try {
+      const price = await fetchItemPrice(item);
+      setNewItems((prev) =>
+        prev.map((it) => (it.tempId === tempId ? { ...it, price_at_purchase: price } : it))
+      );
+    } finally {
+      setLoadingPriceTempId(null);
+    }
   };
 
-  const handleNewItemClear = (tempId: string) => {
+  const handleNewItemClear = (tempId: string) =>
     setNewItems((prev) =>
       prev.map((it) =>
         it.tempId === tempId
@@ -191,27 +245,39 @@ export function OrderItemsEditor({ orderId, initialItems, onClose }: OrderItemsE
           : it
       )
     );
-  };
 
-  const removeNewItem = (tempId: string) => {
+  const removeNewItem = (tempId: string) =>
     setNewItems((prev) => prev.filter((it) => it.tempId !== tempId));
-  };
 
+  // ── Computed totals ───────────────────────────────────────────────────────
+  const activeItems = items.filter((it) => !deletedIds.has(it.id));
+  const deletedItems = items.filter((it) => deletedIds.has(it.id));
+  const validNewItems = newItems.filter((it) => it.item_id !== null && it.name_at_purchase);
+
+  const itemsSubtotal =
+    activeItems.reduce((acc, it) => acc + it.price_at_purchase * it.quantity, 0) +
+    validNewItems.reduce((acc, it) => acc + it.price_at_purchase * it.quantity, 0);
+
+  const newTotal = itemsSubtotal + orderShippingCost + orderDonationAmount - orderCouponDiscount;
+
+  // ── Save ──────────────────────────────────────────────────────────────────
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      // 1. Delete marked items
-      if (deletedIds.size > 0) {
-        const { error } = await supabase
-          .from("order_items")
-          .delete()
-          .in("id", Array.from(deletedIds));
-        if (error) throw new Error(`Erro ao remover itens: ${error.message}`);
+      // 1. Handle deleted items → return stock
+      for (const id of Array.from(deletedIds)) {
+        const original = items.find((it) => it.id === id);
+        if (original) {
+          await adjustStock(original.item_id, original.variant_id ?? null, +original._originalQuantity);
+          const { error } = await supabase.from("order_items").delete().eq("id", id);
+          if (error) throw new Error(`Erro ao remover item: ${error.message}`);
+        }
       }
 
-      // 2. Update existing items (not deleted)
-      const itemsToUpdate = items.filter((it) => !deletedIds.has(it.id));
-      for (const item of itemsToUpdate) {
+      // 2. Update existing items → adjust stock diff
+      for (const item of activeItems) {
+        const qtyDiff = item._originalQuantity - item.quantity; // positive = we reduced qty → return stock
+        await adjustStock(item.item_id, item.variant_id ?? null, qtyDiff);
         const { error } = await supabase
           .from("order_items")
           .update({
@@ -223,8 +289,7 @@ export function OrderItemsEditor({ orderId, initialItems, onClose }: OrderItemsE
         if (error) throw new Error(`Erro ao atualizar item: ${error.message}`);
       }
 
-      // 3. Insert new items
-      const validNewItems = newItems.filter((it) => it.item_id !== null && it.name_at_purchase);
+      // 3. Insert new items → deduct stock
       if (validNewItems.length > 0) {
         const toInsert = validNewItems.map((it) => ({
           order_id: orderId,
@@ -237,11 +302,22 @@ export function OrderItemsEditor({ orderId, initialItems, onClose }: OrderItemsE
         }));
         const { error } = await supabase.from("order_items").insert(toInsert);
         if (error) throw new Error(`Erro ao inserir itens: ${error.message}`);
+
+        for (const it of validNewItems) {
+          await adjustStock(it.item_id, it.variant_id, -it.quantity);
+        }
       }
 
-      showSuccess("Itens do pedido atualizados com sucesso!");
+      // 4. Update order total automatically
+      const { error: orderError } = await supabase
+        .from("orders")
+        .update({ total_price: newTotal })
+        .eq("id", orderId);
+      if (orderError) throw new Error(`Erro ao atualizar total: ${orderError.message}`);
+
+      showSuccess(`Itens e total do pedido #${orderId} atualizados! Novo total: ${fmt(newTotal)}`);
       queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
-      onClose?.();
+      onSaved(newTotal);
     } catch (err: any) {
       showError(err.message || "Erro ao salvar itens");
     } finally {
@@ -251,11 +327,11 @@ export function OrderItemsEditor({ orderId, initialItems, onClose }: OrderItemsE
 
   const hasChanges =
     deletedIds.size > 0 ||
-    newItems.some((it) => it.item_id !== null) ||
-    JSON.stringify(items) !== JSON.stringify(initialItems);
-
-  const activeItems = items.filter((it) => !deletedIds.has(it.id));
-  const deletedItems = items.filter((it) => deletedIds.has(it.id));
+    validNewItems.length > 0 ||
+    items.some((it) => {
+      const orig = initialItems.find((o) => o.id === it.id);
+      return orig && (it.quantity !== orig.quantity || it.price_at_purchase !== orig.price_at_purchase || it.name_at_purchase !== orig.name_at_purchase);
+    });
 
   return (
     <div className="space-y-4">
@@ -265,19 +341,18 @@ export function OrderItemsEditor({ orderId, initialItems, onClose }: OrderItemsE
           {activeItems.map((item) => (
             <div
               key={item.id}
-              className="grid grid-cols-[1fr_80px_110px_36px] gap-2 items-center p-3 bg-gray-50 rounded-lg border border-gray-200"
+              className="grid grid-cols-[1fr_76px_106px_34px] gap-2 items-start p-3 bg-gray-50 rounded-lg border border-gray-200"
             >
-              <div className="min-w-0">
+              {/* Name */}
+              <div className="min-w-0 space-y-1">
                 <Input
                   value={item.name_at_purchase}
-                  onChange={(e) => updateExistingItem(item.id, "name_at_purchase", e.target.value)}
+                  onChange={(e) => updateItem(item.id, "name_at_purchase", e.target.value)}
                   className="h-8 text-sm font-medium"
                   placeholder="Nome do produto"
                 />
-                <div className="flex items-center gap-2 mt-1">
-                  <Badge variant="outline" className="text-[10px] h-4 px-1">
-                    {item.item_type}
-                  </Badge>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <Badge variant="outline" className="text-[10px] h-4 px-1">{item.item_type}</Badge>
                   {item.variant_id && (
                     <span className="text-[10px] text-muted-foreground font-mono">
                       var: {String(item.variant_id).slice(0, 8)}…
@@ -285,37 +360,47 @@ export function OrderItemsEditor({ orderId, initialItems, onClose }: OrderItemsE
                   )}
                 </div>
               </div>
-              <div>
-                <Label className="text-[10px] text-muted-foreground mb-0.5 block">Qtd</Label>
+
+              {/* Qty */}
+              <div className="space-y-0.5">
+                <Label className="text-[10px] text-muted-foreground block">Qtd</Label>
                 <Input
                   type="number"
                   min={1}
                   value={item.quantity}
-                  onChange={(e) => updateExistingItem(item.id, "quantity", parseInt(e.target.value) || 1)}
+                  onChange={(e) => updateItem(item.id, "quantity", parseInt(e.target.value) || 1)}
                   className="h-8 text-sm text-center"
                 />
+                {item.quantity !== item._originalQuantity && (
+                  <p className="text-[10px] text-amber-600">
+                    era {item._originalQuantity}
+                  </p>
+                )}
               </div>
-              <div>
-                <Label className="text-[10px] text-muted-foreground mb-0.5 block">
-                  Preço unit. {formatCurrency(item.price_at_purchase)}
+
+              {/* Price */}
+              <div className="space-y-0.5">
+                <Label className="text-[10px] text-muted-foreground block">
+                  Preço unit.
                 </Label>
                 <Input
                   type="number"
                   step="0.01"
                   min={0}
                   value={item.price_at_purchase}
-                  onChange={(e) =>
-                    updateExistingItem(item.id, "price_at_purchase", parseFloat(e.target.value) || 0)
-                  }
+                  onChange={(e) => updateItem(item.id, "price_at_purchase", parseFloat(e.target.value) || 0)}
                   className="h-8 text-sm"
                 />
+                <p className="text-[10px] text-muted-foreground">{fmt(item.price_at_purchase * item.quantity)}</p>
               </div>
+
+              {/* Delete */}
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 text-red-500 hover:bg-red-50 hover:text-red-700"
+                className="h-8 w-8 mt-4 text-red-500 hover:bg-red-50 hover:text-red-700"
                 onClick={() => markForDeletion(item.id)}
-                title="Remover item"
+                title="Remover item (devolve estoque)"
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -324,16 +409,22 @@ export function OrderItemsEditor({ orderId, initialItems, onClose }: OrderItemsE
         </div>
       )}
 
-      {/* Deleted items (shown with restore option) */}
+      {/* Deleted items */}
       {deletedItems.length > 0 && (
         <div className="space-y-1">
-          <p className="text-xs text-muted-foreground font-medium">Itens marcados para remoção:</p>
+          <p className="text-xs text-muted-foreground font-medium flex items-center gap-1">
+            <AlertTriangle className="h-3 w-3 text-amber-500" />
+            Itens marcados para remoção (estoque será devolvido):
+          </p>
           {deletedItems.map((item) => (
             <div
               key={item.id}
-              className="flex items-center justify-between p-2 bg-red-50 rounded-lg border border-red-200 opacity-60"
+              className="flex items-center justify-between p-2 bg-red-50 rounded-lg border border-red-200"
             >
-              <span className="text-sm line-through text-red-700">{item.name_at_purchase}</span>
+              <div>
+                <span className="text-sm line-through text-red-700">{item.name_at_purchase}</span>
+                <span className="text-xs text-red-500 ml-2">× {item._originalQuantity}</span>
+              </div>
               <Button
                 variant="ghost"
                 size="sm"
@@ -357,7 +448,7 @@ export function OrderItemsEditor({ orderId, initialItems, onClose }: OrderItemsE
               className="p-3 bg-blue-50 rounded-lg border border-blue-200 space-y-2"
             >
               <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-blue-700">Novo item</span>
+                <span className="text-xs font-semibold text-blue-700">Novo produto</span>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -367,43 +458,50 @@ export function OrderItemsEditor({ orderId, initialItems, onClose }: OrderItemsE
                   <Trash2 className="h-3 w-3" />
                 </Button>
               </div>
+
               <ProductCombobox
                 value={newItem.comboValue}
                 selectedItem={newItem.selectedItem}
                 onSearch={searchProducts}
-                onChange={(val, item) => handleNewItemProductSelect(newItem.tempId, val, item)}
+                onChange={(val, item) => handleNewItemSelect(newItem.tempId, val, item)}
                 onClear={() => handleNewItemClear(newItem.tempId)}
                 placeholder="Buscar produto..."
                 allowWrap
               />
+
               {newItem.selectedItem && (
                 <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <Label className="text-[10px] text-muted-foreground mb-0.5 block">Quantidade</Label>
+                  <div className="space-y-0.5">
+                    <Label className="text-[10px] text-muted-foreground block">Quantidade</Label>
                     <Input
                       type="number"
                       min={1}
                       value={newItem.quantity}
-                      onChange={(e) =>
-                        updateNewItem(newItem.tempId, "quantity", parseInt(e.target.value) || 1)
-                      }
+                      onChange={(e) => updateNewItem(newItem.tempId, "quantity", parseInt(e.target.value) || 1)}
                       className="h-8 text-sm"
                     />
+                    <p className="text-[10px] text-muted-foreground">
+                      Estoque: {newItem.selectedItem.stock_quantity}
+                    </p>
                   </div>
-                  <div>
-                    <Label className="text-[10px] text-muted-foreground mb-0.5 block">
-                      Preço unit. {formatCurrency(newItem.price_at_purchase)}
+                  <div className="space-y-0.5">
+                    <Label className="text-[10px] text-muted-foreground block flex items-center gap-1">
+                      Preço unit.
+                      {loadingPriceTempId === newItem.tempId && (
+                        <RefreshCw className="h-3 w-3 animate-spin text-blue-500" />
+                      )}
                     </Label>
                     <Input
                       type="number"
                       step="0.01"
                       min={0}
                       value={newItem.price_at_purchase}
-                      onChange={(e) =>
-                        updateNewItem(newItem.tempId, "price_at_purchase", parseFloat(e.target.value) || 0)
-                      }
+                      onChange={(e) => updateNewItem(newItem.tempId, "price_at_purchase", parseFloat(e.target.value) || 0)}
                       className="h-8 text-sm"
                     />
+                    <p className="text-[10px] text-muted-foreground">
+                      {fmt(newItem.price_at_purchase * newItem.quantity)}
+                    </p>
                   </div>
                 </div>
               )}
@@ -421,24 +519,36 @@ export function OrderItemsEditor({ orderId, initialItems, onClose }: OrderItemsE
       )}
 
       {/* Summary */}
-      {(activeItems.length > 0 || newItems.some((it) => it.selectedItem)) && (
-        <div className="bg-gray-100 rounded-lg p-3 text-sm">
-          <div className="flex justify-between items-center">
-            <span className="text-muted-foreground">Subtotal dos itens:</span>
-            <span className="font-bold">
-              {formatCurrency(
-                activeItems.reduce(
-                  (acc, it) => acc + it.price_at_purchase * it.quantity,
-                  0
-                ) +
-                  newItems
-                    .filter((it) => it.selectedItem)
-                    .reduce((acc, it) => acc + it.price_at_purchase * it.quantity, 0)
-              )}
-            </span>
+      {(activeItems.length > 0 || validNewItems.length > 0) && (
+        <div className="bg-slate-100 rounded-lg p-3 space-y-1.5 text-sm border border-slate-200">
+          <div className="flex justify-between text-muted-foreground">
+            <span>Subtotal dos itens</span>
+            <span>{fmt(itemsSubtotal)}</span>
           </div>
-          <p className="text-[10px] text-muted-foreground mt-1">
-            * O total do pedido deve ser atualizado manualmente na aba de valores.
+          {orderShippingCost > 0 && (
+            <div className="flex justify-between text-muted-foreground">
+              <span>Frete</span>
+              <span>+ {fmt(orderShippingCost)}</span>
+            </div>
+          )}
+          {orderDonationAmount > 0 && (
+            <div className="flex justify-between text-muted-foreground">
+              <span>Doação</span>
+              <span>+ {fmt(orderDonationAmount)}</span>
+            </div>
+          )}
+          {orderCouponDiscount > 0 && (
+            <div className="flex justify-between text-green-700">
+              <span>Desconto cupom</span>
+              <span>- {fmt(orderCouponDiscount)}</span>
+            </div>
+          )}
+          <div className="flex justify-between font-bold text-base border-t pt-1.5 mt-1">
+            <span>Novo total do pedido</span>
+            <span className="text-primary">{fmt(newTotal)}</span>
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            ✓ Total e estoque serão atualizados automaticamente ao salvar.
           </p>
         </div>
       )}
@@ -461,13 +571,9 @@ export function OrderItemsEditor({ orderId, initialItems, onClose }: OrderItemsE
           className="gap-1.5"
         >
           {isSaving ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" /> Salvando...
-            </>
+            <><Loader2 className="h-4 w-4 animate-spin" /> Salvando...</>
           ) : (
-            <>
-              <Save className="h-4 w-4" /> Salvar Itens
-            </>
+            <><Save className="h-4 w-4" /> Salvar Itens</>
           )}
         </Button>
       </div>

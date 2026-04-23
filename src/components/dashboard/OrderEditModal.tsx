@@ -398,7 +398,12 @@ export function OrderEditModal({ order, isOpen, onClose }: OrderEditModalProps) 
             <OrderItemsEditor
               orderId={order.id}
               initialItems={order.order_items ?? []}
-              onClose={onClose}
+              orderShippingCost={Number(updates.shipping_cost) || 0}
+              orderCouponDiscount={Number(updates.coupon_discount) || 0}
+              orderDonationAmount={Number(updates.donation_amount) || 0}
+              onSaved={(newTotal) => {
+                handleChange("total_price", newTotal);
+              }}
             />
           </TabsContent>
         </Tabs>
