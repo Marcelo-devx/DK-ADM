@@ -62,6 +62,8 @@ const CRITICAL_FUNCTIONS = [
   'bulk-add-points',
   'bulk-product-upsert',
   'catalog-api',
+  // Email
+  'send-order-email',
 ];
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
