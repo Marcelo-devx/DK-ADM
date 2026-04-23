@@ -359,6 +359,23 @@ const OrdersPage = () => {
   const totalCount = data?.totalCount ?? 0;
   const totalPages = Math.ceil(totalCount / ORDERS_PER_PAGE);
 
+  // Busca quais pedidos da página atual tiveram itens editados
+  const orderIds = orders.map(o => o.id);
+  const { data: editedOrderIds } = useQuery<Set<number>>({
+    queryKey: ["editedOrderIds", orderIds],
+    queryFn: async () => {
+      if (orderIds.length === 0) return new Set<number>();
+      const { data } = await supabase
+        .from("order_history")
+        .select("order_id")
+        .in("order_id", orderIds)
+        .eq("change_type", "items_edited");
+      return new Set<number>((data || []).map((r: any) => r.order_id));
+    },
+    enabled: orderIds.length > 0,
+    staleTime: 30000,
+  });
+
   useEffect(() => {
     if (error) console.error("[ordersAdmin] Erro na tela de pedidos:", error);
   }, [error]);
@@ -1451,7 +1468,14 @@ const OrdersPage = () => {
                             <TooltipContent>Histórico de Pedidos</TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
-                        #{order.id}
+                        <div className="flex flex-col gap-0.5">
+                          <span>#{order.id}</span>
+                          {editedOrderIds?.has(order.id) && (
+                            <Badge className="text-[9px] px-1 py-0 h-4 bg-amber-100 text-amber-700 border border-amber-300 font-semibold gap-0.5 w-fit">
+                              <Pencil className="w-2.5 h-2.5" /> Itens editados
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell>
