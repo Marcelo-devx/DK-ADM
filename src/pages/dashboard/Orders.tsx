@@ -887,6 +887,25 @@ const OrdersPage = () => {
 
       {/* ── MOBILE: compact action bar + filter sheet ── */}
       <div className="md:hidden flex items-center gap-2 mb-3">
+        {/* Botão Prontos p/ Envio — fora do filtro para acesso rápido */}
+        <Button
+          variant="outline"
+          onClick={() => {
+            const next = !readyToShipOnly;
+            setReadyToShipOnly(next);
+            setMobileReadyToShipOnly(next);
+          }}
+          className={cn(
+            "h-10 gap-1.5 font-semibold text-sm px-3 shrink-0",
+            readyToShipOnly
+              ? "bg-blue-600 text-white border-blue-600 hover:bg-blue-700"
+              : "border-gray-200 text-gray-700 hover:border-blue-400 hover:text-blue-700"
+          )}
+        >
+          <Package className="w-4 h-4" />
+          Envio
+        </Button>
+
         <Sheet open={mobileFiltersOpen} onOpenChange={handleOpenMobileFilters}>
           <SheetTrigger asChild>
             <Button variant="outline" className={cn("flex-1 h-10 gap-2 font-semibold", hasActiveFilters && "border-blue-400 text-blue-700 bg-blue-50")}>
