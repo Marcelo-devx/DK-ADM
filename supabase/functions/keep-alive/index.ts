@@ -64,6 +64,7 @@ const CRITICAL_FUNCTIONS = [
   'catalog-api',
   // Email
   'send-order-email',
+  'resend-batch-emails',
 ];
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
