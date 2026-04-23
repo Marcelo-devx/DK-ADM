@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useOrderAdmin } from "@/hooks/useOrderAdmin";
+import { useUser } from "@/hooks/useUser";
 import { showSuccess, showError } from "@/utils/toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +23,10 @@ export default function OrderAdminPage() {
   const [isEditSaving, setIsEditSaving] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<"edit" | "products" | "history">("edit");
+  const [activeTab, setActiveTab] = useState<"edit" | "products" | "history">("history");
+
+  const { isAdmin, isGerenteGeral } = useUser();
+  const canEdit = isAdmin || isGerenteGeral;
 
   const { searchOrdersByQuery, getOrderHistory, updateOrderMutation, cancelOrderMutation, deleteOrderMutation } = useOrderAdmin();
 
@@ -43,7 +47,7 @@ export default function OrderAdminPage() {
         setSearchResults([]);
       } else if (results.length === 1) {
         setFoundOrder(results[0]);
-        setActiveTab("edit");
+        setActiveTab(canEdit ? "edit" : "history");
         loadHistory(results[0].id);
       } else {
         setSearchResults(results);
@@ -58,7 +62,7 @@ export default function OrderAdminPage() {
   const handleSelectOrder = (order: any) => {
     setFoundOrder(order);
     setSearchResults([]);
-    setActiveTab("edit");
+    setActiveTab(canEdit ? "edit" : "history");
     loadHistory(order.id);
   };
 
@@ -148,7 +152,7 @@ export default function OrderAdminPage() {
           Administração de Pedidos
         </h1>
         <p className="text-sm text-muted-foreground mt-2">
-          Busque, edite, cancele ou exclua pedidos, visualize histórico de alterações
+          Busque, {canEdit ? "edite, cancele ou exclua pedidos, " : ""}visualize histórico de alterações
         </p>
       </div>
 
@@ -241,16 +245,18 @@ export default function OrderAdminPage() {
                   <p>Total: {formatCurrency(Number(foundOrder.total_price))}</p>
                 </div>
               </div>
-              <div className="flex gap-2 flex-wrap">
-                <Button variant="destructive" size="sm" onClick={() => setIsCancelModalOpen(true)}
-                  disabled={foundOrder.status === "Cancelado"} className="gap-2">
-                  <XCircle className="h-4 w-4" /> Cancelar
-                </Button>
-                <Button variant="destructive" size="sm" onClick={() => setIsDeleteModalOpen(true)}
-                  className="gap-2 bg-red-700 hover:bg-red-800">
-                  <Trash2 className="h-4 w-4" /> Excluir
-                </Button>
-              </div>
+              {canEdit && (
+                <div className="flex gap-2 flex-wrap">
+                  <Button variant="destructive" size="sm" onClick={() => setIsCancelModalOpen(true)}
+                    disabled={foundOrder.status === "Cancelado"} className="gap-2">
+                    <XCircle className="h-4 w-4" /> Cancelar
+                  </Button>
+                  <Button variant="destructive" size="sm" onClick={() => setIsDeleteModalOpen(true)}
+                    className="gap-2 bg-red-700 hover:bg-red-800">
+                    <Trash2 className="h-4 w-4" /> Excluir
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -258,46 +264,54 @@ export default function OrderAdminPage() {
           <div className="p-6">
             <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
               <TabsList className="w-full mb-6">
-                <TabsTrigger value="edit" className="flex-1 gap-2">
-                  <FileEdit className="h-4 w-4" /> Editar Pedido
-                </TabsTrigger>
-                <TabsTrigger value="products" className="flex-1 gap-2">
-                  <Package className="h-4 w-4" /> Produtos
-                  {foundOrder.order_items?.length > 0 && (
-                    <span className="ml-1 bg-primary/10 text-primary text-[10px] font-bold rounded-full px-1.5 py-0.5">
-                      {foundOrder.order_items.length}
-                    </span>
-                  )}
-                </TabsTrigger>
+                {canEdit && (
+                  <>
+                    <TabsTrigger value="edit" className="flex-1 gap-2">
+                      <FileEdit className="h-4 w-4" /> Editar Pedido
+                    </TabsTrigger>
+                    <TabsTrigger value="products" className="flex-1 gap-2">
+                      <Package className="h-4 w-4" /> Produtos
+                      {foundOrder.order_items?.length > 0 && (
+                        <span className="ml-1 bg-primary/10 text-primary text-[10px] font-bold rounded-full px-1.5 py-0.5">
+                          {foundOrder.order_items.length}
+                        </span>
+                      )}
+                    </TabsTrigger>
+                  </>
+                )}
                 <TabsTrigger value="history" className="flex-1 gap-2">
                   <History className="h-4 w-4" /> Histórico de Alterações
                 </TabsTrigger>
               </TabsList>
 
               {/* Aba: Editar Pedido */}
-              <TabsContent value="edit">
-                <OrderEditForm
-                  order={foundOrder}
-                  onSave={handleSaveOrder}
-                  onCancel={() => { setFoundOrder(null); setSearchResults([]); }}
-                  isLoading={isEditSaving}
-                />
-              </TabsContent>
+              {canEdit && (
+                <TabsContent value="edit">
+                  <OrderEditForm
+                    order={foundOrder}
+                    onSave={handleSaveOrder}
+                    onCancel={() => { setFoundOrder(null); setSearchResults([]); }}
+                    isLoading={isEditSaving}
+                  />
+                </TabsContent>
+              )}
 
               {/* Aba: Produtos */}
-              <TabsContent value="products">
-                <OrderItemsEditor
-                  orderId={foundOrder.id}
-                  initialItems={foundOrder.order_items ?? []}
-                  orderShippingCost={Number(foundOrder.shipping_cost) || 0}
-                  orderCouponDiscount={Number(foundOrder.coupon_discount) || 0}
-                  orderDonationAmount={Number(foundOrder.donation_amount) || 0}
-                  onSaved={async (newTotal) => {
-                    setFoundOrder((prev: any) => ({ ...prev, total_price: newTotal }));
-                    await refreshOrder();
-                  }}
-                />
-              </TabsContent>
+              {canEdit && (
+                <TabsContent value="products">
+                  <OrderItemsEditor
+                    orderId={foundOrder.id}
+                    initialItems={foundOrder.order_items ?? []}
+                    orderShippingCost={Number(foundOrder.shipping_cost) || 0}
+                    orderCouponDiscount={Number(foundOrder.coupon_discount) || 0}
+                    orderDonationAmount={Number(foundOrder.donation_amount) || 0}
+                    onSaved={async (newTotal) => {
+                      setFoundOrder((prev: any) => ({ ...prev, total_price: newTotal }));
+                      await refreshOrder();
+                    }}
+                  />
+                </TabsContent>
+              )}
 
               {/* Aba: Histórico */}
               <TabsContent value="history">
@@ -315,10 +329,14 @@ export default function OrderAdminPage() {
         </div>
       )}
 
-      <OrderCancelModal isOpen={isCancelModalOpen} onClose={() => setIsCancelModalOpen(false)}
-        order={foundOrder} onConfirm={handleCancelOrder} />
-      <OrderDeleteModal isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)}
-        order={foundOrder} onConfirm={handleDeleteOrder} />
+      {canEdit && (
+        <>
+          <OrderCancelModal isOpen={isCancelModalOpen} onClose={() => setIsCancelModalOpen(false)}
+            order={foundOrder} onConfirm={handleCancelOrder} />
+          <OrderDeleteModal isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)}
+            order={foundOrder} onConfirm={handleDeleteOrder} />
+        </>
+      )}
     </div>
   );
 }

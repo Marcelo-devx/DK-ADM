@@ -1583,9 +1583,11 @@ const OrdersPage = () => {
                               <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
                                 <DropdownMenuLabel>Ações do Pedido</DropdownMenuLabel>
-                                <DropdownMenuItem onSelect={() => { setSelectedOrder(order); setIsEditOrderOpen(true); }} className="text-blue-600 font-medium">
-                                  <Pencil className="w-4 h-4 mr-2" /> Editar Pedido
-                                </DropdownMenuItem>
+                                {(isAdmin || isGerenteGeral) && (
+                                  <DropdownMenuItem onSelect={() => { setSelectedOrder(order); setIsEditOrderOpen(true); }} className="text-blue-600 font-medium">
+                                    <Pencil className="w-4 h-4 mr-2" /> Editar Pedido
+                                  </DropdownMenuItem>
+                                )}
                                 {phone && canUseWhatsApp && (
                                   <DropdownMenuItem asChild>
                                     <a href={getWhatsAppLink(phone, `Olá ${name}, falando sobre o pedido #${order.id}...`)} target="_blank" rel="noreferrer" className="cursor-pointer text-green-600 font-medium">
@@ -1606,15 +1608,19 @@ const OrdersPage = () => {
                                 <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: "Entregue", info: "Entregue manualmente" })}>
                                   <CheckCircle2 className="w-4 h-4 mr-2" /> Marcar como Entregue
                                 </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                {order.status !== "Cancelado" && (
-                                  <DropdownMenuItem onSelect={() => setActionToConfirm({ action: "cancel_fraud", client: order })} className="text-orange-600 font-medium">
-                                    <XCircle className="w-4 h-4 mr-2" /> Cancelar Pedido
-                                  </DropdownMenuItem>
+                                {(isAdmin || isGerenteGeral) && (
+                                  <>
+                                    <DropdownMenuSeparator />
+                                    {order.status !== "Cancelado" && (
+                                      <DropdownMenuItem onSelect={() => setActionToConfirm({ action: "cancel_fraud", client: order })} className="text-orange-600 font-medium">
+                                        <XCircle className="w-4 h-4 mr-2" /> Cancelar Pedido
+                                      </DropdownMenuItem>
+                                    )}
+                                    <DropdownMenuItem onSelect={() => { setSelectedOrder(order); setIsDeleteAlertOpen(true); }} className="text-red-600">
+                                      <Trash2 className="w-4 h-4 mr-2" /> Excluir Pedido
+                                    </DropdownMenuItem>
+                                  </>
                                 )}
-                                <DropdownMenuItem onSelect={() => { setSelectedOrder(order); setIsDeleteAlertOpen(true); }} className="text-red-600">
-                                  <Trash2 className="w-4 h-4 mr-2" /> Excluir Pedido
-                                </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </>
