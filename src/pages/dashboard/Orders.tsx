@@ -1471,9 +1471,16 @@ const OrdersPage = () => {
                         <div className="flex flex-col gap-0.5">
                           <span>#{order.id}</span>
                           {editedOrderIds?.has(order.id) && (
-                            <Badge className="text-[9px] px-1 py-0 h-4 bg-amber-100 text-amber-700 border border-amber-300 font-semibold gap-0.5 w-fit">
-                              <Pencil className="w-2.5 h-2.5" /> Itens editados
-                            </Badge>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 border border-amber-300 rounded-full px-1.5 py-0.5 text-[10px] font-semibold w-fit whitespace-nowrap cursor-default">
+                                    <Pencil className="w-2.5 h-2.5 shrink-0" /> editado
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent>Itens do pedido foram editados pelo admin</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           )}
                         </div>
                       </div>
