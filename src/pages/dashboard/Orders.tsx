@@ -521,6 +521,8 @@ const OrdersPage = () => {
 
   const deleteOrderMutation = useMutation({
     mutationFn: async (orderId: number) => {
+      // Limpa FK de user_coupons (NO ACTION) antes de deletar o pedido
+      await supabase.from("user_coupons").update({ order_id: null }).eq("order_id", orderId);
       const { error } = await supabase.from("orders").delete().eq("id", orderId);
       if (error) throw error;
     },

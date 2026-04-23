@@ -332,16 +332,49 @@ export const useOrderAdmin = () => {
     },
   });
 
-  // Excluir pedido
+  // Excluir pedido — direto no banco, sem edge function (sem cold start)
   const deleteOrderMutation = useMutation({
     mutationFn: async ({ orderId, reason }: { orderId: number; reason: string }) => {
-      const { data, error } = await supabase.functions.invoke('admin-delete-order', {
-        body: { orderId, reason },
+      // 1. Verifica se o pedido está Cancelado
+      const { data: order, error: fetchError } = await supabase
+        .from('orders')
+        .select('id, status')
+        .eq('id', orderId)
+        .single();
+
+      if (fetchError) throw new Error(fetchError.message);
+      if (!order) throw new Error('Pedido não encontrado');
+      if (order.status !== 'Cancelado') {
+        throw new Error(`Não é possível excluir um pedido com status "${order.status}". Cancele o pedido primeiro.`);
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // 2. Salva snapshot no histórico antes de deletar (best-effort)
+      await supabase.from('order_history').insert({
+        order_id: orderId,
+        field_name: 'deleted',
+        old_value: JSON.stringify(order),
+        new_value: null,
+        change_type: 'delete',
+        reason: reason,
+        changed_by: user?.id ?? null,
       });
 
-      if (error) throw new Error(error.message);
-      if (data?.error) throw new Error(data.error);
-      return data;
+      // 3. Deleta registros filhos
+      await supabase.from('order_items').delete().eq('order_id', orderId);
+      await supabase.from('reviews').delete().eq('order_id', orderId);
+      await supabase.from('route_stops').delete().eq('order_id', orderId);
+      await supabase.from('primeiros_pedidos').delete().eq('order_id', orderId);
+      await supabase.from('user_coupons').update({ order_id: null }).eq('order_id', orderId);
+      await supabase.from('loyalty_history').update({ related_order_id: null }).eq('related_order_id', orderId);
+      await supabase.from('order_history').delete().eq('order_id', orderId);
+
+      // 4. Deleta o pedido principal
+      const { error: deleteError } = await supabase.from('orders').delete().eq('id', orderId);
+      if (deleteError) throw new Error(deleteError.message);
+
+      return { success: true };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['adminOrder'] });
