@@ -335,8 +335,9 @@ export function OrderItemsEditor({
         return orig && (it.quantity !== orig.quantity || it.price_at_purchase !== orig.price_at_purchase);
       }).length;
       if (updatedCount > 0) changesSummary.push(`${updatedCount} item(s) alterado(s)`);
+      if (changesSummary.length === 0) changesSummary.push("itens do pedido editados");
 
-      await supabase.from("order_history").insert({
+      const { error: historyError } = await supabase.from("order_history").insert({
         order_id: orderId,
         field_name: "items",
         old_value: null,
@@ -345,9 +346,13 @@ export function OrderItemsEditor({
         change_type: "items_edited",
         reason: `Itens editados pelo admin: ${changesSummary.join(", ")}`,
       });
+      if (historyError) {
+        console.error("[OrderItemsEditor] Erro ao registrar histórico:", historyError);
+      }
 
       showSuccess(`Itens e total do pedido #${orderId} atualizados! Novo total: ${fmt(newTotal)}`);
       queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
+      queryClient.invalidateQueries({ queryKey: ["editedOrderIds"] });
       onSaved(newTotal);
     } catch (err: any) {
       showError(err.message || "Erro ao salvar itens");
