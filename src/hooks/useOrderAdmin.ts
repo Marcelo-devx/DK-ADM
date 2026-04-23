@@ -61,23 +61,16 @@ export const useOrderAdmin = () => {
   });
 
   const searchOrderById = async (orderId: number): Promise<Order | null> => {
-    // Busca pedido sem join (evita erro de schema cache)
     const { data: orders, error: ordersError } = await supabase
       .from('orders')
-      .select('*')
+      .select('*, order_items(*)')
       .eq('id', orderId);
 
-    if (ordersError) {
-      throw ordersError;
-    }
-
-    if (!orders || orders.length === 0) {
-      return null;
-    }
+    if (ordersError) throw ordersError;
+    if (!orders || orders.length === 0) return null;
 
     const order = orders[0];
 
-    // Busca profile separadamente se houver user_id
     let profile = null;
     if (order.user_id) {
       const { data: profiles, error: profilesError } = await supabase
@@ -86,37 +79,28 @@ export const useOrderAdmin = () => {
         .eq('id', order.user_id)
         .single();
 
-      if (!profilesError && profiles) {
-        profile = profiles;
-      }
+      if (!profilesError && profiles) profile = profiles;
     }
 
-    // Retorna o pedido com os dados do profile
-    return {
-      ...order,
-      profiles: profile,
-    } as Order;
+    return { ...order, profiles: profile } as Order;
   };
 
   // Busca unificada por ID, CPF ou Nome do cliente
   const searchOrdersByQuery = async (query: string): Promise<Order[]> => {
-    if (!query || query.trim() === '') {
-      return [];
-    }
+    if (!query || query.trim() === '') return [];
 
     const trimmedQuery = query.trim();
-    
-    // Verifica se é um número (ID do pedido)
+
+    // Número → ID do pedido
     const numericQuery = parseInt(trimmedQuery, 10);
     if (!isNaN(numericQuery) && trimmedQuery === numericQuery.toString()) {
       const order = await searchOrderById(numericQuery);
       return order ? [order] : [];
     }
 
-    // Verifica se é apenas dígitos (CPF sem formatação)
+    // Só dígitos → CPF
     const digitsOnly = trimmedQuery.replace(/\D/g, '');
     if (digitsOnly === trimmedQuery) {
-      // Busca por CPF
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
         .select('id, first_name, last_name, phone, cpf_cnpj');
@@ -124,20 +108,17 @@ export const useOrderAdmin = () => {
       if (profilesError) throw profilesError;
       if (!profiles) return [];
 
-      // Filtra profiles pelo CPF
       const matchingProfiles = profiles.filter(p => {
         if (!p.cpf_cnpj) return false;
-        const cpfDigits = p.cpf_cnpj.replace(/\D/g, '');
-        return cpfDigits.includes(digitsOnly);
+        return p.cpf_cnpj.replace(/\D/g, '').includes(digitsOnly);
       });
 
       if (matchingProfiles.length === 0) return [];
 
-      // Busca pedidos dos profiles encontrados
       const userIds = matchingProfiles.map(p => p.id);
       const { data: orders, error: ordersError } = await supabase
         .from('orders')
-        .select('*')
+        .select('*, order_items(*)')
         .in('user_id', userIds)
         .order('created_at', { ascending: false });
 
@@ -145,16 +126,11 @@ export const useOrderAdmin = () => {
       if (!orders) return [];
 
       const profilesMap = new Map(matchingProfiles.map(p => [p.id, p]));
-
-      return orders.map(order => ({
-        ...order,
-        profiles: profilesMap.get(order.user_id) || null,
-      })) as Order[];
+      return orders.map(order => ({ ...order, profiles: profilesMap.get(order.user_id) || null })) as Order[];
     }
 
-    // Caso contrário, busca por email ou nome do cliente
+    // Nome ou email
     const searchTerm = trimmedQuery.toLowerCase();
-
     const { data: profiles, error: profilesError } = await supabase
       .from('profiles')
       .select('id, first_name, last_name, phone, cpf_cnpj, email');
@@ -162,25 +138,21 @@ export const useOrderAdmin = () => {
     if (profilesError) throw profilesError;
     if (!profiles) return [];
 
-    // Filtra profiles pelo nome ou email
     const matchingProfiles = profiles.filter(p => {
       const firstName = (p.first_name || '').toLowerCase();
       const lastName = (p.last_name || '').toLowerCase();
       const fullName = `${firstName} ${lastName}`;
       const email = (p.email || '').toLowerCase();
-      return firstName.includes(searchTerm) ||
-             lastName.includes(searchTerm) ||
-             fullName.includes(searchTerm) ||
-             email.includes(searchTerm);
+      return firstName.includes(searchTerm) || lastName.includes(searchTerm) ||
+             fullName.includes(searchTerm) || email.includes(searchTerm);
     });
 
     if (matchingProfiles.length === 0) return [];
 
-    // Busca pedidos dos profiles encontrados
     const userIds = matchingProfiles.map(p => p.id);
     const { data: orders, error: ordersError } = await supabase
       .from('orders')
-      .select('*')
+      .select('*, order_items(*)')
       .in('user_id', userIds)
       .order('created_at', { ascending: false });
 
@@ -188,11 +160,7 @@ export const useOrderAdmin = () => {
     if (!orders) return [];
 
     const profilesMap = new Map(matchingProfiles.map(p => [p.id, p]));
-
-    return orders.map(order => ({
-      ...order,
-      profiles: profilesMap.get(order.user_id) || null,
-    })) as Order[];
+    return orders.map(order => ({ ...order, profiles: profilesMap.get(order.user_id) || null })) as Order[];
   };
 
   // Busca avançada de pedidos
