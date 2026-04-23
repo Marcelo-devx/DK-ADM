@@ -196,14 +196,44 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
     candidatesByProduct.set(v.product_id, arr);
   });
 
-  const guessVariantByPrice = (productId: number, pricePaid: number): any | null => {
+  const guessVariantByPrice = (productId: number, pricePaid: number, namePurchased?: string): any | null => {
     const variants = candidatesByProduct.get(productId) ?? [];
     if (!variants.length) return null;
     const price = Number(pricePaid);
-    const matches = variants.filter((v: any) =>
+
+    // 1. Tenta pelo preço — só retorna se for único
+    const byPrice = variants.filter((v: any) =>
       Number(v.price) === price || Number(v.pix_price) === price
     );
-    return matches.length === 1 ? matches[0] : null;
+    if (byPrice.length === 1) return byPrice[0];
+
+    // 2. Se houver empate de preço e tiver o nome, tenta identificar pelo atributo no nome
+    const pool = byPrice.length > 1 ? byPrice : variants;
+    if (namePurchased) {
+      const nameLower = namePurchased.toLowerCase();
+      // Tenta ohms: procura padrão "0.8", "0.6", "1.0" etc no nome
+      for (const v of pool) {
+        if (v.ohms && nameLower.includes(v.ohms.toLowerCase().replace('ω', '').trim())) return v;
+      }
+      // Tenta flavor
+      for (const v of pool) {
+        if (v.flavors?.name && nameLower.includes(v.flavors.name.toLowerCase())) return v;
+      }
+      // Tenta color
+      for (const v of pool) {
+        if (v.color?.trim() && nameLower.includes(v.color.toLowerCase().trim())) return v;
+      }
+      // Tenta size
+      for (const v of pool) {
+        if (v.size?.trim() && nameLower.includes(v.size.toLowerCase().trim())) return v;
+      }
+      // Tenta volume_ml
+      for (const v of pool) {
+        if (v.volume_ml && nameLower.includes(String(v.volume_ml))) return v;
+      }
+    }
+
+    return null;
   };
 
   const enrichedItems = (rawItems ?? []).map((item: any) => {
@@ -211,7 +241,7 @@ export const ClientDetailsModal = ({ client, isOpen, onClose }: ClientDetailsMod
     if (item.variant_id) {
       resolvedVariant = specificVariantsMap.get(item.variant_id) ?? null;
     } else if (item.item_id) {
-      resolvedVariant = guessVariantByPrice(item.item_id, item.price_at_purchase);
+      resolvedVariant = guessVariantByPrice(item.item_id, item.price_at_purchase, item.name_at_purchase);
     }
     return { ...item, resolvedVariant };
   });
