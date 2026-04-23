@@ -2,13 +2,14 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/hooks/useUser';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ReviewForm } from '../components/reviews/ReviewForm';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Star, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Star, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
 import { formatBRL as formatCurrency } from '@/utils/currency';
 import { SalesPopupDisplay } from '@/components/SalesPopupDisplay';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -52,18 +53,31 @@ const fetchOrders = async (userId: string) => {
   const orderIds = (orders || []).map(o => o.id);
   
   let reviews: Review[] = [];
+  let editedOrderIds = new Set<number>();
+
   if (orderIds.length > 0) {
-    const { data: reviewsData, error: reviewsError } = await supabase
-      .from('reviews')
-      .select('product_id, order_id, rating')
-      .in('order_id', orderIds)
-      .eq('user_id', userId);
-    
-    if (reviewsError) console.error("Error fetching reviews:", reviewsError.message);
-    reviews = reviewsData || [];
+    const [reviewsResult, historyResult] = await Promise.all([
+      supabase
+        .from('reviews')
+        .select('product_id, order_id, rating')
+        .in('order_id', orderIds)
+        .eq('user_id', userId),
+      supabase
+        .from('order_history')
+        .select('order_id')
+        .in('order_id', orderIds)
+        .eq('change_type', 'items_edited'),
+    ]);
+
+    if (reviewsResult.error) console.error("Error fetching reviews:", reviewsResult.error.message);
+    reviews = reviewsResult.data || [];
+
+    if (historyResult.data) {
+      historyResult.data.forEach((h: any) => editedOrderIds.add(h.order_id));
+    }
   }
 
-  return { orders: orders || [], reviews };
+  return { orders: orders || [], reviews, editedOrderIds };
 };
 
 const MyOrdersPage = () => {
@@ -72,7 +86,7 @@ const MyOrdersPage = () => {
   const [viewFilter, setViewFilter] = useState<"all" | "paid" | "canceled">("all");
   const [currentPage, setCurrentPage] = useState(1);
 
-  const { data, isLoading, error } = useQuery<{ orders: Order[], reviews: Review[] }>({
+  const { data, isLoading, error } = useQuery<{ orders: Order[], reviews: Review[], editedOrderIds: Set<number> }>({
     queryKey: ['orders', user?.id],
     queryFn: () => fetchOrders(user!.id),
     enabled: !!user,
@@ -152,13 +166,27 @@ const MyOrdersPage = () => {
         ) : (
           paginatedOrders.map(order => {
             const canceled = isCanceledOrder(order.status);
+            const wasEdited = data?.editedOrderIds.has(order.id);
             return (
               <Card
                 key={order.id}
                 className={canceled ? 'border-red-300 bg-red-50/70 shadow-sm' : 'shadow-sm'}
               >
                 <CardHeader className={canceled ? 'border-b border-red-200 bg-red-50/80 p-4 md:p-6' : 'p-4 md:p-6'}>
-                  <CardTitle className={canceled ? 'text-red-700 text-lg md:text-xl' : 'text-lg md:text-xl'}>Pedido #{order.id}</CardTitle>
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
+                    <CardTitle className={canceled ? 'text-red-700 text-lg md:text-xl' : 'text-lg md:text-xl'}>
+                      Pedido #{order.id}
+                    </CardTitle>
+                    {wasEdited && (
+                      <Badge
+                        variant="outline"
+                        className="flex items-center gap-1 border-amber-400 bg-amber-50 text-amber-700 text-xs font-semibold px-2 py-0.5 shrink-0"
+                      >
+                        <Pencil className="h-3 w-3" />
+                        Pedido atualizado pela loja
+                      </Badge>
+                    )}
+                  </div>
                   <CardDescription className={canceled ? 'text-red-700/80 text-sm' : 'text-sm'}>
                     Realizado em {new Date(order.created_at).toLocaleDateString('pt-BR')} - Status: {order.status}
                   </CardDescription>

@@ -315,6 +315,27 @@ export function OrderItemsEditor({
         .eq("id", orderId);
       if (orderError) throw new Error(`Erro ao atualizar total: ${orderError.message}`);
 
+      // 5. Register edit in order_history so client sees the badge
+      const { data: { user } } = await supabase.auth.getUser();
+      const changesSummary: string[] = [];
+      if (deletedIds.size > 0) changesSummary.push(`${deletedIds.size} item(s) removido(s)`);
+      if (validNewItems.length > 0) changesSummary.push(`${validNewItems.length} item(s) adicionado(s)`);
+      const updatedCount = activeItems.filter((it) => {
+        const orig = initialItems.find((o) => o.id === it.id);
+        return orig && (it.quantity !== orig.quantity || it.price_at_purchase !== orig.price_at_purchase);
+      }).length;
+      if (updatedCount > 0) changesSummary.push(`${updatedCount} item(s) alterado(s)`);
+
+      await supabase.from("order_history").insert({
+        order_id: orderId,
+        field_name: "items",
+        old_value: null,
+        new_value: changesSummary.join(", "),
+        changed_by: user?.id ?? null,
+        change_type: "items_edited",
+        reason: `Itens editados pelo admin: ${changesSummary.join(", ")}`,
+      });
+
       showSuccess(`Itens e total do pedido #${orderId} atualizados! Novo total: ${fmt(newTotal)}`);
       queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
       onSaved(newTotal);
