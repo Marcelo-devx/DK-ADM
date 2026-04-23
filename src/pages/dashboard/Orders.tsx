@@ -1552,6 +1552,9 @@ const OrdersPage = () => {
                               <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
                                 <DropdownMenuLabel>Ações do Pedido</DropdownMenuLabel>
+                                <DropdownMenuItem onSelect={() => { setSelectedOrder(order); setIsEditOrderOpen(true); }} className="text-blue-600 font-medium">
+                                  <Pencil className="w-4 h-4 mr-2" /> Editar Pedido
+                                </DropdownMenuItem>
                                 {phone && canUseWhatsApp && (
                                   <DropdownMenuItem asChild>
                                     <a href={getWhatsAppLink(phone, `Olá ${name}, falando sobre o pedido #${order.id}...`)} target="_blank" rel="noreferrer" className="cursor-pointer text-green-600 font-medium">
@@ -1684,6 +1687,7 @@ const OrdersPage = () => {
 
       {selectedOrder && <OrderDetailModal order={selectedOrder} isOpen={isDetailModalOpen} onClose={() => setIsDetailModalOpen(false)} />}
       {selectedOrder && <ShippingLabelModal order={selectedOrder} isOpen={isLabelModalOpen} onClose={() => { setIsLabelModalOpen(false); setSelectedOrder(null); }} />}
+      {selectedOrder && <OrderEditModal order={selectedOrder} isOpen={isEditOrderOpen} onClose={() => { setIsEditOrderOpen(false); setSelectedOrder(null); }} />}
       <ClientDetailsModal client={selectedClientForHistory} isOpen={isClientHistoryOpen} onClose={() => setIsClientHistoryOpen(false)} />
       <CreateOrderModal isOpen={isCreateOrderOpen} onClose={() => setIsCreateOrderOpen(false)} />
 
