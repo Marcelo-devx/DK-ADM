@@ -55,15 +55,19 @@ async function processClient(supabaseAdmin: any, client: any): Promise<{ success
   if (client.state) fieldsToUpdate.state = client.state;
   fieldsToUpdate.email = email;
   fieldsToUpdate.updated_at = new Date().toISOString();
+  // Clientes importados via planilha NÃO recebem o cupom de primeira compra
+  fieldsToUpdate.skip_first_buy_coupon = true;
 
   const password = client.password ? String(client.password) : "123456";
 
   // Tenta criar o usuário no auth
+  // skip_first_buy_coupon=true no metadata garante que o trigger handle_new_user
+  // crie o perfil já com esse flag, impedindo a atribuição do cupom PRIMEIRACOMPRA
   const { data: createdData, error: createError } = await supabaseAdmin.auth.admin.createUser({
     email: email,
     password: password,
     email_confirm: true,
-    user_metadata: { first_name: firstName, last_name: lastName }
+    user_metadata: { first_name: firstName, last_name: lastName, skip_first_buy_coupon: true }
   });
 
   let userId: string | null = null;

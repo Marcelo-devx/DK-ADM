@@ -185,6 +185,7 @@ export const FirstBuyCoupon = () => {
                     <li>Não é atribuído a clientes que já têm pedidos</li>
                     <li>Válido por 180 dias após o cadastro</li>
                     <li>Apenas clientes sem pedidos anteriores podem usar</li>
+                    <li className="font-semibold text-red-700">⚠️ Clientes importados via planilha NÃO recebem este cupom</li>
                   </ul>
                 </div>
               </div>
