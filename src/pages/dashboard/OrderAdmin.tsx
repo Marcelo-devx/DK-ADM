@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, FileEdit, XCircle, History, Trash2, X } from "lucide-react";
+import { Search, FileEdit, XCircle, History, Trash2, X, Package } from "lucide-react";
 import { OrderEditForm } from "@/components/dashboard/OrderEditForm";
+import { OrderItemsEditor } from "@/components/dashboard/OrderItemsEditor";
 import { OrderCancelModal } from "@/components/dashboard/OrderCancelModal";
 import { OrderDeleteModal } from "@/components/dashboard/OrderDeleteModal";
 import { OrderHistoryTimeline } from "@/components/dashboard/OrderHistoryTimeline";
@@ -21,36 +22,30 @@ export default function OrderAdminPage() {
   const [isEditSaving, setIsEditSaving] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<"edit" | "history">("edit");
+  const [activeTab, setActiveTab] = useState<"edit" | "products" | "history">("edit");
 
   const { searchOrdersByQuery, getOrderHistory, updateOrderMutation, cancelOrderMutation, deleteOrderMutation } = useOrderAdmin();
 
   const [history, setHistory] = useState<any[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
-
-  // Estado para lista de resultados quando múltiplos pedidos são encontrados
   const [searchResults, setSearchResults] = useState<any[]>([]);
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
-
     setIsLoading(true);
     setFoundOrder(null);
     setHistory([]);
     setSearchResults([]);
     try {
       const results = await searchOrdersByQuery(searchQuery);
-      
       if (!results || results.length === 0) {
         showError(`Nenhum pedido encontrado para "${searchQuery}"`);
         setSearchResults([]);
       } else if (results.length === 1) {
-        // Apenas um resultado, carrega diretamente
         setFoundOrder(results[0]);
         setActiveTab("edit");
         loadHistory(results[0].id);
       } else {
-        // Múltiplos resultados, mostra lista para seleção
         setSearchResults(results);
       }
     } catch (error: any) {
@@ -86,24 +81,26 @@ export default function OrderAdminPage() {
     }
   };
 
+  const refreshOrder = async () => {
+    if (!searchQuery.trim() || !foundOrder) return;
+    try {
+      const results = await searchOrdersByQuery(searchQuery);
+      if (results && results.length > 0) {
+        const updated = results.find((o: any) => o.id === foundOrder.id);
+        if (updated) {
+          setFoundOrder(updated);
+          loadHistory(updated.id);
+        }
+      }
+    } catch {}
+  };
+
   const handleSaveOrder = async (updates: any, reason: string) => {
     setIsEditSaving(true);
     try {
-      await updateOrderMutation.mutateAsync({
-        orderId: foundOrder.id,
-        updates,
-        reason,
-      });
+      await updateOrderMutation.mutateAsync({ orderId: foundOrder.id, updates, reason });
       showSuccess("Pedido atualizado com sucesso");
-      // Recarregar pedido e histórico
-      const results = await searchOrdersByQuery(searchQuery);
-      if (results && results.length > 0) {
-        const updatedOrder = results.find(o => o.id === foundOrder.id);
-        if (updatedOrder) {
-          setFoundOrder(updatedOrder);
-          loadHistory(updatedOrder.id);
-        }
-      }
+      await refreshOrder();
     } catch (error: any) {
       showError(error.message || "Erro ao atualizar pedido");
     } finally {
@@ -113,21 +110,9 @@ export default function OrderAdminPage() {
 
   const handleCancelOrder = async (reason: string, returnStock: boolean) => {
     try {
-      await cancelOrderMutation.mutateAsync({
-        orderId: foundOrder.id,
-        reason,
-        returnStock,
-      });
+      await cancelOrderMutation.mutateAsync({ orderId: foundOrder.id, reason, returnStock });
       showSuccess("Pedido cancelado com sucesso");
-      // Recarregar pedido e histórico
-      const results = await searchOrdersByQuery(searchQuery);
-      if (results && results.length > 0) {
-        const updatedOrder = results.find(o => o.id === foundOrder.id);
-        if (updatedOrder) {
-          setFoundOrder(updatedOrder);
-          loadHistory(updatedOrder.id);
-        }
-      }
+      await refreshOrder();
     } catch (error: any) {
       showError(error.message || "Erro ao cancelar pedido");
     }
@@ -135,12 +120,8 @@ export default function OrderAdminPage() {
 
   const handleDeleteOrder = async (reason: string) => {
     try {
-      await deleteOrderMutation.mutateAsync({
-        orderId: foundOrder.id,
-        reason,
-      });
+      await deleteOrderMutation.mutateAsync({ orderId: foundOrder.id, reason });
       showSuccess("Pedido excluído com sucesso");
-      // Limpar estado
       setFoundOrder(null);
       setHistory([]);
       setSearchQuery("");
@@ -150,20 +131,13 @@ export default function OrderAdminPage() {
   };
 
   const formatCurrency = (val: number) =>
-    new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(val);
+    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
+  const formatDate = (dateString: string) =>
+    new Date(dateString).toLocaleDateString("pt-BR", {
+      day: "2-digit", month: "2-digit", year: "numeric",
+      hour: "2-digit", minute: "2-digit",
     });
-  };
 
   return (
     <div className="space-y-6">
@@ -178,7 +152,7 @@ export default function OrderAdminPage() {
         </p>
       </div>
 
-      {/* Busca unificada */}
+      {/* Busca */}
       <div className="flex items-center gap-3">
         <div className="relative flex-1 max-w-lg">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -190,10 +164,7 @@ export default function OrderAdminPage() {
             className="pl-9 pr-10"
           />
           {searchQuery && (
-            <button
-              onClick={handleClearSearch}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
+            <button onClick={handleClearSearch} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
               <X className="h-4 w-4" />
             </button>
           )}
@@ -203,11 +174,11 @@ export default function OrderAdminPage() {
         </Button>
       </div>
 
-      {/* Lista de resultados (quando múltiplos pedidos são encontrados) */}
+      {/* Lista de resultados múltiplos */}
       {searchResults.length > 0 && !foundOrder && (
         <div className="bg-white rounded-lg border p-6 space-y-4">
           <div className="text-sm text-muted-foreground mb-4">
-            {searchResults.length} pedido{searchResults.length > 1 ? 's' : ''} encontrado{searchResults.length > 1 ? 's' : ''}. Selecione um para visualizar:
+            {searchResults.length} pedido{searchResults.length > 1 ? "s" : ""} encontrado{searchResults.length > 1 ? "s" : ""}. Selecione um para visualizar:
           </div>
           {searchResults.map((order) => (
             <div
@@ -218,39 +189,23 @@ export default function OrderAdminPage() {
               <div className="flex items-center gap-4">
                 <div>
                   <div className="font-bold text-lg">#{order.id}</div>
-                  <div className="text-sm text-muted-foreground">
-                    {formatDate(order.created_at)}
-                  </div>
+                  <div className="text-sm text-muted-foreground">{formatDate(order.created_at)}</div>
                 </div>
                 <div className="h-8 w-px bg-border" />
                 <div>
-                  <div className="font-medium">
-                    {order.profiles?.first_name} {order.profiles?.last_name}
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    {order.profiles?.phone || "-"}
-                  </div>
+                  <div className="font-medium">{order.profiles?.first_name} {order.profiles?.last_name}</div>
+                  <div className="text-sm text-muted-foreground">{order.profiles?.phone || "-"}</div>
                 </div>
                 <div className="h-8 w-px bg-border" />
                 <div>
-                  <Badge
-                    variant={order.status === "Cancelado" ? "destructive" : "default"}
-                    className={
-                      order.status === "Pago" || order.status === "Finalizada"
-                        ? "bg-green-600"
-                        : ""
-                    }
-                  >
+                  <Badge variant={order.status === "Cancelado" ? "destructive" : "default"}
+                    className={order.status === "Pago" || order.status === "Finalizada" ? "bg-green-600" : ""}>
                     {order.status}
                   </Badge>
-                  <Badge variant="outline" className="ml-2">
-                    {order.delivery_status}
-                  </Badge>
+                  <Badge variant="outline" className="ml-2">{order.delivery_status}</Badge>
                 </div>
               </div>
-              <div className="font-bold text-lg">
-                {formatCurrency(Number(order.total_price))}
-              </div>
+              <div className="font-bold text-lg">{formatCurrency(Number(order.total_price))}</div>
             </div>
           ))}
         </div>
@@ -274,11 +229,7 @@ export default function OrderAdminPage() {
                   <h2 className="text-xl font-bold">Pedido #{foundOrder.id}</h2>
                   <Badge
                     variant={foundOrder.status === "Cancelado" ? "destructive" : "default"}
-                    className={
-                      foundOrder.status === "Pago" || foundOrder.status === "Finalizada"
-                        ? "bg-green-600"
-                        : ""
-                    }
+                    className={foundOrder.status === "Pago" || foundOrder.status === "Finalizada" ? "bg-green-600" : ""}
                   >
                     {foundOrder.status}
                   </Badge>
@@ -291,24 +242,13 @@ export default function OrderAdminPage() {
                 </div>
               </div>
               <div className="flex gap-2 flex-wrap">
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => setIsCancelModalOpen(true)}
-                  disabled={foundOrder.status === "Cancelado"}
-                  className="gap-2"
-                >
-                  <XCircle className="h-4 w-4" />
-                  Cancelar
+                <Button variant="destructive" size="sm" onClick={() => setIsCancelModalOpen(true)}
+                  disabled={foundOrder.status === "Cancelado"} className="gap-2">
+                  <XCircle className="h-4 w-4" /> Cancelar
                 </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => setIsDeleteModalOpen(true)}
-                  className="gap-2 bg-red-700 hover:bg-red-800"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Excluir
+                <Button variant="destructive" size="sm" onClick={() => setIsDeleteModalOpen(true)}
+                  className="gap-2 bg-red-700 hover:bg-red-800">
+                  <Trash2 className="h-4 w-4" /> Excluir
                 </Button>
               </div>
             </div>
@@ -319,27 +259,47 @@ export default function OrderAdminPage() {
             <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
               <TabsList className="w-full mb-6">
                 <TabsTrigger value="edit" className="flex-1 gap-2">
-                  <FileEdit className="h-4 w-4" />
-                  Editar Pedido
+                  <FileEdit className="h-4 w-4" /> Editar Pedido
+                </TabsTrigger>
+                <TabsTrigger value="products" className="flex-1 gap-2">
+                  <Package className="h-4 w-4" /> Produtos
+                  {foundOrder.order_items?.length > 0 && (
+                    <span className="ml-1 bg-primary/10 text-primary text-[10px] font-bold rounded-full px-1.5 py-0.5">
+                      {foundOrder.order_items.length}
+                    </span>
+                  )}
                 </TabsTrigger>
                 <TabsTrigger value="history" className="flex-1 gap-2">
-                  <History className="h-4 w-4" />
-                  Histórico de Alterações
+                  <History className="h-4 w-4" /> Histórico de Alterações
                 </TabsTrigger>
               </TabsList>
 
+              {/* Aba: Editar Pedido */}
               <TabsContent value="edit">
                 <OrderEditForm
                   order={foundOrder}
                   onSave={handleSaveOrder}
-                  onCancel={() => {
-                    setFoundOrder(null);
-                    setSearchResults([]);
-                  }}
+                  onCancel={() => { setFoundOrder(null); setSearchResults([]); }}
                   isLoading={isEditSaving}
                 />
               </TabsContent>
 
+              {/* Aba: Produtos */}
+              <TabsContent value="products">
+                <OrderItemsEditor
+                  orderId={foundOrder.id}
+                  initialItems={foundOrder.order_items ?? []}
+                  orderShippingCost={Number(foundOrder.shipping_cost) || 0}
+                  orderCouponDiscount={Number(foundOrder.coupon_discount) || 0}
+                  orderDonationAmount={Number(foundOrder.donation_amount) || 0}
+                  onSaved={async (newTotal) => {
+                    setFoundOrder((prev: any) => ({ ...prev, total_price: newTotal }));
+                    await refreshOrder();
+                  }}
+                />
+              </TabsContent>
+
+              {/* Aba: Histórico */}
               <TabsContent value="history">
                 {isHistoryLoading ? (
                   <div className="space-y-4">
@@ -355,21 +315,10 @@ export default function OrderAdminPage() {
         </div>
       )}
 
-      {/* Modal de cancelamento */}
-      <OrderCancelModal
-        isOpen={isCancelModalOpen}
-        onClose={() => setIsCancelModalOpen(false)}
-        order={foundOrder}
-        onConfirm={handleCancelOrder}
-      />
-
-      {/* Modal de exclusão */}
-      <OrderDeleteModal
-        isOpen={isDeleteModalOpen}
-        onClose={() => setIsDeleteModalOpen(false)}
-        order={foundOrder}
-        onConfirm={handleDeleteOrder}
-      />
+      <OrderCancelModal isOpen={isCancelModalOpen} onClose={() => setIsCancelModalOpen(false)}
+        order={foundOrder} onConfirm={handleCancelOrder} />
+      <OrderDeleteModal isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)}
+        order={foundOrder} onConfirm={handleDeleteOrder} />
     </div>
   );
 }
