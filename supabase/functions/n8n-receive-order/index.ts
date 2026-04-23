@@ -124,7 +124,7 @@ serve(async (req) => {
       if (itemRequest.sku) {
         const { data: variant } = await supabaseAdmin
             .from('product_variants')
-            .select('id, price, product_id, flavors(name), volume_ml')
+            .select('id, price, product_id, flavors(name), volume_ml, ohms, color, size')
             .eq('sku', itemRequest.sku)
             .maybeSingle();
         
@@ -146,14 +146,26 @@ serve(async (req) => {
       if (productData) {
         const price = variantData ? variantData.price : productData.price;
         const quantity = itemRequest.quantity || 1;
-        const name = variantData 
-            ? `${productData.name} - ${variantData.flavors?.name || ''}` 
+
+        // Monta o label da variação usando o primeiro atributo disponível
+        let variantLabel = '';
+        if (variantData) {
+          if (variantData.flavors?.name) variantLabel = variantData.flavors.name;
+          else if (variantData.ohms) variantLabel = `${variantData.ohms}Ω`;
+          else if (variantData.color) variantLabel = variantData.color;
+          else if (variantData.size) variantLabel = variantData.size;
+          else if (variantData.volume_ml) variantLabel = `${variantData.volume_ml}ml`;
+        }
+
+        const name = variantData
+            ? `${productData.name}${variantLabel ? ` - ${variantLabel}` : ''}`
             : productData.name;
 
         totalOrderPrice += (price * quantity);
 
         orderItemsToInsert.push({
             item_id: variantData ? variantData.product_id : productData.id,
+            variant_id: variantData ? variantData.id : null,
             item_type: 'product',
             quantity: quantity,
             price_at_purchase: price,
