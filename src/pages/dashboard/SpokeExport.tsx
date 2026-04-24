@@ -26,6 +26,7 @@ interface Order {
   total_price: number;
   status: string;
   delivery_status: string;
+  delivery_info: string | null;
   shipping_address: any;
   user_id: string;
   email?: string;
@@ -51,7 +52,7 @@ const checkIsNextRoute = (dateString: string) => {
 const fetchOrdersToExport = async (): Promise<Order[]> => {
   const { data: orders, error: ordersError } = await supabase
     .from("orders")
-    .select("id, created_at, total_price, status, delivery_status, user_id, shipping_address")
+    .select("id, created_at, total_price, status, delivery_status, delivery_info, user_id, shipping_address")
     .in("status", ["Finalizada", "Pago"])
     .in("delivery_status", ["Aguardando Coleta", "Embalado"])
     .order("created_at", { ascending: false });
@@ -136,7 +137,7 @@ const SpokeExportPage = () => {
           "Address Line 1": `${address.street}, ${address.number}`,
           "Address Line 2": address.complement || "",
           "": "",
-          Observação: "",
+          Observação: order.delivery_info || "",
           "Recipient Phone Number": phoneClean,
           Notes: phoneClean ? `wa.me/55${phoneClean}` : "",
           Bairro: address.neighborhood || "",
