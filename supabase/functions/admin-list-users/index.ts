@@ -83,11 +83,13 @@ serve(async (req) => {
 
   const term = searchTerm.trim();
 
+  console.log(`[admin-list-users] term="${term}" page=${page} pageSize=${pageSize}`);
+
   let countResult: { count: number | null; error: any };
   let dataResult: { data: any[] | null; error: any };
 
   if (term) {
-    // Busca com termo: usa SQL direto para suportar nome completo concatenado
+    // Busca com termo: usa RPC para suportar nome completo concatenado
     const likeTerm = `%${term}%`;
 
     const countQuery = await supabaseAdmin.rpc("search_profiles_count", {
@@ -99,6 +101,13 @@ serve(async (req) => {
       page_from: from,
       page_to: to,
     });
+
+    if (countQuery.error) {
+      console.error("[admin-list-users] Count RPC error:", countQuery.error);
+    }
+    if (dataQuery.error) {
+      console.error("[admin-list-users] Data RPC error:", dataQuery.error);
+    }
 
     countResult = { count: countQuery.data ?? 0, error: countQuery.error };
     dataResult = { data: dataQuery.data ?? [], error: dataQuery.error };
