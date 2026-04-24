@@ -1,4 +1,5 @@
 // @ts-nocheck
+// Função temporária para reenviar emails dos pedidos que não receberam confirmação
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 
 const corsHeaders = {
@@ -6,21 +7,22 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? 'https://jrlozhhvwqfmjtkmvukf.supabase.co'
-const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpybG96aGh2d3FmbWp0a212dWtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDU2NjQsImV4cCI6MjA2NzkyMTY2NH0.Do5c1-TKqpyZTJeX_hLbw1SU40CbwXfCIC-pPpcD_JM'
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+
+const ORDER_IDS = [1272,1138,1087,807,806,804,803,802,800,799,798,792,789,787,785,784,783,782,780,778,777,776,775,774,768,765,763,759,756,755,753,752,751,750,749,747,746,745,744,743,742,741,739,737,735,734,732,731,729,727,725,719,693,691,689,687,686,684,682,680,677,675,672,668,667,666,662,661,660,651,648,647,646,632,606,593,583,582,579,573,547,542,536,533,532,527,524,518,517,515,511,504]
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
 
-  const { order_ids } = await req.json()
+  console.log(`[trigger-batch-remail] Iniciando reenvio de ${ORDER_IDS.length} pedidos sem email`)
+
   const results: { id: number; ok: boolean; detail: string }[] = []
 
-  console.log(`[resend-batch-emails] Iniciando reenvio de ${order_ids.length} pedidos`)
-
-  for (const order_id of order_ids) {
+  for (const order_id of ORDER_IDS) {
     try {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/send-order-email`, {
         method: 'POST',
@@ -34,22 +36,27 @@ serve(async (req) => {
       const data = await res.json()
       const ok = res.ok && data.success
       results.push({ id: order_id, ok, detail: ok ? data.to : JSON.stringify(data) })
-      console.log(`[resend-batch-emails] Pedido #${order_id} -> ${ok ? 'OK' : 'ERRO'}: ${results.at(-1)?.detail}`)
+      console.log(`[trigger-batch-remail] Pedido #${order_id} -> ${ok ? 'OK' : 'ERRO'}: ${results.at(-1)?.detail}`)
     } catch (e) {
       results.push({ id: order_id, ok: false, detail: e.message })
-      console.error(`[resend-batch-emails] Pedido #${order_id} -> exceção: ${e.message}`)
+      console.error(`[trigger-batch-remail] Pedido #${order_id} -> exceção: ${e.message}`)
     }
-    // 300ms entre cada envio = ~3 por segundo, abaixo do limite de 5/s do Resend
+    // 300ms entre envios para não estourar limite do Resend (5/s)
     await sleep(300)
   }
 
   const success = results.filter(r => r.ok).length
   const failed = results.filter(r => !r.ok)
 
-  console.log(`[resend-batch-emails] Concluído: ${success} ok, ${failed.length} falhas`)
+  console.log(`[trigger-batch-remail] Concluído: ${success} enviados, ${failed.length} falhas`)
 
   return new Response(
-    JSON.stringify({ success, failed_count: failed.length, failed, results }),
+    JSON.stringify({ 
+      total: ORDER_IDS.length,
+      success, 
+      failed_count: failed.length, 
+      failed,
+    }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   )
 })

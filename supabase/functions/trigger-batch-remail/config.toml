@@ -1,0 +1,2 @@
+[functions.trigger-batch-remail]
+verify_jwt = false
