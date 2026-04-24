@@ -162,6 +162,39 @@ serve(async (req) => {
       }
     }
 
+    // ── Disparar e-mail se o status do pedido mudou para um evento relevante ──
+    const newStatus = updates.status
+    const oldStatus = currentOrder.status
+    const statusChanged = newStatus && newStatus !== oldStatus
+
+    if (statusChanged) {
+      const statusToEvent: Record<string, string> = {
+        'Pago': 'order_paid',
+        'Embalado': 'order_packed',
+        'Cancelado': 'order_cancelled',
+      }
+      const eventType = statusToEvent[newStatus]
+
+      if (eventType) {
+        console.log(`[admin-update-order] Disparando e-mail ${eventType} para pedido ${orderId}`)
+        try {
+          const emailRes = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/send-order-email`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+              'apikey': Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+            },
+            body: JSON.stringify({ event_type: eventType, order_id: orderId }),
+          })
+          const emailData = await emailRes.json().catch(() => ({}))
+          console.log(`[admin-update-order] E-mail ${eventType} disparado`, { status: emailRes.status, emailData })
+        } catch (emailErr) {
+          console.error(`[admin-update-order] Falha ao disparar e-mail ${eventType}`, { error: String(emailErr) })
+        }
+      }
+    }
+
     console.log(`[admin-update-order] Pedido ${orderId} atualizado por ${user.id} (${profile.role}). ${historyEntries.length} campos alterados.`)
 
     return new Response(

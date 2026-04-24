@@ -115,6 +115,23 @@ serve(async (req) => {
       console.error("[admin-cancel-order] History insert error (non-blocking):", historyError);
     }
 
+    // ── Disparar e-mail de cancelamento ──────────────────────────────────────
+    try {
+      const emailRes = await fetch(`${supabaseUrl}/functions/v1/send-order-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseServiceKey}`,
+          'apikey': Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+        },
+        body: JSON.stringify({ event_type: 'order_cancelled', order_id: orderId }),
+      });
+      const emailData = await emailRes.json().catch(() => ({}));
+      console.log('[admin-cancel-order] E-mail order_cancelled disparado', { status: emailRes.status, emailData });
+    } catch (emailErr) {
+      console.error('[admin-cancel-order] Falha ao disparar e-mail order_cancelled', { error: String(emailErr) });
+    }
+
     console.log("[admin-cancel-order] Pedido cancelado com sucesso:", orderId);
 
     return new Response(JSON.stringify({ success: true, orderId }), {

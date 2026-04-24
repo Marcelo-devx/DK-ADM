@@ -268,6 +268,23 @@ serve(async (req) => {
 
             console.log('[mp-webhook] Pedido atualizado com sucesso', { orderId, newStatus: updatedOrder?.status });
 
+            // ── Disparar e-mail de confirmação de pagamento ──────────────────────────
+            try {
+              const emailRes = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/send-order-email`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                  'apikey': Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+                },
+                body: JSON.stringify({ event_type: 'order_paid', order_id: Number(orderId) }),
+              });
+              const emailData = await emailRes.json().catch(() => ({}));
+              console.log('[mp-webhook] E-mail order_paid disparado', { status: emailRes.status, emailData });
+            } catch (emailErr) {
+              console.error('[mp-webhook] Falha ao disparar e-mail order_paid', { error: String(emailErr) });
+            }
+
             // Verificar primeira compra e liberar cartão
             if (updatedOrder?.user_id) {
                 const completedStatuses = ['Pago', 'Finalizada', 'Entregue', 'Concluída'];
