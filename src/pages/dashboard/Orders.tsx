@@ -144,7 +144,7 @@ const fetchOrdersPage = async (page: number, filters: Filters): Promise<OrdersRe
     let q = supabase.from("orders").select(
       forCount
         ? "id"
-        : "id, created_at, total_price, shipping_cost, coupon_discount, donation_amount, status, delivery_status, user_id, delivery_info, payment_method, shipping_address, order_items(item_id, item_type, name_at_purchase, quantity, price_at_purchase)",
+        : "id, created_at, total_price, shipping_cost, coupon_discount, donation_amount, status, delivery_status, user_id, delivery_info, payment_method, shipping_address, order_items(id, item_id, item_type, name_at_purchase, quantity, price_at_purchase, product_variants(ohms, size, color, volume_ml, flavors(name)))",
       forCount ? { count: "exact", head: true } : { count: "exact" }
     );
 

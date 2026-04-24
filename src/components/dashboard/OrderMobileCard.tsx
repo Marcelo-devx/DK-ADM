@@ -309,6 +309,65 @@ export const OrderMobileCard = ({
         </div>
       </button>
 
+      {/* Items preview */}
+      <button className="w-full text-left mt-2 pt-2 border-t border-gray-100" onClick={() => onOpenDetail(order)}>
+        <div className="space-y-1">
+          {(order.order_items || []).slice(0, 3).map((item: any) => {
+            const variant = item.product_variants ?? null;
+            const flavorName = variant?.flavors?.name;
+            const color = variant?.color;
+            const volumeMl = variant?.volume_ml;
+            const ohms = variant?.ohms;
+            const size = variant?.size;
+            const hasVariantBadges = flavorName || color || volumeMl || ohms || size;
+            return (
+              <div key={item.id} className="flex items-start gap-2">
+                <span className="bg-primary/10 text-primary text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 mt-0.5">
+                  {item.quantity}x
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-gray-700 leading-tight truncate">{item.name_at_purchase}</p>
+                  {hasVariantBadges && (
+                    <div className="flex flex-wrap gap-1 mt-0.5">
+                      {flavorName && (
+                        <span className="inline-flex items-center bg-green-50 text-green-700 border border-green-200 text-[10px] font-semibold px-1.5 py-0 rounded-full">
+                          🍃 {flavorName}
+                        </span>
+                      )}
+                      {color && (
+                        <span className="inline-flex items-center bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-semibold px-1.5 py-0 rounded-full">
+                          🎨 {color}
+                        </span>
+                      )}
+                      {volumeMl && (
+                        <span className="inline-flex items-center bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-semibold px-1.5 py-0 rounded-full">
+                          💧 {volumeMl}ml
+                        </span>
+                      )}
+                      {ohms && (
+                        <span className="inline-flex items-center bg-yellow-50 text-yellow-700 border border-yellow-200 text-[10px] font-semibold px-1.5 py-0 rounded-full">
+                          ⚡ {ohms}Ω
+                        </span>
+                      )}
+                      {size && (
+                        <span className="inline-flex items-center bg-gray-100 text-gray-700 border border-gray-200 text-[10px] font-semibold px-1.5 py-0 rounded-full">
+                          📐 {size}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+          {(order.order_items || []).length > 3 && (
+            <p className="text-[10px] text-muted-foreground pl-6">
+              +{order.order_items.length - 3} item(s)...
+            </p>
+          )}
+        </div>
+      </button>
+
       {/* WhatsApp quick action */}
       {phone && canUseWhatsApp && (
         <div className="mt-2 pt-2 border-t border-gray-100">
