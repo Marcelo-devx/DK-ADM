@@ -1490,20 +1490,32 @@ const OrdersPage = () => {
                           </Tooltip>
                         </TooltipProvider>
                         <div className="flex flex-col gap-0.5">
-                          <span>#{order.id}</span>
-                          {editedOrderIds?.has(order.id) && (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 border border-amber-300 rounded-full px-1.5 py-0.5 text-[10px] font-semibold w-fit whitespace-nowrap cursor-default">
-                                    <Pencil className="w-2.5 h-2.5 shrink-0" /> editado
-                                  </span>
-                                </TooltipTrigger>
-                                <TooltipContent>Itens do pedido foram editados pelo admin</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          )}
-                        </div>
+                        <span>#{order.id}</span>
+                        {editedOrderIds?.has(order.id) && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 border border-amber-300 rounded-full px-1.5 py-0.5 text-[10px] font-semibold w-fit whitespace-nowrap cursor-default">
+                                  <Pencil className="w-2.5 h-2.5 shrink-0" /> editado
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>Itens do pedido foram editados pelo admin</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                        {order.delivery_info && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex items-center gap-1 bg-orange-100 text-orange-700 border border-orange-300 rounded-full px-1.5 py-0.5 text-[10px] font-semibold w-fit whitespace-nowrap cursor-default">
+                                  <AlertCircle className="w-2.5 h-2.5 shrink-0" /> obs.
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs">{order.delivery_info}</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                      </div>
                       </div>
                     </TableCell>
                     <TableCell>

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import {
   Eye, MoreHorizontal, MessageCircle, Package, Truck, CheckCircle2,
   CalendarClock, QrCode, CreditCard, DollarSign, ShieldCheck, ShieldX,
-  CheckSquare, Loader2, XCircle, Printer, History, Trash2
+  CheckSquare, Loader2, XCircle, Printer, History, Trash2, AlertCircle
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -158,6 +158,11 @@ export const OrderMobileCard = ({
           {isNextRoute && order.delivery_status === "Pendente" && (
             <Badge variant="outline" className="text-[9px] bg-yellow-100 text-yellow-800 border-yellow-300 gap-1 px-1 py-0">
               <CalendarClock className="w-2.5 h-2.5" /> Próx. Dia
+            </Badge>
+          )}
+          {order.delivery_info && (
+            <Badge variant="outline" className="text-[9px] bg-orange-100 text-orange-700 border-orange-300 gap-1 px-1 py-0">
+              <AlertCircle className="w-2.5 h-2.5" /> obs.
             </Badge>
           )}
         </button>
