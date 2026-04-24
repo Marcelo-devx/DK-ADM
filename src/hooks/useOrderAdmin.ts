@@ -129,27 +129,66 @@ export const useOrderAdmin = () => {
       return orders.map(order => ({ ...order, profiles: profilesMap.get(order.user_id) || null })) as Order[];
     }
 
-    // Nome ou email
+    // Nome ou email → usa edge function (service_role) para buscar profiles sem restrição de RLS
     const searchTerm = trimmedQuery.toLowerCase();
-    const { data: profiles, error: profilesError } = await supabase
-      .from('profiles')
-      .select('id, first_name, last_name, phone, cpf_cnpj, email');
+    const { data: session } = await supabase.auth.getSession();
+    const token = session?.session?.access_token;
 
-    if (profilesError) throw profilesError;
-    if (!profiles) return [];
+    let matchingProfiles: any[] = [];
 
-    const matchingProfiles = profiles.filter(p => {
-      const firstName = (p.first_name || '').toLowerCase();
-      const lastName = (p.last_name || '').toLowerCase();
-      const fullName = `${firstName} ${lastName}`;
-      const email = (p.email || '').toLowerCase();
-      return firstName.includes(searchTerm) || lastName.includes(searchTerm) ||
-             fullName.includes(searchTerm) || email.includes(searchTerm);
-    });
+    if (token) {
+      try {
+        const res = await fetch(
+          'https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1/admin-list-users',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ searchTerm: trimmedQuery, page: 0, pageSize: 200 }),
+          }
+        );
+        if (res.ok) {
+          const json = await res.json();
+          matchingProfiles = json.users ?? [];
+        }
+      } catch (e) {
+        console.error('[useOrderAdmin] Erro ao buscar profiles via edge function:', e);
+      }
+    }
 
-    if (matchingProfiles.length === 0) return [];
+    // Fallback: busca local via RLS (pode não retornar todos)
+    if (matchingProfiles.length === 0) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name, phone, cpf_cnpj, email');
 
-    const userIds = matchingProfiles.map(p => p.id);
+      matchingProfiles = (profiles ?? []).filter(p => {
+        const firstName = (p.first_name || '').toLowerCase();
+        const lastName = (p.last_name || '').toLowerCase();
+        const fullName = `${firstName} ${lastName}`;
+        const email = (p.email || '').toLowerCase();
+        return firstName.includes(searchTerm) || lastName.includes(searchTerm) ||
+               fullName.includes(searchTerm) || email.includes(searchTerm);
+      });
+    }
+
+    if (matchingProfiles.length === 0) {
+      // Tenta também buscar por guest_email diretamente na tabela orders
+      const { data: guestOrders, error: guestError } = await supabase
+        .from('orders')
+        .select('*, order_items(*)')
+        .ilike('guest_email', `%${trimmedQuery}%`)
+        .order('created_at', { ascending: false });
+
+      if (!guestError && guestOrders && guestOrders.length > 0) {
+        return guestOrders.map(o => ({ ...o, profiles: null })) as Order[];
+      }
+      return [];
+    }
+
+    const userIds = matchingProfiles.map((p: any) => p.id);
     const { data: orders, error: ordersError } = await supabase
       .from('orders')
       .select('*, order_items(*)')
@@ -159,23 +198,17 @@ export const useOrderAdmin = () => {
     if (ordersError) throw ordersError;
     if (!orders) return [];
 
-    const profilesMap = new Map(matchingProfiles.map(p => [p.id, p]));
+    const profilesMap = new Map(matchingProfiles.map((p: any) => [p.id, p]));
     return orders.map(order => ({ ...order, profiles: profilesMap.get(order.user_id) || null })) as Order[];
   };
 
   // Busca avançada de pedidos
   const searchOrdersAdvanced = async (filters: OrderFilters): Promise<Order[]> => {
-    // Busca pedidos sem join (evita erro de schema cache)
     let query = supabase
       .from('orders')
       .select('*')
       .order('created_at', { ascending: false });
 
-    // Aplicar filtros por nome
-    // Como não podemos usar join no select, vamos buscar todos e filtrar no código
-    // ou fazer uma busca separada de profiles por email/telefone
-    
-    // Aplicar filtros diretos na tabela orders
     if (filters.status) {
       query = query.eq('status', filters.status);
     }
@@ -198,12 +231,45 @@ export const useOrderAdmin = () => {
       return [];
     }
 
-    // Coleta user_ids únicos
+    // Se há filtro de email ou nome, usa edge function para buscar profiles sem RLS
+    let profilesFromEdge: any[] | null = null;
+    if (filters.email || filters.clientName) {
+      const searchTerm = filters.email || filters.clientName;
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+
+      if (token) {
+        try {
+          const res = await fetch(
+            'https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1/admin-list-users',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+              },
+              body: JSON.stringify({ searchTerm, page: 0, pageSize: 200 }),
+            }
+          );
+          if (res.ok) {
+            const json = await res.json();
+            profilesFromEdge = json.users ?? [];
+          }
+        } catch (e) {
+          console.error('[useOrderAdmin] Erro ao buscar profiles via edge function:', e);
+        }
+      }
+    }
+
+    // Coleta user_ids únicos dos pedidos
     const userIds = [...new Set(orders.map(o => o.user_id).filter(Boolean))];
 
     // Busca profiles separadamente
     let profiles: any[] = [];
-    if (userIds.length > 0) {
+    if (profilesFromEdge !== null) {
+      // Usa os profiles retornados pela edge function
+      profiles = profilesFromEdge;
+    } else if (userIds.length > 0) {
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('id, first_name, last_name, email, phone')
@@ -214,16 +280,14 @@ export const useOrderAdmin = () => {
       }
     }
 
-    // Cria mapa de profiles
     const profilesMap = new Map(profiles.map(p => [p.id, p]));
 
-    // Faz o merge dos dados
     let mergedOrders = orders.map(order => ({
       ...order,
       profiles: profilesMap.get(order.user_id) || null,
     }));
 
-    // Aplica filtros que dependem de profiles (cliente, email, telefone)
+    // Aplica filtros que dependem de profiles
     if (filters.clientName) {
       const searchTerm = filters.clientName.toLowerCase();
       mergedOrders = mergedOrders.filter(order => {
@@ -232,8 +296,8 @@ export const useOrderAdmin = () => {
         const firstName = (profile.first_name || '').toLowerCase();
         const lastName = (profile.last_name || '').toLowerCase();
         const fullName = `${firstName} ${lastName}`;
-        return firstName.includes(searchTerm) || 
-               lastName.includes(searchTerm) || 
+        return firstName.includes(searchTerm) ||
+               lastName.includes(searchTerm) ||
                fullName.includes(searchTerm);
       });
     }
@@ -249,7 +313,7 @@ export const useOrderAdmin = () => {
     }
 
     if (filters.phone) {
-      const searchTerm = filters.phone.replace(/\D/g, ''); // Remove não-dígitos
+      const searchTerm = filters.phone.replace(/\D/g, '');
       mergedOrders = mergedOrders.filter(order => {
         const profile = order.profiles;
         if (!profile) return false;
