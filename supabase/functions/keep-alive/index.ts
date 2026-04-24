@@ -1,5 +1,5 @@
 // @ts-nocheck
-// v5 - warm-up com teste real da send-order-email
+// v6 - warm-up com retry automático para funções COLD
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 
 const corsHeaders = {
@@ -53,6 +53,17 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
+async function pingFunction(fnName: string): Promise<{ status: number; ok: boolean }> {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/${fnName}`, {
+    method: 'GET',
+    headers: {
+      'apikey': SUPABASE_ANON_KEY,
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+    },
+  });
+  return { status: res.status, ok: res.status !== 404 && res.status !== 0 };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -70,19 +81,12 @@ serve(async (req) => {
 
   const results: Record<string, string> = {};
 
-  // Warm-up padrão via GET
+  // 1ª rodada: ping em todas as funções em paralelo
   await Promise.allSettled(
     CRITICAL_FUNCTIONS.map(async (fnName) => {
       try {
-        const res = await fetch(`${SUPABASE_URL}/functions/v1/${fnName}`, {
-          method: 'GET',
-          headers: {
-            'apikey': SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          },
-        });
-        const isWarm = res.status !== 404 && res.status !== 0;
-        results[fnName] = isWarm ? `warm(${res.status})` : `COLD/MISSING(${res.status})`;
+        const { status, ok } = await pingFunction(fnName);
+        results[fnName] = ok ? `warm(${status})` : `COLD/MISSING(${status})`;
         console.log(`[keep-alive] ${fnName} -> ${results[fnName]}`);
       } catch (err) {
         results[fnName] = `error: ${err.message}`;
@@ -91,9 +95,29 @@ serve(async (req) => {
     })
   );
 
-  // Teste real da send-order-email via POST com event_type inválido
-  // Retorna 200 com "Evento não requer e-mail" se estiver deployada
-  // Retorna 404 se estiver off
+  // 2ª rodada: retry nas funções que ficaram COLD — aguarda 2s e tenta novamente
+  const coldFunctions = CRITICAL_FUNCTIONS.filter(fn => results[fn]?.startsWith('COLD'));
+
+  if (coldFunctions.length > 0) {
+    console.warn(`[keep-alive] ⚠️ ${coldFunctions.length} funções COLD, tentando reativar: ${coldFunctions.join(', ')}`);
+
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    await Promise.allSettled(
+      coldFunctions.map(async (fnName) => {
+        try {
+          const { status, ok } = await pingFunction(fnName);
+          const prev = results[fnName];
+          results[fnName] = ok ? `warm(${status})` : `COLD/MISSING(${status})`;
+          console.log(`[keep-alive] RETRY ${fnName}: ${prev} → ${results[fnName]}`);
+        } catch (err) {
+          console.error(`[keep-alive] RETRY ${fnName} -> erro: ${err.message}`);
+        }
+      })
+    );
+  }
+
+  // Warm-up da send-order-email via POST
   for (const fnName of EMAIL_FUNCTIONS) {
     try {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/${fnName}`, {
@@ -123,7 +147,7 @@ serve(async (req) => {
   const warm = Object.entries(results).filter(([, v]) => v.startsWith('warm'));
 
   if (cold.length > 0) {
-    console.warn(`[keep-alive] ⚠️ ${cold.length} funções COLD/MISSING: ${cold.map(([k]) => k).join(', ')}`);
+    console.warn(`[keep-alive] ⚠️ ${cold.length} funções ainda COLD após retry: ${cold.map(([k]) => k).join(', ')}`);
   }
 
   console.log(`[keep-alive] Concluído: ${warm.length} warm, ${cold.length} ausentes`);
