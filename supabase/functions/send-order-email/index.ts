@@ -8,7 +8,7 @@ const corsHeaders = {
 }
 
 const FN = 'send-order-email'
-// v2 - redeploy
+// v3 - redeploy forçado
 
 // ─── Helpers de formatação ────────────────────────────────────────────────────
 
