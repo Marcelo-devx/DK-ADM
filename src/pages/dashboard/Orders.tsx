@@ -504,8 +504,8 @@ const OrdersPage = () => {
   });
 
   const updateDeliveryStatusMutation = useMutation({
-    mutationFn: async ({ orderId, status, info }: { orderId: number; status: string; info: string }) => {
-      const { error } = await supabase.from("orders").update({ delivery_status: status, delivery_info: info }).eq("id", orderId);
+    mutationFn: async ({ orderId, status }: { orderId: number; status: string; info?: string }) => {
+      const { error } = await supabase.from("orders").update({ delivery_status: status }).eq("id", orderId);
       if (error) throw error;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] }),
@@ -513,7 +513,7 @@ const OrdersPage = () => {
 
   const finalizeOrderMutation = useMutation({
     mutationFn: async (orderId: number) => {
-      const { error } = await supabase.from("orders").update({ status: "Finalizada", delivery_status: "Entregue", delivery_info: "Finalizado em massa pelo painel" }).eq("id", orderId);
+      const { error } = await supabase.from("orders").update({ status: "Finalizada", delivery_status: "Entregue" }).eq("id", orderId);
       if (error) throw error;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] }),
@@ -571,7 +571,7 @@ const OrdersPage = () => {
     for (const id of Array.from(selectedIds)) {
       const order = orders.find(o => o.id === id);
       if (order && (order.status === "Finalizada" || order.status === "Pago") && !["Despachado", "Entregue", "Cancelado"].includes(order.delivery_status)) {
-        try { await updateDeliveryStatusMutation.mutateAsync({ orderId: id, status: "Embalado", info: "" }); successCount++; } catch {}
+        try { await updateDeliveryStatusMutation.mutateAsync({ orderId: id, status: "Embalado" }); successCount++; } catch {}
       }
     }
     setIsProcessingBulk(false); setSelectedIds(new Set());
@@ -1370,7 +1370,7 @@ const OrdersPage = () => {
             }}
             onValidatePayment={(id) => validatePaymentAndSetPendingMutation.mutate(id)}
             onCancelFraud={(o) => setActionToConfirm({ action: "cancel_fraud", client: o })}
-            onUpdateDeliveryStatus={(id, status, info) => updateDeliveryStatusMutation.mutate({ orderId: id, status, info })}
+            onUpdateDeliveryStatus={(id, status) => updateDeliveryStatusMutation.mutate({ orderId: id, status })}
             onDeleteOrder={(o) => { setSelectedOrder(o); setIsDeleteAlertOpen(true); }}
             isValidating={validatePaymentAndSetPendingMutation.isPending}
             canUseWhatsApp={canUseWhatsApp}
@@ -1602,7 +1602,7 @@ const OrdersPage = () => {
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <Button size="sm" variant="outline" className="text-green-600 border-green-200 bg-green-50 hover:bg-green-100 font-bold h-8 px-3 text-xs"
-                                      onClick={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: "Entregue", info: "Confirmado pelo painel" })}
+                                      onClick={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: "Entregue" })}
                                       disabled={updateDeliveryStatusMutation.isPending}>
                                       <CheckCircle2 className="w-3 h-3 mr-1" /> Entregue
                                     </Button>
@@ -1632,13 +1632,13 @@ const OrdersPage = () => {
                                   <Printer className="w-4 h-4 mr-2" /> Imprimir Etiqueta
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: "Embalado", info: "Marcado como embalado manualmente" })}>
+                                <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: "Embalado" })}>
                                   <Package className="w-4 h-4 mr-2" /> Marcar como Embalado
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: "Despachado", info: "Despachado manualmente" })}>
+                                <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: "Despachado" })}>
                                   <Truck className="w-4 h-4 mr-2" /> Marcar como Despachado
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: "Entregue", info: "Entregue manualmente" })}>
+                                <DropdownMenuItem onSelect={() => updateDeliveryStatusMutation.mutate({ orderId: order.id, status: "Entregue" })}>
                                   <CheckCircle2 className="w-4 h-4 mr-2" /> Marcar como Entregue
                                 </DropdownMenuItem>
                                 {(isAdmin || isGerenteGeral) && (

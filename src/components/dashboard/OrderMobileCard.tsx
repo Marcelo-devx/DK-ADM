@@ -44,7 +44,7 @@ interface OrderMobileCardProps {
   onOpenClientHistory: (order: Order) => void;
   onValidatePayment: (orderId: number) => void;
   onCancelFraud: (order: Order) => void;
-  onUpdateDeliveryStatus: (orderId: number, status: string, info: string) => void;
+  onUpdateDeliveryStatus: (orderId: number, status: string) => void;
   onDeleteOrder: (order: Order) => void;
   isValidating: boolean;
   canUseWhatsApp: boolean;
@@ -225,13 +225,13 @@ export const OrderMobileCard = ({
                     <Printer className="w-4 h-4 mr-2" /> Imprimir Etiqueta
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={() => onUpdateDeliveryStatus(order.id, "Embalado", "Marcado como embalado manualmente")}>
+                  <DropdownMenuItem onSelect={() => onUpdateDeliveryStatus(order.id, "Embalado")}>
                     <Package className="w-4 h-4 mr-2" /> Marcar como Embalado
                   </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => onUpdateDeliveryStatus(order.id, "Despachado", "Despachado manualmente")}>
+                  <DropdownMenuItem onSelect={() => onUpdateDeliveryStatus(order.id, "Despachado")}>
                     <Truck className="w-4 h-4 mr-2" /> Marcar como Despachado
                   </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => onUpdateDeliveryStatus(order.id, "Entregue", "Entregue manualmente")}>
+                  <DropdownMenuItem onSelect={() => onUpdateDeliveryStatus(order.id, "Entregue")}>
                     <CheckCircle2 className="w-4 h-4 mr-2" /> Marcar como Entregue
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
@@ -300,7 +300,7 @@ export const OrderMobileCard = ({
               className="text-green-600 border-green-200 bg-green-50 hover:bg-green-100 font-bold h-7 px-2 text-xs ml-auto"
               onClick={(e) => {
                 e.stopPropagation();
-                onUpdateDeliveryStatus(order.id, "Entregue", "Confirmado pelo painel");
+                onUpdateDeliveryStatus(order.id, "Entregue");
               }}
             >
               <CheckCircle2 className="w-3 h-3 mr-1" /> Entregue
