@@ -2,6 +2,39 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { RefreshCw, ImageOff, Lock, MoreHorizontal, Pencil, Trash2, Star, Eye, EyeOff } from "lucide-react";
+import { useState } from "react";
+
+// Componente com retry automático: se a imagem falhar, tenta com cache-bust
+const ProductImage = ({ url, name }: { url: string | null; name: string }) => {
+  const [src, setSrc] = useState(url || '');
+  const [failed, setFailed] = useState(false);
+  const [retried, setRetried] = useState(false);
+
+  if (!url || failed) {
+    return (
+      <div className="h-12 w-12 rounded-lg bg-gray-100 flex items-center justify-center border border-dashed">
+        <ImageOff className="h-5 w-5 text-gray-400" />
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={name}
+      className="h-12 w-12 rounded-lg object-cover shadow-sm border"
+      onError={() => {
+        if (!retried) {
+          // Tenta novamente com cache-bust
+          setSrc(`${url}?t=${Date.now()}`);
+          setRetried(true);
+        } else {
+          setFailed(true);
+        }
+      }}
+    />
+  );
+};
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -203,7 +236,9 @@ export const ProductTable = ({
             ) : products && products.length > 0 ? (
               products.map((product) => (
                 <TableRow key={product.id} className="hover:bg-gray-50/50 transition-colors">
-                  <TableCell>{product.image_url ? <img src={product.image_url} alt={product.name} className="h-12 w-12 rounded-lg object-cover shadow-sm border" /> : <div className="h-12 w-12 rounded-lg bg-gray-100 flex items-center justify-center border border-dashed"><ImageOff className="h-5 w-5 text-gray-400" /></div>}</TableCell>
+                  <TableCell>
+                    <ProductImage url={product.image_url} name={product.name} />
+                  </TableCell>
                   <TableCell className="font-mono text-[10px] font-black text-gray-500">#{product.sku || product.id}</TableCell>
                   <TableCell>
                     <TooltipProvider>

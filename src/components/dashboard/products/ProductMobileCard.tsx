@@ -10,6 +10,37 @@ import {
   ImageOff, MoreHorizontal, Pencil, Trash2, Star, Lock, Eye, EyeOff, Package,
 } from "lucide-react";
 import { ExtendedProduct } from "@/hooks/useProductData";
+import { useState } from "react";
+
+const ProductImage = ({ url, name }: { url: string | null; name: string }) => {
+  const [src, setSrc] = useState(url || '');
+  const [failed, setFailed] = useState(false);
+  const [retried, setRetried] = useState(false);
+
+  if (!url || failed) {
+    return (
+      <div className="h-14 w-14 rounded-lg bg-gray-100 border border-dashed flex items-center justify-center">
+        <ImageOff className="h-5 w-5 text-gray-400" />
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={name}
+      className="h-14 w-14 rounded-lg object-cover border shadow-sm"
+      onError={() => {
+        if (!retried) {
+          setSrc(`${url}?t=${Date.now()}`);
+          setRetried(true);
+        } else {
+          setFailed(true);
+        }
+      }}
+    />
+  );
+};
 
 interface ProductMobileCardProps {
   product: ExtendedProduct;
@@ -62,17 +93,7 @@ export const ProductMobileCard = ({
       <div className="flex items-start gap-3">
         {/* Thumbnail */}
         <div className="shrink-0">
-          {product.image_url ? (
-            <img
-              src={product.image_url}
-              alt={product.name}
-              className="h-14 w-14 rounded-lg object-cover border shadow-sm"
-            />
-          ) : (
-            <div className="h-14 w-14 rounded-lg bg-gray-100 border border-dashed flex items-center justify-center">
-              <ImageOff className="h-5 w-5 text-gray-400" />
-            </div>
-          )}
+          <ProductImage url={product.image_url} name={product.name} />
         </div>
 
         {/* Info central */}
