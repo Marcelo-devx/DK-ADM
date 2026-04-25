@@ -223,7 +223,7 @@ export const ProductTable = ({
                       </Tooltip>
                     </TooltipProvider>
                   </TableCell>
-                  <TableCell className="font-bold text-xs truncate max-w-[200px] text-gray-800">{product.name}</TableCell>
+                  <TableCell className="font-bold text-xs text-gray-800">{product.name}</TableCell>
                   <TableCell className="text-xs font-medium text-muted-foreground">{product.category || "N/A"}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{getPriceDisplay(product, true)}</TableCell>
                   <TableCell className="text-xs font-bold text-gray-700">{getPriceDisplay(product)}</TableCell>
