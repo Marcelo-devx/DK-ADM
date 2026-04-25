@@ -82,7 +82,7 @@ export const ProductMobileCard = ({
         >
           <div className="flex items-center gap-1.5 mb-0.5">
             {hasVariants && <Star className="h-3 w-3 fill-yellow-400 text-yellow-400 shrink-0" />}
-            <p className="font-bold text-sm text-gray-900 leading-tight truncate">{product.name}</p>
+            <p className="font-bold text-sm text-gray-900 leading-tight">{product.name}</p>
           </div>
           <p className="text-[11px] font-mono text-gray-400 font-bold">
             #{product.sku || product.id}
