@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,12 +19,8 @@ interface ImageUploaderProps {
 const isVideo = (url: string) => {
   if (!url) return false;
   return /\.(mp4|webm|ogg)$/i.test(url);
-}
+};
 
-/**
- * Compresses and resizes an image file using a canvas.
- * Returns a base64 data URI (JPEG).
- */
 const compressImage = (file: File, maxPx = 1200, quality = 0.85): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -49,7 +45,6 @@ const compressImage = (file: File, maxPx = 1200, quality = 0.85): Promise<string
         const ctx = canvas.getContext('2d');
         if (!ctx) return reject(new Error('Canvas não disponível.'));
         ctx.drawImage(img, 0, 0, width, height);
-        // Use original format if webp/png, otherwise jpeg
         const mimeType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
         resolve(canvas.toDataURL(mimeType, quality));
       };
@@ -60,28 +55,30 @@ const compressImage = (file: File, maxPx = 1200, quality = 0.85): Promise<string
 };
 
 export const ImageUploader = ({
-    onUploadSuccess,
-    onUploadStart,
-    onUploadError,
-    initialUrl,
-    label,
-    accept = "image/png, image/jpeg, image/webp",
-    className
+  onUploadSuccess,
+  onUploadStart,
+  onUploadError,
+  initialUrl,
+  label,
+  accept = "image/png, image/jpeg, image/webp",
+  className,
 }: ImageUploaderProps) => {
   const [uploading, setUploading] = useState(false);
-  // Use initialUrl as the starting value; local uploads will override this
-  const [mediaUrl, setMediaUrl] = useState(initialUrl || null);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  // Track whether the current mediaUrl came from a local upload (not from props)
-  const localUploadDone = useRef(false);
+  // currentUrl is the source of truth for what's displayed.
+  // It starts with initialUrl and is only changed by local actions (upload/remove).
+  const [currentUrl, setCurrentUrl] = useState<string | null>(initialUrl || null);
+  // Keep a ref to the latest initialUrl so we can detect when the prop truly changes
+  // (e.g. a different product is opened), without re-running on every render.
+  const prevInitialUrl = useRef(initialUrl);
 
-  useEffect(() => {
-    // Only sync from props if we haven't done a local upload yet
-    if (!localUploadDone.current) {
-      setMediaUrl(initialUrl || null);
-      setUploadError(null);
-    }
-  }, [initialUrl]);
+  // If the parent swaps to a completely different initialUrl (different product opened),
+  // reset to the new one — but only if we're not in the middle of a local upload.
+  if (initialUrl !== prevInitialUrl.current) {
+    prevInitialUrl.current = initialUrl;
+    setCurrentUrl(initialUrl || null);
+    setUploadError(null);
+  }
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -92,11 +89,10 @@ export const ImageUploader = ({
     onUploadStart?.();
 
     try {
-      console.log('[ImageUploader] Iniciando upload via Cloudinary...', { fileName: file.name, fileType: file.type, fileSize: file.size });
+      console.log('[ImageUploader] Iniciando upload...', { fileName: file.name, fileSize: file.size });
 
-      // Comprime/redimensiona a imagem antes de enviar (máx 1200px, qualidade 85%)
       const base64data = await compressImage(file, 1200, 0.85);
-      console.log('[ImageUploader] Tamanho após compressão:', Math.round(base64data.length / 1024), 'KB');
+      console.log('[ImageUploader] Comprimido:', Math.round(base64data.length / 1024), 'KB');
 
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
@@ -116,26 +112,18 @@ export const ImageUploader = ({
 
       const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(data?.error || `Erro ${response.status} no servidor.`);
-      }
+      if (!response.ok) throw new Error(data?.error || `Erro ${response.status} no servidor.`);
+      if (data?.error) throw new Error(data.error);
+      if (!data?.secure_url) throw new Error(data?.details || 'Cloudinary não retornou uma URL válida.');
 
-      if (data?.error) {
-        throw new Error(data.error);
-      }
-
-      if (!data?.secure_url) {
-        throw new Error(data?.details || 'Cloudinary não retornou uma URL válida.');
-      }
-
-      const { secure_url } = data;
-      localUploadDone.current = true;
-      setMediaUrl(secure_url);
-      onUploadSuccess(secure_url);
-      console.log("[ImageUploader] Upload Cloudinary bem-sucedido:", secure_url);
+      console.log('[ImageUploader] Upload bem-sucedido:', data.secure_url);
+      // Update local display immediately — do NOT rely on initialUrl prop for this
+      setCurrentUrl(data.secure_url);
+      prevInitialUrl.current = data.secure_url; // prevent the guard above from resetting
+      onUploadSuccess(data.secure_url);
       showSuccess("Arquivo enviado com sucesso!");
     } catch (err: any) {
-      console.error("[ImageUploader] Falha no upload:", err);
+      console.error('[ImageUploader] Falha:', err);
       const errorMsg = err?.message || 'Falha no upload do arquivo.';
       setUploadError(errorMsg);
       showError(errorMsg);
@@ -145,10 +133,10 @@ export const ImageUploader = ({
       event.target.value = '';
     }
   };
-  
+
   const handleRemoveMedia = () => {
-    localUploadDone.current = false;
-    setMediaUrl(null);
+    setCurrentUrl(null);
+    prevInitialUrl.current = null;
     setUploadError(null);
     onUploadSuccess("");
   };
@@ -156,24 +144,21 @@ export const ImageUploader = ({
   return (
     <div className="space-y-2">
       <label className="font-medium text-sm">{label || "Arquivo"}</label>
-      {mediaUrl ? (
+      {currentUrl ? (
         <div className={cn(
           "relative border rounded-md overflow-hidden bg-gray-50 flex items-center justify-center",
           "aspect-square w-full max-w-[300px]",
           className
         )}>
-          {isVideo(mediaUrl) ? (
+          {isVideo(currentUrl) ? (
             <video
-              key={mediaUrl}
-              src={mediaUrl}
+              key={currentUrl}
+              src={currentUrl}
               className="w-full h-full object-contain"
-              autoPlay
-              loop
-              muted
-              playsInline
+              autoPlay loop muted playsInline
             />
           ) : (
-            <img src={mediaUrl} alt="Preview" className="w-full h-full object-contain" />
+            <img src={currentUrl} alt="Preview" className="w-full h-full object-contain" />
           )}
           <Button
             type="button"
@@ -216,7 +201,7 @@ export const ImageUploader = ({
           )}
         </div>
       )}
-      
+
       {uploadError && (
         <div className="flex items-start gap-2 text-xs text-red-600 mt-1 px-1">
           <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
