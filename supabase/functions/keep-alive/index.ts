@@ -42,6 +42,7 @@ const CRITICAL_FUNCTIONS = [
   'bulk-product-upsert',
   'catalog-api',
   'resend-batch-emails',
+  'cloudinary-upload',
 ];
 
 // Funções críticas que precisam de teste via POST (não respondem a GET)
