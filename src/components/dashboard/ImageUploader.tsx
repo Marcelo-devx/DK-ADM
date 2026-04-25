@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,22 +59,28 @@ const compressImage = (file: File, maxPx = 1200, quality = 0.85): Promise<string
   });
 };
 
-export const ImageUploader = ({ 
-    onUploadSuccess, 
+export const ImageUploader = ({
+    onUploadSuccess,
     onUploadStart,
     onUploadError,
-    initialUrl, 
-    label, 
+    initialUrl,
+    label,
     accept = "image/png, image/jpeg, image/webp",
     className
 }: ImageUploaderProps) => {
   const [uploading, setUploading] = useState(false);
+  // Use initialUrl as the starting value; local uploads will override this
   const [mediaUrl, setMediaUrl] = useState(initialUrl || null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  // Track whether the current mediaUrl came from a local upload (not from props)
+  const localUploadDone = useRef(false);
 
   useEffect(() => {
-    setMediaUrl(initialUrl || null);
-    setUploadError(null);
+    // Only sync from props if we haven't done a local upload yet
+    if (!localUploadDone.current) {
+      setMediaUrl(initialUrl || null);
+      setUploadError(null);
+    }
   }, [initialUrl]);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -123,6 +129,7 @@ export const ImageUploader = ({
       }
 
       const { secure_url } = data;
+      localUploadDone.current = true;
       setMediaUrl(secure_url);
       onUploadSuccess(secure_url);
       console.log("[ImageUploader] Upload Cloudinary bem-sucedido:", secure_url);
@@ -140,6 +147,7 @@ export const ImageUploader = ({
   };
   
   const handleRemoveMedia = () => {
+    localUploadDone.current = false;
     setMediaUrl(null);
     setUploadError(null);
     onUploadSuccess("");
