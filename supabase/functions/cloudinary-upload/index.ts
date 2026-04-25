@@ -1,5 +1,5 @@
 // @ts-nocheck
-// v4 - envia base64 como string diretamente no FormData (Cloudinary aceita data URI)
+// v3 - sem npm:cloudinary, usa fetch nativo
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -17,6 +17,7 @@ Deno.serve(async (req: Request) => {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
 
+  // GET simples para keep-alive / health check
   if (req.method === 'GET') {
     return new Response(
       JSON.stringify({ status: 'ok', function: 'cloudinary-upload' }),
@@ -51,7 +52,6 @@ Deno.serve(async (req: Request) => {
     }
 
     console.log('[cloudinary-upload] Credenciais OK, cloud:', cloudName);
-    console.log('[cloudinary-upload] Tamanho do payload base64:', image.length, 'chars');
 
     const folder = 'tabacaria-products';
     const timestamp = Math.floor(Date.now() / 1000);
@@ -63,9 +63,8 @@ Deno.serve(async (req: Request) => {
 
     const uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
 
-    // Cloudinary aceita base64 data URI diretamente como string no campo "file"
     const formData = new FormData();
-    formData.append('file', image);  // envia a data URI (base64) como string
+    formData.append('file', image);
     formData.append('api_key', apiKey);
     formData.append('timestamp', String(timestamp));
     formData.append('signature', signature);
@@ -80,32 +79,21 @@ Deno.serve(async (req: Request) => {
 
     console.log('[cloudinary-upload] Status Cloudinary:', response.status);
 
-    const responseText = await response.text();
-    console.log('[cloudinary-upload] Resposta Cloudinary (raw):', responseText.substring(0, 500));
-
     if (!response.ok) {
-      console.error('[cloudinary-upload] Erro Cloudinary:', response.status, responseText);
+      const errorText = await response.text();
+      console.error('[cloudinary-upload] Erro Cloudinary:', response.status, errorText);
       return new Response(
-        JSON.stringify({ error: `Cloudinary retornou erro ${response.status}`, details: responseText }),
+        JSON.stringify({ error: `Cloudinary retornou erro ${response.status}`, details: errorText }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 502 }
       );
     }
 
-    let uploadResult: any;
-    try {
-      uploadResult = JSON.parse(responseText);
-    } catch (parseErr) {
-      console.error('[cloudinary-upload] Falha ao parsear resposta JSON:', responseText);
-      return new Response(
-        JSON.stringify({ error: 'Resposta inválida do Cloudinary.', details: responseText }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 502 }
-      );
-    }
+    const uploadResult = await response.json();
 
     if (!uploadResult?.secure_url) {
       console.error('[cloudinary-upload] Resposta sem secure_url:', JSON.stringify(uploadResult));
       return new Response(
-        JSON.stringify({ error: 'Cloudinary não retornou uma URL válida.', details: JSON.stringify(uploadResult) }),
+        JSON.stringify({ error: 'Cloudinary não retornou uma URL válida.' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 502 }
       );
     }
