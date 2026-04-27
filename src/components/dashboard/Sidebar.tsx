@@ -43,6 +43,7 @@ import {
   Search,
   RefreshCw,
   CreditCard,
+  Flame,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -258,6 +259,9 @@ const Sidebar = () => {
       </NavLink>
       <NavLink to="/dashboard/auditoria-pedidos" className={navLinkClass}>
         {({ isActive }) => (<><ShieldCheck className={iconClass("text-orange-600", isActive)} />Auditoria Pedidos</>)}
+      </NavLink>
+      <NavLink to="/dashboard/warmup-manager" className={navLinkClass}>
+        {({ isActive }) => (<><Flame className={iconClass("text-orange-500", isActive)} />Gestão de Aquecimento</>)}
       </NavLink>
 
     </>

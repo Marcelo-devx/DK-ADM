@@ -62,6 +62,7 @@ import InvestigarUsuario from "./pages/dashboard/InvestigarUsuario";
 import ReativarPedidos from "./pages/dashboard/ReativarPedidos";
 import AuditoriaCartao from "./pages/dashboard/AuditoriaCartao";
 import AuditoriaPedidos from "./pages/dashboard/AuditoriaPedidos";
+import WarmupManager from "./pages/dashboard/WarmupManager";
 import { useKeepAlive } from "./hooks/useKeepAlive";
 
 const DashboardIndex = () => {
@@ -158,6 +159,7 @@ const App = () => (
               <Route path="reativar-pedidos" element={<ReativarPedidos />} />
               <Route path="auditoria-cartao" element={<AuditoriaCartao />} />
               <Route path="auditoria-pedidos" element={<AuditoriaPedidos />} />
+              <Route path="warmup-manager" element={<WarmupManager />} />
             </Route>
             
             <Route path="*" element={<NotFound />} />
