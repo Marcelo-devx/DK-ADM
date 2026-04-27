@@ -61,7 +61,7 @@ function jobCategory(name: string): "warmup" | "cleanup" | "content" | "orders" 
 
 const CATEGORY_META = {
   warmup:  { label: "🔥 Aquecimento de Funções", color: "bg-orange-50 border-orange-200" },
-  cleanup: { label: "🗑️ Limpeza Automática",      color: "bg-red-50 border-red-200" },
+  cleanup: { label: "🗑️ Limpeza Automática",      color: "bg-slate-50 border-slate-200" },
   content: { label: "📢 Geração de Conteúdo",     color: "bg-purple-50 border-purple-200" },
   orders:  { label: "📦 Automação de Pedidos",    color: "bg-blue-50 border-blue-200" },
 };
