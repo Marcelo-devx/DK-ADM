@@ -86,11 +86,8 @@ export const ImageUploader = ({
     onUploadStart?.();
 
     try {
-      console.log('[ImageUploader] Iniciando upload...', { fileName: file.name, fileSize: file.size });
-
       const base64data = await compressImage(file, 1000, 0.82);
       const sizeKB = Math.round(base64data.length / 1024);
-      console.log('[ImageUploader] Comprimido:', sizeKB, 'KB');
 
       if (sizeKB > 5000) {
         throw new Error('Imagem muito grande. Use uma imagem menor.');
@@ -118,13 +115,11 @@ export const ImageUploader = ({
       if (data?.error) throw new Error(data.error);
       if (!data?.secure_url) throw new Error(data?.details || 'Cloudinary não retornou uma URL válida.');
 
-      console.log('[ImageUploader] Upload bem-sucedido:', data.secure_url);
       lastInitialUrl.current = data.secure_url;
       setDisplayUrl(data.secure_url);
       onUploadSuccess(data.secure_url);
       showSuccess("Arquivo enviado com sucesso!");
     } catch (err: any) {
-      console.error('[ImageUploader] Falha:', err);
       let errorMsg = err?.message || 'Falha no upload do arquivo.';
       if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError')) {
         errorMsg = 'Erro de conexão com o servidor. Verifique sua internet e tente novamente.';
@@ -150,16 +145,12 @@ export const ImageUploader = ({
       <label className="font-medium text-sm">{label || "Arquivo"}</label>
 
       {displayUrl ? (
-        <div className={cn(
-          "relative border rounded-md bg-gray-50 flex items-center justify-center",
-          "w-full max-w-[300px]",
-          className
-        )} style={{ aspectRatio: '1 / 1' }}>
+        <div className={cn("relative border rounded-md bg-gray-50 w-full max-w-[300px] h-[300px]", className)}>
           {isVideo(displayUrl) ? (
             <video
               key={displayUrl}
               src={displayUrl}
-              className="w-full h-full object-contain rounded-md"
+              className="absolute inset-0 w-full h-full object-contain"
               autoPlay loop muted playsInline
             />
           ) : (
@@ -167,11 +158,7 @@ export const ImageUploader = ({
               key={displayUrl}
               src={displayUrl}
               alt="Preview"
-              className="w-full h-full object-contain rounded-md"
-              onError={(e) => {
-                console.error('[ImageUploader] Erro ao carregar imagem:', displayUrl);
-                (e.target as HTMLImageElement).style.display = 'none';
-              }}
+              className="absolute inset-0 w-full h-full object-contain"
             />
           )}
           <Button
@@ -187,12 +174,11 @@ export const ImageUploader = ({
         </div>
       ) : (
         <div className={cn(
-          "relative flex flex-col items-center justify-center border-2 border-dashed rounded-md bg-gray-50/50 hover:bg-gray-50 transition-colors",
-          "w-full max-w-[300px]",
+          "relative flex flex-col items-center justify-center border-2 border-dashed rounded-md bg-gray-50/50 hover:bg-gray-50 transition-colors w-full max-w-[300px] h-[300px]",
           uploading && "cursor-not-allowed opacity-60",
           uploadError && "border-red-300 bg-red-50/50",
           className
-        )} style={{ aspectRatio: '1 / 1' }}>
+        )}>
           {uploading ? (
             <>
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
