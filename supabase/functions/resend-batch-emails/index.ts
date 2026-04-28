@@ -1,4 +1,5 @@
 // @ts-nocheck
+// ATENÇÃO: Só aceita POST. GET requests são ignorados (usados apenas para warm-up).
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 
 const corsHeaders = {
@@ -14,6 +15,15 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
+
+  // Só processa POST — GET é usado apenas para warm-up e deve ser ignorado
+  if (req.method !== 'POST') {
+    console.log(`[resend-batch-emails] Método ${req.method} ignorado (apenas POST é aceito para reenvio)`)
+    return new Response(
+      JSON.stringify({ message: 'warm-up ok' }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+  }
 
   const { order_ids } = await req.json()
   const results: { id: number; ok: boolean; detail: string }[] = []

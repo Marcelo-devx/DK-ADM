@@ -1,5 +1,6 @@
 // @ts-nocheck
-// Função temporária para reenviar emails dos pedidos que não receberam confirmação
+// Função para reenviar emails dos pedidos que não receberam confirmação
+// ATENÇÃO: Só aceita POST. GET requests são ignorados (usados apenas para warm-up).
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 
 const corsHeaders = {
@@ -17,6 +18,15 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
+
+  // Só processa POST — GET é usado apenas para warm-up e deve ser ignorado
+  if (req.method !== 'POST') {
+    console.log(`[trigger-batch-remail] Método ${req.method} ignorado (apenas POST é aceito para reenvio)`)
+    return new Response(
+      JSON.stringify({ message: 'warm-up ok' }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+  }
 
   console.log(`[trigger-batch-remail] Iniciando reenvio de ${ORDER_IDS.length} pedidos sem email`)
 
