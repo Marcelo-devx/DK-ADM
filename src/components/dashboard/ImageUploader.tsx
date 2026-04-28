@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +21,7 @@ const isVideo = (url: string) => {
   return /\.(mp4|webm|ogg)$/i.test(url);
 };
 
-const compressImage = (file: File, maxPx = 900, quality = 0.80): Promise<string> => {
+const compressImage = (file: File, maxPx = 1000, quality = 0.82): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('Erro ao ler o arquivo.'));
@@ -65,20 +65,17 @@ export const ImageUploader = ({
 }: ImageUploaderProps) => {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  // currentUrl is the source of truth for what's displayed.
-  // It starts with initialUrl and is only changed by local actions (upload/remove).
-  const [currentUrl, setCurrentUrl] = useState<string | null>(initialUrl || null);
-  // Keep a ref to the latest initialUrl so we can detect when the prop truly changes
-  // (e.g. a different product is opened), without re-running on every render.
-  const prevInitialUrl = useRef(initialUrl);
+  const [displayUrl, setDisplayUrl] = useState<string | null>(initialUrl || null);
+  const lastInitialUrl = useRef(initialUrl);
 
-  // If the parent swaps to a completely different initialUrl (different product opened),
-  // reset to the new one — but only if we're not in the middle of a local upload.
-  if (initialUrl !== prevInitialUrl.current) {
-    prevInitialUrl.current = initialUrl;
-    setCurrentUrl(initialUrl || null);
-    setUploadError(null);
-  }
+  // Sync when parent changes initialUrl (e.g. different product opened)
+  useEffect(() => {
+    if (initialUrl !== lastInitialUrl.current) {
+      lastInitialUrl.current = initialUrl;
+      setDisplayUrl(initialUrl || null);
+      setUploadError(null);
+    }
+  }, [initialUrl]);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -91,12 +88,12 @@ export const ImageUploader = ({
     try {
       console.log('[ImageUploader] Iniciando upload...', { fileName: file.name, fileSize: file.size });
 
-      const base64data = await compressImage(file, 900, 0.80);
+      const base64data = await compressImage(file, 1000, 0.82);
       const sizeKB = Math.round(base64data.length / 1024);
       console.log('[ImageUploader] Comprimido:', sizeKB, 'KB');
 
-      if (sizeKB > 4000) {
-        throw new Error('Imagem muito grande. Use uma imagem menor que 4MB.');
+      if (sizeKB > 5000) {
+        throw new Error('Imagem muito grande. Use uma imagem menor.');
       }
 
       const { data: { session } } = await supabase.auth.getSession();
@@ -122,9 +119,8 @@ export const ImageUploader = ({
       if (!data?.secure_url) throw new Error(data?.details || 'Cloudinary não retornou uma URL válida.');
 
       console.log('[ImageUploader] Upload bem-sucedido:', data.secure_url);
-      // Update local display immediately — do NOT rely on initialUrl prop for this
-      setCurrentUrl(data.secure_url);
-      prevInitialUrl.current = data.secure_url; // prevent the guard above from resetting
+      lastInitialUrl.current = data.secure_url;
+      setDisplayUrl(data.secure_url);
       onUploadSuccess(data.secure_url);
       showSuccess("Arquivo enviado com sucesso!");
     } catch (err: any) {
@@ -142,9 +138,9 @@ export const ImageUploader = ({
     }
   };
 
-  const handleRemoveMedia = () => {
-    setCurrentUrl(null);
-    prevInitialUrl.current = null;
+  const handleRemove = () => {
+    lastInitialUrl.current = null;
+    setDisplayUrl(null);
     setUploadError(null);
     onUploadSuccess("");
   };
@@ -152,28 +148,38 @@ export const ImageUploader = ({
   return (
     <div className="space-y-2">
       <label className="font-medium text-sm">{label || "Arquivo"}</label>
-      {currentUrl ? (
+
+      {displayUrl ? (
         <div className={cn(
-          "relative border rounded-md overflow-hidden bg-gray-50 flex items-center justify-center",
-          "aspect-square w-full max-w-[300px]",
+          "relative border rounded-md bg-gray-50 flex items-center justify-center",
+          "w-full max-w-[300px]",
           className
-        )}>
-          {isVideo(currentUrl) ? (
+        )} style={{ aspectRatio: '1 / 1' }}>
+          {isVideo(displayUrl) ? (
             <video
-              key={currentUrl}
-              src={currentUrl}
-              className="w-full h-full object-contain"
+              key={displayUrl}
+              src={displayUrl}
+              className="w-full h-full object-contain rounded-md"
               autoPlay loop muted playsInline
             />
           ) : (
-            <img src={currentUrl} alt="Preview" className="w-full h-full object-contain" />
+            <img
+              key={displayUrl}
+              src={displayUrl}
+              alt="Preview"
+              className="w-full h-full object-contain rounded-md"
+              onError={(e) => {
+                console.error('[ImageUploader] Erro ao carregar imagem:', displayUrl);
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
+            />
           )}
           <Button
             type="button"
             variant="destructive"
             size="icon"
             className="absolute top-2 right-2 h-7 w-7 z-10 shadow-md"
-            onClick={handleRemoveMedia}
+            onClick={handleRemove}
             disabled={uploading}
           >
             <X className="h-4 w-4" />
@@ -182,11 +188,11 @@ export const ImageUploader = ({
       ) : (
         <div className={cn(
           "relative flex flex-col items-center justify-center border-2 border-dashed rounded-md bg-gray-50/50 hover:bg-gray-50 transition-colors",
-          "aspect-square w-full max-w-[300px]",
+          "w-full max-w-[300px]",
           uploading && "cursor-not-allowed opacity-60",
           uploadError && "border-red-300 bg-red-50/50",
           className
-        )}>
+        )} style={{ aspectRatio: '1 / 1' }}>
           {uploading ? (
             <>
               <Loader2 className="h-8 w-8 animate-spin text-primary" />

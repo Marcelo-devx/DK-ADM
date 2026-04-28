@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/dialog";
 import { CategoryForm } from "./category-form";
 import { PlusCircle, Layers, Copy, RefreshCw, Loader2, ListChecks, CheckSquare } from "lucide-react";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { showSuccess, showError } from "@/utils/toast";
@@ -143,11 +143,16 @@ export const ProductForm = ({
     if (linkedSubs) setSelectedSubIds(linkedSubs);
   }, [linkedSubs]);
 
+  const prevProductId = useRef(initialData?.id);
   useEffect(() => {
-    if (initialData) {
+    if (initialData && initialData.id !== prevProductId.current) {
+      prevProductId.current = initialData.id;
+      form.reset(initialData);
+    } else if (initialData && prevProductId.current === undefined) {
+      prevProductId.current = initialData.id;
       form.reset(initialData);
     }
-  }, [initialData, form]);
+  }, [initialData?.id]);
 
   // Filtra subcategorias com base no nome da categoria selecionada (Case Insensitive e Trim)
   const filteredSubCategories = useMemo(() => {
@@ -474,7 +479,7 @@ export const ProductForm = ({
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-xs font-bold uppercase text-gray-500">Imagem Principal</FormLabel>
-                <ImageUploader onUploadSuccess={(url) => field.onChange(url)} initialUrl={field.value} />
+                <ImageUploader key={`img-${initialData?.id ?? 'new'}`} onUploadSuccess={(url) => field.onChange(url)} initialUrl={field.value} />
                 <FormMessage />
               </FormItem>
             )}
