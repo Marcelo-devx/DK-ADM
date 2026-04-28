@@ -1,5 +1,5 @@
 // @ts-nocheck
-// v3 - sem npm:cloudinary, usa fetch nativo
+// v4 - envia base64 diretamente para o Cloudinary (suportado nativamente)
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -28,7 +28,17 @@ Deno.serve(async (req: Request) => {
   try {
     console.log('[cloudinary-upload] Requisição recebida, método:', req.method);
 
-    const body = await req.json();
+    let body: any;
+    try {
+      body = await req.json();
+    } catch (e) {
+      console.error('[cloudinary-upload] Erro ao parsear body JSON:', e);
+      return new Response(
+        JSON.stringify({ error: 'Body inválido. Esperado JSON.' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
+
     const { image } = body;
 
     if (!image) {
@@ -52,10 +62,12 @@ Deno.serve(async (req: Request) => {
     }
 
     console.log('[cloudinary-upload] Credenciais OK, cloud:', cloudName);
+    console.log('[cloudinary-upload] Tamanho da imagem (chars):', image.length);
 
     const folder = 'tabacaria-products';
     const timestamp = Math.floor(Date.now() / 1000);
 
+    // Assinar os parâmetros
     const paramsToSign = `folder=${folder}&timestamp=${timestamp}`;
     const toSign = paramsToSign + apiSecret;
     const sigBuffer = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(toSign));
@@ -63,8 +75,9 @@ Deno.serve(async (req: Request) => {
 
     const uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
 
+    // Cloudinary aceita base64 data URI diretamente no campo "file"
     const formData = new FormData();
-    formData.append('file', image);
+    formData.append('file', image); // data:image/jpeg;base64,... ou data:image/png;base64,...
     formData.append('api_key', apiKey);
     formData.append('timestamp', String(timestamp));
     formData.append('signature', signature);

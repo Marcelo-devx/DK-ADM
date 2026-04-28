@@ -21,7 +21,7 @@ const isVideo = (url: string) => {
   return /\.(mp4|webm|ogg)$/i.test(url);
 };
 
-const compressImage = (file: File, maxPx = 1200, quality = 0.85): Promise<string> => {
+const compressImage = (file: File, maxPx = 900, quality = 0.80): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('Erro ao ler o arquivo.'));
@@ -91,8 +91,13 @@ export const ImageUploader = ({
     try {
       console.log('[ImageUploader] Iniciando upload...', { fileName: file.name, fileSize: file.size });
 
-      const base64data = await compressImage(file, 1200, 0.85);
-      console.log('[ImageUploader] Comprimido:', Math.round(base64data.length / 1024), 'KB');
+      const base64data = await compressImage(file, 900, 0.80);
+      const sizeKB = Math.round(base64data.length / 1024);
+      console.log('[ImageUploader] Comprimido:', sizeKB, 'KB');
+
+      if (sizeKB > 4000) {
+        throw new Error('Imagem muito grande. Use uma imagem menor que 4MB.');
+      }
 
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
@@ -124,7 +129,10 @@ export const ImageUploader = ({
       showSuccess("Arquivo enviado com sucesso!");
     } catch (err: any) {
       console.error('[ImageUploader] Falha:', err);
-      const errorMsg = err?.message || 'Falha no upload do arquivo.';
+      let errorMsg = err?.message || 'Falha no upload do arquivo.';
+      if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError')) {
+        errorMsg = 'Erro de conexão com o servidor. Verifique sua internet e tente novamente.';
+      }
       setUploadError(errorMsg);
       showError(errorMsg);
       onUploadError?.(errorMsg);
