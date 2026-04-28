@@ -43,6 +43,15 @@ const CRITICAL_FUNCTIONS = [
   'catalog-api',
   'resend-batch-emails',
   'cloudinary-upload',
+  'cloudinary-list-images',
+  'cloudinary-delete-image',
+  'cloudinary-usage',
+  'n8n-list-products',
+  'n8n-list-clients',
+  'n8n-receive-order',
+  'n8n-webhook',
+  'generate-sales-popups',
+  'actionable-insights',
 ];
 
 // Funções críticas que precisam de teste via POST (não respondem a GET)

@@ -6,8 +6,8 @@ const KEEP_ALIVE_URL =
 const ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpybG96aGh2d3FmbWp0a212dWtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDU2NjQsImV4cCI6MjA2NzkyMTY2NH0.Do5c1-TKqpyZTJeX_hLbw1SU40CbwXfCIC-pPpcD_JM";
 
-// Intervalo de 4 minutos — antes do cold start de ~5 min do Supabase
-const INTERVAL_MS = 4 * 60 * 1000;
+// Intervalo de 2 minutos — garante que nenhuma função entre em cold start
+const INTERVAL_MS = 2 * 60 * 1000;
 
 const ping = () =>
   fetch(KEEP_ALIVE_URL, {
