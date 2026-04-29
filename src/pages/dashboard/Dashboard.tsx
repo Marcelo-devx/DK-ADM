@@ -589,31 +589,6 @@ const DashboardPage = () => {
         </Card>
       </div>
 
-      {/* ── Estoque crítico ── */}
-      {rt?.criticalStock && rt.criticalStock.length > 0 && (
-        <Card className="shadow-sm border-l-4 border-l-red-500">
-          <CardHeader className="pb-2 pt-4 px-4">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-red-700">
-              <AlertTriangle className="w-4 h-4" /> Estoque Crítico (≤ 5 unidades)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {rt.criticalStock.map((item, i) => (
-                <div key={i} className="flex items-center justify-between gap-2 bg-red-50 rounded-lg px-3 py-2">
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold text-gray-800 truncate">{item.name}</p>
-                    {item.spec && <p className="text-[10px] text-muted-foreground truncate">{item.spec}</p>}
-                  </div>
-                  <Badge variant="destructive" className="shrink-0 text-xs font-bold">
-                    {item.stock} un.
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 };
