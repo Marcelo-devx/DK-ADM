@@ -36,17 +36,30 @@ const fmt = (val: number) =>
 
 // ─── Fetch principal (período filtrado) ──────────────────────────────────────
 const fetchFinancialSummary = async (startDate?: string, endDate?: string) => {
-  let salesQuery = supabase
-    .from("orders")
-    .select("total_price, coupon_discount, created_at, payment_method, donation_amount, status")
-    .in("status", ["Finalizada", "Pago"]);
+  // Busca todos os pedidos sem limite (paginando de 1000 em 1000)
+  let allSales: any[] = [];
+  let from = 0;
+  const pageSize = 1000;
 
-  if (startDate) salesQuery = salesQuery.gte("created_at", startDate);
-  if (endDate) salesQuery = salesQuery.lte("created_at", endDate + "T23:59:59");
+  while (true) {
+    let q = supabase
+      .from("orders")
+      .select("total_price, coupon_discount, created_at, payment_method, donation_amount, status")
+      .in("status", ["Finalizada", "Pago"])
+      .range(from, from + pageSize - 1);
 
-  const { data: salesRaw, error: salesError } = await salesQuery;
-  if (salesError) throw salesError;
-  const sales = salesRaw || [];
+    if (startDate) q = q.gte("created_at", startDate);
+    if (endDate) q = q.lte("created_at", endDate + "T23:59:59");
+
+    const { data, error } = await q;
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    allSales = allSales.concat(data);
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+
+  const sales = allSales;
 
   const { data: usedCouponsRaw } = await supabase
     .from("user_coupons")
