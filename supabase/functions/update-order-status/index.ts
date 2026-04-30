@@ -116,7 +116,26 @@ serve(async (req) => {
     if (body.status) updates.status = body.status
     if (body.delivery_status) updates.delivery_status = body.delivery_status
     if (body.tracking_code) updates.tracking_code = body.tracking_code
-    if (body.delivery_info) updates.delivery_info = body.delivery_info
+
+    // Se vier delivery_info no body (msg automática), só aplica se não houver obs do admin
+    if (body.delivery_info) {
+      const { data: currentOrder } = await supabase
+        .from('orders')
+        .select('delivery_info')
+        .eq('id', orderId)
+        .single();
+      const currentInfo = currentOrder?.delivery_info ?? '';
+      const SYSTEM_MESSAGES = [
+        'motorista designado para a entrega',
+        'motorista iniciou o trajeto',
+        'pedido entregue com sucesso',
+        'motorista tentou entregar',
+        'atualizado automaticamente',
+        'despachado manualmente',
+      ];
+      const isSystemMsg = !currentInfo || SYSTEM_MESSAGES.some((m) => currentInfo.toLowerCase().includes(m));
+      if (isSystemMsg) updates.delivery_info = body.delivery_info;
+    }
 
     if (Object.keys(updates).length === 0) {
       return new Response(JSON.stringify({ error: 'Nothing to update' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })

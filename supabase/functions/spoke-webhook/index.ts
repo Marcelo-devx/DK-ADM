@@ -7,6 +7,22 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Mensagens automáticas que o sistema grava — não são obs do admin
+const SYSTEM_MESSAGES = [
+  'motorista designado para a entrega',
+  'motorista iniciou o trajeto',
+  'pedido entregue com sucesso',
+  'motorista tentou entregar',
+  'atualizado automaticamente',
+  'despachado manualmente',
+]
+
+const isSystemMessage = (val: string | null | undefined): boolean => {
+  if (!val) return true
+  const lower = val.toLowerCase()
+  return SYSTEM_MESSAGES.some((msg) => lower.includes(msg))
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -14,15 +30,14 @@ serve(async (req) => {
 
   try {
     const payload = await req.json();
-    console.log("Evento Spoke recebido:", payload.event_type);
+    console.log("[spoke-webhook] Evento Spoke recebido:", payload.event_type);
 
     const { event_type, data } = payload;
     
-    // O Spoke envia o external_id no objeto data
     const externalId = data?.external_id;
 
     if (!externalId || !externalId.startsWith('ORDER-')) {
-      console.log("Ignorando webhook sem ID de pedido válido:", externalId);
+      console.log("[spoke-webhook] Ignorando webhook sem ID de pedido válido:", externalId);
       return new Response(JSON.stringify({ message: 'Ignorado' }), { status: 200 });
     }
 
@@ -36,30 +51,39 @@ serve(async (req) => {
 
     // Mapeamento de Eventos Spoke -> Status da Loja
     let deliveryStatus = 'Pendente';
-    let deliveryInfo = data.last_update_message || "";
     let orderStatus = undefined;
 
     if (event_type === 'stop.allocated') {
         deliveryStatus = 'Aguardando Coleta';
-        deliveryInfo = 'Motorista designado para a entrega.';
     } else if (event_type === 'stop.out_for_delivery') {
         deliveryStatus = 'Despachado';
-        deliveryInfo = 'O motorista iniciou o trajeto até você.';
     } else if (event_type === 'stop.completed' || data.status === 'completed') {
         deliveryStatus = 'Entregue';
-        deliveryInfo = 'Pedido entregue com sucesso!';
         orderStatus = 'Finalizada';
     } else if (event_type === 'stop.attempted_delivery') {
         deliveryStatus = 'Tentativa de Entrega';
-        deliveryInfo = 'O motorista tentou entregar, mas houve um imprevisto.';
     }
 
-    const updatePayload: any = { 
-        delivery_status: deliveryStatus,
-        delivery_info: deliveryInfo
-    };
+    // Buscar o delivery_info atual para preservar obs do admin
+    const { data: currentOrder } = await supabaseAdmin
+      .from('orders')
+      .select('delivery_info')
+      .eq('id', orderId)
+      .single();
+
+    const currentInfo = currentOrder?.delivery_info ?? '';
+
+    // Só atualiza delivery_info se o valor atual for uma msg automática (ou vazio)
+    // Se houver obs do admin, preserva ela
+    const updatePayload: any = { delivery_status: deliveryStatus };
+    if (isSystemMessage(currentInfo)) {
+      updatePayload.delivery_info = '';
+    }
+    // Se tem obs do admin, não toca no delivery_info
 
     if (orderStatus) updatePayload.status = orderStatus;
+
+    console.log("[spoke-webhook] Atualizando pedido", orderId, updatePayload);
 
     const { error } = await supabaseAdmin
       .from('orders')
@@ -74,7 +98,7 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('Erro no processamento do Webhook:', error);
+    console.error('[spoke-webhook] Erro no processamento do Webhook:', error);
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 })
