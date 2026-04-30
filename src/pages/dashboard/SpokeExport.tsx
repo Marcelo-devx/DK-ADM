@@ -131,15 +131,18 @@ const SpokeExportPage = () => {
         const profile = order.profiles;
         const phoneClean = cleanDigits(profile?.phone);
         const fullName = `${profile?.first_name || ""} ${profile?.last_name || ""}`.trim();
+        const observacao = order.delivery_info || "";
+        const notesValue = observacao && phoneClean
+          ? `${observacao} wa.me/55${phoneClean}`
+          : observacao || (phoneClean ? `wa.me/55${phoneClean}` : "");
         return {
           Id: order.id,
           "Recipient Name": fullName || "Cliente",
           "Address Line 1": `${address.street}, ${address.number}`,
           "Address Line 2": address.complement || "",
-          "": "",
-          Observação: order.delivery_info || "",
+          Observação: observacao,
           "Recipient Phone Number": phoneClean,
-          Notes: phoneClean ? `wa.me/55${phoneClean}` : "",
+          Notes: notesValue,
           Bairro: address.neighborhood || "",
           City: address.city || "",
           Zip: cleanDigits(address.cep),
