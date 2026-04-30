@@ -154,15 +154,20 @@ export default function PrintLabelsPage() {
     const p = order.profiles;
     const addr = order.shipping_address || {};
     const fullName = `${cleanStr(p?.first_name)} ${cleanStr(p?.last_name)}`.trim();
+    const phoneClean = (p?.phone || "").replace(/\D/g, "");
+    const observacao = order.delivery_info || "";
+    const notaCircuit = observacao && phoneClean
+      ? `${observacao} wa.me/55${phoneClean}`
+      : observacao || (phoneClean ? `wa.me/55${phoneClean}` : "");
     return {
       "Número pedido": order.id,
       "Nome Entrega": fullName,
       "Endereço": `${addr.street || ""}${addr.number ? `, ${addr.number}` : ""}`.trim(),
       "Complemento": addr.complement || "",
       "Entrega": "",
-      "Observações": order.delivery_info || "",
+      "Observações": observacao,
       "Telefone": p?.phone || "",
-      "Nota Circuit": "",
+      "Nota Circuit": notaCircuit,
       "Bairro Entrega": addr.neighborhood || "",
       "Cidade Entrega": addr.city || "",
       "CEP Entrega": addr.cep || "",
