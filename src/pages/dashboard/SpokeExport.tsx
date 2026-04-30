@@ -121,6 +121,22 @@ const SpokeExportPage = () => {
 
   const cleanDigits = (val: string | null | undefined) => (val ? val.replace(/\D/g, "") : "");
 
+  // Mensagens automáticas do sistema que NÃO são observações do admin
+  const SYSTEM_MESSAGES = [
+    "motorista designado para a entrega",
+    "motorista iniciou o trajeto",
+    "pedido entregue com sucesso",
+    "motorista tentou entregar",
+    "atualizado automaticamente",
+    "despachado manualmente",
+  ];
+  const getAdminObs = (val: string | null | undefined): string => {
+    if (!val) return "";
+    const lower = val.toLowerCase();
+    if (SYSTEM_MESSAGES.some((msg) => lower.includes(msg))) return "";
+    return val;
+  };
+
   const handleExport = async (testMode = false) => {
     if (selectedIds.size === 0) { showError("Selecione pelo menos um pedido para exportar."); return; }
     setIsExporting(true);
@@ -131,7 +147,7 @@ const SpokeExportPage = () => {
         const profile = order.profiles;
         const phoneClean = cleanDigits(profile?.phone);
         const fullName = `${profile?.first_name || ""} ${profile?.last_name || ""}`.trim();
-        const observacao = order.delivery_info || "";
+        const observacao = getAdminObs(order.delivery_info);
         const notesValue = observacao && phoneClean
           ? `${observacao} wa.me/55${phoneClean}`
           : observacao || (phoneClean ? `wa.me/55${phoneClean}` : "");

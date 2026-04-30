@@ -150,12 +150,28 @@ export default function PrintLabelsPage() {
 
   const cleanStr = (val: string | null | undefined) => val || "";
 
+  // Mensagens automáticas do sistema que NÃO são observações do admin
+  const SYSTEM_MESSAGES = [
+    "motorista designado para a entrega",
+    "motorista iniciou o trajeto",
+    "pedido entregue com sucesso",
+    "motorista tentou entregar",
+    "atualizado automaticamente",
+    "despachado manualmente",
+  ];
+  const getAdminObs = (val: string | null | undefined): string => {
+    if (!val) return "";
+    const lower = val.toLowerCase();
+    if (SYSTEM_MESSAGES.some((msg) => lower.includes(msg))) return "";
+    return val;
+  };
+
   const buildRowValues = (order: Order) => {
     const p = order.profiles;
     const addr = order.shipping_address || {};
     const fullName = `${cleanStr(p?.first_name)} ${cleanStr(p?.last_name)}`.trim();
     const phoneClean = (p?.phone || "").replace(/\D/g, "");
-    const observacao = order.delivery_info || "";
+    const observacao = getAdminObs(order.delivery_info);
     const notaCircuit = observacao && phoneClean
       ? `${observacao} wa.me/55${phoneClean}`
       : observacao || (phoneClean ? `wa.me/55${phoneClean}` : "");
