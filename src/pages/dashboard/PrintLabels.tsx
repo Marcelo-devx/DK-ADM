@@ -150,20 +150,20 @@ export default function PrintLabelsPage() {
 
   const cleanStr = (val: string | null | undefined) => val || "";
 
-  // Mensagens automáticas do sistema que NÃO são observações do admin
-  const SYSTEM_MESSAGES = [
-    "motorista designado para a entrega",
-    "motorista iniciou o trajeto",
-    "pedido entregue com sucesso",
-    "motorista tentou entregar",
-    "atualizado automaticamente",
-    "despachado manualmente",
+  // Padrões automáticos do sistema a remover do delivery_info
+  const SYSTEM_PATTERNS = [
+    /motorista designado para a entrega\.?/gi,
+    /o motorista iniciou o trajeto até você\.?/gi,
+    /pedido entregue com sucesso!?/gi,
+    /o motorista tentou entregar, mas houve um imprevisto\.?/gi,
+    /\[atualizado automaticamente[^\]]*\]/gi,
+    /despachado manualmente\.?/gi,
   ];
   const getAdminObs = (val: string | null | undefined): string => {
     if (!val) return "";
-    const lower = val.toLowerCase();
-    if (SYSTEM_MESSAGES.some((msg) => lower.includes(msg))) return "";
-    return val;
+    let result = val;
+    SYSTEM_PATTERNS.forEach((pattern) => { result = result.replace(pattern, ""); });
+    return result.replace(/\s*\|\s*/g, " ").trim();
   };
 
   const buildRowValues = (order: Order) => {
