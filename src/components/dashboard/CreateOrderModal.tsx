@@ -58,6 +58,7 @@ interface ProductVariant {
   color: string | null;
   ohms: string | null;
   size: string | null;
+  flavorName?: string | null;
 }
 
 interface Product {
@@ -107,6 +108,7 @@ const effectivePrice = (basePrice: number, pixPrice: number | null, paymentMetho
 
 const getVariantLabel = (variant: ProductVariant): string =>
   [
+    variant.flavorName || "",
     n(variant.volume_ml) > 0 ? `${variant.volume_ml}ml` : "",
     variant.color || "",
     variant.ohms ? `${variant.ohms}Ω` : "",
@@ -268,21 +270,41 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
     setSearchingProducts(true);
     try {
       const like = `%${term.trim()}%`;
-      const fields = "id, name, price, pix_price, stock_quantity, image_url, sku, product_variants(id, product_id, flavor_id, volume_ml, sku, price, pix_price, stock_quantity, is_active, color, ohms, size)";
+      const fields = "id, name, price, pix_price, stock_quantity, image_url, sku, product_variants(id, product_id, flavor_id, volume_ml, sku, price, pix_price, stock_quantity, is_active, color, ohms, size, flavors(name))";
 
       const [{ data: byName }, { data: bySku }, { data: byVariantSku }] = await Promise.all([
         supabase.from("products").select(fields).ilike("name", like).limit(100),
         supabase.from("products").select(fields).ilike("sku", like).limit(100),
         supabase
           .from("product_variants")
-          .select(`id, product_id, flavor_id, volume_ml, sku, price, pix_price, stock_quantity, is_active, color, ohms, size, products(id, name, price, pix_price, stock_quantity, image_url, sku)`)
+          .select(`id, product_id, flavor_id, volume_ml, sku, price, pix_price, stock_quantity, is_active, color, ohms, size, flavors(name), products(id, name, price, pix_price, stock_quantity, image_url, sku)`)
           .ilike("sku", like)
           .limit(100),
       ]);
 
       const map = new Map<number, Product>();
-      (byName || []).forEach((p: any) => map.set(p.id, p));
-      (bySku || []).forEach((p: any) => map.set(p.id, p));
+      (byName || []).forEach((p: any) => {
+        const mapped = {
+          ...p,
+          product_variants: (p.product_variants || []).map((v: any) => ({
+            ...v,
+            flavorName: v.flavors?.name ?? null,
+          })),
+        };
+        map.set(p.id, mapped);
+      });
+      (bySku || []).forEach((p: any) => {
+        if (!map.has(p.id)) {
+          const mapped = {
+            ...p,
+            product_variants: (p.product_variants || []).map((v: any) => ({
+              ...v,
+              flavorName: v.flavors?.name ?? null,
+            })),
+          };
+          map.set(p.id, mapped);
+        }
+      });
 
       (byVariantSku || []).forEach((variantRow: any) => {
         const parent = variantRow.products;
@@ -306,6 +328,7 @@ export const CreateOrderModal = ({ isOpen, onClose }: CreateOrderModalProps) => 
           color: variantRow.color,
           ohms: variantRow.ohms,
           size: variantRow.size,
+          flavorName: variantRow.flavors?.name ?? null,
         };
 
         const variants = Array.isArray(existing.product_variants) ? existing.product_variants : [];
