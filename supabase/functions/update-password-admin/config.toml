@@ -1,0 +1,2 @@
+[functions.update-password-admin]
+verify_jwt = false

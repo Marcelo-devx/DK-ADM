@@ -1,0 +1,2 @@
+[functions.forgot-password]
+verify_jwt = false

@@ -1,0 +1,2 @@
+[functions.generate-token]
+verify_jwt = false

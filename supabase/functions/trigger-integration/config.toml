@@ -1,0 +1,2 @@
+[functions.trigger-integration]
+verify_jwt = false

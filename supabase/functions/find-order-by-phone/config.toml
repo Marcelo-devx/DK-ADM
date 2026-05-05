@@ -1,0 +1,2 @@
+[functions.find-order-by-phone]
+verify_jwt = false

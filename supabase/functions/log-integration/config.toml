@@ -1,0 +1,2 @@
+[functions.log-integration]
+verify_jwt = false

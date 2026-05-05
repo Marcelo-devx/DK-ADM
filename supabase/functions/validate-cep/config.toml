@@ -1,0 +1,2 @@
+[functions.validate-cep]
+verify_jwt = false
