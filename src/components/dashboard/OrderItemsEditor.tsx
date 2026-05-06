@@ -122,10 +122,10 @@ const searchProducts = async (term: string): Promise<SelectableItem[]> => {
   const productIds = products.map((p: any) => p.id);
   const productMap = new Map(products.map((p: any) => [p.id, p]));
 
-  // 2. Busca variantes desses produtos
+  // 2. Busca variantes desses produtos (incluindo flavor_id, volume_ml e nome do sabor)
   const { data: variants } = await supabase
     .from("product_variants")
-    .select("id, product_id, ohms, size, color, stock_quantity, cost_price, price, pix_price")
+    .select("id, product_id, flavor_id, volume_ml, ohms, size, color, stock_quantity, cost_price, price, pix_price, flavors(name)")
     .in("product_id", productIds)
     .eq("is_active", true)
     .order("stock_quantity", { ascending: false });
@@ -144,7 +144,16 @@ const searchProducts = async (term: string): Promise<SelectableItem[]> => {
     const pvs = variantsByProduct.get(product.id);
     if (pvs && pvs.length > 0) {
       for (const v of pvs) {
-        const attrs = [v.ohms, v.size, v.color].filter((a) => a && a.trim() !== "").join(" / ");
+        const flavorName = (v.flavors as any)?.name ?? null;
+        const attrs = [
+          flavorName,
+          v.volume_ml ? `${v.volume_ml}ml` : null,
+          v.color,
+          v.ohms ? `${v.ohms}Ω` : null,
+          v.size ? `Tam ${v.size}` : null,
+        ]
+          .filter((a) => a && String(a).trim() !== "")
+          .join(" / ");
         const name = attrs ? `${product.name} — ${attrs}` : product.name;
         results.push({
           id: product.id,
