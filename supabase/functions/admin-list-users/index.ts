@@ -14,7 +14,7 @@ serve(async (req) => {
 
   // GET simples para keep-alive / health check
   if (req.method === "GET") {
-    return new Response(JSON.stringify({ status: "ok", function: "admin-list-users" }), {
+    return new Response(JSON.stringify({ status: "ok", function: "admin-list-users", version: "2" }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -76,7 +76,8 @@ serve(async (req) => {
   );
 
   // Parâmetros da requisição
-  const { searchTerm = "", page = 0, pageSize = 50 } = await req.json().catch(() => ({}));
+  const body = await req.json().catch(() => ({}));
+  const { searchTerm = "", page = 0, pageSize = 50 } = body;
 
   const from = page * pageSize;
   const to = from + pageSize - 1;
@@ -89,28 +90,58 @@ serve(async (req) => {
   let dataResult: { data: any[] | null; error: any };
 
   if (term) {
-    // Busca com termo: usa RPC para suportar nome completo concatenado
     const likeTerm = `%${term}%`;
 
-    const countQuery = await supabaseAdmin.rpc("search_profiles_count", {
-      search_term: likeTerm,
-    });
-
-    const dataQuery = await supabaseAdmin.rpc("search_profiles_paginated", {
-      search_term: likeTerm,
-      page_from: from,
-      page_to: to,
-    });
-
-    if (countQuery.error) {
-      console.error("[admin-list-users] Count RPC error:", countQuery.error);
+    // Primeiro: buscar IDs de usuários pelo email em auth.users (via Admin API)
+    // Isso garante que encontramos usuários mesmo que o email não esteja sincronizado no profiles
+    let authUserIds: string[] = [];
+    try {
+      const { data: authUsers, error: authErr } = await supabaseAdmin.auth.admin.listUsers({
+        page: 1,
+        perPage: 1000,
+      });
+      if (!authErr && authUsers?.users) {
+        const lowerTerm = term.toLowerCase();
+        authUserIds = authUsers.users
+          .filter(u => u.email && u.email.toLowerCase().includes(lowerTerm))
+          .map(u => u.id);
+        console.log(`[admin-list-users] Found ${authUserIds.length} users by email in auth.users`);
+      }
+    } catch (e) {
+      console.error("[admin-list-users] Error searching auth.users:", e);
     }
-    if (dataQuery.error) {
-      console.error("[admin-list-users] Data RPC error:", dataQuery.error);
+
+    // Buscar profiles que batem com o termo OU cujo ID está nos authUserIds
+    let profilesQuery = supabaseAdmin
+      .from("profiles")
+      .select(
+        "id, first_name, last_name, cpf_cnpj, email, phone, date_of_birth, gender, " +
+        "cep, street, number, complement, neighborhood, city, state, " +
+        "force_pix_on_next_purchase, is_credit_card_enabled, " +
+        "is_blocked, created_at, role",
+        { count: "exact" }
+      );
+
+    if (authUserIds.length > 0) {
+      // Busca por campos do profile OU por IDs encontrados no auth.users
+      profilesQuery = profilesQuery.or(
+        `email.ilike.${likeTerm},cpf_cnpj.ilike.${likeTerm},phone.ilike.${likeTerm},first_name.ilike.${likeTerm},last_name.ilike.${likeTerm},id.in.(${authUserIds.join(",")})`
+      );
+    } else {
+      profilesQuery = profilesQuery.or(
+        `email.ilike.${likeTerm},cpf_cnpj.ilike.${likeTerm},phone.ilike.${likeTerm},first_name.ilike.${likeTerm},last_name.ilike.${likeTerm}`
+      );
     }
 
-    countResult = { count: countQuery.data ?? 0, error: countQuery.error };
-    dataResult = { data: dataQuery.data ?? [], error: dataQuery.error };
+    const { data, error, count } = await profilesQuery
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+    console.log(`[admin-list-users] profiles query result: count=${count}, data=${data?.length}, error=${error?.message}`);
+
+    countResult = { count: count ?? 0, error };
+    dataResult = { data: data ?? [], error };
+
   } else {
     // Sem termo: listagem normal paginada
     const [cRes, dRes] = await Promise.all([
@@ -149,11 +180,33 @@ serve(async (req) => {
     });
   }
 
-  console.log(`[admin-list-users] term="${term}" page=${page} returning ${dataResult.data?.length} users, total: ${countResult.count}`);
+  // Para usuários encontrados via auth.users mas sem email no profile,
+  // enriquecer com o email do auth.users
+  const users = dataResult.data ?? [];
+  if (users.length > 0) {
+    try {
+      const missingEmailIds = users.filter(u => !u.email).map(u => u.id);
+      if (missingEmailIds.length > 0) {
+        const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+        if (authUsers?.users) {
+          const authEmailMap = new Map(authUsers.users.map(u => [u.id, u.email]));
+          for (const u of users) {
+            if (!u.email && authEmailMap.has(u.id)) {
+              u.email = authEmailMap.get(u.id) || null;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error("[admin-list-users] Error enriching emails:", e);
+    }
+  }
+
+  console.log(`[admin-list-users] term="${term}" page=${page} returning ${users.length} users, total: ${countResult.count}`);
 
   return new Response(
     JSON.stringify({
-      users: dataResult.data ?? [],
+      users,
       total: countResult.count ?? 0,
     }),
     {
