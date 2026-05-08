@@ -37,8 +37,12 @@ const fetchProducts = async () => {
   if (error) throw new Error(error.message);
   return data as Product[];
 };
-const fetchProfiles = async () => {
-  const { data, error } = await supabase.from("profiles").select("id, first_name, last_name");
+const fetchProfiles = async (userIds: string[]) => {
+  if (!userIds.length) return [] as Profile[];
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, first_name, last_name")
+    .in("id", userIds);
   if (error) throw new Error(error.message);
   return data as Profile[];
 };
@@ -63,7 +67,13 @@ const ReviewsPage = () => {
 
   const { data: reviews, isLoading: isLoadingReviews } = useQuery({ queryKey: ["reviewsAdmin"], queryFn: fetchReviews });
   const { data: products, isLoading: isLoadingProducts } = useQuery({ queryKey: ["products"], queryFn: fetchProducts });
-  const { data: profiles, isLoading: isLoadingProfiles } = useQuery({ queryKey: ["profilesAdmin"], queryFn: fetchProfiles });
+
+  const reviewUserIds = reviews ? [...new Set(reviews.map((r) => r.user_id))] : [];
+  const { data: profiles, isLoading: isLoadingProfiles } = useQuery({
+    queryKey: ["profilesAdmin", reviewUserIds],
+    queryFn: () => fetchProfiles(reviewUserIds),
+    enabled: reviewUserIds.length > 0,
+  });
 
   const productMap = new Map(products?.map((p) => [p.id, p.name]));
   const profileMap = new Map(profiles?.map((p) => [p.id, p.first_name?.trim() || ""]));
