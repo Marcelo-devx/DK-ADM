@@ -23,12 +23,15 @@ type Review = {
   comment: string | null;
   created_at: string;
   is_approved: boolean;
+  profiles: { first_name: string | null } | null;
 };
 type Product = { id: number; name: string };
-type Profile = { id: string; first_name: string | null; last_name: string | null };
 
 const fetchReviews = async () => {
-  const { data, error } = await supabase.from("reviews").select("*").order("created_at", { ascending: false });
+  const { data, error } = await supabase
+    .from("reviews")
+    .select("*, profiles(first_name)")
+    .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
   return data as Review[];
 };
@@ -36,11 +39,6 @@ const fetchProducts = async () => {
   const { data, error } = await supabase.from("products").select("id, name");
   if (error) throw new Error(error.message);
   return data as Product[];
-};
-const fetchProfiles = async () => {
-  const { data, error } = await supabase.from("profiles").select("id, first_name, last_name");
-  if (error) throw new Error(error.message);
-  return data as Profile[];
 };
 
 const StarRating = ({ rating, size = "sm" }: { rating: number; size?: "sm" | "lg" }) => (
@@ -63,10 +61,11 @@ const ReviewsPage = () => {
 
   const { data: reviews, isLoading: isLoadingReviews } = useQuery({ queryKey: ["reviewsAdmin"], queryFn: fetchReviews });
   const { data: products, isLoading: isLoadingProducts } = useQuery({ queryKey: ["products"], queryFn: fetchProducts });
-  const { data: profiles, isLoading: isLoadingProfiles } = useQuery({ queryKey: ["profiles"], queryFn: fetchProfiles });
 
   const productMap = new Map(products?.map((p) => [p.id, p.name]));
-  const profileMap = new Map(profiles?.map((p) => [p.id, `${p.first_name || ""} ${p.last_name || ""}`.trim()]));
+
+  const getUserName = (review: Review) =>
+    review.profiles?.first_name?.trim() || review.user_id.substring(0, 8);
 
   const updateMutation = useMutation({
     mutationFn: async ({ reviewId, newStatus }: { reviewId: number; newStatus: boolean }) => {
@@ -90,7 +89,7 @@ const ReviewsPage = () => {
     onError: (e: Error) => showError(`Erro: ${e.message}`),
   });
 
-  const isLoading = isLoadingReviews || isLoadingProducts || isLoadingProfiles;
+  const isLoading = isLoadingReviews || isLoadingProducts;
 
   return (
     <div className="space-y-4">
@@ -118,14 +117,13 @@ const ReviewsPage = () => {
                 review.is_approved ? "border-green-100" : "border-gray-100"
               )}
             >
-              {/* Produto + estrelas + aprovação */}
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-sm text-gray-900 leading-tight">
                     {productMap.get(review.product_id) || "Produto não encontrado"}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {profileMap.get(review.user_id) || review.user_id.substring(0, 8)}
+                    {getUserName(review)}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -140,7 +138,6 @@ const ReviewsPage = () => {
                 </div>
               </div>
 
-              {/* Estrelas + data */}
               <div className="flex items-center justify-between">
                 <StarRating rating={review.rating} size="lg" />
                 <span className="text-xs text-muted-foreground">
@@ -148,14 +145,12 @@ const ReviewsPage = () => {
                 </span>
               </div>
 
-              {/* Comentário */}
               {review.comment && (
                 <p className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3 border border-gray-100 leading-relaxed">
                   "{review.comment}"
                 </p>
               )}
 
-              {/* Ação */}
               <div className="pt-1 border-t border-gray-100">
                 <Button
                   size="sm"
@@ -192,7 +187,7 @@ const ReviewsPage = () => {
               reviews.map((review) => (
                 <TableRow key={review.id}>
                   <TableCell className="font-medium">{productMap.get(review.product_id) || "Produto não encontrado"}</TableCell>
-                  <TableCell>{profileMap.get(review.user_id) || review.user_id.substring(0, 8)}</TableCell>
+                  <TableCell>{getUserName(review)}</TableCell>
                   <TableCell><StarRating rating={review.rating} /></TableCell>
                   <TableCell>
                     <p className="max-w-xs truncate" title={review.comment || ""}>{review.comment || "-"}</p>
