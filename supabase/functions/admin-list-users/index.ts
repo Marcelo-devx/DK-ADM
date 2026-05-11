@@ -92,21 +92,33 @@ serve(async (req) => {
   if (term) {
     const likeTerm = `%${term}%`;
 
-    // Primeiro: buscar IDs de usuários pelo email em auth.users (via Admin API)
-    // Isso garante que encontramos usuários mesmo que o email não esteja sincronizado no profiles
+    // Buscar IDs de usuários pelo email em auth.users (via Admin API) — percorre TODAS as páginas
     let authUserIds: string[] = [];
     try {
-      const { data: authUsers, error: authErr } = await supabaseAdmin.auth.admin.listUsers({
-        page: 1,
-        perPage: 1000,
-      });
-      if (!authErr && authUsers?.users) {
+      let authPage = 1;
+      const perPage = 1000;
+      while (true) {
+        const { data: authUsers, error: authErr } = await supabaseAdmin.auth.admin.listUsers({
+          page: authPage,
+          perPage,
+        });
+        if (authErr) {
+          console.error("[admin-list-users] Error fetching auth.users page", authPage, authErr);
+          break;
+        }
+        if (!authUsers?.users || authUsers.users.length === 0) break;
+
         const lowerTerm = term.toLowerCase();
-        authUserIds = authUsers.users
+        const matched = authUsers.users
           .filter(u => u.email && u.email.toLowerCase().includes(lowerTerm))
           .map(u => u.id);
-        console.log(`[admin-list-users] Found ${authUserIds.length} users by email in auth.users`);
+        authUserIds = authUserIds.concat(matched);
+
+        // Se retornou menos que perPage, chegamos na última página
+        if (authUsers.users.length < perPage) break;
+        authPage++;
       }
+      console.log(`[admin-list-users] Found ${authUserIds.length} users by email in auth.users (all pages)`);
     } catch (e) {
       console.error("[admin-list-users] Error searching auth.users:", e);
     }
@@ -181,19 +193,27 @@ serve(async (req) => {
   }
 
   // Para usuários encontrados via auth.users mas sem email no profile,
-  // enriquecer com o email do auth.users
+  // enriquecer com o email do auth.users — percorre TODAS as páginas
   const users = dataResult.data ?? [];
   if (users.length > 0) {
     try {
       const missingEmailIds = users.filter(u => !u.email).map(u => u.id);
       if (missingEmailIds.length > 0) {
-        const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-        if (authUsers?.users) {
-          const authEmailMap = new Map(authUsers.users.map(u => [u.id, u.email]));
-          for (const u of users) {
-            if (!u.email && authEmailMap.has(u.id)) {
-              u.email = authEmailMap.get(u.id) || null;
-            }
+        const authEmailMap = new Map<string, string | undefined>();
+        let enrichPage = 1;
+        const perPage = 1000;
+        while (true) {
+          const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers({ page: enrichPage, perPage });
+          if (!authUsers?.users || authUsers.users.length === 0) break;
+          for (const u of authUsers.users) {
+            authEmailMap.set(u.id, u.email);
+          }
+          if (authUsers.users.length < perPage) break;
+          enrichPage++;
+        }
+        for (const u of users) {
+          if (!u.email && authEmailMap.has(u.id)) {
+            u.email = authEmailMap.get(u.id) || null;
           }
         }
       }
