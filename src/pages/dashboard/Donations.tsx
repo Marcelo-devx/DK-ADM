@@ -17,7 +17,7 @@ interface DonationOrder {
 }
 
 const fetchDonations = async (): Promise<DonationOrder[]> => {
-  const { data, error } = await supabase.rpc("get_donations_report");
+  const { data, error } = await supabase.rpc("get_donations_report" as any, {});
   if (error) throw error;
   return (data ?? []) as DonationOrder[];
 };
