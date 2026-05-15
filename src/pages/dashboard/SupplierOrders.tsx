@@ -78,14 +78,15 @@ const fetchSupplierOrders = async () => {
 const searchProducts = async (term: string): Promise<SelectableItem[]> => {
   const trimmed = term.trim();
 
-  // Converte espaços em % para busca wildcard (ex: "Salt Magna" → "%Salt%Magna%")
-  // Também preserva % digitados manualmente pelo usuário
-  const toPattern = (t: string) => {
-    if (!t) return "";
-    // Substitui espaços por % e envolve com % no início e fim
-    const inner = t.replace(/\s+/g, "%");
-    return `%${inner}%`;
-  };
+  // Divide o termo em partes usando espaço ou % como separador
+  // Ex: "Salt Magna % Strawberry" → ["Salt", "Magna", "Strawberry"]
+  const parts = trimmed
+    ? trimmed.split(/[\s%]+/).map((p) => p.trim()).filter(Boolean)
+    : [];
+
+  // Para filtrar no banco, usa apenas a primeira parte (nome do produto pai)
+  // O filtro completo (incluindo flavor/variação) é feito no JS após montar o nome
+  const firstPart = parts[0] ?? "";
 
   // Busca variantes diretamente com join ao produto
   let variantQuery = supabase
@@ -97,10 +98,10 @@ const searchProducts = async (term: string): Promise<SelectableItem[]> => {
     )
     .eq("is_active", true)
     .order("id")
-    .limit(200);
+    .limit(500);
 
-  if (trimmed) {
-    variantQuery = variantQuery.ilike("products.name", toPattern(trimmed));
+  if (firstPart) {
+    variantQuery = variantQuery.ilike("products.name", `%${firstPart}%`);
   }
 
   const { data: variantsData, error: variantsError } = await variantQuery;
@@ -110,10 +111,10 @@ const searchProducts = async (term: string): Promise<SelectableItem[]> => {
     .from("products")
     .select(`id, name, stock_quantity, cost_price, brand, category`)
     .order("name")
-    .limit(100);
+    .limit(200);
 
-  if (trimmed) {
-    productQuery = productQuery.ilike("name", toPattern(trimmed));
+  if (firstPart) {
+    productQuery = productQuery.ilike("name", `%${firstPart}%`);
   }
 
   const { data: productsData, error: productsError } = await productQuery;
@@ -175,7 +176,17 @@ const searchProducts = async (term: string): Promise<SelectableItem[]> => {
     });
   }
 
-  return flattened.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  // Filtra pelo nome completo (produto + variação) usando todas as partes do termo
+  // Isso permite buscar "Salt Magna Strawberry" e encontrar "Salt Magna - Strawberry"
+  const filtered =
+    parts.length > 1
+      ? flattened.filter((item) => {
+          const nameLower = item.name.toLowerCase();
+          return parts.every((part) => nameLower.includes(part.toLowerCase()));
+        })
+      : flattened;
+
+  return filtered.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 };
 
 // ─── Helper: monta variant_name completo ──────────────────────────────────────
