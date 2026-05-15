@@ -63,6 +63,11 @@ const N8nIntegrationPage = () => {
   // NEW: editing state
   const [editingWebhookId, setEditingWebhookId] = useState<number | null>(null);
   const [editingUrl, setEditingUrl] = useState<string>("");
+
+  // Reenvio de pedidos
+  const [reenvioInput, setReenvioInput] = useState("3966,3967,3968,3969,3970,3972,3975,3976");
+  const [reenvioResults, setReenvioResults] = useState<{ id: number; status: "pending" | "success" | "error" | "sending"; message: string }[]>([]);
+  const [isRenviando, setIsRenviando] = useState(false);
   
   const baseUrl = "https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1";
 
@@ -537,6 +542,56 @@ const N8nIntegrationPage = () => {
     onError: (err: any) => showError(err.message),
   });
 
+  // Reenviar pedidos para o n8n
+  const handleReenviarPedidos = async () => {
+    const ids = reenvioInput
+      .split(/[,\s;]+/)
+      .map(s => parseInt(s.trim(), 10))
+      .filter(n => !isNaN(n) && n > 0);
+
+    if (ids.length === 0) {
+      showError("Informe ao menos um ID de pedido válido.");
+      return;
+    }
+
+    setIsRenviando(true);
+    setReenvioResults(ids.map(id => ({ id, status: "pending", message: "Aguardando..." })));
+
+    for (let i = 0; i < ids.length; i++) {
+      const orderId = ids[i];
+      setReenvioResults(prev => prev.map(r => r.id === orderId ? { ...r, status: "sending", message: "Enviando..." } : r));
+
+      try {
+        const { data, error } = await supabase.functions.invoke("dispatch-webhook", {
+          body: {
+            event_type: "order_created",
+            payload: { id: orderId }
+          }
+        });
+
+        if (error) throw error;
+
+        if (data?.skipped) {
+          setReenvioResults(prev => prev.map(r => r.id === orderId ? { ...r, status: "success", message: `Enviado (deduplicado — aguarde 10s e tente novamente se necessário)` } : r));
+        } else if (data?.dispatched > 0) {
+          setReenvioResults(prev => prev.map(r => r.id === orderId ? { ...r, status: "success", message: `✓ Enviado para ${data.dispatched} webhook(s)` } : r));
+        } else if (data?.message === "No active webhooks") {
+          setReenvioResults(prev => prev.map(r => r.id === orderId ? { ...r, status: "error", message: "Nenhum webhook ativo para order_created" } : r));
+        } else {
+          setReenvioResults(prev => prev.map(r => r.id === orderId ? { ...r, status: "success", message: `Processado: ${JSON.stringify(data)}` } : r));
+        }
+      } catch (err: any) {
+        setReenvioResults(prev => prev.map(r => r.id === orderId ? { ...r, status: "error", message: `Erro: ${err.message || "Falha desconhecida"}` } : r));
+      }
+
+      // Pequena pausa entre envios para não sobrecarregar
+      if (i < ids.length - 1) await new Promise(r => setTimeout(r, 600));
+    }
+
+    setIsRenviando(false);
+    showSuccess("Reenvio concluído! Verifique os resultados abaixo.");
+  };
+
   // Allow importing built-in endpoints into api_configs
   const importBuiltinMutation = useMutation({
     mutationFn: async (builtin: any) => {
@@ -591,10 +646,11 @@ const N8nIntegrationPage = () => {
 
         <div className="lg:col-span-2">
             <Tabs defaultValue="webhooks">
-                <TabsList className="grid w-full grid-cols-4 bg-slate-100 p-1">
+                <TabsList className="grid w-full grid-cols-5 bg-slate-100 p-1">
                     <TabsTrigger value="webhooks" className="font-bold">Gatilhos</TabsTrigger>
                     <TabsTrigger value="apis" className="font-bold">APIs</TabsTrigger>
                     <TabsTrigger value="logs" className="font-bold">Histórico</TabsTrigger>
+                    <TabsTrigger value="reenvio" className="font-bold text-orange-700">Reenviar</TabsTrigger>
                     <TabsTrigger value="docs" className="font-bold">Docs</TabsTrigger>
                 </TabsList>
 
@@ -948,6 +1004,97 @@ const N8nIntegrationPage = () => {
                                     </CollapsibleContent>
                                 </Collapsible>
                             ))}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                <TabsContent value="reenvio" className="mt-6">
+                    <Card className="shadow-md border-orange-200">
+                        <CardHeader className="bg-orange-50/40 border-b pb-4">
+                            <CardTitle className="text-base flex items-center gap-2 text-orange-800">
+                                <RefreshCw className="w-5 h-5" /> Reenviar Pedidos para o N8N
+                            </CardTitle>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                Use esta ferramenta para reenviar pedidos que não foram encaminhados ao N8N.
+                                Informe os IDs separados por vírgula e clique em Reenviar.
+                            </p>
+                        </CardHeader>
+                        <CardContent className="pt-6 space-y-5">
+                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800 flex gap-3">
+                                <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-amber-600" />
+                                <div>
+                                    <strong>Atenção:</strong> Esta ação irá disparar o evento <code className="bg-amber-100 px-1 rounded font-mono text-xs">order_created</code> para cada pedido informado,
+                                    enviando os dados completos para todos os webhooks ativos configurados na aba <strong>Gatilhos</strong>.
+                                    Nenhum dado do pedido será alterado.
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label className="font-bold text-sm">IDs dos Pedidos</Label>
+                                <div className="flex gap-3">
+                                    <Input
+                                        value={reenvioInput}
+                                        onChange={(e) => setReenvioInput(e.target.value)}
+                                        placeholder="Ex: 3966, 3967, 3968, 3969"
+                                        className="font-mono text-sm flex-1"
+                                        disabled={isRenviando}
+                                    />
+                                    <Button
+                                        onClick={handleReenviarPedidos}
+                                        disabled={isRenviando || !reenvioInput.trim()}
+                                        className="bg-orange-600 hover:bg-orange-700 font-bold px-6 shrink-0"
+                                    >
+                                        {isRenviando ? (
+                                            <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Enviando...</>
+                                        ) : (
+                                            <><Zap className="w-4 h-4 mr-2" /> Reenviar</>
+                                        )}
+                                    </Button>
+                                </div>
+                                <p className="text-xs text-muted-foreground">Separe os IDs por vírgula, espaço ou ponto-e-vírgula.</p>
+                            </div>
+
+                            {reenvioResults.length > 0 && (
+                                <div className="border rounded-xl overflow-hidden shadow-sm">
+                                    <Table>
+                                        <TableHeader className="bg-gray-50">
+                                            <TableRow>
+                                                <TableHead className="w-24">Pedido #</TableHead>
+                                                <TableHead className="w-28">Status</TableHead>
+                                                <TableHead>Resultado</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {reenvioResults.map((r) => (
+                                                <TableRow key={r.id} className={
+                                                    r.status === "error" ? "bg-red-50/50" :
+                                                    r.status === "success" ? "bg-green-50/30" : ""
+                                                }>
+                                                    <TableCell className="font-mono font-bold text-sm">#{r.id}</TableCell>
+                                                    <TableCell>
+                                                        {r.status === "pending" && <Badge variant="outline" className="text-gray-500">Pendente</Badge>}
+                                                        {r.status === "sending" && <Badge className="bg-blue-100 text-blue-700 border-none"><Loader2 className="w-3 h-3 mr-1 animate-spin" />Enviando</Badge>}
+                                                        {r.status === "success" && <Badge className="bg-green-100 text-green-700 border-none"><CheckCircle2 className="w-3 h-3 mr-1" />Enviado</Badge>}
+                                                        {r.status === "error" && <Badge className="bg-red-100 text-red-700 border-none"><XCircle className="w-3 h-3 mr-1" />Erro</Badge>}
+                                                    </TableCell>
+                                                    <TableCell className="text-sm text-gray-600">{r.message}</TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            )}
+
+                            {reenvioResults.length > 0 && !isRenviando && (
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-muted-foreground">
+                                        {reenvioResults.filter(r => r.status === "success").length} de {reenvioResults.length} enviados com sucesso
+                                    </span>
+                                    <Button variant="outline" size="sm" onClick={() => setReenvioResults([])}>
+                                        Limpar resultados
+                                    </Button>
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
                 </TabsContent>
