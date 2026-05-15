@@ -121,7 +121,6 @@ const OrderItemRow = memo(function OrderItemRow({
                   onChange={handleChange}
                   onClear={handleClear}
                   placeholder="Buscar produto..."
-                  searchPlaceholder="Ex.: Salt Magna%Strawberry"
                   allowWrap={true}
                 />
                 <FormMessage />
