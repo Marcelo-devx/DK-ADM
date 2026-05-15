@@ -84,9 +84,13 @@ const searchProducts = async (term: string): Promise<SelectableItem[]> => {
     ? trimmed.split(/[\s%]+/).map((p) => p.trim()).filter(Boolean)
     : [];
 
-  // Para filtrar no banco, usa apenas a primeira parte (nome do produto pai)
-  // O filtro completo (incluindo flavor/variação) é feito no JS após montar o nome
-  const firstPart = parts[0] ?? "";
+  // Para filtrar no banco, usa as duas primeiras partes juntas para ser mais específico
+  // Ex: "Salt Magna Lemon Ice" → filtra por "%Salt%Magna%" no nome do produto
+  // Isso evita trazer 1000+ variantes de todos os produtos "Salt ..."
+  const dbFilterParts = parts.slice(0, 2);
+  const dbPattern = dbFilterParts.length > 0
+    ? `%${dbFilterParts.join("%")}%`
+    : "";
 
   // Busca variantes diretamente com join ao produto
   let variantQuery = supabase
@@ -100,8 +104,8 @@ const searchProducts = async (term: string): Promise<SelectableItem[]> => {
     .order("id")
     .limit(500);
 
-  if (firstPart) {
-    variantQuery = variantQuery.ilike("products.name", `%${firstPart}%`);
+  if (dbPattern) {
+    variantQuery = variantQuery.ilike("products.name", dbPattern);
   }
 
   const { data: variantsData, error: variantsError } = await variantQuery;
@@ -113,8 +117,8 @@ const searchProducts = async (term: string): Promise<SelectableItem[]> => {
     .order("name")
     .limit(200);
 
-  if (firstPart) {
-    productQuery = productQuery.ilike("name", `%${firstPart}%`);
+  if (dbPattern) {
+    productQuery = productQuery.ilike("name", dbPattern);
   }
 
   const { data: productsData, error: productsError } = await productQuery;
