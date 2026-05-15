@@ -39,6 +39,7 @@ interface ProductComboboxProps {
   onChange: (value: string, item: SelectableItem) => void;
   onClear?: () => void;
   placeholder?: string;
+  searchPlaceholder?: string;
   allowWrap?: boolean;
 }
 
@@ -49,6 +50,7 @@ export const ProductCombobox = React.memo(function ProductCombobox({
   onChange,
   onClear,
   placeholder = "Buscar produto...",
+  searchPlaceholder = "Digite para buscar...",
   allowWrap = false,
 }: ProductComboboxProps) {
   const [open, setOpen] = React.useState(false);
@@ -200,7 +202,7 @@ export const ProductCombobox = React.memo(function ProductCombobox({
             <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
             <input
               autoFocus
-              placeholder="Digite para buscar..."
+              placeholder={searchPlaceholder}
               value={searchValue}
               onChange={(e) => handleSearchChange(e.target.value)}
               className="flex h-10 w-full bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground"
