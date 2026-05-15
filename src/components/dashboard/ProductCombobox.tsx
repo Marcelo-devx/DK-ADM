@@ -208,7 +208,7 @@ export const ProductCombobox = React.memo(function ProductCombobox({
             {isLoading && <Loader2 className="h-4 w-4 animate-spin opacity-50 shrink-0" />}
           </div>
 
-          <CommandList className="max-h-[300px]">
+          <CommandList className="max-h-[300px] overflow-y-auto">
             {isLoading && results.length === 0 ? (
               <div className="py-6 flex flex-col items-center justify-center text-sm text-muted-foreground">
                 <Loader2 className="h-5 w-5 animate-spin mb-2" />
