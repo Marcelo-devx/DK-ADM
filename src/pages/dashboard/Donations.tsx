@@ -17,9 +17,32 @@ interface DonationOrder {
 }
 
 const fetchDonations = async (): Promise<DonationOrder[]> => {
-  const { data, error } = await supabase.rpc("get_donations_report" as any, {});
+  const { data, error } = await supabase
+    .from("orders")
+    .select(`
+      id,
+      donation_amount,
+      created_at,
+      status,
+      user_id,
+      profiles!left(first_name, last_name, email)
+    `)
+    .gt("donation_amount", 0)
+    .in("status", ["Pago", "Finalizada"])
+    .order("created_at", { ascending: false });
+
   if (error) throw error;
-  return (data ?? []) as DonationOrder[];
+
+  return (data ?? []).map((o: any) => ({
+    id: o.id,
+    donation_amount: o.donation_amount,
+    created_at: o.created_at,
+    status: o.status,
+    user_id: o.user_id,
+    first_name: o.profiles?.first_name ?? null,
+    last_name: o.profiles?.last_name ?? null,
+    email: o.profiles?.email ?? null,
+  }));
 };
 
 export default function DonationsPage() {
