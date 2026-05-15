@@ -200,7 +200,7 @@ export const ProductCombobox = React.memo(function ProductCombobox({
             <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
             <input
               autoFocus
-              placeholder="Digite para buscar..."
+              placeholder="Digite para buscar... (espaço ou % = curinga)"
               value={searchValue}
               onChange={(e) => handleSearchChange(e.target.value)}
               className="flex h-10 w-full bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground"

@@ -78,6 +78,15 @@ const fetchSupplierOrders = async () => {
 const searchProducts = async (term: string): Promise<SelectableItem[]> => {
   const trimmed = term.trim();
 
+  // Converte espaços em % para busca wildcard (ex: "Salt Magna" → "%Salt%Magna%")
+  // Também preserva % digitados manualmente pelo usuário
+  const toPattern = (t: string) => {
+    if (!t) return "";
+    // Substitui espaços por % e envolve com % no início e fim
+    const inner = t.replace(/\s+/g, "%");
+    return `%${inner}%`;
+  };
+
   // Busca variantes diretamente com join ao produto
   let variantQuery = supabase
     .from("product_variants")
@@ -91,7 +100,7 @@ const searchProducts = async (term: string): Promise<SelectableItem[]> => {
     .limit(200);
 
   if (trimmed) {
-    variantQuery = variantQuery.ilike("products.name", `%${trimmed}%`);
+    variantQuery = variantQuery.ilike("products.name", toPattern(trimmed));
   }
 
   const { data: variantsData, error: variantsError } = await variantQuery;
@@ -104,7 +113,7 @@ const searchProducts = async (term: string): Promise<SelectableItem[]> => {
     .limit(100);
 
   if (trimmed) {
-    productQuery = productQuery.ilike("name", `%${trimmed}%`);
+    productQuery = productQuery.ilike("name", toPattern(trimmed));
   }
 
   const { data: productsData, error: productsError } = await productQuery;
