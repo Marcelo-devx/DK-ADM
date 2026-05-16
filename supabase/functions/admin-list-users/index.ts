@@ -123,31 +123,53 @@ serve(async (req) => {
       console.error("[admin-list-users] Error searching auth.users:", e);
     }
 
-    // Buscar profiles que batem com o termo OU cujo ID está nos authUserIds
-    let profilesQuery = supabaseAdmin
-      .from("profiles")
-      .select(
-        "id, first_name, last_name, cpf_cnpj, email, phone, date_of_birth, gender, " +
-        "cep, street, number, complement, neighborhood, city, state, " +
-        "force_pix_on_next_purchase, is_credit_card_enabled, " +
-        "is_blocked, created_at, role",
-        { count: "exact" }
-      );
+    // Buscar profiles que batem com o termo nos campos do profile
+    const selectFields =
+      "id, first_name, last_name, cpf_cnpj, email, phone, date_of_birth, gender, " +
+      "cep, street, number, complement, neighborhood, city, state, " +
+      "force_pix_on_next_purchase, is_credit_card_enabled, " +
+      "is_blocked, created_at, role";
 
-    if (authUserIds.length > 0) {
-      // Busca por campos do profile OU por IDs encontrados no auth.users
-      profilesQuery = profilesQuery.or(
-        `email.ilike.${likeTerm},cpf_cnpj.ilike.${likeTerm},phone.ilike.${likeTerm},first_name.ilike.${likeTerm},last_name.ilike.${likeTerm},id.in.(${authUserIds.join(",")})`
-      );
-    } else {
-      profilesQuery = profilesQuery.or(
+    // Query 1: busca por campos do profile (sem misturar id.in com ilike no .or())
+    const { data: profileData, error: profileSearchError } = await supabaseAdmin
+      .from("profiles")
+      .select(selectFields)
+      .or(
         `email.ilike.${likeTerm},cpf_cnpj.ilike.${likeTerm},phone.ilike.${likeTerm},first_name.ilike.${likeTerm},last_name.ilike.${likeTerm}`
-      );
+      )
+      .order("created_at", { ascending: false });
+
+    if (profileSearchError) {
+      console.error("[admin-list-users] Profile fields query error:", profileSearchError);
     }
 
-    const { data, error, count } = await profilesQuery
-      .order("created_at", { ascending: false })
-      .range(from, to);
+    // Query 2: busca por IDs encontrados no auth.users (email match), excluindo já encontrados
+    let authIdData: any[] = [];
+    if (authUserIds.length > 0) {
+      const alreadyFoundIds = new Set((profileData ?? []).map((u: any) => u.id));
+      const idsToFetch = authUserIds.filter(id => !alreadyFoundIds.has(id));
+      if (idsToFetch.length > 0) {
+        const { data: idData, error: idError } = await supabaseAdmin
+          .from("profiles")
+          .select(selectFields)
+          .in("id", idsToFetch)
+          .order("created_at", { ascending: false });
+        if (idError) {
+          console.error("[admin-list-users] Auth ID query error:", idError);
+        }
+        authIdData = idData ?? [];
+      }
+    }
+
+    // Merge e ordenar por created_at desc
+    const allData = [...(profileData ?? []), ...authIdData].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+
+    const totalCount = allData.length;
+    const data = allData.slice(from, to + 1);
+    const count = totalCount;
+    const error = profileSearchError;
 
     console.log(`[admin-list-users] profiles query result: count=${count}, data=${data?.length}, error=${error?.message}`);
 
@@ -194,7 +216,7 @@ serve(async (req) => {
 
   // Para usuários encontrados via auth.users mas sem email no profile,
   // enriquecer com o email do auth.users — percorre TODAS as páginas
-  const users = dataResult.data ?? [];
+  const users = dataResult.data ?? [] as any[];
   if (users.length > 0) {
     try {
       const missingEmailIds = users.filter(u => !u.email).map(u => u.id);
