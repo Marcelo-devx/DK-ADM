@@ -11,9 +11,11 @@ import {
 } from "lucide-react";
 import { ExtendedProduct } from "@/hooks/useProductData";
 import { useState } from "react";
+import { optimizeCloudinaryUrl } from "@/utils/cloudinary";
 
 const ProductImage = ({ url, name }: { url: string | null; name: string }) => {
-  const [src, setSrc] = useState(url || '');
+  const optimizedUrl = optimizeCloudinaryUrl(url, 200);
+  const [src, setSrc] = useState(optimizedUrl || '');
   const [failed, setFailed] = useState(false);
   const [retried, setRetried] = useState(false);
 

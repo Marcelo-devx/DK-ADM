@@ -10,6 +10,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "./ui/skeleton";
 import { Link } from "react-router-dom";
+import { optimizeCloudinaryUrl } from "@/utils/cloudinary";
 
 const fetchActiveHeroSlides = async () => {
   const { data, error } = await supabase
@@ -58,7 +59,7 @@ export const HeroCarousel = () => {
                     />
                 ) : (
                     <img
-                        src={slide.image_url || ''}
+                        src={optimizeCloudinaryUrl(slide.image_url, 1200)}
                         alt={slide.title || 'Hero slide'}
                         className="w-full h-full object-cover"
                     />

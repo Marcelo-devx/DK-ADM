@@ -43,6 +43,7 @@ import { PlusCircle, MoreHorizontal, ImageOff } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { optimizeCloudinaryUrl } from "@/utils/cloudinary";
 
 type HeroSlide = {
   id: number;
@@ -299,7 +300,7 @@ const HeroSlidesPage = () => {
                 <TableRow key={slide.id}>
                   <TableCell>
                     {slide.image_url ? (
-                      <img src={slide.image_url} alt={slide.title || ''} className="h-12 w-24 rounded-md object-cover" />
+                      <img src={optimizeCloudinaryUrl(slide.image_url, 400)} alt={slide.title || ''} className="h-12 w-24 rounded-md object-cover" />
                     ) : (
                       <div className="h-12 w-24 rounded-md bg-gray-100 flex items-center justify-center">
                         <ImageOff className="h-5 w-5 text-gray-400" />

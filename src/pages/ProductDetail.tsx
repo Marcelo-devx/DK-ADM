@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { sortVariantsBySpecification } from '@/utils/variantSort';
 import { SalesPopupDisplay } from '@/components/SalesPopupDisplay';
+import { optimizeCloudinaryUrl } from '@/utils/cloudinary';
 
 interface Product {
   id: number;
@@ -103,7 +104,7 @@ const ProductDetailPage = () => {
         <div className="md:sticky md:top-8 h-fit">
           <Card className="overflow-hidden border-none shadow-xl rounded-3xl">
              {product?.image_url ? (
-                <img src={product.image_url} alt={product.name} className="w-full aspect-square object-cover" />
+                <img src={optimizeCloudinaryUrl(product.image_url, 900)} alt={product.name} className="w-full aspect-square object-cover" />
              ) : (
                 <div className="w-full aspect-square bg-gray-100 flex items-center justify-center"><PackageCheck className="w-20 h-20 text-gray-300" /></div>
              )}

@@ -23,6 +23,7 @@ import { Switch } from "@/components/ui/switch";
 import { useLocation } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { optimizeCloudinaryUrl } from "@/utils/cloudinary";
 
 type PromotionItem = {
   quantity: number;
@@ -194,7 +195,7 @@ const PromotionsPage = () => {
               <div className="flex items-start gap-3">
                 <div className="h-16 w-16 rounded-xl border bg-gray-50 flex items-center justify-center overflow-hidden shrink-0">
                   {promo.image_url ? (
-                    <img src={promo.image_url} alt={promo.name} className="h-full w-full object-cover" />
+                    <img src={optimizeCloudinaryUrl(promo.image_url, 200)} alt={promo.name} className="h-full w-full object-cover" />
                   ) : (
                     <ImageOff className="h-6 w-6 text-gray-300" />
                   )}
@@ -282,7 +283,7 @@ const PromotionsPage = () => {
                 <TableRow key={promo.id}>
                   <TableCell>
                     {promo.image_url ? (
-                      <img src={promo.image_url} alt={promo.name} className="h-12 w-12 rounded-md object-cover" />
+                      <img src={optimizeCloudinaryUrl(promo.image_url, 100)} alt={promo.name} className="h-12 w-12 rounded-md object-cover" />
                     ) : (
                       <div className="h-12 w-12 rounded-md bg-gray-100 flex items-center justify-center">
                         <ImageOff className="h-5 w-5 text-gray-400" />

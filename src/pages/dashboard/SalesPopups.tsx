@@ -42,6 +42,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { optimizeCloudinaryUrl } from "@/utils/cloudinary";
 
 type SalesPopup = {
   id: number;
@@ -285,7 +286,7 @@ const SalesPopupsPage = () => {
                     <div className="w-12 h-12 flex-shrink-0">
                       {popup.product_image_url ? (
                         <img
-                          src={popup.product_image_url}
+                          src={optimizeCloudinaryUrl(popup.product_image_url, 100)}
                           alt={popup.product_name}
                           className="h-full w-full rounded-md object-cover"
                         />

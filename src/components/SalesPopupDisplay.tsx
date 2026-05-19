@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { ShoppingCart, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { optimizeCloudinaryUrl } from "@/utils/cloudinary";
 
 interface SalesPopup {
   id: number;
@@ -113,7 +114,7 @@ export const SalesPopupDisplay = () => {
       <div className="flex items-start space-x-3">
         {currentPopup.product_image_url ? (
           <img
-            src={currentPopup.product_image_url}
+            src={optimizeCloudinaryUrl(currentPopup.product_image_url, 100)}
             alt={currentPopup.product_name}
             className="h-12 w-12 rounded-md object-cover flex-shrink-0"
           />

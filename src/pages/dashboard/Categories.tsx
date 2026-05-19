@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { optimizeCloudinaryUrl } from "@/utils/cloudinary";
 
 type Category = {
   id: number;
@@ -200,7 +201,7 @@ const CategoriesPage = () => {
                 <TableRow key={category.id}>
                   <TableCell>
                     {category.image_url ? (
-                      <img src={category.image_url} alt={category.name} className="h-12 w-12 rounded-md object-cover" />
+                      <img src={optimizeCloudinaryUrl(category.image_url, 100)} alt={category.name} className="h-12 w-12 rounded-md object-cover" />
                     ) : (
                       <div className="h-12 w-12 rounded-md bg-gray-100 flex items-center justify-center">
                         <ImageOff className="h-5 w-5 text-gray-400" />

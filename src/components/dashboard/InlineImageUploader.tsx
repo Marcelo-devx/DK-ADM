@@ -10,7 +10,7 @@ interface InlineImageUploaderProps {
   onUploadSuccess: (cardId: number, newUrl: string) => void;
 }
 
-const compressImage = (file: File, maxPx = 900, quality = 0.80): Promise<string> => {
+const compressImage = (file: File, maxPx = 800, quality = 0.78): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('Erro ao ler o arquivo.'));
@@ -34,8 +34,8 @@ const compressImage = (file: File, maxPx = 900, quality = 0.80): Promise<string>
         const ctx = canvas.getContext('2d');
         if (!ctx) return reject(new Error('Canvas não disponível.'));
         ctx.drawImage(img, 0, 0, width, height);
-        const mimeType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
-        resolve(canvas.toDataURL(mimeType, quality));
+        // Sempre exporta como JPEG para garantir compressão real (PNG ignora o parâmetro quality)
+        resolve(canvas.toDataURL('image/jpeg', quality));
       };
       img.src = reader.result as string;
     };
@@ -54,7 +54,7 @@ export const InlineImageUploader = ({ cardId, initialUrl, onUploadSuccess }: Inl
     setUploading(true);
 
     try {
-      const base64data = await compressImage(file, 900, 0.80);
+      const base64data = await compressImage(file, 800, 0.78);
 
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;

@@ -21,7 +21,7 @@ const isVideo = (url: string) => {
   return /\.(mp4|webm|ogg)$/i.test(url);
 };
 
-const compressImage = (file: File, maxPx = 1000, quality = 0.82): Promise<string> => {
+const compressImage = (file: File, maxPx = 900, quality = 0.78): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('Erro ao ler o arquivo.'));
@@ -45,8 +45,8 @@ const compressImage = (file: File, maxPx = 1000, quality = 0.82): Promise<string
         const ctx = canvas.getContext('2d');
         if (!ctx) return reject(new Error('Canvas não disponível.'));
         ctx.drawImage(img, 0, 0, width, height);
-        const mimeType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
-        resolve(canvas.toDataURL(mimeType, quality));
+        // Sempre exporta como JPEG para garantir compressão real (PNG ignora o parâmetro quality)
+        resolve(canvas.toDataURL('image/jpeg', quality));
       };
       img.src = reader.result as string;
     };
@@ -86,10 +86,10 @@ export const ImageUploader = ({
     onUploadStart?.();
 
     try {
-      const base64data = await compressImage(file, 1000, 0.82);
+      const base64data = await compressImage(file, 900, 0.78);
       const sizeKB = Math.round(base64data.length / 1024);
 
-      if (sizeKB > 5000) {
+      if (sizeKB > 2000) {
         throw new Error('Imagem muito grande. Use uma imagem menor.');
       }
 

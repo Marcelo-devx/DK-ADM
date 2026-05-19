@@ -13,6 +13,7 @@ import { Star, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
 import { formatBRL as formatCurrency } from '@/utils/currency';
 import { SalesPopupDisplay } from '@/components/SalesPopupDisplay';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { optimizeCloudinaryUrl } from '@/utils/cloudinary';
 
 interface OrderItem {
   id: number;
@@ -226,7 +227,7 @@ const MyOrdersPage = () => {
                     {order.order_items.map(item => (
                       <li key={item.id} className="py-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex items-center gap-3 min-w-0">
-                          <img src={item.image_url_at_purchase || ''} alt={item.name_at_purchase} className="h-14 w-14 rounded-md object-cover shrink-0" />
+                          <img src={optimizeCloudinaryUrl(item.image_url_at_purchase, 100)} alt={item.name_at_purchase} className="h-14 w-14 rounded-md object-cover shrink-0" />
                           <div className="min-w-0">
                             <Link to={`/produto/${item.item_id}`} className="font-semibold hover:underline line-clamp-2">
                               {item.name_at_purchase}

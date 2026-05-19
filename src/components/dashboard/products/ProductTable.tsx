@@ -16,6 +16,7 @@ import { ExtendedProduct } from "@/hooks/useProductData";
 import { Switch } from "@/components/ui/switch";
 import { SortDropdown } from "./SortDropdown";
 import { ProductMobileCard } from "./ProductMobileCard";
+import { optimizeCloudinaryUrl } from "@/utils/cloudinary";
 
 interface SortState {
   column: string | null;
@@ -36,7 +37,8 @@ interface ProductTableProps {
 const formatCurrency = (val: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
 
 const ProductImage = ({ url, name }: { url: string | null; name: string }) => {
-  const [src, setSrc] = useState(url || '');
+  const optimizedUrl = optimizeCloudinaryUrl(url, 200);
+  const [src, setSrc] = useState(optimizedUrl || '');
   const [failed, setFailed] = useState(false);
   const [retried, setRetried] = useState(false);
 

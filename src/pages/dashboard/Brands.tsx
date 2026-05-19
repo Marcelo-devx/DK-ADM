@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { optimizeCloudinaryUrl } from "@/utils/cloudinary";
 
 type Brand = {
   id: number;
@@ -191,7 +192,7 @@ const BrandsPage = () => {
                 <TableRow key={brand.id}>
                   <TableCell>
                     {brand.image_url ? (
-                      <img src={brand.image_url} alt={brand.name} className="h-12 w-12 rounded-md object-contain" />
+                      <img src={optimizeCloudinaryUrl(brand.image_url, 100)} alt={brand.name} className="h-12 w-12 rounded-md object-contain" />
                     ) : (
                       <div className="h-12 w-12 rounded-md bg-gray-100 flex items-center justify-center">
                         <ImageOff className="h-5 w-5 text-gray-400" />
