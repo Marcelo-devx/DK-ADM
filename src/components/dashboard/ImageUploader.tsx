@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { showError, showSuccess } from "@/utils/toast";
-import { Loader2, UploadCloud, X, AlertCircle } from "lucide-react";
+import { Loader2, UploadCloud, X, AlertCircle, Cloud, Database } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ImageUploaderProps {
@@ -15,6 +15,8 @@ interface ImageUploaderProps {
   accept?: string;
   className?: string;
 }
+
+type UploadDestination = "cloudinary" | "supabase";
 
 const isVideo = (url: string) => {
   if (!url) return false;
@@ -54,6 +56,59 @@ const compressImage = (file: File, maxPx = 900, quality = 0.78): Promise<string>
   });
 };
 
+const dataURLtoBlob = (dataURL: string): Blob => {
+  const [header, data] = dataURL.split(',');
+  const mime = header.match(/:(.*?);/)?.[1] || 'image/jpeg';
+  const binary = atob(data);
+  const array = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) array[i] = binary.charCodeAt(i);
+  return new Blob([array], { type: mime });
+};
+
+const uploadToCloudinary = async (base64data: string): Promise<string> => {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+
+  const response = await fetch(
+    'https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1/cloudinary-upload',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpybG96aGh2d3FmbWp0a212dWtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDU2NjQsImV4cCI6MjA2NzkyMTY2NH0.Do5c1-TKqpyZTJeX_hLbw1SU40CbwXfCIC-pPpcD_JM',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ image: base64data }),
+    }
+  );
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data?.error || `Erro ${response.status} no servidor.`);
+  if (data?.error) throw new Error(data.error);
+  if (!data?.secure_url) throw new Error(data?.details || 'Cloudinary não retornou uma URL válida.');
+
+  return data.secure_url;
+};
+
+const uploadToSupabase = async (base64data: string, originalFileName: string): Promise<string> => {
+  const blob = dataURLtoBlob(base64data);
+  const ext = 'jpg'; // sempre JPEG após compressão
+  const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${ext}`;
+  const filePath = `products/${fileName}`;
+
+  const { error } = await supabase.storage
+    .from('product-images')
+    .upload(filePath, blob, { contentType: 'image/jpeg', upsert: false });
+
+  if (error) throw new Error(error.message);
+
+  const { data: { publicUrl } } = supabase.storage
+    .from('product-images')
+    .getPublicUrl(filePath);
+
+  return publicUrl;
+};
+
 export const ImageUploader = ({
   onUploadSuccess,
   onUploadStart,
@@ -66,6 +121,7 @@ export const ImageUploader = ({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [displayUrl, setDisplayUrl] = useState<string | null>(initialUrl || null);
+  const [destination, setDestination] = useState<UploadDestination>("cloudinary");
   const lastInitialUrl = useRef(initialUrl);
 
   // Sync when parent changes initialUrl (e.g. different product opened)
@@ -93,31 +149,16 @@ export const ImageUploader = ({
         throw new Error('Imagem muito grande. Use uma imagem menor.');
       }
 
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+      let url: string;
+      if (destination === "supabase") {
+        url = await uploadToSupabase(base64data, file.name);
+      } else {
+        url = await uploadToCloudinary(base64data);
+      }
 
-      const response = await fetch(
-        'https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1/cloudinary-upload',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpybG96aGh2d3FmbWp0a212dWtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNDU2NjQsImV4cCI6MjA2NzkyMTY2NH0.Do5c1-TKqpyZTJeX_hLbw1SU40CbwXfCIC-pPpcD_JM',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ image: base64data }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) throw new Error(data?.error || `Erro ${response.status} no servidor.`);
-      if (data?.error) throw new Error(data.error);
-      if (!data?.secure_url) throw new Error(data?.details || 'Cloudinary não retornou uma URL válida.');
-
-      lastInitialUrl.current = data.secure_url;
-      setDisplayUrl(data.secure_url);
-      onUploadSuccess(data.secure_url);
+      lastInitialUrl.current = url;
+      setDisplayUrl(url);
+      onUploadSuccess(url);
       showSuccess("Arquivo enviado com sucesso!");
     } catch (err: any) {
       let errorMsg = err?.message || 'Falha no upload do arquivo.';
@@ -143,6 +184,36 @@ export const ImageUploader = ({
   return (
     <div className="space-y-2">
       <label className="font-medium text-sm">{label || "Arquivo"}</label>
+
+      {/* Seletor de destino */}
+      <div className="flex gap-2 mb-1">
+        <button
+          type="button"
+          onClick={() => setDestination("cloudinary")}
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all",
+            destination === "cloudinary"
+              ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+              : "bg-white text-gray-500 border-gray-200 hover:border-blue-300"
+          )}
+        >
+          <Cloud className="h-3.5 w-3.5" />
+          Cloudinary
+        </button>
+        <button
+          type="button"
+          onClick={() => setDestination("supabase")}
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all",
+            destination === "supabase"
+              ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+              : "bg-white text-gray-500 border-gray-200 hover:border-emerald-300"
+          )}
+        >
+          <Database className="h-3.5 w-3.5" />
+          Supabase
+        </button>
+      </div>
 
       {displayUrl ? (
         <div className={cn("relative border rounded-md bg-gray-50 w-full max-w-[300px] h-[300px]", className)}>
@@ -182,13 +253,18 @@ export const ImageUploader = ({
           {uploading ? (
             <>
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="mt-2 text-xs text-muted-foreground font-medium">Enviando...</p>
+              <p className="mt-2 text-xs text-muted-foreground font-medium">
+                Enviando para {destination === "supabase" ? "Supabase" : "Cloudinary"}...
+              </p>
             </>
           ) : (
             <>
               <UploadCloud className={cn("h-8 w-8", uploadError ? "text-red-400" : "text-muted-foreground")} />
               <p className="mt-2 text-xs text-muted-foreground font-medium text-center px-4">
                 {uploadError ? "Clique para tentar novamente" : "Arraste ou clique para enviar"}
+              </p>
+              <p className="text-[10px] text-muted-foreground/70 mt-0.5">
+                → {destination === "supabase" ? "Supabase Storage" : "Cloudinary"}
               </p>
               <Input
                 type="file"
