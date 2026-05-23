@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, ImageOff, Lock, MoreHorizontal, Pencil, Trash2, Star, Eye, EyeOff } from "lucide-react";
+import { RefreshCw, ImageOff, Lock, MoreHorizontal, Pencil, Trash2, Star, Eye, EyeOff, X } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -59,7 +59,7 @@ const ImageSourceBadge = ({ url }: { url: string }) => {
   );
 };
 
-const ProductImage = ({ url, name }: { url: string | null; name: string }) => {
+const ProductImage = ({ url, name, onZoom }: { url: string | null; name: string; onZoom: (url: string) => void }) => {
   const optimizedUrl = optimizeCloudinaryUrl(url, 200);
   const [src, setSrc] = useState(optimizedUrl || '');
   const [failed, setFailed] = useState(false);
@@ -78,7 +78,8 @@ const ProductImage = ({ url, name }: { url: string | null; name: string }) => {
       <img
         src={src}
         alt={name}
-        className="h-12 w-12 rounded-lg object-cover shadow-sm border shrink-0"
+        className="h-12 w-12 rounded-lg object-cover shadow-sm border shrink-0 cursor-zoom-in hover:opacity-80 transition-opacity"
+        onClick={() => onZoom(url)}
         onError={() => {
           if (!retried) {
             setSrc(`${url}?t=${Date.now()}`);
@@ -93,16 +94,18 @@ const ProductImage = ({ url, name }: { url: string | null; name: string }) => {
   );
 };
 
-export const ProductTable = ({ 
-  isLoading, 
-  products, 
-  onEdit, 
-  onDelete, 
+export const ProductTable = ({
+  isLoading,
+  products,
+  onEdit,
+  onDelete,
   onViewVariants,
   onToggleVisibility,
   sortState,
   onSortChange
 }: ProductTableProps) => {
+  const [zoomedUrl, setZoomedUrl] = useState<string | null>(null);
+
   const getPriceDisplay = (product: ExtendedProduct, isCost: boolean = false) => {
     if (!product) return "-";
     const costsArray = Array.isArray(product.variant_costs) ? product.variant_costs : [];
@@ -144,6 +147,28 @@ export const ProductTable = ({
 
   return (
     <>
+      {/* ── Zoom overlay ── */}
+      {zoomedUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+          onClick={() => setZoomedUrl(null)}
+        >
+          <div className="relative max-w-lg w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={zoomedUrl}
+              alt="Zoom"
+              className="w-full max-h-[80vh] object-contain rounded-xl shadow-2xl"
+            />
+            <button
+              onClick={() => setZoomedUrl(null)}
+              className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded-full p-1.5 transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── MOBILE: Card list ── */}
       <div className="md:hidden">
         {isLoading ? (
@@ -260,7 +285,7 @@ export const ProductTable = ({
               products.map((product) => (
                 <TableRow key={product.id} className="hover:bg-gray-50/50 transition-colors">
                   <TableCell>
-                    <ProductImage url={product.image_url} name={product.name} />
+                    <ProductImage url={product.image_url} name={product.name} onZoom={setZoomedUrl} />
                   </TableCell>
                   <TableCell className="font-mono text-[10px] font-black text-gray-500">#{product.sku || product.id}</TableCell>
                   <TableCell>
