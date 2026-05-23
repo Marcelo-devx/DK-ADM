@@ -216,32 +216,51 @@ export const ImageUploader = ({
       </div>
 
       {displayUrl ? (
-        <div className={cn("relative border rounded-md bg-gray-50 w-full max-w-[300px] h-[300px]", className)}>
-          {isVideo(displayUrl) ? (
-            <video
-              key={displayUrl}
-              src={displayUrl}
-              className="absolute inset-0 w-full h-full object-contain"
-              autoPlay loop muted playsInline
-            />
-          ) : (
-            <img
-              key={displayUrl}
-              src={displayUrl}
-              alt="Preview"
-              className="absolute inset-0 w-full h-full object-contain"
-            />
-          )}
-          <Button
-            type="button"
-            variant="destructive"
-            size="icon"
-            className="absolute top-2 right-2 h-7 w-7 z-10 shadow-md"
-            onClick={handleRemove}
-            disabled={uploading}
-          >
-            <X className="h-4 w-4" />
-          </Button>
+        <div className="space-y-1.5">
+          <div className={cn("relative border rounded-md bg-gray-50 w-full max-w-[300px] h-[300px]", className)}>
+            {isVideo(displayUrl) ? (
+              <video
+                key={displayUrl}
+                src={displayUrl}
+                className="absolute inset-0 w-full h-full object-contain"
+                autoPlay loop muted playsInline
+              />
+            ) : (
+              <img
+                key={displayUrl}
+                src={displayUrl}
+                alt="Preview"
+                className="absolute inset-0 w-full h-full object-contain"
+              />
+            )}
+            <Button
+              type="button"
+              variant="destructive"
+              size="icon"
+              className="absolute top-2 right-2 h-7 w-7 z-10 shadow-md"
+              onClick={handleRemove}
+              disabled={uploading}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          {(() => {
+            if (displayUrl.includes("supabase.co")) {
+              return (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200">
+                  <Database className="h-3 w-3" /> Supabase Storage
+                </span>
+              );
+            }
+            if (displayUrl.includes("cloudinary.com")) {
+              return (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-600 border border-blue-200">
+                  <Cloud className="h-3 w-3" /> Cloudinary
+                </span>
+              );
+            }
+            return null;
+          })()}
         </div>
       ) : (
         <div className={cn(

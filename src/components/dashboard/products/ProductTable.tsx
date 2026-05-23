@@ -36,6 +36,29 @@ interface ProductTableProps {
 
 const formatCurrency = (val: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
 
+const getImageSource = (url: string): "supabase" | "cloudinary" | null => {
+  if (url.includes("supabase.co")) return "supabase";
+  if (url.includes("cloudinary.com")) return "cloudinary";
+  return null;
+};
+
+const ImageSourceBadge = ({ url }: { url: string }) => {
+  const source = getImageSource(url);
+  if (!source) return null;
+  if (source === "supabase") {
+    return (
+      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 leading-none whitespace-nowrap">
+        SB
+      </span>
+    );
+  }
+  return (
+    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 border border-blue-200 leading-none whitespace-nowrap">
+      CL
+    </span>
+  );
+};
+
 const ProductImage = ({ url, name }: { url: string | null; name: string }) => {
   const optimizedUrl = optimizeCloudinaryUrl(url, 200);
   const [src, setSrc] = useState(optimizedUrl || '');
@@ -51,19 +74,22 @@ const ProductImage = ({ url, name }: { url: string | null; name: string }) => {
   }
 
   return (
-    <img
-      src={src}
-      alt={name}
-      className="h-12 w-12 rounded-lg object-cover shadow-sm border"
-      onError={() => {
-        if (!retried) {
-          setSrc(`${url}?t=${Date.now()}`);
-          setRetried(true);
-        } else {
-          setFailed(true);
-        }
-      }}
-    />
+    <div className="flex items-center gap-1.5">
+      <img
+        src={src}
+        alt={name}
+        className="h-12 w-12 rounded-lg object-cover shadow-sm border shrink-0"
+        onError={() => {
+          if (!retried) {
+            setSrc(`${url}?t=${Date.now()}`);
+            setRetried(true);
+          } else {
+            setFailed(true);
+          }
+        }}
+      />
+      <ImageSourceBadge url={url} />
+    </div>
   );
 };
 
