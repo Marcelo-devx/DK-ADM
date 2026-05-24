@@ -75,6 +75,8 @@ export const HeroSlideForm = ({
                 onUploadSuccess={(url) => field.onChange(url)}
                 initialUrl={field.value}
                 accept="image/*,video/mp4,video/webm"
+                maxPx={1920}
+                quality={0.95}
               />
               <FormMessage />
             </FormItem>
