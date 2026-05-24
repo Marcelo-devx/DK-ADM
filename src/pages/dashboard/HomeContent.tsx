@@ -352,11 +352,19 @@ const HomeContentPage = () => {
                   ) : infoCards?.map((card) => (
                     <TableRow key={card.id}>
                       <TableCell>
-                        <InlineImageUploader
-                          cardId={card.id}
-                          initialUrl={card.image_url}
-                          onUploadSuccess={handleImageUpdate}
-                        />
+                        <div className="flex items-center gap-1.5">
+                          <InlineImageUploader
+                            cardId={card.id}
+                            initialUrl={card.image_url}
+                            onUploadSuccess={handleImageUpdate}
+                          />
+                          {card.image_url?.includes("supabase.co") && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 leading-none whitespace-nowrap">SB</span>
+                          )}
+                          {card.image_url?.includes("cloudinary.com") && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 border border-blue-200 leading-none whitespace-nowrap">CL</span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>{card.link_url || "-"}</TableCell>
                       <TableCell>
