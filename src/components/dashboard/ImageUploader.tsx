@@ -17,6 +17,7 @@ interface ImageUploaderProps {
   maxPx?: number;
   quality?: number;
   maxSizeKB?: number;
+  skipCompression?: boolean;
 }
 
 type UploadDestination = "cloudinary" | "supabase";
@@ -125,6 +126,7 @@ export const ImageUploader = ({
   maxPx = 900,
   quality = 0.78,
   maxSizeKB = 2000,
+  skipCompression = false,
 }: ImageUploaderProps) => {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -150,7 +152,15 @@ export const ImageUploader = ({
     onUploadStart?.();
 
     try {
-      const base64data = await compressImage(file, maxPx, quality);
+      const base64data = skipCompression
+        ? await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onerror = () => reject(new Error('Erro ao ler o arquivo.'));
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(file);
+          })
+        : await compressImage(file, maxPx, quality);
+
       const sizeKB = Math.round(base64data.length / 1024);
 
       if (sizeKB > maxSizeKB) {
