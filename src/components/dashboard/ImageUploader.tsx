@@ -24,6 +24,7 @@ const isVideo = (url: string) => {
 };
 
 const compressImage = (file: File, maxPx = 900, quality = 0.78): Promise<string> => {
+  const isPng = file.type === 'image/png';
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('Erro ao ler o arquivo.'));
@@ -47,8 +48,8 @@ const compressImage = (file: File, maxPx = 900, quality = 0.78): Promise<string>
         const ctx = canvas.getContext('2d');
         if (!ctx) return reject(new Error('Canvas não disponível.'));
         ctx.drawImage(img, 0, 0, width, height);
-        // Sempre exporta como JPEG para garantir compressão real (PNG ignora o parâmetro quality)
-        resolve(canvas.toDataURL('image/jpeg', quality));
+        // PNG preserva transparência; JPEG comprime melhor para fotos
+        resolve(isPng ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', quality));
       };
       img.src = reader.result as string;
     };
@@ -92,13 +93,14 @@ const uploadToCloudinary = async (base64data: string): Promise<string> => {
 
 const uploadToSupabase = async (base64data: string, originalFileName: string): Promise<string> => {
   const blob = dataURLtoBlob(base64data);
-  const ext = 'jpg'; // sempre JPEG após compressão
+  const isPng = base64data.startsWith('data:image/png');
+  const ext = isPng ? 'png' : 'jpg';
   const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${ext}`;
   const filePath = `products/${fileName}`;
 
   const { error } = await supabase.storage
     .from('product-images')
-    .upload(filePath, blob, { contentType: 'image/jpeg', upsert: false });
+    .upload(filePath, blob, { contentType: isPng ? 'image/png' : 'image/jpeg', upsert: false });
 
   if (error) throw new Error(error.message);
 
