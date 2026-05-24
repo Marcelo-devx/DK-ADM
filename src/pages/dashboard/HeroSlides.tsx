@@ -376,7 +376,15 @@ const HeroSlidesPage = () => {
                 <TableRow key={slide.id}>
                   <TableCell>
                     {slide.image_url ? (
-                      <img src={optimizeCloudinaryUrl(slide.image_url, 400)} alt={slide.title || ''} className="h-12 w-24 rounded-md object-cover" />
+                      <div className="flex items-center gap-1.5">
+                        <img src={optimizeCloudinaryUrl(slide.image_url, 400)} alt={slide.title || ''} className="h-12 w-24 rounded-md object-cover shrink-0" />
+                        {slide.image_url.includes("supabase.co") && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 leading-none whitespace-nowrap">SB</span>
+                        )}
+                        {slide.image_url.includes("cloudinary.com") && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 border border-blue-200 leading-none whitespace-nowrap">CL</span>
+                        )}
+                      </div>
                     ) : (
                       <div className="h-12 w-24 rounded-md bg-gray-100 flex items-center justify-center">
                         <ImageOff className="h-5 w-5 text-gray-400" />
