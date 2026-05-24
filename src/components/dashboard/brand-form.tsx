@@ -70,6 +70,7 @@ export const BrandForm = ({ onSubmit, isSubmitting, initialData }: BrandFormProp
               <ImageUploader
                 onUploadSuccess={(url) => field.onChange(url)}
                 initialUrl={field.value}
+                className="bg-white"
               />
               <FormMessage />
             </FormItem>
