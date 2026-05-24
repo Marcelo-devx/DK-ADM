@@ -77,6 +77,7 @@ export const HeroSlideForm = ({
                 accept="image/*,video/mp4,video/webm"
                 maxPx={1920}
                 quality={0.95}
+                maxSizeKB={8000}
               />
               <FormMessage />
             </FormItem>

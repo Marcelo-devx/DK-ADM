@@ -16,6 +16,7 @@ interface ImageUploaderProps {
   className?: string;
   maxPx?: number;
   quality?: number;
+  maxSizeKB?: number;
 }
 
 type UploadDestination = "cloudinary" | "supabase";
@@ -123,6 +124,7 @@ export const ImageUploader = ({
   className,
   maxPx = 900,
   quality = 0.78,
+  maxSizeKB = 2000,
 }: ImageUploaderProps) => {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -151,7 +153,7 @@ export const ImageUploader = ({
       const base64data = await compressImage(file, maxPx, quality);
       const sizeKB = Math.round(base64data.length / 1024);
 
-      if (sizeKB > 2000) {
+      if (sizeKB > maxSizeKB) {
         throw new Error('Imagem muito grande. Use uma imagem menor.');
       }
 
