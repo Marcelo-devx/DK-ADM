@@ -38,14 +38,12 @@ export const PromotionForm = ({ onSubmit, isSubmitting, initialData }: Promotion
   const [breakdown, setBreakdown] = useState<BreakdownItem[]>([]);
 
   // ─── Passo 1: Criar ou atualizar dados básicos ───────────────────────────────
-  const handleCreateBasic = async (values: {
-    name: string;
-    description: string;
-    image_url: string;
-  }) => {
-    // Se já tem ID (editando), apenas avança para composição
+  const handleCreateBasic = async (
+    values: { name: string; description: string; image_url: string },
+    saveAndClose = false
+  ) => {
+    // Se já tem ID (editando), apenas atualiza e avança ou fecha
     if (currentPromotionId) {
-      // Atualiza os dados básicos no banco sem mudar o fluxo
       const { error } = await supabase
         .from("promotions")
         .update({
@@ -57,6 +55,11 @@ export const PromotionForm = ({ onSubmit, isSubmitting, initialData }: Promotion
 
       if (error) {
         showError(`Erro ao atualizar dados básicos: ${error.message}`);
+        return;
+      }
+
+      if (saveAndClose) {
+        onSubmit({ id: currentPromotionId, saved: true });
         return;
       }
 
@@ -199,6 +202,7 @@ export const PromotionForm = ({ onSubmit, isSubmitting, initialData }: Promotion
             onSubmit={handleCreateBasic}
             isSubmitting={isSubmitting && !currentPromotionId}
             initialData={initialData}
+            isEditing={!!currentPromotionId}
           />
         </TabsContent>
 

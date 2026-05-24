@@ -15,13 +15,14 @@ import { ImageUploader } from "../ImageUploader";
 import { Tag, Loader2 } from "lucide-react";
 
 interface BasicInfoTabProps {
-  onSubmit: (values: { name: string; description: string; image_url: string }) => void;
+  onSubmit: (values: { name: string; description: string; image_url: string }, saveAndClose?: boolean) => void;
   isSubmitting?: boolean;
   initialData?: {
     name?: string;
     description?: string;
     image_url?: string;
   };
+  isEditing?: boolean;
 }
 
 // Componente auxiliar para label com asterisco obrigatório
@@ -36,6 +37,7 @@ export const BasicInfoTab = ({
   onSubmit,
   isSubmitting = false,
   initialData,
+  isEditing = false,
 }: BasicInfoTabProps) => {
   const [isUploading, setIsUploading] = useState(false);
 
@@ -47,7 +49,7 @@ export const BasicInfoTab = ({
     },
   });
 
-  const handleSubmit = (values: { name: string; description: string; image_url: string }) => {
+  const validate = (values: { name: string; description: string; image_url: string }) => {
     if (!values.name || values.name.trim().length < 2) {
       form.setError("name", {
         type: "manual",
@@ -55,16 +57,18 @@ export const BasicInfoTab = ({
       });
       return false;
     }
-
-    console.log("[BasicInfoTab] Enviando dados básicos:", {
-      name: values.name,
-      description: values.description,
-      image_url: values.image_url,
-      hasImage: !!values.image_url
-    });
-
-    onSubmit(values);
     return true;
+  };
+
+  const handleSubmit = (values: { name: string; description: string; image_url: string }) => {
+    if (!validate(values)) return;
+    onSubmit(values, false);
+  };
+
+  const handleSaveAndClose = () => {
+    const values = form.getValues();
+    if (!validate(values)) return;
+    onSubmit(values, true);
   };
 
   const isDisabled = isSubmitting || isUploading;
@@ -142,22 +146,29 @@ export const BasicInfoTab = ({
           </div>
         </div>
 
-        <div className="flex justify-end pt-4">
+        <div className="flex justify-end gap-2 pt-4">
+          {isEditing && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isDisabled}
+              onClick={handleSaveAndClose}
+              className="border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+            >
+              {isUploading ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Aguardando upload...</>
+              ) : "✅ Salvar e Fechar"}
+            </Button>
+          )}
           <Button
             type="submit"
             disabled={isDisabled}
             className="bg-blue-600 hover:bg-blue-700"
           >
             {isUploading ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Aguardando upload...
-              </>
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Aguardando upload...</>
             ) : isSubmitting ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Criando...
-              </>
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Criando...</>
             ) : (
               "Avançar →"
             )}
