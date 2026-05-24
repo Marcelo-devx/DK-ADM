@@ -193,11 +193,19 @@ const PromotionsPage = () => {
             <div key={promo.id} className="bg-white rounded-xl border-2 border-gray-100 shadow-sm p-4 space-y-3">
               {/* Imagem + nome + switch */}
               <div className="flex items-start gap-3">
-                <div className="h-16 w-16 rounded-xl border bg-gray-50 flex items-center justify-center overflow-hidden shrink-0">
-                  {promo.image_url ? (
-                    <img src={optimizeCloudinaryUrl(promo.image_url, 200)} alt={promo.name} className="h-full w-full object-cover" />
-                  ) : (
-                    <ImageOff className="h-6 w-6 text-gray-300" />
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="h-16 w-16 rounded-xl border bg-gray-50 flex items-center justify-center overflow-hidden shrink-0">
+                    {promo.image_url ? (
+                      <img src={optimizeCloudinaryUrl(promo.image_url, 200)} alt={promo.name} className="h-full w-full object-cover" />
+                    ) : (
+                      <ImageOff className="h-6 w-6 text-gray-300" />
+                    )}
+                  </div>
+                  {promo.image_url?.includes("supabase.co") && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 leading-none whitespace-nowrap">SB</span>
+                  )}
+                  {promo.image_url?.includes("cloudinary.com") && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 border border-blue-200 leading-none whitespace-nowrap">CL</span>
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -283,7 +291,15 @@ const PromotionsPage = () => {
                 <TableRow key={promo.id}>
                   <TableCell>
                     {promo.image_url ? (
-                      <img src={optimizeCloudinaryUrl(promo.image_url, 100)} alt={promo.name} className="h-12 w-12 rounded-md object-cover" />
+                      <div className="flex items-center gap-1.5">
+                        <img src={optimizeCloudinaryUrl(promo.image_url, 100)} alt={promo.name} className="h-12 w-12 rounded-md object-cover shrink-0" />
+                        {promo.image_url.includes("supabase.co") && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 leading-none whitespace-nowrap">SB</span>
+                        )}
+                        {promo.image_url.includes("cloudinary.com") && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 border border-blue-200 leading-none whitespace-nowrap">CL</span>
+                        )}
+                      </div>
                     ) : (
                       <div className="h-12 w-12 rounded-md bg-gray-100 flex items-center justify-center">
                         <ImageOff className="h-5 w-5 text-gray-400" />
