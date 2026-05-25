@@ -51,9 +51,10 @@ serve(async (req) => {
             .eq('id', userId)
             .maybeSingle();
 
-          if (!profileErr && profile && profile.role === 'adm') {
-            isAuthorized = true;
-          }
+          const ALLOWED_ROLES = ['adm', 'gerente_geral', 'gerente'];
+          if (!profileErr && profile && ALLOWED_ROLES.includes(profile.role)) {
+                isAuthorized = true;
+              }
         }
       } catch (e) {
         console.warn('[create-client-by-admin] Failed to validate user token:', String(e));
