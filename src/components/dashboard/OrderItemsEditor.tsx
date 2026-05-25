@@ -73,30 +73,23 @@ async function adjustStock(
   delta: number // positive = add back, negative = deduct
 ) {
   if (delta === 0) return;
-  if (variant_id) {
-    const { data: v } = await supabase
-      .from("product_variants")
-      .select("stock_quantity")
-      .eq("id", variant_id)
-      .single();
-    if (v) {
-      await supabase
-        .from("product_variants")
-        .update({ stock_quantity: Math.max(0, v.stock_quantity + delta) })
-        .eq("id", variant_id);
-    }
-  } else if (item_id) {
-    const { data: p } = await supabase
-      .from("products")
-      .select("stock_quantity")
-      .eq("id", item_id)
-      .single();
-    if (p) {
-      await supabase
-        .from("products")
-        .update({ stock_quantity: Math.max(0, p.stock_quantity + delta) })
-        .eq("id", item_id);
-    }
+
+  // Use a SECURITY DEFINER RPC so stock adjustments bypass RLS restrictions
+  const { data, error } = await supabase.rpc("adjust_item_stock", {
+    p_variant_id: variant_id ?? null,
+    p_item_id: item_id ?? null,
+    p_delta: delta,
+  });
+
+  if (error) {
+    console.error("[OrderItemsEditor] adjustStock RPC error:", error.message, { item_id, variant_id, delta });
+    throw new Error(`Erro ao ajustar estoque: ${error.message}`);
+  }
+
+  if (data && !data.ok) {
+    console.warn("[OrderItemsEditor] adjustStock RPC returned not ok:", data, { item_id, variant_id, delta });
+  } else {
+    console.log(`[OrderItemsEditor] Estoque ajustado: ${data?.old_stock} → ${data?.new_stock} (delta ${delta})`, { variant_id, item_id });
   }
 }
 
