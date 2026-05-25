@@ -242,8 +242,15 @@ export function useClients(initialPage = 1) {
         console.error('[useClients] Error calling create-client-by-admin:', e);
         const msg = String(e?.message || e);
 
-        const isFunctionsHttpError = e?.name === 'FunctionsHttpError' || msg.includes('non-2xx');
-        if (isFunctionsHttpError) {
+        const shouldTryFallback =
+          e?.name === 'FunctionsHttpError' ||
+          msg.includes('non-2xx') ||
+          msg.includes('Failed to send a request') ||
+          msg.includes('Failed to fetch') ||
+          msg.includes('NetworkError');
+
+        if (shouldTryFallback) {
+          console.log('[useClients] Tentando fallback via fetch direto para create-client-by-admin...');
           try {
             const fallbackRes = await fetch(
               'https://jrlozhhvwqfmjtkmvukf.supabase.co/functions/v1/create-client-by-admin',
@@ -259,6 +266,18 @@ export function useClients(initialPage = 1) {
             );
 
             const text = await fallbackRes.text();
+
+            if (fallbackRes.ok) {
+              try {
+                const parsed = JSON.parse(text);
+                if (parsed?.error) throw new Error(parsed.error + (parsed.details ? ` ${parsed.details}` : ''));
+                if (parsed?.warning && parsed?.success) return { data: parsed, values, warning: parsed.warning };
+                return { data: parsed, values };
+              } catch (parseErr: any) {
+                if (parseErr?.message && !parseErr.message.startsWith('Unexpected')) throw parseErr;
+              }
+            }
+
             const parsedMessage = await readErrorMessageFromResponse(text);
             const detailMsg = `Status ${fallbackRes.status}: ${parsedMessage}`;
             console.error('[useClients] Fallback fetch details:', detailMsg);
@@ -266,19 +285,13 @@ export function useClients(initialPage = 1) {
           } catch (fallbackErr: any) {
             console.error('[useClients] Fallback fetch also failed:', fallbackErr);
             const fbMsg = String(fallbackErr?.message || fallbackErr);
-            if (fbMsg.includes('Failed to fetch') || fbMsg.includes('NetworkError')) {
+            if (fbMsg.includes('Failed to fetch') || fbMsg.includes('NetworkError') || fbMsg.includes('Failed to send')) {
               throw new Error(
-                'Não foi possível conectar ao serviço de cadastro de clientes. Verifique sua conexão e tente novamente.'
+                'A função de cadastro de clientes não está disponível no momento. Tente novamente em alguns instantes.'
               );
             }
             throw new Error(fbMsg);
           }
-        }
-
-        if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
-          throw new Error(
-            "Não foi possível conectar ao serviço de cadastro de clientes. Verifique sua conexão e tente novamente."
-          );
         }
 
         throw new Error(msg);
