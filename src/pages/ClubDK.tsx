@@ -1,11 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Crown, Gift, Zap, Lock, Star, Cake, Loader2, History, TicketCheck, TrendingUp, TrendingDown } from "lucide-react";
+import { Gift, Lock, Cake, Loader2, History, TicketCheck, TrendingUp, TrendingDown } from "lucide-react";
 import { useUser } from "@/hooks/useUser";
 import { showSuccess, showError } from "@/utils/toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -46,21 +45,13 @@ export default function ClubDKPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
-        .select("*, loyalty_tiers(*)")
+        .select("id, points, date_of_birth, birth_date_locked")
         .eq("id", user!.id)
         .single();
       if (error) throw error;
       return data;
     },
     enabled: !!user,
-  });
-
-  const { data: tiers } = useQuery({
-    queryKey: ["loyaltyTiers"],
-    queryFn: async () => {
-      const { data } = await supabase.from("loyalty_tiers").select("*").order("min_spend");
-      return data || [];
-    },
   });
 
   const { data: rewardCoupons, isLoading: isLoadingRewards } = useQuery({
@@ -76,7 +67,6 @@ export default function ClubDKPage() {
     },
   });
 
-  // ── Histórico de pontos do usuário ──
   const { data: loyaltyHistory, isLoading: isLoadingHistory } = useQuery({
     queryKey: ["myLoyaltyHistory", user?.id],
     queryFn: async () => {
@@ -92,7 +82,6 @@ export default function ClubDKPage() {
     enabled: !!user,
   });
 
-  // ── Cupons do usuário ──
   const { data: myCoupons, isLoading: isLoadingCoupons } = useQuery({
     queryKey: ["myUserCoupons", user?.id],
     queryFn: async () => {
@@ -177,32 +166,12 @@ export default function ClubDKPage() {
     onError: (err: any) => showError(`Erro no resgate: ${err.message}`),
   });
 
-  if (isLoading || !profile || !tiers)
+  if (isLoading || !profile)
     return (
       <div className="p-8">
         <Skeleton className="h-96 w-full" />
       </div>
     );
-
-  const currentTier = profile.loyalty_tiers;
-  const nextTier = tiers.find((t: any) => t.min_spend > (profile.spend_last_6_months || 0));
-  const spend = profile.spend_last_6_months || 0;
-
-  let progressPercent = 0;
-  let toNextLevel = 0;
-
-  if (nextTier) {
-    const currentTierMin = currentTier?.min_spend || 0;
-    const range = nextTier.min_spend - currentTierMin;
-    const currentInLevel = spend - currentTierMin;
-    progressPercent = Math.min(100, Math.max(0, (currentInLevel / range) * 100));
-    toNextLevel = nextTier.min_spend - spend;
-  } else {
-    progressPercent = 100;
-  }
-
-  const formatCurrency = (val: number) =>
-    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
 
   const formatDate = (d: string) =>
     new Date(d).toLocaleDateString("pt-BR", {
@@ -213,13 +182,15 @@ export default function ClubDKPage() {
 
   const getOperationLabel = (type: string) => {
     switch (type) {
-      case "order_points":   return "Compra";
-      case "redeem":         return "Resgate";
-      case "adjustment":     return "Ajuste";
-      case "birthday_bonus": return "Aniversário";
-      case "referral_bonus": return "Indicação";
-      case "earn":           return "Ganho";
-      default:               return type;
+      case "order_points":    return "Compra";
+      case "redeem":          return "Resgate";
+      case "adjustment":      return "Ajuste";
+      case "birthday_bonus":  return "Aniversário";
+      case "referral_bonus":  return "Indicação";
+      case "ticket_bonus":    return "Ticket Alto";
+      case "recurrence_bonus":return "Recorrência";
+      case "earn":            return "Ganho";
+      default:                return type;
     }
   };
 
@@ -230,39 +201,20 @@ export default function ClubDKPage() {
 
   return (
     <div className="container mx-auto p-4 md:p-8 space-y-8 max-w-5xl">
+
       {/* HERO SECTION */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-gray-900 via-slate-800 to-black text-white p-8 md:p-12 shadow-2xl">
-        <div className="absolute top-0 right-0 p-12 opacity-10">
-          <Crown className="w-64 h-64 text-white" />
-        </div>
-        <div className="relative z-10 grid md:grid-cols-2 gap-8 items-center">
-          <div className="space-y-4">
+        <div className="relative z-10 flex flex-col md:flex-row gap-8 items-center justify-between">
+          <div className="space-y-3">
             <Badge className="bg-yellow-500 text-black font-black uppercase px-3 py-1">Club DK</Badge>
             <h1 className="text-4xl md:text-5xl font-black tracking-tighter">
-              Você é cliente <span className="text-yellow-400">{currentTier?.name}</span>
+              Bem-vindo ao <span className="text-yellow-400">Club DK</span>
             </h1>
             <p className="text-gray-300 text-lg font-medium">
-              Seu histórico vale mais do que você imagina. Continue comprando para desbloquear benefícios exclusivos.
+              Acumule pontos a cada compra e troque por cupons de desconto exclusivos.
             </p>
-            <div className="pt-4">
-              <div className="flex justify-between text-sm font-bold mb-2">
-                <span>Progresso do Nível</span>
-                {nextTier ? (
-                  <span>Faltam {formatCurrency(toNextLevel)} para {nextTier.name}</span>
-                ) : (
-                  <span>Nível Máximo!</span>
-                )}
-              </div>
-              <Progress
-                value={progressPercent}
-                className="h-3 bg-gray-700 [&>div]:bg-gradient-to-r [&>div]:from-yellow-400 [&>div]:to-yellow-600"
-              />
-              <p className="text-xs text-gray-400 mt-2">
-                Baseado no gasto de {formatCurrency(spend)} nos últimos 6 meses.
-              </p>
-            </div>
           </div>
-          <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/10 flex flex-col items-center justify-center text-center">
+          <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/10 flex flex-col items-center justify-center text-center min-w-[180px]">
             <p className="text-sm font-bold uppercase text-gray-300 mb-1">Saldo Disponível</p>
             <div className="text-6xl font-black text-white mb-2">{profile.points}</div>
             <p className="text-sm font-medium bg-white/20 px-3 py-1 rounded-full">pontos</p>
@@ -272,9 +224,8 @@ export default function ClubDKPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
-          <Tabs defaultValue="benefits" className="w-full">
-            <TabsList className="grid w-full grid-cols-4 mb-6">
-              <TabsTrigger value="benefits">Níveis</TabsTrigger>
+          <Tabs defaultValue="redeem" className="w-full">
+            <TabsList className="grid w-full grid-cols-3 mb-6">
               <TabsTrigger value="redeem">Resgatar</TabsTrigger>
               <TabsTrigger value="history" className="flex items-center gap-1">
                 <History className="w-3.5 h-3.5" />
@@ -290,66 +241,6 @@ export default function ClubDKPage() {
                 )}
               </TabsTrigger>
             </TabsList>
-
-            {/* ── ABA: BENEFÍCIOS & NÍVEIS ── */}
-            <TabsContent value="benefits" className="space-y-6">
-              <div className="grid gap-4">
-                {tiers.map((tier: any) => {
-                  const isCurrent = tier.id === currentTier?.id;
-                  const isLocked = tier.min_spend > spend;
-                  const benefits = tier.benefits
-                    ? Array.isArray(tier.benefits)
-                      ? tier.benefits
-                      : JSON.parse(tier.benefits as string)
-                    : [];
-                  return (
-                    <Card
-                      key={tier.id}
-                      className={cn(
-                        "border-l-4 transition-all",
-                        isCurrent
-                          ? "border-l-yellow-500 bg-yellow-50/30 shadow-md transform scale-[1.01]"
-                          : "border-l-gray-200 opacity-80"
-                      )}
-                    >
-                      <CardContent className="p-6 flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div
-                            className={cn(
-                              "h-12 w-12 rounded-full flex items-center justify-center font-bold text-lg border-2",
-                              isCurrent
-                                ? "bg-yellow-100 text-yellow-700 border-yellow-400"
-                                : "bg-gray-100 text-gray-500 border-gray-200"
-                            )}
-                          >
-                            {tier.name[0]}
-                          </div>
-                          <div>
-                            <h3 className="font-bold text-lg flex items-center gap-2">
-                              {tier.name}
-                              {isCurrent && <Badge className="bg-yellow-500 text-black">Atual</Badge>}
-                              {isLocked && <Lock className="w-4 h-4 text-gray-400" />}
-                            </h3>
-                            <p className="text-sm text-muted-foreground">
-                              Gasto: {formatCurrency(tier.min_spend)}{" "}
-                              {tier.max_spend ? `a ${formatCurrency(tier.max_spend)}` : "+"}
-                            </p>
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {Array.isArray(benefits) &&
-                                benefits.map((b: string, i: number) => (
-                                  <Badge key={i} variant="secondary" className="text-[10px] bg-white border">
-                                    {b}
-                                  </Badge>
-                                ))}
-                            </div>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            </TabsContent>
 
             {/* ── ABA: RESGATAR PONTOS ── */}
             <TabsContent value="redeem">
@@ -383,6 +274,9 @@ export default function ClubDKPage() {
                                 : "border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed grayscale"
                             )}
                           >
+                            {!canAfford && (
+                              <Lock className="w-3 h-3 text-gray-400 absolute top-2 right-2" />
+                            )}
                             <span className="text-2xl font-black text-purple-700">
                               R$ {coupon.discount_value}
                             </span>
@@ -521,7 +415,6 @@ export default function ClubDKPage() {
                   </Card>
                 ) : (
                   <>
-                    {/* Cupons disponíveis */}
                     {activeCoupons.length > 0 && (
                       <div>
                         <h3 className="text-sm font-bold text-green-700 uppercase tracking-wide mb-2 flex items-center gap-1">
@@ -554,7 +447,6 @@ export default function ClubDKPage() {
                       </div>
                     )}
 
-                    {/* Cupons usados */}
                     {usedCoupons.length > 0 && (
                       <div>
                         <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wide mb-2">
@@ -581,7 +473,6 @@ export default function ClubDKPage() {
                       </div>
                     )}
 
-                    {/* Cupons expirados */}
                     {expiredCoupons.length > 0 && (
                       <div>
                         <h3 className="text-sm font-bold text-red-400 uppercase tracking-wide mb-2">
@@ -616,27 +507,6 @@ export default function ClubDKPage() {
 
         {/* ── SIDEBAR ── */}
         <div className="space-y-6">
-          <Card className="bg-gradient-to-b from-blue-50 to-white border-blue-100">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-blue-800">
-                <Zap className="w-5 h-5" /> Acelere seus Ganhos
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-3 p-3 bg-white rounded-lg shadow-sm border">
-                <div className="p-2 bg-green-100 text-green-700 rounded-full">
-                  <Star className="w-4 h-4" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-bold">Ganhe Pontos em Dobro</p>
-                  <p className="text-xs text-gray-500">
-                    Cada R$ 1 gasto = {currentTier?.points_multiplier || 1} ponto
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-pink-600">
