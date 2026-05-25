@@ -5,12 +5,14 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { FileUp, FileDown, Users, AlertCircle, Table as TableIcon } from "lucide-react";
+import { FileUp, FileDown, Users, AlertCircle, Table as TableIcon, UserPlus } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import * as XLSX from 'xlsx';
 import { mapRowKeys } from "@/utils/excel-utils";
 import { ClientImportModal } from "@/components/dashboard/ClientImportModal";
 import { ImportResultModal } from "@/components/dashboard/ImportResultModal";
+import CreateClientModal from "@/components/dashboard/clients/CreateClientModal";
+import { useClients } from "@/hooks/useClients";
 import {
   Table,
   TableBody,
@@ -26,6 +28,9 @@ const ImportClientsPage = () => {
   const [clientsToImport, setClientsToImport] = useState<any[]>([]);
   const [isResultModalOpen, setIsResultModalOpen] = useState(false);
   const [importResult, setImportResult] = useState<{ created?: number; updated?: number; success: number; failed: number; errors: string[] } | null>(null);
+  const [isManualModalOpen, setIsManualModalOpen] = useState(false);
+
+  const { create: createClient, createStatus } = useClients();
 
   // Função robusta para converter datas da planilha para ISO (YYYY-MM-DD)
   const formatAnyDateToISO = (val: any) => {
@@ -143,6 +148,25 @@ const ImportClientsPage = () => {
     event.target.value = '';
   };
 
+  const handleManualCreate = (values: any) => {
+    console.log("[ImportClients] Cadastro manual iniciado com:", { email: values.email, full_name: values.full_name });
+    createClient(values, {
+      onSuccess: ({ warning }) => {
+        console.log("[ImportClients] Cadastro manual concluído com sucesso. Warning:", warning ?? "nenhum");
+        if (warning) {
+          showSuccess(`Cliente cadastrado com aviso: ${warning}`);
+        } else {
+          showSuccess("Cliente cadastrado com sucesso!");
+        }
+        setIsManualModalOpen(false);
+      },
+      onError: (error: Error) => {
+        console.error("[ImportClients] Erro no cadastro manual:", error.message);
+        showError(`Erro ao cadastrar cliente: ${error.message}`);
+      },
+    });
+  };
+
   const handleDownloadTemplate = () => {
     const headers = [
         "Email", "Senha", "Nome Completo", "CPF/CNPJ", "Sexo", "Data de Nascimento", "Cliente Desde", "Telefone", "CEP", "Rua", "Numero", "Complemento", "Bairro", "Cidade", "Estado"
@@ -169,7 +193,7 @@ const ImportClientsPage = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="border-l-4 border-l-blue-500 shadow-md">
             <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
@@ -198,6 +222,21 @@ const ImportClientsPage = () => {
                     Selecionar Arquivo Excel
                 </Button>
                 <input type="file" id="client-import-input-new" className="hidden" onChange={handleImportXLSX} accept=".xlsx, .xls" />
+            </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-purple-500 shadow-md">
+            <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                    <UserPlus className="h-5 w-5 text-purple-600" />
+                    Cadastro Manual
+                </CardTitle>
+                <CardDescription>Cadastre um único cliente preenchendo um formulário.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Button className="w-full h-12 bg-purple-600 hover:bg-purple-700 font-bold" onClick={() => setIsManualModalOpen(true)}>
+                    Cadastrar Cliente Manualmente
+                </Button>
             </CardContent>
         </Card>
       </div>
@@ -253,10 +292,17 @@ const ImportClientsPage = () => {
         isSubmitting={bulkImportMutation.isPending}
       />
 
-      <ImportResultModal 
-        isOpen={isResultModalOpen} 
-        onClose={() => setIsResultModalOpen(false)} 
-        result={importResult} 
+      <ImportResultModal
+        isOpen={isResultModalOpen}
+        onClose={() => setIsResultModalOpen(false)}
+        result={importResult}
+      />
+
+      <CreateClientModal
+        open={isManualModalOpen}
+        onOpenChange={setIsManualModalOpen}
+        onCreate={handleManualCreate}
+        isCreating={createStatus.isPending}
       />
     </div>
   );
