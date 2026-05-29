@@ -126,7 +126,7 @@ serve(async (req) => {
     // 1. Buscar reservas ativas para esse produto/variante
     let query = supabaseAdmin
       .from('product_reservations')
-      .select('id, user_id, product_name, product_image, variant_id, variant_name')
+      .select('id, user_id, product_id, product_name, product_image, variant_id, variant_name')
       .eq('product_id', product_id)
       .eq('status', 'active')
 
