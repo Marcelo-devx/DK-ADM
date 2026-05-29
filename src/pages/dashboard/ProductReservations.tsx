@@ -53,44 +53,36 @@ export default function ProductReservations() {
   const fetchReservations = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      // 1. Buscar reservas
+      const { data: resData, error: resError } = await supabase
         .from("product_reservations")
-        .select(`
-          id,
-          user_id,
-          product_id,
-          product_name,
-          product_image,
-          variant_id,
-          variant_name,
-          status,
-          created_at,
-          updated_at,
-          profiles!product_reservations_user_id_fkey (
-            first_name,
-            last_name,
-            email
-          )
-        `)
+        .select("id, user_id, product_id, product_name, product_image, variant_id, variant_name, status, created_at, updated_at")
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
+      if (resError) throw resError;
+      if (!resData || resData.length === 0) {
+        setReservations([]);
+        return;
+      }
 
-      const rows: ReservationRow[] = (data || []).map((r: any) => ({
-        id: r.id,
-        user_id: r.user_id,
-        product_id: r.product_id,
-        product_name: r.product_name,
-        product_image: r.product_image,
-        variant_id: r.variant_id,
-        variant_name: r.variant_name,
-        status: r.status,
-        created_at: r.created_at,
-        updated_at: r.updated_at,
-        first_name: r.profiles?.first_name ?? null,
-        last_name: r.profiles?.last_name ?? null,
-        email: r.profiles?.email ?? null,
-      }));
+      // 2. Buscar profiles dos usuários únicos
+      const userIds = [...new Set(resData.map((r) => r.user_id))];
+      const { data: profilesData } = await supabase
+        .from("profiles")
+        .select("id, first_name, last_name, email")
+        .in("id", userIds);
+
+      const profileMap = new Map((profilesData ?? []).map((p) => [p.id, p]));
+
+      const rows: ReservationRow[] = resData.map((r) => {
+        const profile = profileMap.get(r.user_id);
+        return {
+          ...r,
+          first_name: profile?.first_name ?? null,
+          last_name: profile?.last_name ?? null,
+          email: profile?.email ?? null,
+        };
+      });
 
       setReservations(rows);
     } catch (err: any) {
