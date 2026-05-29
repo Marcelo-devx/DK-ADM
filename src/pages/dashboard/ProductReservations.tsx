@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { BookmarkCheck, Search, RefreshCw, Package, Mail, User } from "lucide-react";
+import { BookmarkCheck, Search, RefreshCw, Package, Mail, User, PackageCheck, SendHorizonal } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 interface ReservationRow {
@@ -32,6 +32,8 @@ interface ReservationRow {
   status: string;
   created_at: string;
   updated_at: string;
+  stock_returned_at: string | null;
+  email_notified_at: string | null;
   // joined from profiles
   first_name: string | null;
   last_name: string | null;
@@ -56,7 +58,7 @@ export default function ProductReservations() {
       // 1. Buscar reservas
       const { data: resData, error: resError } = await supabase
         .from("product_reservations")
-        .select("id, user_id, product_id, product_name, product_image, variant_id, variant_name, status, created_at, updated_at")
+        .select("id, user_id, product_id, product_name, product_image, variant_id, variant_name, status, created_at, updated_at, stock_returned_at, email_notified_at")
         .order("created_at", { ascending: false });
 
       if (resError) throw resError;
@@ -74,10 +76,12 @@ export default function ProductReservations() {
 
       const profileMap = new Map((profilesData ?? []).map((p) => [p.id, p]));
 
-      const rows: ReservationRow[] = resData.map((r) => {
+      const rows: ReservationRow[] = resData.map((r: any) => {
         const profile = profileMap.get(r.user_id);
         return {
           ...r,
+          stock_returned_at: r.stock_returned_at ?? null,
+          email_notified_at: r.email_notified_at ?? null,
           first_name: profile?.first_name ?? null,
           last_name: profile?.last_name ?? null,
           email: profile?.email ?? null,
@@ -214,6 +218,12 @@ export default function ProductReservations() {
                   <span className="flex items-center gap-1"><Mail className="w-3.5 h-3.5" /> E-mail</span>
                 </TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>
+                  <span className="flex items-center gap-1"><PackageCheck className="w-3.5 h-3.5" /> Estoque voltou</span>
+                </TableHead>
+                <TableHead>
+                  <span className="flex items-center gap-1"><SendHorizonal className="w-3.5 h-3.5" /> E-mail enviado</span>
+                </TableHead>
                 <TableHead>Reservado em</TableHead>
               </TableRow>
             </TableHeader>
@@ -259,6 +269,25 @@ export default function ProductReservations() {
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${cfg.color}`}>
                         {cfg.label}
                       </span>
+                    </TableCell>
+                    <TableCell className="text-sm whitespace-nowrap">
+                      {r.stock_returned_at ? (
+                        <span className="text-green-700 font-medium">{formatDate(r.stock_returned_at)}</span>
+                      ) : (
+                        <span className="text-slate-300 italic text-xs">Ainda sem estoque</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm whitespace-nowrap">
+                      {r.email_notified_at ? (
+                        <span className="inline-flex items-center gap-1 text-blue-700 font-medium">
+                          <SendHorizonal className="w-3 h-3" />
+                          {formatDate(r.email_notified_at)}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-slate-400 text-xs italic">
+                          Não enviado
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="text-sm text-slate-500 whitespace-nowrap">
                       {formatDate(r.created_at)}

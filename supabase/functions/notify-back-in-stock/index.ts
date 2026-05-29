@@ -230,6 +230,12 @@ serve(async (req) => {
         console.log(`[${FN}] E-mail enviado para ${customerEmail}`, { resend_id: resendData?.id })
         sent++
 
+        // Gravar data/hora do envio do email na reserva
+        await supabaseAdmin
+          .from('product_reservations')
+          .update({ email_notified_at: new Date().toISOString() })
+          .eq('id', reservation.id)
+
         // Registrar no integration_logs
         await supabaseAdmin.from('integration_logs').insert({
           event_type: 'email_back_in_stock',
