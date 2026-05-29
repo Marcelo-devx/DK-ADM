@@ -44,6 +44,7 @@ import {
   RefreshCw,
   CreditCard,
   Flame,
+  BookmarkCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -134,6 +135,9 @@ const Sidebar = () => {
           {({ isActive }) => (<><ShoppingCart className={iconClass("text-amber-600", isActive)} />Pedidos Fornecedor</>)}
         </NavLink>
       )}
+      <NavLink to="/dashboard/product-reservations" className={navLinkClass}>
+        {({ isActive }) => (<><BookmarkCheck className={iconClass("text-amber-500", isActive)} />Lista de Reservas</>)}
+      </NavLink>
       <NavLink to="/dashboard/products" className={navLinkClass}>
         {({ isActive }) => (<><Package className={iconClass("text-blue-600", isActive)} />Produtos</>)}
       </NavLink>
@@ -299,6 +303,9 @@ const Sidebar = () => {
           {({ isActive }) => (<><ShoppingCart className={iconClass("text-amber-600", isActive)} />Pedidos Fornecedor</>)}
         </NavLink>
       )}
+      <NavLink to="/dashboard/product-reservations" className={navLinkClass}>
+        {({ isActive }) => (<><BookmarkCheck className={iconClass("text-amber-500", isActive)} />Lista de Reservas</>)}
+      </NavLink>
 
       {/* CATÁLOGO */}
       <p className={sectionTitleClass}>Catálogo</p>
