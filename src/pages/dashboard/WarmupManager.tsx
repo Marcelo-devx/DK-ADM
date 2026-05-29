@@ -429,6 +429,7 @@ const WarmupManager = () => {
               { name: "analytics-bi",                  desc: "Analytics e relatórios",            critical: false },
               { name: "catalog-api",                   desc: "API pública do catálogo",           critical: false },
               { name: "get-order-details",             desc: "Detalhes de pedidos",               critical: false },
+              { name: "notify-back-in-stock",          desc: "Email: produto voltou ao estoque",  critical: true  },
             ].map((fn) => (
               <div
                 key={fn.name}

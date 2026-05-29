@@ -52,6 +52,7 @@ const CRITICAL_FUNCTIONS = [
   'n8n-webhook',
   'generate-sales-popups',
   'actionable-insights',
+  'notify-back-in-stock',
 ];
 
 // Funções críticas que precisam de teste via POST (não respondem a GET)
