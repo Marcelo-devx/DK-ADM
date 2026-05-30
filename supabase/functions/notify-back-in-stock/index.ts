@@ -67,15 +67,11 @@ function buildBackInStockEmail(params: {
 
               <!-- CTA -->
               <div style="text-align:center;margin:28px 0;">
-                <a href="${productUrl}"
+                <a href="https://www.dkcwb.com"
                   style="display:inline-block;background:#111111;color:#ffffff;padding:14px 36px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:700;letter-spacing:0.3px;">
                   Comprar agora →
                 </a>
               </div>
-
-              <p style="font-size:13px;color:#888;text-align:center;line-height:1.6;margin:0 0 8px;">
-                Ou acesse diretamente: <a href="${productUrl}" style="color:#111;word-break:break-all;">${productUrl}</a>
-              </p>
 
               <hr style="border:none;border-top:1px solid #f0f0f0;margin:28px 0;">
 
