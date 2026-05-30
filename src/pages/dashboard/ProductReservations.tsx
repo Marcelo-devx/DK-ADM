@@ -286,11 +286,11 @@ export default function ProductReservations() {
                             <SendHorizonal className="w-3 h-3" />
                             {formatDate(r.email_notified_at)}
                           </span>
-                          <span className="inline-flex items-center gap-1 text-xs text-slate-500">
-                            <span className="bg-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded-full">
+                          {r.email_send_count > 0 && (
+                            <span className="bg-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded-full text-xs w-fit">
                               {r.email_send_count}x enviado{r.email_send_count !== 1 ? "s" : ""}
                             </span>
-                          </span>
+                          )}
                         </div>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-slate-400 text-xs italic">
