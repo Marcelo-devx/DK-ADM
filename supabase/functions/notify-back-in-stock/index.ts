@@ -122,7 +122,7 @@ serve(async (req) => {
     // 1. Buscar reservas ativas para esse produto/variante
     let query = supabaseAdmin
       .from('product_reservations')
-      .select('id, user_id, product_id, product_name, product_image, variant_id, variant_name')
+      .select('id, user_id, product_id, product_name, product_image, variant_id, variant_name, email_send_count')
       .eq('product_id', product_id)
       .eq('status', 'active')
 
@@ -226,10 +226,13 @@ serve(async (req) => {
         console.log(`[${FN}] E-mail enviado para ${customerEmail}`, { resend_id: resendData?.id })
         sent++
 
-        // Gravar data/hora do envio do email na reserva
+        // Gravar data/hora do envio e incrementar contador
         await supabaseAdmin
           .from('product_reservations')
-          .update({ email_notified_at: new Date().toISOString() })
+          .update({
+            email_notified_at: new Date().toISOString(),
+            email_send_count: (reservation.email_send_count ?? 0) + 1,
+          })
           .eq('id', reservation.id)
 
         // Registrar no integration_logs

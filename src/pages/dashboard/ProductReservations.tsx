@@ -34,6 +34,7 @@ interface ReservationRow {
   updated_at: string;
   stock_returned_at: string | null;
   email_notified_at: string | null;
+  email_send_count: number;
   // joined from profiles
   first_name: string | null;
   last_name: string | null;
@@ -58,7 +59,7 @@ export default function ProductReservations() {
       // 1. Buscar reservas
       const { data: resData, error: resError } = await supabase
         .from("product_reservations")
-        .select("id, user_id, product_id, product_name, product_image, variant_id, variant_name, status, created_at, updated_at, stock_returned_at, email_notified_at")
+        .select("id, user_id, product_id, product_name, product_image, variant_id, variant_name, status, created_at, updated_at, stock_returned_at, email_notified_at, email_send_count")
         .order("created_at", { ascending: false });
 
       if (resError) throw resError;
@@ -82,6 +83,7 @@ export default function ProductReservations() {
           ...r,
           stock_returned_at: r.stock_returned_at ?? null,
           email_notified_at: r.email_notified_at ?? null,
+          email_send_count: r.email_send_count ?? 0,
           first_name: profile?.first_name ?? null,
           last_name: profile?.last_name ?? null,
           email: profile?.email ?? null,
@@ -279,10 +281,17 @@ export default function ProductReservations() {
                     </TableCell>
                     <TableCell className="text-sm whitespace-nowrap">
                       {r.email_notified_at ? (
-                        <span className="inline-flex items-center gap-1 text-blue-700 font-medium">
-                          <SendHorizonal className="w-3 h-3" />
-                          {formatDate(r.email_notified_at)}
-                        </span>
+                        <div className="flex flex-col gap-1">
+                          <span className="inline-flex items-center gap-1 text-blue-700 font-medium">
+                            <SendHorizonal className="w-3 h-3" />
+                            {formatDate(r.email_notified_at)}
+                          </span>
+                          <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+                            <span className="bg-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded-full">
+                              {r.email_send_count}x enviado{r.email_send_count !== 1 ? "s" : ""}
+                            </span>
+                          </span>
+                        </div>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-slate-400 text-xs italic">
                           Não enviado
