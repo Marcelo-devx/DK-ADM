@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send, History, FileDown, Calendar, FilterX, ShieldCheck, ShieldX, CheckSquare, Plus, Search, Pencil, ChevronLeft, ChevronRight, XCircle, ChevronDown, SlidersHorizontal, Webhook } from "lucide-react";
+import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send, History, FileDown, Calendar, FilterX, ShieldCheck, ShieldX, CheckSquare, Plus, Search, Pencil, ChevronLeft, ChevronRight, XCircle, ChevronDown, SlidersHorizontal } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { showSuccess, showError } from "@/utils/toast";
@@ -528,18 +528,6 @@ const OrdersPage = () => {
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] }); setIsDeleteAlertOpen(false); showSuccess("Venda removida!"); },
     onError: (err: any) => showError(`Erro ao deletar: ${err.message}`),
-  });
-
-  const resendN8nMutation = useMutation({
-    mutationFn: async (orderId: number) => {
-      const { data, error } = await supabase.functions.invoke("dispatch-webhook", {
-        body: { event_type: "order_created", payload: { id: orderId, order_id: orderId } },
-      });
-      if (error) throw new Error(error.message);
-      return data;
-    },
-    onSuccess: () => showSuccess("Pedido reenviado para o N8N com sucesso!"),
-    onError: (err: any) => showError(`Erro ao reenviar: ${err.message}`),
   });
 
   const userActionMutation = useMutation({
@@ -1655,15 +1643,6 @@ const OrdersPage = () => {
                                 </DropdownMenuItem>
                                 {(isAdmin || isGerenteGeral) && (
                                   <>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem
-                                      onSelect={() => resendN8nMutation.mutate(order.id)}
-                                      disabled={resendN8nMutation.isPending}
-                                      className="text-violet-600 font-medium"
-                                    >
-                                      {resendN8nMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Webhook className="w-4 h-4 mr-2" />}
-                                      Reenviar para N8N
-                                    </DropdownMenuItem>
                                     <DropdownMenuSeparator />
                                     {order.status !== "Cancelado" && (
                                       <DropdownMenuItem onSelect={() => setActionToConfirm({ action: "cancel_fraud", client: order })} className="text-orange-600 font-medium">
