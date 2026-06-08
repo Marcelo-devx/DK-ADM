@@ -2,6 +2,7 @@ import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useEffect, useCallback, useState, createContext, useContext } from "react";
 import { useUser } from "../../hooks/useUser";
 import { useSession } from "@/components/SessionContextProvider";
+import { useKeepAlive } from "@/hooks/useKeepAlive";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 
@@ -73,6 +74,9 @@ const DashboardLayout = () => {
   const location = useLocation();
   const session = useSession();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Aquece as funções críticas apenas quando o admin está logado no dashboard
+  useKeepAlive();
 
   const sessionAccessToken = session?.access_token;
 

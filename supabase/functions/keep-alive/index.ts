@@ -1,5 +1,5 @@
 // @ts-nocheck
-// v6 - warm-up com retry automático para funções COLD
+// v7 - lista reduzida para funções críticas do cliente apenas
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 
 const corsHeaders = {
@@ -7,55 +7,22 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Apenas funções críticas para o fluxo do cliente em tempo real
 const CRITICAL_FUNCTIONS = [
-  'update-order-status',
-  'get-order-details',
-  'admin-update-order',
-  'admin-cancel-order',
-  'admin-delete-order',
-  'admin-get-order-history',
-  'admin-send-campaign',
-  'admin-user-actions',
-  'admin-mark-as-recurrent',
-  'admin-delete-orders',
-  'admin-create-user',
-  'admin-delete-user',
-  'admin-block-user',
-  'admin-list-users',
-  'create-client-by-admin',
-  'get-users',
-  'get-users-emails',
-  'get-user-email',
-  'bulk-import-clients',
-  'cleanup-orders',
-  'dispatch-webhook',
   'mp-webhook',
-  'api-config-manager',
   'create-mercadopago-pix',
   'create-mercadopago-preference',
-  'get-mercadopago-status',
-  'update-mercadopago-token',
-  'get-pagseguro-status',
-  'update-pagseguro-token',
-  'analytics-bi',
-  'bulk-add-points',
-  'bulk-product-upsert',
-  'catalog-api',
-  'resend-batch-emails',
-  'cloudinary-upload',
-  'cloudinary-list-images',
-  'cloudinary-delete-image',
-  'cloudinary-usage',
-  'n8n-list-products',
-  'n8n-list-clients',
+  'update-order-status',
+  'dispatch-webhook',
+  'get-order-details',
   'n8n-receive-order',
   'n8n-webhook',
-  'generate-sales-popups',
-  'actionable-insights',
+  'n8n-list-products',
+  'n8n-list-clients',
   'notify-back-in-stock',
 ];
 
-// Funções críticas que precisam de teste via POST (não respondem a GET)
+// send-order-email precisa de POST (não responde a GET)
 const EMAIL_FUNCTIONS = [
   'send-order-email',
 ];
@@ -92,12 +59,12 @@ serve(async (req) => {
 
   const results: Record<string, string> = {};
 
-  // 1ª rodada: ping em todas as funções em paralelo
+  // Ping em todas as funções em paralelo (sem retry)
   await Promise.allSettled(
     CRITICAL_FUNCTIONS.map(async (fnName) => {
       try {
         const { status, ok } = await pingFunction(fnName);
-        results[fnName] = ok ? `warm(${status})` : `COLD/MISSING(${status})`;
+        results[fnName] = ok ? `warm(${status})` : `cold(${status})`;
         console.log(`[keep-alive] ${fnName} -> ${results[fnName]}`);
       } catch (err) {
         results[fnName] = `error: ${err.message}`;
@@ -105,28 +72,6 @@ serve(async (req) => {
       }
     })
   );
-
-  // 2ª rodada: retry nas funções que ficaram COLD — aguarda 2s e tenta novamente
-  const coldFunctions = CRITICAL_FUNCTIONS.filter(fn => results[fn]?.startsWith('COLD'));
-
-  if (coldFunctions.length > 0) {
-    console.warn(`[keep-alive] ⚠️ ${coldFunctions.length} funções COLD, tentando reativar: ${coldFunctions.join(', ')}`);
-
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    await Promise.allSettled(
-      coldFunctions.map(async (fnName) => {
-        try {
-          const { status, ok } = await pingFunction(fnName);
-          const prev = results[fnName];
-          results[fnName] = ok ? `warm(${status})` : `COLD/MISSING(${status})`;
-          console.log(`[keep-alive] RETRY ${fnName}: ${prev} → ${results[fnName]}`);
-        } catch (err) {
-          console.error(`[keep-alive] RETRY ${fnName} -> erro: ${err.message}`);
-        }
-      })
-    );
-  }
 
   // Warm-up da send-order-email via POST
   for (const fnName of EMAIL_FUNCTIONS) {
@@ -140,31 +85,21 @@ serve(async (req) => {
         },
         body: JSON.stringify({ event_type: 'keep_alive_ping', order_id: 0 }),
       });
-
-      if (res.status === 404) {
-        results[fnName] = `COLD/MISSING(404)`;
-        console.error(`[keep-alive] ⚠️ CRÍTICO: ${fnName} está OFF (404) — emails não serão enviados!`);
-      } else {
-        results[fnName] = `warm(${res.status})`;
-        console.log(`[keep-alive] ${fnName} -> warm(${res.status}) ✅`);
-      }
+      results[fnName] = `warm(${res.status})`;
+      console.log(`[keep-alive] ${fnName} -> warm(${res.status})`);
     } catch (err) {
       results[fnName] = `error: ${err.message}`;
       console.error(`[keep-alive] ${fnName} -> erro: ${err.message}`);
     }
   }
 
-  const cold = Object.entries(results).filter(([, v]) => v.startsWith('COLD'));
-  const warm = Object.entries(results).filter(([, v]) => v.startsWith('warm'));
+  const warm = Object.entries(results).filter(([, v]) => v.startsWith('warm')).length;
+  const cold = Object.entries(results).filter(([, v]) => v.startsWith('cold')).length;
 
-  if (cold.length > 0) {
-    console.warn(`[keep-alive] ⚠️ ${cold.length} funções ainda COLD após retry: ${cold.map(([k]) => k).join(', ')}`);
-  }
-
-  console.log(`[keep-alive] Concluído: ${warm.length} warm, ${cold.length} ausentes`);
+  console.log(`[keep-alive] Concluído: ${warm} warm, ${cold} cold`);
 
   return new Response(
-    JSON.stringify({ status: 'done', warm: warm.length, cold: cold.length, results, timestamp: new Date().toISOString() }),
+    JSON.stringify({ status: 'done', warm, cold, results, timestamp: new Date().toISOString() }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
   )
 })
