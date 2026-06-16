@@ -80,11 +80,6 @@ interface Order {
   order_items: any[];
 }
 
-interface OrdersResult {
-  orders: Order[];
-  totalCount: number;
-}
-
 interface Filters {
   readyToShipOnly: boolean;
   startDate: string;
@@ -98,16 +93,15 @@ interface Filters {
   paymentMethodFilter: string[];
 }
 
-const ORDERS_PER_PAGE = 100;
+const ORDERS_LIMIT = 300;
 
-// Busca server-side: só os pedidos da página atual com filtros aplicados no banco
-const fetchOrdersPage = async (page: number, filters: Filters): Promise<OrdersResult> => {
-  // 1. Resolve user_ids se filtrar por nome, email ou CPF (requer busca em profiles)
+// Busca server-side: últimos 300 pedidos com filtros aplicados no banco, sem joins pesados
+const fetchLatestOrders = async (filters: Filters): Promise<Order[]> => {
+  // 1. Resolve user_ids se filtrar por nome, email ou CPF
   let filteredUserIds: string[] | null = null;
 
   const needsProfileFilter = filters.clientName || filters.email || filters.cpf;
   if (needsProfileFilter) {
-    // Filtra diretamente no banco com ilike — evita o limite de 1000 registros do Supabase
     let profileQuery = supabase.from("profiles").select("id");
 
     if (filters.email) {
@@ -116,7 +110,6 @@ const fetchOrdersPage = async (page: number, filters: Filters): Promise<OrdersRe
     if (filters.clientName) {
       const nameParts = filters.clientName.trim().split(/\s+/);
       if (nameParts.length >= 2) {
-        // Nome completo: busca primeiro nome no first_name E sobrenome no last_name (e vice-versa)
         const first = nameParts[0];
         const rest = nameParts.slice(1).join(" ");
         profileQuery = profileQuery.or(
@@ -134,86 +127,55 @@ const fetchOrdersPage = async (page: number, filters: Filters): Promise<OrdersRe
     }
 
     const { data: matchedProfiles } = await profileQuery;
-    if (!matchedProfiles || matchedProfiles.length === 0) return { orders: [], totalCount: 0 };
-
+    if (!matchedProfiles || matchedProfiles.length === 0) return [];
     filteredUserIds = matchedProfiles.map((p: any) => p.id);
   }
 
-  // 2. Monta a query base com filtros diretos no banco
-  const buildQuery = (forCount = false) => {
-    let q = supabase.from("orders").select(
-      forCount
-        ? "id"
-        : "id, created_at, total_price, shipping_cost, coupon_discount, donation_amount, status, delivery_status, user_id, delivery_info, payment_method, shipping_address, order_items(id, item_id, item_type, name_at_purchase, quantity, price_at_purchase)",
-      forCount ? { count: "exact", head: true } : { count: "exact" }
-    );
+  // 2. Monta a query — sem order_items para evitar timeout
+  let q = supabase.from("orders").select(
+    "id, created_at, total_price, shipping_cost, coupon_discount, donation_amount, status, delivery_status, user_id, delivery_info, payment_method, shipping_address"
+  );
 
-    if (filters.orderId) {
-      q = q.eq("id", parseInt(filters.orderId, 10));
+  if (filters.orderId) {
+    q = q.eq("id", parseInt(filters.orderId, 10));
+  }
+  if (filters.statusFilter.length > 0) {
+    q = q.in("status", filters.statusFilter);
+  }
+  if (filters.deliveryStatusFilter.length > 0) {
+    q = q.in("delivery_status", filters.deliveryStatusFilter);
+  }
+  if (filters.paymentMethodFilter.length > 0) {
+    if (filters.paymentMethodFilter.includes("Pix") && !filters.paymentMethodFilter.includes("Cartão")) {
+      q = q.or("payment_method.is.null,payment_method.ilike.%pix%");
+    } else if (filters.paymentMethodFilter.includes("Cartão") && !filters.paymentMethodFilter.includes("Pix")) {
+      q = q.or("payment_method.ilike.%credit%,payment_method.ilike.%card%,payment_method.ilike.%cart%");
     }
+  }
+  if (filters.startDate) {
+    q = q.gte("created_at", `${filters.startDate}T03:00:00.000Z`);
+  }
+  if (filters.endDate) {
+    const endDateObj = new Date(`${filters.endDate}T00:00:00`);
+    endDateObj.setDate(endDateObj.getDate() + 1);
+    const nextDay = endDateObj.toISOString().split("T")[0];
+    q = q.lte("created_at", `${nextDay}T02:59:59.999Z`);
+  }
+  if (filters.readyToShipOnly) {
+    q = q.in("status", ["Finalizada", "Pago"]).in("delivery_status", ["Pendente", "Aguardando Coleta"]);
+  }
+  if (filteredUserIds !== null) {
+    q = q.in("user_id", filteredUserIds);
+  }
 
-    if (filters.statusFilter.length > 0) {
-      q = q.in("status", filters.statusFilter);
-    }
-
-    if (filters.deliveryStatusFilter.length > 0) {
-      q = q.in("delivery_status", filters.deliveryStatusFilter);
-    }
-
-    if (filters.paymentMethodFilter.length > 0) {
-      // Pix = null ou contém 'pix'; Cartão = contém 'credit'/'card'/'cart'
-      if (filters.paymentMethodFilter.includes("Pix") && !filters.paymentMethodFilter.includes("Cartão")) {
-        q = q.or("payment_method.is.null,payment_method.ilike.%pix%");
-      } else if (filters.paymentMethodFilter.includes("Cartão") && !filters.paymentMethodFilter.includes("Pix")) {
-        q = q.or("payment_method.ilike.%credit%,payment_method.ilike.%card%,payment_method.ilike.%cart%");
-      }
-      // Se ambos selecionados, não filtra (mostra tudo)
-    }
-
-    if (filters.startDate) {
-      // Converte data local (YYYY-MM-DD) para início do dia em Brasília → UTC
-      q = q.gte("created_at", `${filters.startDate}T03:00:00.000Z`);
-    }
-    if (filters.endDate) {
-      // Fim do dia em Brasília (UTC-3): 23:59:59 BRT = 02:59:59 UTC do dia seguinte
-      const endDateObj = new Date(`${filters.endDate}T00:00:00`);
-      endDateObj.setDate(endDateObj.getDate() + 1);
-      const nextDay = endDateObj.toISOString().split("T")[0];
-      q = q.lte("created_at", `${nextDay}T02:59:59.999Z`);
-    }
-
-    if (filters.readyToShipOnly) {
-      q = q.in("status", ["Finalizada", "Pago"]).in("delivery_status", ["Pendente", "Aguardando Coleta"]);
-    }
-
-    if (filteredUserIds !== null) {
-      q = q.in("user_id", filteredUserIds);
-    }
-
-    return q;
-  };
-
-  // 3. Conta total (para paginação)
-  const countQuery = buildQuery(true);
-  const { count, error: countError } = await countQuery;
-  if (countError) throw new Error(countError.message);
-
-  const totalCount = count ?? 0;
-  if (totalCount === 0) return { orders: [], totalCount: 0 };
-
-  // 4. Busca a página atual
-  const from = (page - 1) * ORDERS_PER_PAGE;
-  const to = from + ORDERS_PER_PAGE - 1;
-
-  const dataQuery = buildQuery(false)
+  const { data: orders, error: ordersError } = await q
     .order("created_at", { ascending: false })
-    .range(from, to);
+    .limit(ORDERS_LIMIT);
 
-  const { data: orders, error: ordersError } = await dataQuery;
   if (ordersError) throw new Error(ordersError.message);
-  if (!orders || orders.length === 0) return { orders: [], totalCount };
+  if (!orders || orders.length === 0) return [];
 
-  // 5. Busca profiles dos pedidos retornados
+  // 3. Busca profiles dos pedidos retornados
   const userIds = [...new Set(orders.map((o: any) => o.user_id).filter(Boolean))];
   let profilesMap = new Map<string, any>();
 
@@ -228,12 +190,11 @@ const fetchOrdersPage = async (page: number, filters: Filters): Promise<OrdersRe
     }
   }
 
-  const result: Order[] = orders.map((order: any) => ({
+  return orders.map((order: any) => ({
     ...order,
+    order_items: [],
     profiles: profilesMap.get(order.user_id) || null,
   }));
-
-  return { orders: result, totalCount };
 };
 
 // Função para verificar se o pedido caiu na próxima rota
@@ -309,7 +270,6 @@ const OrdersPage = () => {
     paymentMethodFilter: [],
   });
 
-  const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [isProcessingBulk, setIsProcessingBulk] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -330,36 +290,30 @@ const OrdersPage = () => {
   useEffect(() => {
     const t = setTimeout(() => {
       setDebouncedFilters({
-        readyToShipOnly,
-        startDate,
-        endDate,
-        orderId: searchOrderId.trim(),
-        cpf: searchCPF.trim(),
-        clientName: searchClientName.trim(),
-        email: searchEmail.trim(),
-        statusFilter,
-        deliveryStatusFilter,
-        paymentMethodFilter,
-      });
-      setCurrentPage(1);
+          readyToShipOnly,
+          startDate,
+          endDate,
+          orderId: searchOrderId.trim(),
+          cpf: searchCPF.trim(),
+          clientName: searchClientName.trim(),
+          email: searchEmail.trim(),
+          statusFilter,
+          deliveryStatusFilter,
+          paymentMethodFilter,
+        });
     }, 400);
     return () => clearTimeout(t);
   }, [readyToShipOnly, startDate, endDate, searchOrderId, searchCPF, searchClientName, searchEmail, statusFilter, deliveryStatusFilter, paymentMethodFilter]);
 
-  const queryKey = ["ordersAdmin", currentPage, debouncedFilters];
+  const queryKey = ["ordersAdmin", debouncedFilters];
 
-  const { data, isLoading, refetch, isRefetching, error } = useQuery<OrdersResult, Error>({
+  const { data: orders = [], isLoading, refetch, isRefetching, error } = useQuery<Order[], Error>({
     queryKey,
-    queryFn: () => fetchOrdersPage(currentPage, debouncedFilters),
-    refetchInterval: 60000, // Reduzido para 60s (era 30s) — menos pressão no banco
-    keepPreviousData: true,
+    queryFn: () => fetchLatestOrders(debouncedFilters),
+    refetchInterval: 60000,
   } as any);
 
-  const orders = data?.orders ?? [];
-  const totalCount = data?.totalCount ?? 0;
-  const totalPages = Math.ceil(totalCount / ORDERS_PER_PAGE);
-
-  // Busca quais pedidos da página atual tiveram itens editados
+  // Busca quais pedidos exibidos tiveram itens editados
   const orderIds = orders.map(o => o.id);
   const { data: editedOrderIds } = useQuery<Set<number>>({
     queryKey: ["editedOrderIds", orderIds],
@@ -598,9 +552,22 @@ const OrdersPage = () => {
     setIsExporting(true);
     try {
       const ordersToExport = orders.filter(o => selectedIds.has(o.id));
+
+      // Busca order_items dos pedidos selecionados
+      const selectedOrderIds = ordersToExport.map(o => o.id);
+      const { data: allItems } = await supabase
+        .from("order_items")
+        .select("order_id, id, item_id, item_type, name_at_purchase, quantity, price_at_purchase")
+        .in("order_id", selectedOrderIds);
+      const itemsByOrder = new Map<number, any[]>();
+      (allItems || []).forEach((item: any) => {
+        if (!itemsByOrder.has(item.order_id)) itemsByOrder.set(item.order_id, []);
+        itemsByOrder.get(item.order_id)!.push(item);
+      });
+
       const productIds = new Set<number>();
       const promotionIds = new Set<number>();
-      ordersToExport.forEach(order => order.order_items.forEach((item: any) => {
+      ordersToExport.forEach(order => (itemsByOrder.get(order.id) || []).forEach((item: any) => {
         if (item.item_type === "product" && item.item_id) productIds.add(item.item_id);
         if (item.item_type === "promotion" && item.item_id) promotionIds.add(item.item_id);
       }));
@@ -648,12 +615,13 @@ const OrdersPage = () => {
 
       const rows: any[] = [];
       ordersToExport.forEach(order => {
-        const itemsSubtotal = (order.order_items || []).reduce((acc: number, it: any) => acc + (Number(it.price_at_purchase) || 0) * (Number(it.quantity) || 0), 0);
+        const orderItems = itemsByOrder.get(order.id) || [];
+        const itemsSubtotal = orderItems.reduce((acc: number, it: any) => acc + (Number(it.price_at_purchase) || 0) * (Number(it.quantity) || 0), 0);
         const shipping = Number(order.shipping_cost) || 0;
         const donation = Number(order.donation_amount) || 0;
         const coupon = Number(order.coupon_discount) || 0;
-        const total = itemsSubtotal + shipping + donation - coupon;
-        order.order_items.forEach((item: any) => {
+        const total = orderItems.length > 0 ? itemsSubtotal + shipping + donation - coupon : Number(order.total_price) || 0;
+        orderItems.forEach((item: any) => {
           let unitCost = 0;
           if (item.item_type === "product" && item.item_id) {
             unitCost = costsMap.get(item.item_id) || 0;
@@ -676,6 +644,23 @@ const OrdersPage = () => {
             "Total Pedido": total,
           });
         });
+        if (orderItems.length === 0) {
+          rows.push({
+            "Número do Pedido": order.id,
+            "Cliente": `${order.profiles?.first_name || ""} ${order.profiles?.last_name || ""}`.trim(),
+            "Data": new Date(order.created_at).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }),
+            "Produto": "-",
+            "Quantidade": 0,
+            "Custo Unitário": 0,
+            "Valor Total Venda": 0,
+            "Valor Total Custo": 0,
+            "Lucro": 0,
+            "Forma de Pagamento": order.payment_method || "Pix",
+            "Frete": shipping,
+            "Doação": donation,
+            "Total Pedido": total,
+          });
+        }
       });
       const worksheet = XLSX.utils.json_to_sheet(rows);
       const workbook = XLSX.utils.book_new();
@@ -850,7 +835,7 @@ const OrdersPage = () => {
     if (e.key === "Enter") applyDesktopTextFilters();
   };
 
-  if (isLoading && !data) {
+  if (isLoading && orders.length === 0) {
     return (
       <div className="relative pb-24">
         <div className="flex items-center justify-between mb-4">
@@ -881,7 +866,7 @@ const OrdersPage = () => {
         </div>
         <Card className="px-4 py-3 bg-white shadow-sm border flex items-center gap-2">
           <span className="text-sm text-muted-foreground font-medium">Pedidos</span>
-          <span className="text-2xl font-bold text-slate-900">{totalCount}</span>
+          <span className="text-2xl font-bold text-slate-900">{orders.length}</span>
         </Card>
       </div>
 
@@ -1381,18 +1366,12 @@ const OrdersPage = () => {
           />
         ))}
 
-        {/* Mobile Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-1 py-3 mt-2">
-            <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
-              <ChevronLeft className="h-4 w-4" /> Anterior
-            </Button>
+        {/* Showing count info */}
+        {orders.length > 0 && (
+          <div className="px-1 py-2 text-center">
             <span className="text-xs text-muted-foreground">
-              {currentPage} / {totalPages}
+              {orders.length === 300 ? "Mostrando os 300 pedidos mais recentes" : `${orders.length} pedido(s) encontrado(s)`}
             </span>
-            <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
-              Próximo <ChevronRight className="h-4 w-4" />
-            </Button>
           </div>
         )}
       </div>
@@ -1432,11 +1411,7 @@ const OrdersPage = () => {
                 const paymentDetails = getPaymentMethodDetails(order.payment_method);
                 const PaymentIcon = paymentDetails.icon;
 
-                const itemsSubtotalRaw = (order.order_items || []).reduce((acc: number, it: any) => acc + (Number(it.price_at_purchase) || 0) * (Number(it.quantity) || 0), 0);
-                const shipping = Number(order.shipping_cost) || 0;
-                const donation = Number(order.donation_amount) || 0;
-                const coupon = Number(order.coupon_discount) || 0;
-                const finalTotal = (order.order_items && order.order_items.length > 0) ? itemsSubtotalRaw + shipping + donation - coupon : Number(order.total_price) || 0;
+                const finalTotal = Number(order.total_price) || 0;
 
                 const phone = order.profiles?.phone;
                 const name = order.profiles?.first_name || "Cliente";
@@ -1667,36 +1642,14 @@ const OrdersPage = () => {
           </Table>
         </div>
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t bg-gray-50">
+        {/* Count info */}
+        {orders.length > 0 && (
+          <div className="flex items-center justify-center px-4 py-3 border-t bg-gray-50">
             <span className="text-sm text-muted-foreground">
-              Mostrando {((currentPage - 1) * ORDERS_PER_PAGE) + 1}–{Math.min(currentPage * ORDERS_PER_PAGE, totalCount)} de {totalCount} pedidos
+              {orders.length === ORDERS_LIMIT
+                ? `Mostrando os ${ORDERS_LIMIT} pedidos mais recentes`
+                : `${orders.length} pedido(s) encontrado(s)`}
             </span>
-            <div className="flex items-center gap-1">
-              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
-                <ChevronLeft className="h-4 w-4" /> Anterior
-              </Button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1)
-                .filter(page => page === 1 || page === totalPages || Math.abs(page - currentPage) <= 2)
-                .reduce<(number | "ellipsis")[]>((acc, page, idx, arr) => {
-                  if (idx > 0 && page - (arr[idx - 1] as number) > 1) acc.push("ellipsis");
-                  acc.push(page);
-                  return acc;
-                }, [])
-                .map((item, idx) =>
-                  item === "ellipsis" ? (
-                    <span key={`e-${idx}`} className="px-2 text-muted-foreground text-sm">…</span>
-                  ) : (
-                    <Button key={item} variant={currentPage === item ? "default" : "outline"} size="sm" className="w-9" onClick={() => setCurrentPage(item as number)}>
-                      {item}
-                    </Button>
-                  )
-                )}
-              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
-                Próximo <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
           </div>
         )}
       </div>
