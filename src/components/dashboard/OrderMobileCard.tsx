@@ -293,6 +293,37 @@ export const OrderMobileCard = ({
             {paymentDetails.label}
           </Badge>
 
+          {/* Frete badge */}
+          {(() => {
+            const shippingCost = Number(order.shipping_cost) || 0;
+            const addr = order.shipping_address as any;
+            const bairro = addr?.neighborhood || addr?.bairro || "";
+            const cidade = addr?.city || addr?.cidade || "";
+            const freeShipping = shippingCost === 0;
+            const location = [bairro, cidade].filter(Boolean).join(", ");
+            return (
+              <div className="flex items-center gap-1 flex-wrap">
+                <Badge
+                  variant="secondary"
+                  className={cn(
+                    "text-[10px] px-2 py-0.5 gap-1",
+                    freeShipping ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"
+                  )}
+                >
+                  🚚 {freeShipping ? "Grátis" : formatCurrency(shippingCost)}
+                </Badge>
+                {freeShipping && (
+                  <Badge variant="outline" className="text-[9px] px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border-emerald-200">
+                    🎉 benefício
+                  </Badge>
+                )}
+                {location && (
+                  <span className="text-[10px] text-muted-foreground truncate max-w-[140px]">{location}</span>
+                )}
+              </div>
+            );
+          })()}
+
           {isInRoute && (
             <Button
               size="sm"
