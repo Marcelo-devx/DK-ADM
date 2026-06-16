@@ -1436,6 +1436,7 @@ const OrdersPage = () => {
                 <TableHead>Data</TableHead>
                 <TableHead>Cliente & Contato</TableHead>
                 <TableHead>Valor Total</TableHead>
+                <TableHead>Frete</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Entrega</TableHead>
                 <TableHead>Pagamento</TableHead>
@@ -1445,7 +1446,7 @@ const OrdersPage = () => {
             <TableBody>
               {orders.length === 0 && !isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
+                  <TableCell colSpan={10} className="text-center py-12 text-muted-foreground">
                     Nenhum pedido encontrado com os filtros aplicados.
                   </TableCell>
                 </TableRow>
@@ -1583,6 +1584,42 @@ const OrdersPage = () => {
                       </div>
                     </TableCell>
                     <TableCell className="font-bold">{formatCurrency(finalTotal)}</TableCell>
+                    <TableCell>
+                      {(() => {
+                        const shippingCost = Number(order.shipping_cost) || 0;
+                        const addr = order.shipping_address as any;
+                        const bairro = addr?.neighborhood || addr?.bairro || "";
+                        const cidade = addr?.city || addr?.cidade || "";
+                        const hasCoupon = Number(order.coupon_discount) > 0;
+                        const hasDonation = Number(order.donation_amount) > 0;
+                        return (
+                          <div className="flex flex-col gap-0.5 min-w-[110px]">
+                            <span className={cn("text-xs font-semibold", shippingCost === 0 ? "text-green-600" : "text-gray-800")}>
+                              {shippingCost === 0 ? "Grátis" : formatCurrency(shippingCost)}
+                            </span>
+                            {(bairro || cidade) && (
+                              <span className="text-[10px] text-muted-foreground leading-tight truncate max-w-[130px]">
+                                {[bairro, cidade].filter(Boolean).join(", ")}
+                              </span>
+                            )}
+                            {(hasCoupon || hasDonation) && (
+                              <div className="flex flex-wrap gap-0.5 mt-0.5">
+                                {hasCoupon && (
+                                  <span className="inline-flex items-center bg-orange-100 text-orange-700 text-[9px] font-semibold px-1 py-0.5 rounded-full leading-none">
+                                    -{ formatCurrency(Number(order.coupon_discount)) }
+                                  </span>
+                                )}
+                                {hasDonation && (
+                                  <span className="inline-flex items-center bg-pink-100 text-pink-700 text-[9px] font-semibold px-1 py-0.5 rounded-full leading-none">
+                                    +{ formatCurrency(Number(order.donation_amount)) } don.
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </TableCell>
                     <TableCell>{statusBadge}</TableCell>
                     <TableCell>{deliveryBadge}</TableCell>
                     <TableCell>
