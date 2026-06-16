@@ -314,11 +314,11 @@ export const OrderMobileCard = ({
         <div className="space-y-1">
           {(order.order_items || []).slice(0, 3).map((item: any) => {
             const variant = item.product_variants ?? null;
-            const flavorName = variant?.flavors?.name;
-            const color = variant?.color;
-            const volumeMl = variant?.volume_ml;
-            const ohms = variant?.ohms;
-            const size = variant?.size;
+            const flavorName = variant?.flavors?.name ?? null;
+            const color = variant?.color ?? null;
+            const volumeMl = variant?.volume_ml ?? null;
+            const ohms = variant?.ohms ?? null;
+            const size = variant?.size ?? null;
             const hasVariantBadges = flavorName || color || volumeMl || ohms || size;
             return (
               <div key={item.id} className="flex items-start gap-2">
