@@ -1590,31 +1590,26 @@ const OrdersPage = () => {
                         const addr = order.shipping_address as any;
                         const bairro = addr?.neighborhood || addr?.bairro || "";
                         const cidade = addr?.city || addr?.cidade || "";
-                        const hasCoupon = Number(order.coupon_discount) > 0;
-                        const hasDonation = Number(order.donation_amount) > 0;
+                        const freeShipping = shippingCost === 0;
                         return (
                           <div className="flex flex-col gap-0.5 min-w-[110px]">
-                            <span className={cn("text-xs font-semibold", shippingCost === 0 ? "text-green-600" : "text-gray-800")}>
-                              {shippingCost === 0 ? "Grátis" : formatCurrency(shippingCost)}
+                            <span className={cn(
+                              "inline-flex items-center w-fit px-2 py-0.5 rounded-full text-xs font-semibold",
+                              freeShipping
+                                ? "bg-green-100 text-green-700"
+                                : "bg-gray-100 text-gray-700"
+                            )}>
+                              {freeShipping ? "Grátis" : formatCurrency(shippingCost)}
                             </span>
+                            {freeShipping && (
+                              <span className="inline-flex items-center w-fit bg-emerald-50 text-emerald-700 border border-emerald-200 text-[9px] font-semibold px-1.5 py-0.5 rounded-full leading-none">
+                                🎉 benefício
+                              </span>
+                            )}
                             {(bairro || cidade) && (
                               <span className="text-[10px] text-muted-foreground leading-tight truncate max-w-[130px]">
                                 {[bairro, cidade].filter(Boolean).join(", ")}
                               </span>
-                            )}
-                            {(hasCoupon || hasDonation) && (
-                              <div className="flex flex-wrap gap-0.5 mt-0.5">
-                                {hasCoupon && (
-                                  <span className="inline-flex items-center bg-orange-100 text-orange-700 text-[9px] font-semibold px-1 py-0.5 rounded-full leading-none">
-                                    -{ formatCurrency(Number(order.coupon_discount)) }
-                                  </span>
-                                )}
-                                {hasDonation && (
-                                  <span className="inline-flex items-center bg-pink-100 text-pink-700 text-[9px] font-semibold px-1 py-0.5 rounded-full leading-none">
-                                    +{ formatCurrency(Number(order.donation_amount)) } don.
-                                  </span>
-                                )}
-                              </div>
                             )}
                           </div>
                         );
