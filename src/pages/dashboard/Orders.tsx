@@ -282,6 +282,10 @@ const OrdersPage = () => {
     const today = new Date();
     return today.toISOString().split("T")[0];
   });
+  const [exportByDayEndDate, setExportByDayEndDate] = useState(() => {
+    const today = new Date();
+    return today.toISOString().split("T")[0];
+  });
 
   const [actionToConfirm, setActionToConfirm] = useState<{
     action: 'resend_confirmation' | 'send_password_reset' | 'delete_orders' | 'mark_as_recurrent' | 'cancel_fraud';
@@ -684,17 +688,17 @@ const OrdersPage = () => {
   };
 
   const handleExportByDay = async () => {
-    if (!exportByDayDate) { showError("Selecione uma data."); return; }
+    if (!exportByDayDate || !exportByDayEndDate) { showError("Selecione o período."); return; }
+    if (exportByDayEndDate < exportByDayDate) { showError("A data final não pode ser anterior à data inicial."); return; }
     setIsExporting(true);
     setExportByDayOpen(false);
     setExportByDayOpenMobile(false);
     try {
-      // Fetch all orders for the selected day (Brasília timezone UTC-3)
-      // Dia selecionado começa às 00:00 BRT = 03:00 UTC
-      // Dia selecionado termina às 23:59:59 BRT = 02:59:59 UTC do dia seguinte
-      const [year, month, day] = exportByDayDate.split("-").map(Number);
+      // Período começa às 00:00 BRT do dia inicial = 03:00 UTC
+      // Período termina às 23:59:59 BRT do dia final = 02:59:59 UTC do dia seguinte
       const startUTC = `${exportByDayDate}T03:00:00.000Z`;
-      const nextDayDate = new Date(Date.UTC(year, month - 1, day + 1));
+      const [ey, em, ed] = exportByDayEndDate.split("-").map(Number);
+      const nextDayDate = new Date(Date.UTC(ey, em - 1, ed + 1));
       const nextDay = nextDayDate.toISOString().split("T")[0];
       const endUTC = `${nextDay}T02:59:59.999Z`;
 
@@ -802,9 +806,11 @@ const OrdersPage = () => {
       const worksheet = XLSX.utils.json_to_sheet(rows);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "Vendas_Detalhadas");
-      const dateLabel = new Date(exportByDayDate + "T00:00:00").toLocaleDateString("pt-BR").replace(/\//g, "-");
-      XLSX.writeFile(workbook, `Vendas_${dateLabel}.xlsx`);
-      showSuccess(`${ordersWithProfiles.length} pedidos exportados do dia ${dateLabel}!`);
+      const startLabel = new Date(exportByDayDate + "T00:00:00").toLocaleDateString("pt-BR").replace(/\//g, "-");
+      const endLabel = new Date(exportByDayEndDate + "T00:00:00").toLocaleDateString("pt-BR").replace(/\//g, "-");
+      const fileLabel = startLabel === endLabel ? startLabel : `${startLabel}_a_${endLabel}`;
+      XLSX.writeFile(workbook, `Vendas_${fileLabel}.xlsx`);
+      showSuccess(`${ordersWithProfiles.length} pedidos exportados (${startLabel === endLabel ? startLabel : `${startLabel} a ${endLabel}`})!`);
     } catch (err) {
       console.error(err); showError("Erro ao gerar o arquivo Excel.");
     } finally {
@@ -1057,7 +1063,7 @@ const OrdersPage = () => {
             </Button>
           </PopoverTrigger>
           <PopoverContent
-            className="w-72 p-4"
+            className="w-80 p-4"
             align="end"
             onInteractOutside={(e) => e.preventDefault()}
             onFocusOutside={(e) => e.preventDefault()}
@@ -1065,16 +1071,31 @@ const OrdersPage = () => {
             <div className="space-y-3">
               <div>
                 <p className="text-sm font-semibold text-gray-800 mb-1 flex items-center gap-1.5">
-                  <Calendar className="w-4 h-4 text-green-600" /> Exportar por dia
+                  <Calendar className="w-4 h-4 text-green-600" /> Exportar por período
                 </p>
-                <p className="text-xs text-muted-foreground">Escolha o dia e exporte todos os pedidos automaticamente.</p>
+                <p className="text-xs text-muted-foreground">Selecione o período e exporte todos os pedidos.</p>
               </div>
-              <input
-                type="date"
-                value={exportByDayDate}
-                onChange={(e) => setExportByDayDate(e.target.value)}
-                className="w-full h-9 px-3 text-sm border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
-              />
+              <div className="space-y-2">
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">De</label>
+                  <input
+                    type="date"
+                    value={exportByDayDate}
+                    onChange={(e) => setExportByDayDate(e.target.value)}
+                    className="w-full h-9 px-3 text-sm border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">Até</label>
+                  <input
+                    type="date"
+                    value={exportByDayEndDate}
+                    min={exportByDayDate}
+                    onChange={(e) => setExportByDayEndDate(e.target.value)}
+                    className="w-full h-9 px-3 text-sm border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                </div>
+              </div>
               <div className="flex gap-2">
                 <Button
                   variant="outline"
@@ -1086,7 +1107,7 @@ const OrdersPage = () => {
                 <Button
                   className="flex-1 h-9 bg-green-600 hover:bg-green-700 text-sm font-bold gap-1"
                   onClick={handleExportByDay}
-                  disabled={!exportByDayDate || isExporting}>
+                  disabled={!exportByDayDate || !exportByDayEndDate || isExporting}>
                   {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
                   Exportar
                 </Button>
@@ -1269,7 +1290,7 @@ const OrdersPage = () => {
                 </Button>
               </PopoverTrigger>
               <PopoverContent
-                className="w-72 p-4"
+                className="w-80 p-4"
                 align="end"
                 onInteractOutside={(e) => e.preventDefault()}
                 onFocusOutside={(e) => e.preventDefault()}
@@ -1277,16 +1298,31 @@ const OrdersPage = () => {
                 <div className="space-y-3">
                   <div>
                     <p className="text-sm font-semibold text-gray-800 mb-1 flex items-center gap-1.5">
-                      <Calendar className="w-4 h-4 text-green-600" /> Exportar por dia
+                      <Calendar className="w-4 h-4 text-green-600" /> Exportar por período
                     </p>
-                    <p className="text-xs text-muted-foreground">Escolha o dia e exporte todos os pedidos automaticamente.</p>
+                    <p className="text-xs text-muted-foreground">Selecione o período e exporte todos os pedidos.</p>
                   </div>
-                  <input
-                    type="date"
-                    value={exportByDayDate}
-                    onChange={(e) => setExportByDayDate(e.target.value)}
-                    className="w-full h-9 px-3 text-sm border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                  />
+                  <div className="space-y-2">
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 mb-1 block">De</label>
+                      <input
+                        type="date"
+                        value={exportByDayDate}
+                        onChange={(e) => setExportByDayDate(e.target.value)}
+                        className="w-full h-9 px-3 text-sm border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 mb-1 block">Até</label>
+                      <input
+                        type="date"
+                        value={exportByDayEndDate}
+                        min={exportByDayDate}
+                        onChange={(e) => setExportByDayEndDate(e.target.value)}
+                        className="w-full h-9 px-3 text-sm border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                      />
+                    </div>
+                  </div>
                   <div className="flex gap-2">
                     <Button
                       variant="outline"
@@ -1298,7 +1334,7 @@ const OrdersPage = () => {
                     <Button
                       className="flex-1 h-9 bg-green-600 hover:bg-green-700 text-sm font-bold gap-1"
                       onClick={handleExportByDay}
-                      disabled={!exportByDayDate || isExporting}>
+                      disabled={!exportByDayDate || !exportByDayEndDate || isExporting}>
                       {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
                       Exportar
                     </Button>
