@@ -95,8 +95,8 @@ interface Filters {
 
 const ORDERS_LIMIT = 300;
 
-// Busca server-side: últimos 300 pedidos com filtros aplicados no banco, sem joins pesados
-const fetchLatestOrders = async (filters: Filters): Promise<Order[]> => {
+// Busca server-side: últimos 300 pedidos sem filtros, ou todos os pedidos quando há filtros
+const fetchLatestOrders = async (filters: Filters, hasFilters = false): Promise<Order[]> => {
   // 1. Resolve user_ids se filtrar por nome, email ou CPF
   let filteredUserIds: string[] | null = null;
 
@@ -168,9 +168,11 @@ const fetchLatestOrders = async (filters: Filters): Promise<Order[]> => {
     q = q.in("user_id", filteredUserIds);
   }
 
-  const { data: orders, error: ordersError } = await q
-    .order("created_at", { ascending: false })
-    .limit(ORDERS_LIMIT);
+  let finalQuery = q.order("created_at", { ascending: false });
+  if (!hasFilters) {
+    finalQuery = finalQuery.limit(ORDERS_LIMIT);
+  }
+  const { data: orders, error: ordersError } = await finalQuery;
 
   if (ordersError) throw new Error(ordersError.message);
   if (!orders || orders.length === 0) return [];
@@ -307,9 +309,16 @@ const OrdersPage = () => {
 
   const queryKey = ["ordersAdmin", debouncedFilters];
 
+  const debouncedHasFilters = !!(
+    debouncedFilters.orderId || debouncedFilters.cpf || debouncedFilters.clientName ||
+    debouncedFilters.email || debouncedFilters.startDate || debouncedFilters.endDate ||
+    debouncedFilters.statusFilter.length > 0 || debouncedFilters.deliveryStatusFilter.length > 0 ||
+    debouncedFilters.paymentMethodFilter.length > 0 || debouncedFilters.readyToShipOnly
+  );
+
   const { data: orders = [], isLoading, refetch, isRefetching, error } = useQuery<Order[], Error>({
     queryKey,
-    queryFn: () => fetchLatestOrders(debouncedFilters),
+    queryFn: () => fetchLatestOrders(debouncedFilters, debouncedHasFilters),
     refetchInterval: 60000,
   } as any);
 
@@ -1370,7 +1379,9 @@ const OrdersPage = () => {
         {orders.length > 0 && (
           <div className="px-1 py-2 text-center">
             <span className="text-xs text-muted-foreground">
-              {orders.length === 300 ? "Mostrando os 300 pedidos mais recentes" : `${orders.length} pedido(s) encontrado(s)`}
+              {!debouncedHasFilters && orders.length === ORDERS_LIMIT
+                ? `Mostrando os ${ORDERS_LIMIT} pedidos mais recentes`
+                : `${orders.length} pedido(s) encontrado(s)`}
             </span>
           </div>
         )}
@@ -1646,7 +1657,7 @@ const OrdersPage = () => {
         {orders.length > 0 && (
           <div className="flex items-center justify-center px-4 py-3 border-t bg-gray-50">
             <span className="text-sm text-muted-foreground">
-              {orders.length === ORDERS_LIMIT
+              {!debouncedHasFilters && orders.length === ORDERS_LIMIT
                 ? `Mostrando os ${ORDERS_LIMIT} pedidos mais recentes`
                 : `${orders.length} pedido(s) encontrado(s)`}
             </span>
