@@ -84,8 +84,15 @@ serve(async (req) => {
       })
     }
 
-    // Buscar user_id pelo e-mail
-    const { data: userId } = await supabaseAdmin.rpc('get_user_id_by_email', { user_email: email })
+    // Buscar user_id pelo e-mail diretamente na tabela profiles
+    // (evita o RPC get_user_id_by_email que requer auth.uid() — incompatível com service role)
+    const { data: profileData } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('email', email.toLowerCase().trim())
+      .maybeSingle()
+
+    const userId = profileData?.id
 
     if (!userId) {
       return new Response(JSON.stringify({ error: 'Usuário não encontrado com este e-mail' }), {

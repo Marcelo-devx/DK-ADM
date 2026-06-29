@@ -69,8 +69,15 @@ serve(async (req) => {
     // Calcular expiração: 10 minutos
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString()
 
-    // Buscar user_id pelo e-mail (opcional, pode ser null para novos cadastros)
-    const { data: userId } = await supabaseAdmin.rpc('get_user_id_by_email', { user_email: email })
+    // Buscar user_id pelo e-mail diretamente na tabela profiles
+    // (evita o RPC get_user_id_by_email que requer auth.uid() — incompatível com service role)
+    const { data: profileData } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('email', email.toLowerCase().trim())
+      .maybeSingle()
+
+    const userId = profileData?.id
 
     // Inserir na tabela email_links (mesmo fluxo do sistema normal)
     const { error: insertError } = await supabaseAdmin

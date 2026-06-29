@@ -67,8 +67,6 @@ serve(async (req) => {
       .eq('id', link.id)
 
     // Gerar magic link para autenticar o usuário sem senha
-    const redirectTo = redirect_to || `${Deno.env.get('SUPABASE_URL')?.replace('https://', 'https://').split('.supabase')[0]}`
-
     const { data: linkData, error: genError } = await supabaseAdmin.auth.admin.generateLink({
       type: 'magiclink',
       email: email.toLowerCase().trim(),
