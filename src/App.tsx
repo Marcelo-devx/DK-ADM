@@ -65,6 +65,7 @@ import AuditoriaPedidos from "./pages/dashboard/AuditoriaPedidos";
 import WarmupManager from "./pages/dashboard/WarmupManager";
 import ProductReservations from "./pages/dashboard/ProductReservations";
 import AdminAcessoManual from "./pages/dashboard/AdminAcessoManual";
+import VerificarAcesso from "./pages/VerificarAcesso";
 
 const DashboardIndex = () => {
   const { isGerente, isGerenteGeral, isAdmin, loading } = useUser();
@@ -103,6 +104,7 @@ const App = () => (
             <Route path="/meus-pedidos" element={<MyOrders />} />
             <Route path="/meu-perfil" element={<MyProfile />} />
             <Route path="/club-dk" element={<ClubDK />} />
+            <Route path="/verificar-acesso" element={<VerificarAcesso />} />
             
             <Route path="/dashboard" element={<DashboardLayout />}>
               <Route index element={<DashboardIndex />} />

@@ -5,8 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { KeyRound, RefreshCw, Copy, CheckCheck, ShieldAlert, Hash } from "lucide-react";
+import { KeyRound, RefreshCw, Copy, CheckCheck, ShieldAlert, Hash, Link } from "lucide-react";
 import { toast } from "sonner";
+
+const APP_URL = window.location.origin;
 
 const SUPABASE_URL = "https://jrlozhhvwqfmjtkmvukf.supabase.co";
 
@@ -16,6 +18,7 @@ export default function AdminAcessoManual() {
   const [loadingOtp, setLoadingOtp] = useState(false);
   const [generatedOtp, setGeneratedOtp] = useState<{ code: string; expires_at: string } | null>(null);
   const [copiedOtp, setCopiedOtp] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   // Aba 2 - Nova senha
   const [emailPass, setEmailPass] = useState("");
@@ -92,17 +95,23 @@ export default function AdminAcessoManual() {
     }
   };
 
-  const copyToClipboard = (text: string, type: "otp" | "pass") => {
+  const copyToClipboard = (text: string, type: "otp" | "pass" | "link") => {
     navigator.clipboard.writeText(text);
     if (type === "otp") {
       setCopiedOtp(true);
       setTimeout(() => setCopiedOtp(false), 2000);
+    } else if (type === "link") {
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
     } else {
       setCopiedPass(true);
       setTimeout(() => setCopiedPass(false), 2000);
     }
     toast.success("Copiado!");
   };
+
+  const getVerifyLink = (email: string) =>
+    `${APP_URL}/verificar-acesso?email=${encodeURIComponent(email.trim().toLowerCase())}`;
 
   const formatExpiry = (isoDate: string) => {
     return new Date(isoDate).toLocaleTimeString("pt-BR", {
@@ -214,8 +223,30 @@ export default function AdminAcessoManual() {
                     </Badge>
                   </div>
                   <p className="text-xs text-slate-400">
-                    Diga ao cliente para inserir este código na tela de login ou cadastro.
+                    Envie o código <strong>e o link abaixo</strong> para o cliente pelo WhatsApp.
                   </p>
+
+                  {/* Link copiável */}
+                  <div className="bg-white border border-slate-200 rounded-lg p-3 text-left space-y-2">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1">
+                      <Link className="w-3 h-3" />
+                      Link para o cliente acessar a tela do código
+                    </p>
+                    <p className="text-xs text-slate-600 break-all font-mono bg-slate-50 p-2 rounded">
+                      {getVerifyLink(emailOtp)}
+                    </p>
+                    <button
+                      onClick={() => copyToClipboard(getVerifyLink(emailOtp), "link")}
+                      className="flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary/80 transition-colors"
+                    >
+                      {copiedLink ? (
+                        <><CheckCheck className="w-3 h-3 text-green-600" /> Link copiado!</>
+                      ) : (
+                        <><Copy className="w-3 h-3" /> Copiar link</>
+                      )}
+                    </button>
+                  </div>
+
                   <Button
                     variant="outline"
                     size="sm"
