@@ -1,0 +1,2 @@
+[functions.admin-generate-otp]
+verify_jwt = false

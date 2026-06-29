@@ -1,0 +1,2 @@
+[functions.admin-generate-password]
+verify_jwt = false

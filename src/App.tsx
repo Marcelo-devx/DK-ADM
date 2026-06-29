@@ -64,6 +64,7 @@ import AuditoriaCartao from "./pages/dashboard/AuditoriaCartao";
 import AuditoriaPedidos from "./pages/dashboard/AuditoriaPedidos";
 import WarmupManager from "./pages/dashboard/WarmupManager";
 import ProductReservations from "./pages/dashboard/ProductReservations";
+import AdminAcessoManual from "./pages/dashboard/AdminAcessoManual";
 
 const DashboardIndex = () => {
   const { isGerente, isGerenteGeral, isAdmin, loading } = useUser();
@@ -155,6 +156,7 @@ const App = () => (
               <Route path="auditoria-pedidos" element={<AuditoriaPedidos />} />
               <Route path="warmup-manager" element={<WarmupManager />} />
               <Route path="product-reservations" element={<ProductReservations />} />
+              <Route path="acesso-manual" element={<AdminAcessoManual />} />
             </Route>
             
             <Route path="*" element={<NotFound />} />

@@ -45,6 +45,7 @@ import {
   CreditCard,
   Flame,
   BookmarkCheck,
+  WifiOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -108,6 +109,9 @@ const Sidebar = () => {
       </NavLink>
       <NavLink to="/dashboard/user-admin" className={navLinkClass}>
         {({ isActive }) => (<><ShieldAlert className={iconClass("text-red-600", isActive)} />Admin Usuários</>)}
+      </NavLink>
+      <NavLink to="/dashboard/acesso-manual" className={navLinkClass}>
+        {({ isActive }) => (<><WifiOff className={iconClass("text-orange-500", isActive)} />Acesso Manual</>)}
       </NavLink>
       <NavLink to="/dashboard/order-admin" className={navLinkClass}>
         {({ isActive }) => (<><FileEdit className={iconClass("text-red-600", isActive)} />Admin Pedidos</>)}
@@ -222,6 +226,9 @@ const Sidebar = () => {
       <NavLink to="/dashboard/user-admin" className={navLinkClass}>
         {({ isActive }) => (<><ShieldAlert className={iconClass("text-red-600", isActive)} />Admin Usuários</>)}
       </NavLink>
+      <NavLink to="/dashboard/acesso-manual" className={navLinkClass}>
+        {({ isActive }) => (<><WifiOff className={iconClass("text-orange-500", isActive)} />Acesso Manual</>)}
+      </NavLink>
       <NavLink to="/dashboard/order-admin" className={navLinkClass}>
         {({ isActive }) => (<><FileEdit className={iconClass("text-red-600", isActive)} />Admin Pedidos</>)}
       </NavLink>
@@ -279,6 +286,9 @@ const Sidebar = () => {
       </NavLink>
       <NavLink to="/dashboard/user-admin" className={navLinkClass}>
         {({ isActive }) => (<><ShieldAlert className={iconClass("text-red-600", isActive)} />Admin Usuários</>)}
+      </NavLink>
+      <NavLink to="/dashboard/acesso-manual" className={navLinkClass}>
+        {({ isActive }) => (<><WifiOff className={iconClass("text-orange-500", isActive)} />Acesso Manual</>)}
       </NavLink>
       <NavLink to="/dashboard/order-admin" className={navLinkClass}>
         {({ isActive }) => (<><FileEdit className={iconClass("text-red-600", isActive)} />Admin Pedidos</>)}
