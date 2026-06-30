@@ -570,7 +570,7 @@ const OrdersPage = () => {
       const selectedOrderIds = ordersToExport.map(o => o.id);
       const { data: allItems } = await supabase
         .from("order_items")
-        .select("order_id, id, item_id, item_type, name_at_purchase, quantity, price_at_purchase")
+        .select("order_id, id, item_id, item_type, name_at_purchase, quantity, price_at_purchase, variant_id")
         .in("order_id", selectedOrderIds);
       const itemsByOrder = new Map<number, any[]>();
       (allItems || []).forEach((item: any) => {
@@ -579,9 +579,11 @@ const OrdersPage = () => {
       });
 
       const productIds = new Set<number>();
+      const productVariantIds = new Set<string>();
       const promotionIds = new Set<number>();
       ordersToExport.forEach(order => (itemsByOrder.get(order.id) || []).forEach((item: any) => {
         if (item.item_type === "product" && item.item_id) productIds.add(item.item_id);
+        if (item.item_type === "product" && item.variant_id) productVariantIds.add(item.variant_id);
         if (item.item_type === "promotion" && item.item_id) promotionIds.add(item.item_id);
       }));
 
@@ -589,6 +591,12 @@ const OrdersPage = () => {
       if (productIds.size > 0) {
         const { data: productsData } = await supabase.from("products").select("id, cost_price").in("id", Array.from(productIds));
         productsData?.forEach((p: any) => costsMap.set(p.id, p.cost_price || 0));
+      }
+
+      let variantCostsMap = new Map<string, number>();
+      if (productVariantIds.size > 0) {
+        const { data: variantsData } = await supabase.from("product_variants").select("id, cost_price").in("id", Array.from(productVariantIds));
+        variantsData?.forEach((v: any) => variantCostsMap.set(v.id, v.cost_price || 0));
       }
 
       // Fetch promotion costs: sum of (product cost × quantity) for each promotion item
@@ -637,7 +645,9 @@ const OrdersPage = () => {
         orderItems.forEach((item: any) => {
           let unitCost = 0;
           if (item.item_type === "product" && item.item_id) {
-            unitCost = costsMap.get(item.item_id) || 0;
+            unitCost = item.variant_id
+              ? (variantCostsMap.get(item.variant_id) || costsMap.get(item.item_id) || 0)
+              : costsMap.get(item.item_id) || 0;
           } else if (item.item_type === "promotion" && item.item_id) {
             unitCost = promotionCostsMap.get(item.item_id) || 0;
           }
@@ -704,7 +714,7 @@ const OrdersPage = () => {
 
       const { data: dayOrders, error: dayError } = await supabase
         .from("orders")
-        .select("id, created_at, total_price, shipping_cost, coupon_discount, donation_amount, status, delivery_status, user_id, delivery_info, payment_method, shipping_address, order_items(item_id, item_type, name_at_purchase, quantity, price_at_purchase)")
+        .select("id, created_at, total_price, shipping_cost, coupon_discount, donation_amount, status, delivery_status, user_id, delivery_info, payment_method, shipping_address, order_items(item_id, item_type, name_at_purchase, quantity, price_at_purchase, variant_id)")
         .gte("created_at", startUTC)
         .lte("created_at", endUTC)
         .neq("status", "Cancelado")
@@ -725,9 +735,11 @@ const OrdersPage = () => {
 
       // Fetch product costs
       const productIds = new Set<number>();
+      const productVariantIds = new Set<string>();
       const promotionIds = new Set<number>();
       ordersWithProfiles.forEach((order: any) => order.order_items.forEach((item: any) => {
         if (item.item_type === "product" && item.item_id) productIds.add(item.item_id);
+        if (item.item_type === "product" && item.variant_id) productVariantIds.add(item.variant_id);
         if (item.item_type === "promotion" && item.item_id) promotionIds.add(item.item_id);
       }));
 
@@ -735,6 +747,12 @@ const OrdersPage = () => {
       if (productIds.size > 0) {
         const { data: productsData } = await supabase.from("products").select("id, cost_price").in("id", Array.from(productIds));
         productsData?.forEach((p: any) => costsMap.set(p.id, p.cost_price || 0));
+      }
+
+      let variantCostsMap = new Map<string, number>();
+      if (productVariantIds.size > 0) {
+        const { data: variantsData } = await supabase.from("product_variants").select("id, cost_price").in("id", Array.from(productVariantIds));
+        variantsData?.forEach((v: any) => variantCostsMap.set(v.id, v.cost_price || 0));
       }
 
       // Fetch promotion costs: sum of (product cost × quantity) for each promotion item
@@ -781,7 +799,9 @@ const OrdersPage = () => {
         order.order_items.forEach((item: any) => {
           let unitCost = 0;
           if (item.item_type === "product" && item.item_id) {
-            unitCost = costsMap.get(item.item_id) || 0;
+            unitCost = item.variant_id
+              ? (variantCostsMap.get(item.variant_id) || costsMap.get(item.item_id) || 0)
+              : costsMap.get(item.item_id) || 0;
           } else if (item.item_type === "promotion" && item.item_id) {
             unitCost = promotionCostsMap.get(item.item_id) || 0;
           }
