@@ -645,9 +645,12 @@ const OrdersPage = () => {
         orderItems.forEach((item: any) => {
           let unitCost = 0;
           if (item.item_type === "product" && item.item_id) {
-            unitCost = item.variant_id
-              ? (variantCostsMap.get(item.variant_id) || costsMap.get(item.item_id) || 0)
-              : costsMap.get(item.item_id) || 0;
+            if (item.variant_id) {
+              // Produto com variação: usa SEMPRE o custo da variação (mesmo que seja 0)
+              unitCost = variantCostsMap.get(item.variant_id) ?? 0;
+            } else {
+              unitCost = costsMap.get(item.item_id) ?? 0;
+            }
           } else if (item.item_type === "promotion" && item.item_id) {
             unitCost = promotionCostsMap.get(item.item_id) || 0;
           }
@@ -799,9 +802,12 @@ const OrdersPage = () => {
         order.order_items.forEach((item: any) => {
           let unitCost = 0;
           if (item.item_type === "product" && item.item_id) {
-            unitCost = item.variant_id
-              ? (variantCostsMap.get(item.variant_id) || costsMap.get(item.item_id) || 0)
-              : costsMap.get(item.item_id) || 0;
+            if (item.variant_id) {
+              // Produto com variação: usa SEMPRE o custo da variação (mesmo que seja 0)
+              unitCost = variantCostsMap.get(item.variant_id) ?? 0;
+            } else {
+              unitCost = costsMap.get(item.item_id) ?? 0;
+            }
           } else if (item.item_type === "promotion" && item.item_id) {
             unitCost = promotionCostsMap.get(item.item_id) || 0;
           }
