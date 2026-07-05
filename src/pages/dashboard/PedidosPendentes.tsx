@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -12,7 +13,15 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ClipboardList } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ClipboardList, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
@@ -97,6 +106,28 @@ const PedidosPendentes = () => {
     queryFn: fetchPendingItems,
   });
 
+  const [searchTerm, setSearchTerm] = useState("");
+  const [supplierFilter, setSupplierFilter] = useState("all");
+
+  const supplierOptions = useMemo(() => {
+    const names = new Set((rows || []).map((r) => r.supplierName));
+    return Array.from(names).sort((a, b) => (a > b ? 1 : a < b ? -1 : 0));
+  }, [rows]);
+
+  const filteredRows = useMemo(() => {
+    if (!rows) return [];
+    const term = searchTerm.trim().toLowerCase();
+    return rows.filter((row) => {
+      const matchesSupplier = supplierFilter === "all" || row.supplierName === supplierFilter;
+      const matchesTerm =
+        !term ||
+        row.displayName.toLowerCase().includes(term) ||
+        row.supplierName.toLowerCase().includes(term) ||
+        String(row.orderId).includes(term);
+      return matchesSupplier && matchesTerm;
+    });
+  }, [rows, searchTerm, supplierFilter]);
+
   return (
     <div className="space-y-4 pb-6">
       <div className="flex items-center justify-between">
@@ -110,14 +141,38 @@ const PedidosPendentes = () => {
         Itens de pedidos ao fornecedor que ainda estão aguardando recebimento, com o estoque atual ao lado para conferência. Assim que um pedido deixa de estar "Pendente", seus itens saem automaticamente desta lista.
       </p>
 
+      {/* ── Filtros ── */}
+      <div className="flex flex-col md:flex-row gap-2 md:items-center bg-white p-3 rounded-lg border shadow-sm">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Buscar por produto, fornecedor ou nº do pedido..."
+            className="pl-9"
+          />
+        </div>
+        <Select value={supplierFilter} onValueChange={setSupplierFilter}>
+          <SelectTrigger className="w-full md:w-56">
+            <SelectValue placeholder="Fornecedor" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os fornecedores</SelectItem>
+            {supplierOptions.map((name) => (
+              <SelectItem key={name} value={name}>{name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       {/* ── MOBILE: Cards ── */}
       <div className="md:hidden space-y-2">
         {isLoading ? (
           Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="rounded-xl border bg-white h-20 animate-pulse bg-gray-100" />
           ))
-        ) : rows && rows.length > 0 ? (
-          rows.map((row) => (
+        ) : filteredRows.length > 0 ? (
+          filteredRows.map((row) => (
             <div key={row.itemId} className="rounded-xl border bg-white p-3 shadow-sm">
               <div className="flex items-start justify-between gap-2">
                 <p className="font-semibold text-sm text-gray-900 leading-tight flex-1">{row.displayName}</p>
@@ -149,7 +204,7 @@ const PedidosPendentes = () => {
           ))
         ) : (
           <div className="bg-white rounded-xl border shadow-sm p-10 text-center text-muted-foreground text-sm">
-            Nenhum item pendente no momento.
+            {rows && rows.length > 0 ? "Nenhum item encontrado para os filtros aplicados." : "Nenhum item pendente no momento."}
           </div>
         )}
       </div>
@@ -171,8 +226,8 @@ const PedidosPendentes = () => {
               <TableRow>
                 <TableCell colSpan={5}><Skeleton className="h-8 w-full" /></TableCell>
               </TableRow>
-            ) : rows && rows.length > 0 ? (
-              rows.map((row) => (
+            ) : filteredRows.length > 0 ? (
+              filteredRows.map((row) => (
                 <TableRow key={row.itemId}>
                   <TableCell className="font-medium">{row.displayName}</TableCell>
                   <TableCell className="font-mono text-muted-foreground">#{row.orderId}</TableCell>
@@ -193,7 +248,7 @@ const PedidosPendentes = () => {
             ) : (
               <TableRow>
                 <TableCell colSpan={5} className="text-center py-10">
-                  Nenhum item pendente no momento.
+                  {rows && rows.length > 0 ? "Nenhum item encontrado para os filtros aplicados." : "Nenhum item pendente no momento."}
                 </TableCell>
               </TableRow>
             )}
