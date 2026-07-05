@@ -104,16 +104,83 @@ const OrderItemRow = memo(function OrderItemRow({
   }, [setValue, index]);
 
   return (
-    <div className="border p-3 rounded-xl bg-gray-50 space-y-2">
-      {/* Produto — linha inteira */}
-      <div className="flex items-start gap-2">
-        <div className="flex-1 min-w-0">
+    <>
+      {/* ── MOBILE: card empilhado (inalterado) ── */}
+      <div className="md:hidden border p-3 rounded-xl bg-gray-50 space-y-2">
+        {/* Produto — linha inteira */}
+        <div className="flex items-start gap-2">
+          <div className="flex-1 min-w-0">
+            <FormField
+              control={control}
+              name={`items.${index}.product_id`}
+              render={() => (
+                <FormItem>
+                  <FormLabel className="text-[11px] font-bold text-gray-500 uppercase">Produto / Variação</FormLabel>
+                  <ProductCombobox
+                    value={comboValue}
+                    selectedItem={selectedItem}
+                    onSearch={onSearch}
+                    onChange={handleChange}
+                    onClear={handleClear}
+                    placeholder="Buscar produto..."
+                    allowWrap={true}
+                  />
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+          {/* Botão remover — sempre visível no topo direito */}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={onRemove}
+            className="text-red-400 hover:bg-red-50 hover:text-red-600 h-8 w-8 mt-5 shrink-0"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {/* Qtd + Custo — lado a lado */}
+        <div className="grid grid-cols-2 gap-2">
           <FormField
             control={control}
-            name={`items.${index}.product_id`}
-            render={() => (
+            name={`items.${index}.quantity`}
+            render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-[11px] font-bold text-gray-500 uppercase">Produto / Variação</FormLabel>
+                <FormLabel className="text-[11px] font-bold text-gray-500 uppercase">Quantidade</FormLabel>
+                <FormControl>
+                  <Input type="number" min={1} className="h-10 text-sm font-bold" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={control}
+            name={`items.${index}.unit_cost`}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-[11px] font-bold text-gray-500 uppercase">Custo Unit. (R$)</FormLabel>
+                <FormControl>
+                  <Input type="number" step="0.01" min={0.01} className="h-10 text-sm font-bold" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+      </div>
+
+      {/* ── DESKTOP: linha única em formato de tabela ── */}
+      <div className="hidden md:grid grid-cols-[1fr_110px_130px_40px] gap-2 items-start px-2 py-2 border-b border-gray-100 last:border-0">
+        <FormField
+          control={control}
+          name={`items.${index}.product_id`}
+          render={() => (
+            <FormItem className="min-w-0">
+              <FormControl>
                 <ProductCombobox
                   value={comboValue}
                   selectedItem={selectedItem}
@@ -123,31 +190,16 @@ const OrderItemRow = memo(function OrderItemRow({
                   placeholder="Buscar produto..."
                   allowWrap={true}
                 />
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-        {/* Botão remover — sempre visível no topo direito */}
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={onRemove}
-          className="text-red-400 hover:bg-red-50 hover:text-red-600 h-8 w-8 mt-5 shrink-0"
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
-      </div>
-
-      {/* Qtd + Custo — lado a lado */}
-      <div className="grid grid-cols-2 gap-2">
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
         <FormField
           control={control}
           name={`items.${index}.quantity`}
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="text-[11px] font-bold text-gray-500 uppercase">Quantidade</FormLabel>
               <FormControl>
                 <Input type="number" min={1} className="h-10 text-sm font-bold" {...field} />
               </FormControl>
@@ -160,7 +212,6 @@ const OrderItemRow = memo(function OrderItemRow({
           name={`items.${index}.unit_cost`}
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="text-[11px] font-bold text-gray-500 uppercase">Custo Unit. (R$)</FormLabel>
               <FormControl>
                 <Input type="number" step="0.01" min={0.01} className="h-10 text-sm font-bold" {...field} />
               </FormControl>
@@ -168,8 +219,17 @@ const OrderItemRow = memo(function OrderItemRow({
             </FormItem>
           )}
         />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={onRemove}
+          className="text-red-400 hover:bg-red-50 hover:text-red-600 h-8 w-8 mt-1 shrink-0 justify-self-end"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
       </div>
-    </div>
+    </>
   );
 });
 
@@ -333,17 +393,27 @@ export const SupplierOrderForm = ({
             </TooltipProvider>
           </div>
 
-          {fields.map((field, index) => (
-            <OrderItemRow
-              key={field.id}
-              index={index}
-              control={form.control}
-              setValue={form.setValue}
-              onSearch={onSearch}
-              onRemove={() => remove(index)}
-              preloadedItem={preloadedItems[index] ?? null}
-            />
-          ))}
+          {/* Lista de itens — no desktop, altura limitada a ~15 itens com scroll interno e cabeçalho fixo */}
+          <div className="space-y-2 md:space-y-0 md:max-h-[640px] md:overflow-y-auto md:border md:rounded-xl md:bg-white">
+            {/* Cabeçalho de colunas — apenas desktop, fica fixo ao rolar */}
+            <div className="hidden md:grid grid-cols-[1fr_110px_130px_40px] gap-2 px-2 py-2 border-b sticky top-0 bg-white z-10">
+              <span className="text-[11px] font-bold text-gray-500 uppercase">Produto / Variação</span>
+              <span className="text-[11px] font-bold text-gray-500 uppercase">Quantidade</span>
+              <span className="text-[11px] font-bold text-gray-500 uppercase">Custo Unit. (R$)</span>
+              <span />
+            </div>
+            {fields.map((field, index) => (
+              <OrderItemRow
+                key={field.id}
+                index={index}
+                control={form.control}
+                setValue={form.setValue}
+                onSearch={onSearch}
+                onRemove={() => remove(index)}
+                preloadedItem={preloadedItems[index] ?? null}
+              />
+            ))}
+          </div>
         </div>
 
         {/* Observações */}
