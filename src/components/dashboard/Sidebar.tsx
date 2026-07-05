@@ -46,6 +46,7 @@ import {
   Flame,
   BookmarkCheck,
   WifiOff,
+  ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -139,6 +140,9 @@ const Sidebar = () => {
           {({ isActive }) => (<><ShoppingCart className={iconClass("text-amber-600", isActive)} />Pedidos Fornecedor</>)}
         </NavLink>
       )}
+      <NavLink to="/dashboard/pedidos-pendentes" className={navLinkClass}>
+        {({ isActive }) => (<><ClipboardList className={iconClass("text-amber-700", isActive)} />Pedido Pendente</>)}
+      </NavLink>
       <NavLink to="/dashboard/product-reservations" className={navLinkClass}>
         {({ isActive }) => (<><BookmarkCheck className={iconClass("text-amber-500", isActive)} />Lista de Reservas</>)}
       </NavLink>

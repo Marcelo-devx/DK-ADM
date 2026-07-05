@@ -65,6 +65,7 @@ import AuditoriaPedidos from "./pages/dashboard/AuditoriaPedidos";
 import WarmupManager from "./pages/dashboard/WarmupManager";
 import ProductReservations from "./pages/dashboard/ProductReservations";
 import AdminAcessoManual from "./pages/dashboard/AdminAcessoManual";
+import PedidosPendentes from "./pages/dashboard/PedidosPendentes";
 import VerificarAcesso from "./pages/VerificarAcesso";
 
 const DashboardIndex = () => {
@@ -124,6 +125,7 @@ const App = () => (
               <Route path="coupons" element={<Coupons />} />
               <Route path="promotions" element={<Promotions />} />
               <Route path="supplier-orders" element={<SupplierOrders />} />
+              <Route path="pedidos-pendentes" element={<PedidosPendentes />} />
               <Route path="settings" element={<Settings />} />
               <Route path="spoke-integration" element={<CircuitIntegration />} />
               <Route path="integrations" element={<Integrations />} />
