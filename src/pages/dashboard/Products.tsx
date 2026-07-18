@@ -27,7 +27,7 @@ const cleanAndParseFloat = (value: any): number => {
 
 const ProductsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { products, categories, subCategories, brands, isLoadingProducts, updateProductMutation, activateAllMutation } = useProductData();
+  const { products, categories, subCategories, brands, isLoadingProducts, updateProductMutation, activateAllMutation, zeroStockMutation } = useProductData();
   
   // Local state for filters (no need to be in URL unless requested)
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -153,6 +153,12 @@ const ProductsPage = () => {
   const handleActivateAll = () => {
     if (confirm("Deseja realmente ativar a visibilidade de TODOS os produtos do catálogo?")) {
         activateAllMutation.mutate();
+    }
+  };
+
+  const handleZeroStock = () => {
+    if (confirm("Isso vai ZERAR a quantidade de estoque de TODOS os produtos e variações. Essa ação não pode ser desfeita. Deseja continuar?")) {
+        zeroStockMutation.mutate();
     }
   };
 
@@ -381,6 +387,8 @@ const ProductsPage = () => {
         onDownloadTemplate={handleDownloadTemplate}
         onActivateAll={handleActivateAll}
         isActivatingAll={activateAllMutation.isPending}
+        onZeroStock={handleZeroStock}
+        isZeroingStock={zeroStockMutation.isPending}
         isExporting={isExporting}
       />
       

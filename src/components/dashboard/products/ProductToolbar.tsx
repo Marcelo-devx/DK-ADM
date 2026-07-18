@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { PlusCircle, Search, DownloadCloud, FileUp, FileDown, Eye, Loader2, SlidersHorizontal, X, FilterX, Package } from "lucide-react";
+import { PlusCircle, Search, DownloadCloud, FileUp, FileDown, Eye, Loader2, SlidersHorizontal, X, FilterX, Package, ClipboardList } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +24,8 @@ interface ProductToolbarProps {
   onDownloadTemplate: () => void;
   onActivateAll: () => void;
   isActivatingAll: boolean;
+  onZeroStock: () => void;
+  isZeroingStock: boolean;
   isExporting?: boolean;
 }
 
@@ -43,6 +45,8 @@ export const ProductToolbar = ({
   onDownloadTemplate,
   onActivateAll,
   isActivatingAll,
+  onZeroStock,
+  isZeroingStock,
   isExporting = false,
 }: ProductToolbarProps) => {
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
@@ -233,6 +237,15 @@ export const ProductToolbar = ({
                       {isExporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
                       Exportar
                     </Button>
+                    <Button
+                      variant="outline"
+                      className="h-10 text-xs gap-1.5 text-red-700 border-red-200 hover:bg-red-50"
+                      onClick={() => { onZeroStock(); setMobileFiltersOpen(false); }}
+                      disabled={isZeroingStock}
+                    >
+                      {isZeroingStock ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ClipboardList className="h-3.5 w-3.5" />}
+                      Balanço de Estoque
+                    </Button>
                   </div>
                 </div>
 
@@ -346,6 +359,23 @@ export const ProductToolbar = ({
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent><p>Exportar Catálogo</p></TooltipContent>
+                </Tooltip>
+
+                <div className="w-[1px] h-4 bg-gray-200 mx-1" />
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      className="h-9 px-3 text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-2 font-bold text-xs"
+                      onClick={onZeroStock}
+                      disabled={isZeroingStock}
+                    >
+                      {isZeroingStock ? <Loader2 className="h-4 w-4 animate-spin" /> : <ClipboardList className="h-4 w-4" />}
+                      <span>Balanço de Estoque</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent><p>Zerar a quantidade de estoque de todos os produtos e variações</p></TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             </div>

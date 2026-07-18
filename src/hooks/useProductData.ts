@@ -202,6 +202,27 @@ export const useProductData = () => {
     onError: (err: any) => showError(err.message),
   });
 
+  const zeroStockMutation = useMutation({
+    mutationFn: async () => {
+      const { error: variantsError } = await supabase
+        .from("product_variants")
+        .update({ stock_quantity: 0 })
+        .not("id", "is", null);
+      if (variantsError) throw variantsError;
+
+      const { error: productsError } = await supabase
+        .from("products")
+        .update({ stock_quantity: 0 })
+        .not("id", "is", null);
+      if (productsError) throw productsError;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      showSuccess("Estoque zerado com sucesso!");
+    },
+    onError: (err: any) => showError(err.message),
+  });
+
   // UPDATED: Using RPC for safe deletion
   const deleteMutation = useMutation({
     mutationFn: async (productId: number) => {
@@ -241,6 +262,7 @@ export const useProductData = () => {
     addProductMutation,
     updateProductMutation,
     activateAllMutation,
+    zeroStockMutation,
     deleteMutation,
     bulkInsertMutation
   };
