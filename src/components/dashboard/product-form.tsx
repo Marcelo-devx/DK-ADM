@@ -37,6 +37,7 @@ import { ProductVariantManager } from "./ProductVariantManager";
 import { Separator } from "../ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { SearchableCombobox } from "./products/SearchableCombobox";
 
 const formSchema = z.object({
   id: z.number().optional(),
@@ -90,6 +91,7 @@ export const ProductForm = ({
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [variantsToClone, setVariantsToClone] = useState<any[]>([]);
   const [isCloning, setIsCloning] = useState(false);
+  const [selectedCloneLabel, setSelectedCloneLabel] = useState("");
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(formSchema),
@@ -237,20 +239,22 @@ export const ProductForm = ({
                 </div>
             </div>
             <div className="flex-1 w-full">
-                <Select onValueChange={handleCloneProduct} disabled={isCloning}>
-                    <SelectTrigger className="bg-white">
-                        <SelectValue placeholder="Selecione um produto para copiar..." />
-                    </SelectTrigger>
-                    <SelectContent className="max-w-[calc(100vw-3rem)]">
-                        {existingProducts.map(p => (
-                            <SelectItem key={p.id} value={String(p.id)} className="max-w-full">
-                                <span className="block truncate">
-                                    {p.name} {p.brand ? `(${p.brand})` : ''}
-                                </span>
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+                <SearchableCombobox
+                    options={existingProducts.map(p => ({
+                        value: String(p.id),
+                        label: `${p.name}${p.brand ? ` (${p.brand})` : ''}`,
+                    }))}
+                    displayLabel={selectedCloneLabel}
+                    onSelect={(val, label) => {
+                        setSelectedCloneLabel(label);
+                        handleCloneProduct(val);
+                    }}
+                    placeholder="Selecione um produto para copiar..."
+                    searchPlaceholder="Pesquisar produto..."
+                    emptyMessage="Nenhum produto encontrado."
+                    disabled={isCloning}
+                    className="bg-white"
+                />
             </div>
         </div>
       )}
@@ -306,13 +310,20 @@ export const ProductForm = ({
               render={({ field }) => (
                   <FormItem>
                   <FormLabel className="text-xs font-bold uppercase text-gray-500">Marca</FormLabel>
-                  <Select onValueChange={(val) => field.onChange(val === '__none' ? '' : val)} value={field.value} disabled={isLoadingBrands}>
-                      <FormControl><SelectTrigger className="h-11"><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
-                      <SelectContent>
-                          <SelectItem value="__none">Sem Marca</SelectItem>
-                          {brands.map((brand) => (<SelectItem key={brand.id} value={brand.name}>{brand.name}</SelectItem>))}
-                      </SelectContent>
-                  </Select>
+                  <FormControl>
+                    <SearchableCombobox
+                        options={[
+                            { value: "__none", label: "Sem Marca" },
+                            ...brands.map((brand) => ({ value: brand.name, label: brand.name })),
+                        ]}
+                        value={field.value || "__none"}
+                        onSelect={(val) => field.onChange(val === '__none' ? '' : val)}
+                        placeholder="Selecione"
+                        searchPlaceholder="Pesquisar marca..."
+                        emptyMessage="Nenhuma marca encontrada."
+                        disabled={isLoadingBrands}
+                    />
+                  </FormControl>
                   <FormMessage />
                   </FormItem>
               )}
