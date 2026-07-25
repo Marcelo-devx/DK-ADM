@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -46,10 +46,25 @@ export const SearchableCombobox = ({
   className,
 }: SearchableComboboxProps) => {
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const selectedLabel = displayLabel ?? options.find((o) => o.value === value)?.label;
 
+  const filteredOptions = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+    if (!normalizedSearch) return options;
+    return options.filter((option) =>
+      option.label.toLowerCase().includes(normalizedSearch),
+    );
+  }, [options, search]);
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) setSearch("");
+      }}
+    >
       <PopoverTrigger asChild>
         <Button
           type="button"
@@ -71,15 +86,22 @@ export const SearchableCombobox = ({
         align="start"
         className="w-[--radix-popover-trigger-width] max-w-[calc(100vw-3rem)] p-0"
       >
-        <Command>
-          <CommandInput placeholder={searchPlaceholder} />
+        <Command shouldFilter={false}>
+          <CommandInput
+            placeholder={searchPlaceholder}
+            value={search}
+            onValueChange={setSearch}
+          />
+          <div className="px-3 py-1.5 text-[11px] text-muted-foreground border-b">
+            {filteredOptions.length} de {options.length} {options.length === 1 ? "resultado" : "resultados"}
+          </div>
           <CommandList className="max-h-72">
             <CommandEmpty>{emptyMessage}</CommandEmpty>
             <CommandGroup>
-              {options.map((option) => (
+              {filteredOptions.map((option) => (
                 <CommandItem
                   key={option.value}
-                  value={option.label}
+                  value={option.value}
                   onSelect={() => {
                     onSelect(option.value, option.label);
                     setOpen(false);
