@@ -69,10 +69,11 @@ import PedidosPendentes from "./pages/dashboard/PedidosPendentes";
 import VerificarAcesso from "./pages/VerificarAcesso";
 
 const DashboardIndex = () => {
-  const { isGerente, isGerenteGeral, isAdmin, loading } = useUser();
+  const { isGerente, isGerenteGeral, isLogistica, isAdmin, loading } = useUser();
   if (loading) return null;
   if (isGerenteGeral) return <Navigate to="/dashboard/orders" replace />;
   if (isGerente && !isAdmin) return <Navigate to="/dashboard/orders" replace />;
+  if (isLogistica && !isAdmin) return <Navigate to="/dashboard/orders" replace />;
   return <Dashboard />;
 };
 
