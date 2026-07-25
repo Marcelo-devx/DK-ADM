@@ -33,6 +33,7 @@ const ProductsPage = () => {
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [brandFilter, setBrandFilter] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [maxStockFilter, setMaxStockFilter] = useState<string>("");
   const [sortState, setSortState] = useState<SortState>({ column: null, direction: null });
 
   // States for Import Flow (needs to pass data to modal)
@@ -141,14 +142,18 @@ const ProductsPage = () => {
     let result = products.filter(product => {
       const matchesCategory = categoryFilter === 'all' || product.category === categoryFilter;
       const matchesBrand = brandFilter === 'all' || product.brand === brandFilter;
-      const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                             (product.sku?.toLowerCase().includes(searchTerm.toLowerCase()));
-      return matchesCategory && matchesBrand && matchesSearch;
+      const productStock = Number(product.variant_stock_total || 0) > 0
+        ? Number(product.variant_stock_total)
+        : (product.stock_quantity || 0);
+      const matchesMaxStock = maxStockFilter === '' || isNaN(Number(maxStockFilter)) || productStock <= Number(maxStockFilter);
+      return matchesCategory && matchesBrand && matchesSearch && matchesMaxStock;
     });
     
     // Depois aplica a ordenação
     return sortProducts(result);
-  }, [products, categoryFilter, brandFilter, searchTerm, sortState]);
+  }, [products, categoryFilter, brandFilter, searchTerm, maxStockFilter, sortState]);
 
   const handleActivateAll = () => {
     if (confirm("Deseja realmente ativar a visibilidade de TODOS os produtos do catálogo?")) {
@@ -378,6 +383,8 @@ const ProductsPage = () => {
         onBrandFilterChange={setBrandFilter}
         categoryFilter={categoryFilter}
         onCategoryFilterChange={setCategoryFilter}
+        maxStockFilter={maxStockFilter}
+        onMaxStockFilterChange={setMaxStockFilter}
         brands={brands}
         categories={categories}
         totalCount={filteredProducts.length}
