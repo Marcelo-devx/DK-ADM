@@ -55,6 +55,7 @@ const OrderItemRow = memo(function OrderItemRow({
   onSearch,
   onRemove,
   preloadedItem,
+  autoOpenProduct,
 }: {
   index: number;
   control: any;
@@ -62,6 +63,7 @@ const OrderItemRow = memo(function OrderItemRow({
   onSearch: (term: string) => Promise<SelectableItem[]>;
   onRemove: () => void;
   preloadedItem?: SelectableItem | null;
+  autoOpenProduct?: boolean;
 }) {
   // Estado local do item selecionado — isolado por linha
   const [selectedItem, setSelectedItem] = useState<SelectableItem | null>(preloadedItem ?? null);
@@ -124,6 +126,7 @@ const OrderItemRow = memo(function OrderItemRow({
                     onClear={handleClear}
                     placeholder="Buscar produto..."
                     allowWrap={true}
+                    autoOpen={autoOpenProduct}
                   />
                   <FormMessage />
                 </FormItem>
@@ -189,6 +192,7 @@ const OrderItemRow = memo(function OrderItemRow({
                   onClear={handleClear}
                   placeholder="Buscar produto..."
                   allowWrap={true}
+                  autoOpen={autoOpenProduct}
                 />
               </FormControl>
               <FormMessage />
@@ -244,6 +248,7 @@ export const SupplierOrderForm = ({
   const [isLowStockModalOpen, setIsLowStockModalOpen] = useState(false);
   const [lowStockProducts, setLowStockProducts] = useState<SelectableItem[]>([]);
   const [isLoadingLowStock, setIsLoadingLowStock] = useState(false);
+  const [justAddedIndex, setJustAddedIndex] = useState<number | null>(null);
 
   const form = useForm<SupplierOrderFormValues>({
     resolver: zodResolver(formSchema),
@@ -312,6 +317,7 @@ export const SupplierOrderForm = ({
       if (e.altKey && (e.key === "z" || e.key === "Z")) {
         e.preventDefault();
         e.stopPropagation();
+        setJustAddedIndex(fields.length);
         append({ product_id: undefined as any, variant_id: null, quantity: 1, unit_cost: 0 });
         showSuccess("Nova linha adicionada (Alt+Z)");
       }
@@ -319,7 +325,7 @@ export const SupplierOrderForm = ({
     document.addEventListener("keydown", handleKeyDown, { capture: true });
     return () =>
       document.removeEventListener("keydown", handleKeyDown, { capture: true } as any);
-  }, [append]);
+  }, [append, fields.length]);
 
   return (
     <Form {...form}>
@@ -371,14 +377,15 @@ export const SupplierOrderForm = ({
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() =>
+                    onClick={() => {
+                      setJustAddedIndex(fields.length);
                       append({
                         product_id: undefined as any,
                         variant_id: null,
                         quantity: 1,
                         unit_cost: 0,
-                      })
-                    }
+                      });
+                    }}
                   >
                     <Plus className="h-4 w-4 mr-2" /> Adicionar Item
                   </Button>
@@ -411,6 +418,7 @@ export const SupplierOrderForm = ({
                 onSearch={onSearch}
                 onRemove={() => remove(index)}
                 preloadedItem={preloadedItems[index] ?? null}
+                autoOpenProduct={index === justAddedIndex}
               />
             ))}
           </div>

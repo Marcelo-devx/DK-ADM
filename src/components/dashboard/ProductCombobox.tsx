@@ -40,6 +40,7 @@ interface ProductComboboxProps {
   onClear?: () => void;
   placeholder?: string;
   allowWrap?: boolean;
+  autoOpen?: boolean;
 }
 
 export const ProductCombobox = React.memo(function ProductCombobox({
@@ -50,12 +51,19 @@ export const ProductCombobox = React.memo(function ProductCombobox({
   onClear,
   placeholder = "Buscar produto...",
   allowWrap = false,
+  autoOpen = false,
 }: ProductComboboxProps) {
   const [open, setOpen] = React.useState(false);
   const [searchValue, setSearchValue] = React.useState("");
   const [results, setResults] = React.useState<SelectableItem[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
   const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Abre automaticamente o popover ao montar (usado para linhas recém-adicionadas)
+  React.useEffect(() => {
+    if (autoOpen) setOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Quando o popover abre, busca os primeiros resultados (sem termo)
   React.useEffect(() => {
