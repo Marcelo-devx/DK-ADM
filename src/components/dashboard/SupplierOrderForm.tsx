@@ -325,6 +325,7 @@ export const SupplierOrderForm = ({
         setJustAddedIndex(fields.length);
         append({ product_id: undefined as any, variant_id: null, quantity: 1, unit_cost: 0 });
         showSuccess("Nova linha adicionada (Alt+Z)");
+        setTimeout(() => setJustAddedIndex(null), 1000);
       }
     };
     document.addEventListener("keydown", handleKeyDown, { capture: true });
@@ -390,6 +391,7 @@ export const SupplierOrderForm = ({
                         quantity: 1,
                         unit_cost: 0,
                       });
+                      setTimeout(() => setJustAddedIndex(null), 1000);
                     }}
                   >
                     <Plus className="h-4 w-4 mr-2" /> Adicionar Item
@@ -421,7 +423,13 @@ export const SupplierOrderForm = ({
                 control={form.control}
                 setValue={form.setValue}
                 onSearch={onSearch}
-                onRemove={() => remove(index)}
+                onRemove={() => {
+                  // Busca o índice atual pelo id do campo (evita remover a linha
+                  // errada caso o índice tenha ficado desatualizado após
+                  // adições/remoções anteriores).
+                  const currentIndex = fields.findIndex((f) => f.id === field.id);
+                  if (currentIndex !== -1) remove(currentIndex);
+                }}
                 preloadedItem={preloadedItems[index] ?? null}
                 autoOpenProduct={index === justAddedIndex}
               />
@@ -446,12 +454,19 @@ export const SupplierOrderForm = ({
 
         {/* Total + Botão — sticky no mobile */}
         <div className="sticky bottom-0 bg-white pt-3 pb-2 -mx-4 px-4 md:static md:mx-0 md:px-0 md:pb-0 md:pt-0 border-t md:border-none space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 p-3 md:p-4 bg-primary/5 rounded-xl border border-primary/10">
-            <div className="flex flex-col">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 p-3 md:p-4 bg-primary/5 rounded-xl border border-primary/10">
+            <div className="flex flex-col gap-1.5">
               <span className="text-sm md:text-lg font-bold">Total Estimado:</span>
-              <span className="text-xs text-muted-foreground">
-                {totalLines} {totalLines === 1 ? "produto" : "produtos"} • {totalQuantity} {totalQuantity === 1 ? "item" : "itens"} no total
-              </span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 text-primary text-xs md:text-sm font-bold px-2.5 py-1">
+                  <Package className="h-3.5 w-3.5" />
+                  {totalLines} {totalLines === 1 ? "produto" : "produtos"}
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 text-primary text-xs md:text-sm font-bold px-2.5 py-1">
+                  <Zap className="h-3.5 w-3.5" />
+                  {totalQuantity} {totalQuantity === 1 ? "item" : "itens"} no total
+                </span>
+              </div>
             </div>
             <span className="text-xl md:text-2xl font-black text-primary">
               {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(total)}
