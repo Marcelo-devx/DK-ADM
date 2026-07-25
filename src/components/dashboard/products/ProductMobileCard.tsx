@@ -31,6 +31,8 @@ const ProductImage = ({ url, name }: { url: string | null; name: string }) => {
     <img
       src={src}
       alt={name}
+      loading="lazy"
+      decoding="async"
       className="h-14 w-14 rounded-lg object-cover border shadow-sm"
       onError={() => {
         if (!retried) {

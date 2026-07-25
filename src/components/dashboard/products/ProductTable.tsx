@@ -78,6 +78,8 @@ const ProductImage = ({ url, name, onZoom }: { url: string | null; name: string;
       <img
         src={src}
         alt={name}
+        loading="lazy"
+        decoding="async"
         className="h-12 w-12 rounded-lg object-cover shadow-sm border shrink-0 cursor-zoom-in hover:opacity-80 transition-opacity"
         onClick={() => onZoom(url)}
         onError={() => {
