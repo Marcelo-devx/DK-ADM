@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import * as XLSX from 'xlsx';
 import { mapRowKeys } from "@/utils/excel-utils";
@@ -8,11 +8,14 @@ import { ProductTable } from "@/components/dashboard/products/ProductTable";
 import { ProductToolbar } from "@/components/dashboard/products/ProductToolbar";
 import { ProductDialogs } from "@/components/dashboard/products/ProductDialogs";
 import { ExtendedProduct } from "@/hooks/useProductData";
+import { Button } from "@/components/ui/button";
 
 interface SortState {
   column: string | null;
   direction: 'asc' | 'desc' | null;
 }
+
+const PAGE_SIZE = 30;
 
 // Helper para limpeza de dados do Excel
 const cleanAndParseFloat = (value: any): number => {
@@ -35,6 +38,7 @@ const ProductsPage = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [maxStockFilter, setMaxStockFilter] = useState<string>("");
   const [sortState, setSortState] = useState<SortState>({ column: null, direction: null });
+  const [currentPage, setCurrentPage] = useState(1);
 
   // States for Import Flow (needs to pass data to modal)
   const [productsToConfirm, setProductsToConfirm] = useState<any[]>([]);
@@ -154,6 +158,18 @@ const ProductsPage = () => {
     // Depois aplica a ordenação
     return sortProducts(result);
   }, [products, categoryFilter, brandFilter, searchTerm, maxStockFilter, sortState]);
+
+  // Sempre que os filtros/ordenação mudam, volta para a primeira página
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [categoryFilter, brandFilter, searchTerm, maxStockFilter, sortState]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE));
+
+  const paginatedProducts = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredProducts.slice(start, start + PAGE_SIZE);
+  }, [filteredProducts, currentPage]);
 
   const handleActivateAll = () => {
     if (confirm("Deseja realmente ativar a visibilidade de TODOS os produtos do catálogo?")) {
@@ -402,9 +418,9 @@ const ProductsPage = () => {
       {/* Hidden Input for Import */}
       <input type="file" id="import-input" className="hidden" onChange={handleImportXLSX} accept=".xlsx, .xls" />
 
-      <ProductTable 
+      <ProductTable
         isLoading={isLoadingProducts}
-        products={filteredProducts}
+        products={paginatedProducts}
         onEdit={(p) => openModal("edit", p.id)}
         onDelete={(p) => openModal("delete", p.id)}
         onViewVariants={(p) => openModal("variants", p.id)}
@@ -413,7 +429,33 @@ const ProductsPage = () => {
         onSortChange={handleSortChange}
       />
 
-      <ProductDialogs 
+      {!isLoadingProducts && filteredProducts.length > 0 && (
+        <div className="flex items-center justify-between mt-4 px-1">
+          <span className="text-xs text-muted-foreground font-medium">
+            Página {currentPage} de {totalPages}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+            >
+              Anterior
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+            >
+              Próxima
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <ProductDialogs
         products={products || []}
         categories={categories || []}
         subCategories={subCategories || []}
