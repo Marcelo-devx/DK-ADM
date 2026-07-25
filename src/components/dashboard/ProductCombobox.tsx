@@ -58,6 +58,7 @@ export const ProductCombobox = React.memo(function ProductCombobox({
   const [results, setResults] = React.useState<SelectableItem[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
   const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef = React.useRef<HTMLInputElement>(null);
 
   // Abre automaticamente o popover ao montar (usado para linhas recém-adicionadas)
   React.useEffect(() => {
@@ -65,7 +66,7 @@ export const ProductCombobox = React.memo(function ProductCombobox({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Quando o popover abre, busca os primeiros resultados (sem termo)
+  // Quando o popover abre, busca os primeiros resultados (sem termo) e foca o campo de busca
   React.useEffect(() => {
     if (!open) {
       setSearchValue("");
@@ -74,6 +75,13 @@ export const ProductCombobox = React.memo(function ProductCombobox({
     }
     // Busca inicial ao abrir
     triggerSearch("");
+    // Garante o foco no campo de busca mesmo quando o popover é aberto
+    // programaticamente (ex: auto-abertura de linha recém-adicionada),
+    // já que nesse caso o autoFocus nativo do input nem sempre é aplicado.
+    const raf = requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(raf);
   }, [open]);
 
   const triggerSearch = React.useCallback(
@@ -207,6 +215,7 @@ export const ProductCombobox = React.memo(function ProductCombobox({
           <div className="flex items-center border-b px-3">
             <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
             <input
+              ref={inputRef}
               autoFocus
               placeholder="Digite para buscar... (espaço ou % = curinga)"
               value={searchValue}
