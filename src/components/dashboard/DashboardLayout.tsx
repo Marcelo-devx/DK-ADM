@@ -25,9 +25,10 @@ const OPERACIONAL_ALLOWED_ROUTES = [
   "/dashboard/delivery-routes",
 ];
 
-// Rotas visíveis no menu para a role "gerente" (Pedidos, Exportar Rotas, Imprimir Etiquetas)
+// Rotas visíveis no menu para a role "gerente" (Pedidos, Pedidos Fornecedor, Exportar Rotas, Imprimir Etiquetas)
 const GERENTE_ALLOWED_ROUTES = [
   "/dashboard/orders",
+  "/dashboard/supplier-orders",
   "/dashboard/spoke-export",
   "/dashboard/print-labels",
 ];
