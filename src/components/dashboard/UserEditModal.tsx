@@ -371,7 +371,7 @@ export function UserEditModal({ isOpen, onClose, user, onConfirm }: UserEditModa
                     <span className="text-slate-600">👤 Usuário (padrão)</span>
                   </SelectItem>
                   <SelectItem value="logistica">
-                    <span className="text-green-600">🚚 Logística</span>
+                    <span className="text-green-600">🚚 Gestor</span>
                   </SelectItem>
                   <SelectItem value="gerente">
                     <span className="text-purple-600">👔 Gerente</span>
@@ -388,7 +388,7 @@ export function UserEditModal({ isOpen, onClose, user, onConfirm }: UserEditModa
                 {form.role === "adm" && "⚠️ Acesso total ao painel administrativo."}
                 {form.role === "gerente_geral" && "⭐ Acesso ampliado com menus operacionais e administrativos liberados."}
                 {form.role === "gerente" && "👔 Acesso restrito a rotas operacionais e logística."}
-                {form.role === "logistica" && "✅ Acesso restrito: Pedidos, Exportar Rotas e Imprimir Etiquetas."}
+                {form.role === "logistica" && "✅ Acesso restrito: Pedidos, Pedidos Fornecedor, Produtos, Exportar Rotas e Imprimir Etiquetas."}
                 {form.role === "user" && "Acesso apenas ao site da loja."}
               </p>
             </div>
