@@ -25,6 +25,13 @@ const OPERACIONAL_ALLOWED_ROUTES = [
   "/dashboard/delivery-routes",
 ];
 
+// Rotas visíveis no menu para a role "gerente" (Pedidos, Exportar Rotas, Imprimir Etiquetas)
+const GERENTE_ALLOWED_ROUTES = [
+  "/dashboard/orders",
+  "/dashboard/spoke-export",
+  "/dashboard/print-labels",
+];
+
 const GERENTE_GERAL_ALLOWED_ROUTES = [
   "/dashboard/orders",
   "/dashboard/donations",
@@ -103,7 +110,17 @@ const DashboardLayout = () => {
         }
       }
 
-      if ((isLogistica || isGerente) && !isAdmin && !isGerenteGeral) {
+      if (isGerente && !isAdmin && !isGerenteGeral) {
+        const currentPath = location.pathname;
+        const isAllowed =
+          currentPath === "/dashboard" ||
+          GERENTE_ALLOWED_ROUTES.some((r) => currentPath.startsWith(r));
+
+        if (!isAllowed) {
+          navigate("/dashboard/orders", { replace: true });
+          return;
+        }
+      } else if (isLogistica && !isAdmin && !isGerenteGeral) {
         const currentPath = location.pathname;
         const isAllowed =
           currentPath === "/dashboard" ||
