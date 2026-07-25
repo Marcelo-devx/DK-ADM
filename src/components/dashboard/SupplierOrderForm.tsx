@@ -281,6 +281,11 @@ export const SupplierOrderForm = ({
       ),
     [watchedItems]
   );
+  const totalLines = watchedItems?.length || 0;
+  const totalQuantity = useMemo(
+    () => (watchedItems || []).reduce((acc, item) => acc + Number(item?.quantity || 0), 0),
+    [watchedItems]
+  );
 
   // Abre modal de estoque baixo — busca produtos via server-side
   const handleOpenLowStockModal = useCallback(async () => {
@@ -441,8 +446,13 @@ export const SupplierOrderForm = ({
 
         {/* Total + Botão — sticky no mobile */}
         <div className="sticky bottom-0 bg-white pt-3 pb-2 -mx-4 px-4 md:static md:mx-0 md:px-0 md:pb-0 md:pt-0 border-t md:border-none space-y-2">
-          <div className="flex items-center justify-between p-3 md:p-4 bg-primary/5 rounded-xl border border-primary/10">
-            <span className="text-sm md:text-lg font-bold">Total Estimado:</span>
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 p-3 md:p-4 bg-primary/5 rounded-xl border border-primary/10">
+            <div className="flex flex-col">
+              <span className="text-sm md:text-lg font-bold">Total Estimado:</span>
+              <span className="text-xs text-muted-foreground">
+                {totalLines} {totalLines === 1 ? "produto" : "produtos"} • {totalQuantity} {totalQuantity === 1 ? "item" : "itens"} no total
+              </span>
+            </div>
             <span className="text-xl md:text-2xl font-black text-primary">
               {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(total)}
             </span>
