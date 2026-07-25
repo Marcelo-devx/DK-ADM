@@ -6,10 +6,11 @@ import { useKeepAlive } from "@/hooks/useKeepAlive";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 
-// Rotas visíveis no menu para a role "logistica" (Pedidos, Pedidos Fornecedor, Exportar Rotas, Imprimir Etiquetas)
+// Rotas visíveis no menu para a role "logistica" (Pedidos, Pedidos Fornecedor, Produtos, Exportar Rotas, Imprimir Etiquetas)
 const OPERACIONAL_ALLOWED_ROUTES = [
   "/dashboard/orders",
   "/dashboard/supplier-orders",
+  "/dashboard/products",
   "/dashboard/spoke-export",
   "/dashboard/print-labels",
 ];

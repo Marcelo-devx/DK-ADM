@@ -424,6 +424,11 @@ const Sidebar = () => {
             <NavLink to="/dashboard/supplier-orders" className={navLinkClass}>
               {({ isActive }) => (<><ShoppingCart className={iconClass("text-amber-600", isActive)} />Pedidos Fornecedor</>)}
             </NavLink>
+            {!isGerente && (
+              <NavLink to="/dashboard/products" className={navLinkClass}>
+                {({ isActive }) => (<><Package className={iconClass("text-blue-600", isActive)} />Produtos</>)}
+              </NavLink>
+            )}
             <NavLink to="/dashboard/spoke-export" className={navLinkClass}>
               {({ isActive }) => (<><FileOutput className={iconClass("text-green-600", isActive)} />Exportar Rotas</>)}
             </NavLink>
