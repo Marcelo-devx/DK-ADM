@@ -1466,7 +1466,6 @@ const OrdersPage = () => {
                 <TableHead>Status</TableHead>
                 <TableHead>Entrega</TableHead>
                 <TableHead>Pagamento</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1648,7 +1647,7 @@ const OrdersPage = () => {
                         <PaymentIcon className="w-3 h-3" />{paymentDetails.label}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right hidden">
                       <div className="flex justify-end gap-1">
                         {needsManualValidation ? (
                           <>
