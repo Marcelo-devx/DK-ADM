@@ -110,6 +110,17 @@ export function OrderEditModal({ order, isOpen, onClose }: OrderEditModalProps) 
   };
 
   const handleSave = async () => {
+    if (
+      order.status === 'Cancelado' &&
+      updates.status !== 'Cancelado' &&
+      (updates.status === 'Pago' || updates.status === 'Finalizada')
+    ) {
+      showError(
+        'Pedidos cancelados só podem ser reativados na tela "Reativar Pedidos Cancelados" (isso garante que o estoque seja descontado corretamente).'
+      );
+      return;
+    }
+
     setIsLoading(true);
     try {
       const { error } = await supabase
@@ -174,11 +185,16 @@ export function OrderEditModal({ order, isOpen, onClose }: OrderEditModalProps) 
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Pendente">Pendente</SelectItem>
-                      <SelectItem value="Pago">Pago</SelectItem>
-                      <SelectItem value="Finalizada">Finalizada</SelectItem>
+                      <SelectItem value="Pago" disabled={order.status === "Cancelado"}>Pago</SelectItem>
+                      <SelectItem value="Finalizada" disabled={order.status === "Cancelado"}>Finalizada</SelectItem>
                       <SelectItem value="Cancelado">Cancelado</SelectItem>
                     </SelectContent>
                   </Select>
+                  {order.status === "Cancelado" && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Para reativar, use a tela "Reativar Pedidos Cancelados" (deduz o estoque corretamente).
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-1">
