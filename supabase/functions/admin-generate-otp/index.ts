@@ -63,9 +63,6 @@ serve(async (req) => {
       })
     }
 
-    // Gerar código de 6 dígitos
-    const code = String(Math.floor(100000 + Math.random() * 900000))
-
     // Calcular expiração: 10 minutos
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString()
 
@@ -79,17 +76,31 @@ serve(async (req) => {
 
     const userId = profileData?.id
 
-    // Inserir na tabela email_links (mesmo fluxo do sistema normal)
-    const { error: insertError } = await supabaseAdmin
-      .from('email_links')
-      .insert({
-        email,
-        token: code,
-        type: 'signup_otp',
-        used: false,
-        expires_at: expiresAt,
-        user_id: userId || null,
-      })
+    // A coluna "token" tem constraint UNIQUE, então tentamos algumas vezes
+    // com códigos diferentes caso ocorra colisão com um token já existente.
+    let code = ''
+    let insertError: any = null
+    for (let attempt = 0; attempt < 5; attempt++) {
+      code = String(Math.floor(100000 + Math.random() * 900000))
+
+      const { error } = await supabaseAdmin
+        .from('email_links')
+        .insert({
+          email,
+          token: code,
+          type: 'signup_otp',
+          used: false,
+          expires_at: expiresAt,
+          user_id: userId || null,
+        })
+
+      insertError = error
+      if (!error) break
+
+      // Só continua tentando se for colisão de unicidade; outros erros abortam de imediato
+      if (error.code !== '23505') break
+      console.warn(`[${FN}] Colisão de código detectada, tentando novamente (tentativa ${attempt + 1})`)
+    }
 
     if (insertError) {
       console.error(`[${FN}] Erro ao inserir código:`, insertError)
