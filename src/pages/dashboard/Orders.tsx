@@ -1693,7 +1693,7 @@ const OrdersPage = () => {
                             )}
                             <Button variant="ghost" size="icon" onClick={() => { setSelectedOrder(order); setIsDetailModalOpen(true); }}><Eye className="h-4 w-4 text-primary" /></Button>
                             <DropdownMenu>
-                              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="hidden"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
                                 <DropdownMenuLabel>Ações do Pedido</DropdownMenuLabel>
                                 {(isAdmin || isGerenteGeral) && (
