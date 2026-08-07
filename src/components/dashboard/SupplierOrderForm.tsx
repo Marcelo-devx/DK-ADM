@@ -43,7 +43,10 @@ interface SupplierOrderFormProps {
   isSubmitting: boolean;
   onSearch: (term: string) => Promise<SelectableItem[]>;
   initialValues?: SupplierOrderFormValues | null;
-  preloadedItems?: SelectableItem[];
+  // Indexado por uma chave estável (_key) atribuída a cada item em `initialValues`,
+  // não por posição — assim a remoção de uma linha no meio da lista não faz o
+  // preload "vazar" para a linha errada.
+  preloadedItems?: Record<string, SelectableItem>;
 }
 
 // ─── Linha individual do pedido ───────────────────────────────────────────────
@@ -243,7 +246,7 @@ export const SupplierOrderForm = ({
   isSubmitting,
   onSearch,
   initialValues = null,
-  preloadedItems = [],
+  preloadedItems = {},
 }: SupplierOrderFormProps) => {
   const [isLowStockModalOpen, setIsLowStockModalOpen] = useState(false);
   const [lowStockProducts, setLowStockProducts] = useState<SelectableItem[]>([]);
@@ -430,7 +433,9 @@ export const SupplierOrderForm = ({
                   const currentIndex = fields.findIndex((f) => f.id === field.id);
                   if (currentIndex !== -1) remove(currentIndex);
                 }}
-                preloadedItem={preloadedItems[index] ?? null}
+                preloadedItem={
+                  ((field as any)._key && preloadedItems[(field as any)._key]) || null
+                }
                 autoOpenProduct={index === justAddedIndex}
               />
             ))}

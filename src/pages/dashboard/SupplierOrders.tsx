@@ -220,8 +220,10 @@ const SupplierOrdersPage = () => {
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
   const [editingOrderId, setEditingOrderId] = useState<number | null>(null);
   const [editingInitialValues, setEditingInitialValues] = useState<any | null>(null);
-  // Itens pré-carregados para edição (para exibir nomes corretos no combobox)
-  const [editingPreloadedItems, setEditingPreloadedItems] = useState<SelectableItem[]>([]);
+  // Itens pré-carregados para edição (para exibir nomes corretos no combobox).
+  // Indexado por uma chave estável (_key) associada a cada item, não por posição —
+  // isso evita que a remoção de um item no meio da lista "confunda" o preload de outro.
+  const [editingPreloadedItems, setEditingPreloadedItems] = useState<Record<string, SelectableItem>>({});
 
   const { data: orders, isLoading: isLoadingOrders } = useQuery({
     queryKey: ["supplierOrders"],
@@ -237,7 +239,7 @@ const SupplierOrdersPage = () => {
   const openCreateOrder = () => {
     setEditingOrderId(null);
     setEditingInitialValues(null);
-    setEditingPreloadedItems([]);
+    setEditingPreloadedItems({});
     setIsOrderModalOpen(true);
   };
 
@@ -253,7 +255,10 @@ const SupplierOrdersPage = () => {
       const initial = {
         supplier_name: order.supplier_name || "",
         notes: order.notes || "",
-        items: (itemsData || []).map((it: any) => ({
+        items: (itemsData || []).map((it: any, idx: number) => ({
+          // Chave estável para vincular o item ao seu preload independentemente
+          // de remoções/reordenações posteriores na lista.
+          _key: `item-${idx}`,
           product_id: Number(it.product_id),
           variant_id: it.variant_id || null,
           quantity: it.quantity,
@@ -261,17 +266,21 @@ const SupplierOrdersPage = () => {
         })),
       };
 
-      // Monta itens pré-carregados para exibir nomes corretos nos comboboxes
-      const preloaded: SelectableItem[] = (itemsData || []).map((it: any) => ({
-        id: Number(it.product_id),
-        variant_id: it.variant_id || null,
-        name: it.variant_name || `Produto #${it.product_id}`,
-        stock_quantity: 0,
-        cost_price: it.unit_cost,
-        is_variant: !!it.variant_id,
-        brand: null,
-        category: null,
-      }));
+      // Monta itens pré-carregados para exibir nomes corretos nos comboboxes,
+      // indexados pela mesma chave estável usada em `initial.items`.
+      const preloaded: Record<string, SelectableItem> = {};
+      (itemsData || []).forEach((it: any, idx: number) => {
+        preloaded[`item-${idx}`] = {
+          id: Number(it.product_id),
+          variant_id: it.variant_id || null,
+          name: it.variant_name || `Produto #${it.product_id}`,
+          stock_quantity: 0,
+          cost_price: it.unit_cost,
+          is_variant: !!it.variant_id,
+          brand: null,
+          category: null,
+        };
+      });
 
       setEditingOrderId(order.id);
       setEditingInitialValues(initial);
@@ -429,7 +438,7 @@ const SupplierOrdersPage = () => {
       setIsOrderModalOpen(false);
       setEditingOrderId(null);
       setEditingInitialValues(null);
-      setEditingPreloadedItems([]);
+      setEditingPreloadedItems({});
       showSuccess("Pedido atualizado com sucesso!");
     },
     onError: (err: any) => showError(`Erro ao atualizar pedido: ${err.message}`),
@@ -697,7 +706,7 @@ const SupplierOrdersPage = () => {
             if (!open) {
               setEditingOrderId(null);
               setEditingInitialValues(null);
-              setEditingPreloadedItems([]);
+              setEditingPreloadedItems({});
             }
             setIsOrderModalOpen(open);
           }}
