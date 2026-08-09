@@ -521,42 +521,54 @@ const OrdersPage = () => {
   const handleBulkValidate = async () => {
     setIsProcessingBulk(true);
     let successCount = 0;
+    let eligibleCount = 0;
+    let lastError: string | null = null;
     for (const id of Array.from(selectedIds)) {
       const order = orders.find(o => o.id === id);
       if (order && ["Pendente", "Aguardando Pagamento", "Aguardando Validação"].includes(order.status)) {
-        try { await validatePaymentAndSetPendingMutation.mutateAsync(id); successCount++; } catch {}
+        eligibleCount++;
+        try { await validatePaymentAndSetPendingMutation.mutateAsync(id); successCount++; } catch (err: any) { lastError = err?.message ?? String(err); }
       }
     }
     setIsProcessingBulk(false); setSelectedIds(new Set());
     if (successCount > 0) showSuccess(`${successCount} pagamentos validados!`);
+    else if (eligibleCount > 0) showError(`Erro ao validar: ${lastError}`);
     else showError("Nenhum pedido elegível.");
   };
 
   const handleBulkPackaged = async () => {
     setIsProcessingBulk(true);
     let successCount = 0;
+    let eligibleCount = 0;
+    let lastError: string | null = null;
     for (const id of Array.from(selectedIds)) {
       const order = orders.find(o => o.id === id);
       if (order && (order.status === "Finalizada" || order.status === "Pago") && !["Despachado", "Entregue", "Cancelado"].includes(order.delivery_status)) {
-        try { await updateDeliveryStatusMutation.mutateAsync({ orderId: id, status: "Embalado" }); successCount++; } catch {}
+        eligibleCount++;
+        try { await updateDeliveryStatusMutation.mutateAsync({ orderId: id, status: "Embalado" }); successCount++; } catch (err: any) { lastError = err?.message ?? String(err); }
       }
     }
     setIsProcessingBulk(false); setSelectedIds(new Set());
     if (successCount > 0) showSuccess(`${successCount} pedidos marcados como embalados!`);
+    else if (eligibleCount > 0) showError(`Erro ao embalar: ${lastError}`);
     else showError("Nenhum pedido apto.");
   };
 
   const handleBulkDelivered = async () => {
     setIsProcessingBulk(true);
     let successCount = 0;
+    let eligibleCount = 0;
+    let lastError: string | null = null;
     for (const id of Array.from(selectedIds)) {
       const order = orders.find(o => o.id === id);
       if (order && (order.status === "Pago" || order.status === "Finalizada") && !["Entregue", "Cancelado"].includes(order.delivery_status)) {
-        try { await finalizeOrderMutation.mutateAsync(id); successCount++; } catch {}
+        eligibleCount++;
+        try { await finalizeOrderMutation.mutateAsync(id); successCount++; } catch (err: any) { lastError = err?.message ?? String(err); }
       }
     }
     setIsProcessingBulk(false); setSelectedIds(new Set());
     if (successCount > 0) showSuccess(`${successCount} pedidos finalizados!`);
+    else if (eligibleCount > 0) showError(`Erro ao finalizar: ${lastError}`);
     else showError("Nenhum pedido apto.");
   };
 
