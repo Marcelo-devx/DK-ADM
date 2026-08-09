@@ -146,8 +146,12 @@ export function OrderEditModal({ order, isOpen, onClose }: OrderEditModalProps) 
   if (!order) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open && !isLoading) onClose(); }}>
+      <DialogContent
+        className="max-w-2xl max-h-[90vh] overflow-y-auto"
+        onInteractOutside={(e) => { if (isLoading) e.preventDefault(); }}
+        onEscapeKeyDown={(e) => { if (isLoading) e.preventDefault(); }}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             Editar Pedido <span className="font-mono text-primary">#{order.id}</span>
