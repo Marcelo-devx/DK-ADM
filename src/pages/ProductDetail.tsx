@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { sortVariantsBySpecification } from '@/utils/variantSort';
 import { SalesPopupDisplay } from '@/components/SalesPopupDisplay';
 import { optimizeCloudinaryUrl } from '@/utils/cloudinary';
+import { renderFormattedText } from '@/utils/renderFormattedText';
 
 interface Product {
   id: number;
@@ -180,7 +181,7 @@ const ProductDetailPage = () => {
 
           <div className="space-y-3">
             <h3 className="font-bold text-lg border-b pb-2">Descrição</h3>
-            <p className="text-gray-600 leading-relaxed">{product?.description || "Sem descrição disponível para este produto."}</p>
+            <p className="text-gray-600 leading-relaxed">{product?.description ? renderFormattedText(product.description) : "Sem descrição disponível para este produto."}</p>
           </div>
         </div>
       </div>

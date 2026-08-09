@@ -26,7 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { CategoryForm } from "./category-form";
-import { PlusCircle, Layers, Copy, RefreshCw, Loader2, ListChecks, CheckSquare } from "lucide-react";
+import { PlusCircle, Layers, Copy, RefreshCw, Loader2, ListChecks, CheckSquare, Link2 } from "lucide-react";
 import { useEffect, useState, useMemo, useRef } from "react";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -92,6 +92,7 @@ export const ProductForm = ({
   const [variantsToClone, setVariantsToClone] = useState<any[]>([]);
   const [isCloning, setIsCloning] = useState(false);
   const [selectedCloneLabel, setSelectedCloneLabel] = useState("");
+  const descriptionRef = useRef<HTMLTextAreaElement | null>(null);
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(formSchema),
@@ -192,6 +193,29 @@ export const ProductForm = ({
 
   const handleRegenerateSku = () => {
     form.setValue("sku", generateRandomSku());
+  };
+
+  const handleInsertLink = () => {
+    const textarea = descriptionRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const currentValue = form.getValues("description") || "";
+
+    if (start === end) {
+      showError("Selecione um trecho do texto para transformar em link.");
+      return;
+    }
+
+    const selectedText = currentValue.substring(start, end);
+    const url = window.prompt("Cole o link de destino (ex: https://exemplo.com):", "https://");
+    if (!url) return;
+
+    const newValue = `${currentValue.substring(0, start)}[${selectedText}](${url})${currentValue.substring(end)}`;
+    form.setValue("description", newValue, { shouldDirty: true });
+
+    setTimeout(() => textarea.focus(), 0);
   };
 
   const handleCloneProduct = async (productIdStr: string) => {
@@ -391,8 +415,33 @@ export const ProductForm = ({
             name="description"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-xs font-bold uppercase text-gray-500">Descrição Curta</FormLabel>
-                <FormControl><Textarea placeholder="Detalhes gerais..." {...field} className="resize-none" rows={3} /></FormControl>
+                <div className="flex items-center justify-between">
+                  <FormLabel className="text-xs font-bold uppercase text-gray-500">Descrição Curta</FormLabel>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 gap-1 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                    onClick={handleInsertLink}
+                  >
+                    <Link2 className="h-3.5 w-3.5" /> Criar Link
+                  </Button>
+                </div>
+                <FormControl>
+                  <Textarea
+                    placeholder="Detalhes gerais..."
+                    {...field}
+                    ref={(el) => {
+                      field.ref(el);
+                      descriptionRef.current = el;
+                    }}
+                    className="resize-y min-h-[180px]"
+                    rows={8}
+                  />
+                </FormControl>
+                <p className="text-[10px] text-muted-foreground">
+                  Dica: selecione um trecho do texto e clique em "Criar Link" para transformá-lo em um link clicável (fica azul para o cliente).
+                </p>
                 <FormMessage />
               </FormItem>
             )}
