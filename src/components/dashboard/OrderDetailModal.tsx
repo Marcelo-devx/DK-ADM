@@ -131,14 +131,14 @@ export const OrderDetailModal = ({ order, isOpen, onClose, onMarkDelivered, isMa
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <div className="flex justify-between items-start pr-8">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 pr-8">
             <div>
                 <DialogTitle className="text-xl">Detalhes do Pedido #{order.id}</DialogTitle>
                 <DialogDescription>
                     Realizado em {new Date(order.created_at).toLocaleString("pt-BR")}
                 </DialogDescription>
             </div>
-            <div className="flex gap-2 items-center">
+            <div className="flex flex-wrap gap-2 items-center">
                 {order.payment_method?.toLowerCase().includes('pix') ? (
                     <Badge variant="outline" className="bg-cyan-50 text-cyan-700 border-cyan-200 gap-1"><QrCode className="w-3 h-3" /> Pix</Badge>
                 ) : order.payment_method?.toLowerCase().includes('cartão') ? (
