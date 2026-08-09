@@ -40,6 +40,7 @@ const GERENTE_GERAL_ALLOWED_ROUTES = [
   "/dashboard/manual-add-points",
   "/dashboard/bulk-add-points",
   "/dashboard/user-admin",
+  "/dashboard/acesso-manual",
   "/dashboard/investigar-usuario",
   "/dashboard/order-admin",
   "/dashboard/reativar-pedidos",
