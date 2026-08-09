@@ -10,7 +10,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Truck, CreditCard, QrCode, Ticket, User, Phone, MapPin, Fingerprint, Package, Heart, Mail, Gift } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Truck, CreditCard, QrCode, Ticket, User, Phone, MapPin, Fingerprint, Package, Heart, Mail, Gift, CheckCircle2, Loader2 } from "lucide-react";
 
 interface Order {
   id: number;
@@ -20,6 +21,7 @@ interface Order {
   coupon_discount: number;
   donation_amount: number;
   status: string;
+  delivery_status?: string;
   user_id: string;
   delivery_info?: string | null;
   payment_method?: string | null;
@@ -60,6 +62,8 @@ interface OrderDetailModalProps {
   order: Order;
   isOpen: boolean;
   onClose: () => void;
+  onMarkDelivered?: (orderId: number) => void;
+  isMarkingDelivered?: boolean;
 }
 
 const fetchOrderItems = async (orderId: number): Promise<OrderItem[]> => {
@@ -94,7 +98,7 @@ const fetchFreeShippingRules = async () => {
   return data as { id: number; shipping_price: number; min_order_value: number }[];
 };
 
-export const OrderDetailModal = ({ order, isOpen, onClose }: OrderDetailModalProps) => {
+export const OrderDetailModal = ({ order, isOpen, onClose, onMarkDelivered, isMarkingDelivered }: OrderDetailModalProps) => {
   const { data: items, isLoading: isLoadingItems } = useQuery<OrderItem[]>({
     queryKey: ["orderItems", order.id],
     queryFn: () => fetchOrderItems(order.id),
@@ -134,13 +138,24 @@ export const OrderDetailModal = ({ order, isOpen, onClose }: OrderDetailModalPro
                     Realizado em {new Date(order.created_at).toLocaleString("pt-BR")}
                 </DialogDescription>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
                 {order.payment_method?.toLowerCase().includes('pix') ? (
                     <Badge variant="outline" className="bg-cyan-50 text-cyan-700 border-cyan-200 gap-1"><QrCode className="w-3 h-3" /> Pix</Badge>
                 ) : order.payment_method?.toLowerCase().includes('cartão') ? (
                     <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 gap-1"><CreditCard className="w-3 h-3" /> Cartão</Badge>
                 ) : null}
                 <Badge variant="outline" className="bg-gray-100">{order.status}</Badge>
+                {onMarkDelivered && (order.status === "Pago" || order.status === "Finalizada") && !["Entregue", "Cancelado"].includes(order.delivery_status || "") && (
+                    <Button
+                      size="sm"
+                      className="bg-green-600 hover:bg-green-700 h-8 px-3 text-xs font-bold"
+                      onClick={() => onMarkDelivered(order.id)}
+                      disabled={isMarkingDelivered}
+                    >
+                      {isMarkingDelivered ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <CheckCircle2 className="w-3 h-3 mr-1" />}
+                      Marcar Entregue
+                    </Button>
+                )}
             </div>
           </div>
         </DialogHeader>

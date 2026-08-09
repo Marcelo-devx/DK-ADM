@@ -1825,7 +1825,18 @@ const OrdersPage = () => {
         </div>
       )}
 
-      {selectedOrder && <OrderDetailModal order={selectedOrder} isOpen={isDetailModalOpen} onClose={() => setIsDetailModalOpen(false)} />}
+      {selectedOrder && (
+        <OrderDetailModal
+          order={selectedOrder}
+          isOpen={isDetailModalOpen}
+          onClose={() => setIsDetailModalOpen(false)}
+          onMarkDelivered={(orderId) => finalizeOrderMutation.mutate(orderId, {
+            onSuccess: () => { setIsDetailModalOpen(false); showSuccess("Pedido marcado como entregue!"); },
+            onError: (err: any) => showError(err?.message ?? String(err)),
+          })}
+          isMarkingDelivered={finalizeOrderMutation.isPending}
+        />
+      )}
       {selectedOrder && <ShippingLabelModal order={selectedOrder} isOpen={isLabelModalOpen} onClose={() => { setIsLabelModalOpen(false); setSelectedOrder(null); }} />}
       {selectedOrder && <OrderEditModal order={selectedOrder} isOpen={isEditOrderOpen} onClose={() => { setIsEditOrderOpen(false); setSelectedOrder(null); }} />}
       <ClientDetailsModal client={selectedClientForHistory} isOpen={isClientHistoryOpen} onClose={() => setIsClientHistoryOpen(false)} />
