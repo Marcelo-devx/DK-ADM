@@ -1835,6 +1835,11 @@ const OrdersPage = () => {
             onError: (err: any) => showError(err?.message ?? String(err)),
           })}
           isMarkingDelivered={finalizeOrderMutation.isPending}
+          onMarkPackaged={(orderId) => updateDeliveryStatusMutation.mutate({ orderId, status: "Embalado" }, {
+            onSuccess: () => showSuccess("Pedido marcado como embalado!"),
+            onError: (err: any) => showError(err?.message ?? String(err)),
+          })}
+          isMarkingPackaged={updateDeliveryStatusMutation.isPending}
         />
       )}
       {selectedOrder && <ShippingLabelModal order={selectedOrder} isOpen={isLabelModalOpen} onClose={() => { setIsLabelModalOpen(false); setSelectedOrder(null); }} />}

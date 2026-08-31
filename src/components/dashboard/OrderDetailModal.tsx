@@ -64,6 +64,8 @@ interface OrderDetailModalProps {
   onClose: () => void;
   onMarkDelivered?: (orderId: number) => void;
   isMarkingDelivered?: boolean;
+  onMarkPackaged?: (orderId: number) => void;
+  isMarkingPackaged?: boolean;
 }
 
 const fetchOrderItems = async (orderId: number): Promise<OrderItem[]> => {
@@ -98,7 +100,7 @@ const fetchFreeShippingRules = async () => {
   return data as { id: number; shipping_price: number; min_order_value: number }[];
 };
 
-export const OrderDetailModal = ({ order, isOpen, onClose, onMarkDelivered, isMarkingDelivered }: OrderDetailModalProps) => {
+export const OrderDetailModal = ({ order, isOpen, onClose, onMarkDelivered, isMarkingDelivered, onMarkPackaged, isMarkingPackaged }: OrderDetailModalProps) => {
   const { data: items, isLoading: isLoadingItems } = useQuery<OrderItem[]>({
     queryKey: ["orderItems", order.id],
     queryFn: () => fetchOrderItems(order.id),
@@ -145,7 +147,28 @@ export const OrderDetailModal = ({ order, isOpen, onClose, onMarkDelivered, isMa
                     <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 gap-1"><CreditCard className="w-3 h-3" /> Cartão</Badge>
                 ) : null}
                 <Badge variant="outline" className="bg-gray-100">{order.status}</Badge>
-                {onMarkDelivered && (order.status === "Pago" || order.status === "Finalizada") && !["Entregue", "Cancelado"].includes(order.delivery_status || "") && (
+                {(() => {
+                  const isPaidOrFinalized = order.status === "Pago" || order.status === "Finalizada";
+                  const isClosed = ["Entregue", "Cancelado"].includes(order.delivery_status || "");
+                  const isPackaged = ["Embalado", "Despachado"].includes(order.delivery_status || "");
+
+                  if (!isPaidOrFinalized || isClosed) return null;
+
+                  if (!isPackaged) {
+                    return onMarkPackaged ? (
+                      <Button
+                        size="sm"
+                        className="bg-amber-500 hover:bg-amber-600 h-8 px-3 text-xs font-bold"
+                        onClick={() => onMarkPackaged(order.id)}
+                        disabled={isMarkingPackaged}
+                      >
+                        {isMarkingPackaged ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Package className="w-3 h-3 mr-1" />}
+                        Marcar Embalado
+                      </Button>
+                    ) : null;
+                  }
+
+                  return onMarkDelivered ? (
                     <Button
                       size="sm"
                       className="bg-green-600 hover:bg-green-700 h-8 px-3 text-xs font-bold"
@@ -155,7 +178,8 @@ export const OrderDetailModal = ({ order, isOpen, onClose, onMarkDelivered, isMa
                       {isMarkingDelivered ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <CheckCircle2 className="w-3 h-3 mr-1" />}
                       Marcar Entregue
                     </Button>
-                )}
+                  ) : null;
+                })()}
             </div>
           </div>
         </DialogHeader>
