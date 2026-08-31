@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import * as XLSX from 'xlsx';
 import { mapRowKeys } from "@/utils/excel-utils";
 import { showSuccess, showError } from "@/utils/toast";
@@ -30,6 +30,7 @@ const cleanAndParseFloat = (value: any): number => {
 
 const ProductsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { products, categories, subCategories, brands, isLoadingProducts, updateProductMutation, activateAllMutation, zeroStockMutation } = useProductData();
   
   // Local state for filters (no need to be in URL unless requested)
@@ -404,7 +405,7 @@ const ProductsPage = () => {
         brands={brands}
         categories={categories}
         totalCount={filteredProducts.length}
-        onAddProduct={() => openModal("create")}
+        onAddProduct={() => navigate("/dashboard/products/novo")}
         onImport={() => document.getElementById('import-input')?.click()}
         onExport={handleExportXLSX}
         onDownloadTemplate={handleDownloadTemplate}

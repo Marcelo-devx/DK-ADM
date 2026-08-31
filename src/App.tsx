@@ -15,6 +15,7 @@ import NotFound from "./pages/NotFound";
 import DashboardLayout from "./components/dashboard/DashboardLayout";
 import Dashboard from "./pages/dashboard/Dashboard";
 import Products from "./pages/dashboard/Products";
+import ProductAddPage from "./pages/dashboard/ProductAddPage";
 import Orders from "./pages/dashboard/Orders";
 import Clients from "./pages/dashboard/Clients";
 import CadastrarCliente from "./pages/dashboard/CadastrarCliente";
@@ -111,6 +112,7 @@ const App = () => (
             <Route path="/dashboard" element={<DashboardLayout />}>
               <Route index element={<DashboardIndex />} />
               <Route path="products" element={<Products />} />
+              <Route path="products/novo" element={<ProductAddPage />} />
               <Route path="orders" element={<Orders />} />
               <Route path="clients" element={<Clients />} />
               <Route path="cadastrar-cliente" element={<CadastrarCliente />} />

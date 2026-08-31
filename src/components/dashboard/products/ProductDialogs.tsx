@@ -38,7 +38,7 @@ export const ProductDialogs = ({
   productsToConfirm, importResult, setImportResult, setProductsToConfirm
 }: ProductDialogsProps) => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { addProductMutation, updateProductMutation, deleteMutation, bulkInsertMutation } = useProductData();
+  const { updateProductMutation, deleteMutation, bulkInsertMutation } = useProductData();
   
   const mode = searchParams.get("mode");
   const targetId = searchParams.get("id");
@@ -56,12 +56,10 @@ export const ProductDialogs = ({
     
     if (mode === 'edit' && selectedProduct) {
       result = await updateProductMutation.mutateAsync({ productId: selectedProduct.id, values });
-    } else {
-      result = await addProductMutation.mutateAsync({ productData: values, variants: variantsToClone });
     }
 
     // Sincroniza Sub-categorias
-    const pid = mode === 'edit' ? selectedProduct?.id : result?.id;
+    const pid = selectedProduct?.id;
     if (pid && subCategoryIds) {
         // Limpa antigas
         await supabase.from('product_sub_categories').delete().eq('product_id', pid);
@@ -96,31 +94,31 @@ export const ProductDialogs = ({
 
   return (
     <>
-      <Dialog open={mode === 'create' || (mode === 'edit' && !!selectedProduct)} onOpenChange={(open) => !open && handleClose()}>
+      <Dialog open={mode === 'edit' && !!selectedProduct} onOpenChange={(open) => !open && handleClose()}>
         <DialogContent className="w-full max-w-4xl h-[100dvh] md:h-auto md:max-h-[90vh] overflow-y-auto p-0 md:p-6 rounded-none md:rounded-lg">
           <DialogHeader className="px-4 pt-4 pb-2 md:px-0 md:pt-0 md:pb-0 border-b md:border-none sticky top-0 bg-white z-10 md:static">
-            <DialogTitle className="text-base md:text-lg">{mode === 'edit' ? `Editar: ${selectedProduct?.name}` : "Adicionar Novo Produto"}</DialogTitle>
+            <DialogTitle className="text-base md:text-lg">{`Editar: ${selectedProduct?.name}`}</DialogTitle>
           </DialogHeader>
           <div className="px-4 pb-6 md:px-0 md:pb-0">
-            <ProductForm 
-              onSubmit={handleFormSubmit} 
-              isSubmitting={addProductMutation.isPending || updateProductMutation.isPending} 
-              categories={categories || []} 
-              isLoadingCategories={false} 
-              subCategories={subCategories || []} 
-              isLoadingSubCategories={false} 
-              brands={brands || []} 
-              isLoadingBrands={false} 
-              initialData={selectedProduct ? { 
-                  ...selectedProduct, 
-                  sku: selectedProduct.sku || '', 
-                  description: selectedProduct.description || '', 
-                  category: selectedProduct.category || '', 
-                  brand: selectedProduct.brand || '', 
-                  image_url: selectedProduct.image_url || '', 
-                  cost_price: selectedProduct.cost_price || 0, 
-                  pix_price: selectedProduct.pix_price || 0 
-              } : undefined} 
+            <ProductForm
+              onSubmit={handleFormSubmit}
+              isSubmitting={updateProductMutation.isPending}
+              categories={categories || []}
+              isLoadingCategories={false}
+              subCategories={subCategories || []}
+              isLoadingSubCategories={false}
+              brands={brands || []}
+              isLoadingBrands={false}
+              initialData={selectedProduct ? {
+                  ...selectedProduct,
+                  sku: selectedProduct.sku || '',
+                  description: selectedProduct.description || '',
+                  category: selectedProduct.category || '',
+                  brand: selectedProduct.brand || '',
+                  image_url: selectedProduct.image_url || '',
+                  cost_price: selectedProduct.cost_price || 0,
+                  pix_price: selectedProduct.pix_price || 0
+              } : undefined}
               existingProducts={products}
             />
           </div>
