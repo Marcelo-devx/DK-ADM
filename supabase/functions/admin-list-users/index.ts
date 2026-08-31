@@ -1,3 +1,4 @@
+// v3 - removida varredura completa de auth.users na busca (redeploy forçado)
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
@@ -14,7 +15,7 @@ serve(async (req) => {
 
   // GET simples para keep-alive / health check
   if (req.method === "GET") {
-    return new Response(JSON.stringify({ status: "ok", function: "admin-list-users", version: "2" }), {
+    return new Response(JSON.stringify({ status: "ok", function: "admin-list-users", version: "3" }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

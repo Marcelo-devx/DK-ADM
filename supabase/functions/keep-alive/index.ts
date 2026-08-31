@@ -1,5 +1,5 @@
 // @ts-nocheck
-// v7 - lista reduzida para funções críticas do cliente apenas
+// v8 - lista reduzida para funções críticas do cliente + admin-list-users (redeploy forçado)
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 
 const corsHeaders = {
@@ -20,6 +20,7 @@ const CRITICAL_FUNCTIONS = [
   'n8n-list-products',
   'n8n-list-clients',
   'notify-back-in-stock',
+  'admin-list-users',
 ];
 
 // send-order-email precisa de POST (não responde a GET)
