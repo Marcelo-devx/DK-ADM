@@ -711,7 +711,11 @@ const SupplierOrdersPage = () => {
             setIsOrderModalOpen(open);
           }}
         >
-          <DialogContent className="w-full max-w-4xl h-[100dvh] md:h-auto md:max-h-[90vh] overflow-y-auto p-0 md:p-6 rounded-none md:rounded-lg">
+          <DialogContent
+            className="w-full max-w-4xl h-[100dvh] md:h-auto md:max-h-[90vh] overflow-y-auto p-0 md:p-6 rounded-none md:rounded-lg"
+            onInteractOutside={(e) => e.preventDefault()}
+            onEscapeKeyDown={(e) => e.preventDefault()}
+          >
             <DialogHeader className="px-4 pt-4 pb-3 md:px-0 md:pt-0 md:pb-0 border-b md:border-none sticky top-0 bg-white z-10 md:static">
               <DialogTitle className="text-base md:text-lg">
                 {editingOrderId ? `Editar Pedido #${editingOrderId}` : "Criar Pedido para Fornecedor"}
