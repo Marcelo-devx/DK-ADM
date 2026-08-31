@@ -13,11 +13,11 @@ import {
   TableRow,
 } from "../../components/ui/table";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "../../components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "../../components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import {
   PlusCircle,
@@ -700,7 +700,7 @@ const SupplierOrdersPage = () => {
           <span className="md:hidden">Novo</span>
         </Button>
 
-        <Dialog
+        <Sheet
           open={isOrderModalOpen}
           onOpenChange={(open) => {
             if (!open) {
@@ -711,17 +711,18 @@ const SupplierOrdersPage = () => {
             setIsOrderModalOpen(open);
           }}
         >
-          <DialogContent
-            className="w-full max-w-4xl h-[100dvh] md:h-auto md:max-h-[90vh] overflow-y-auto p-0 md:p-6 rounded-none md:rounded-lg"
+          <SheetContent
+            side="right"
+            className="w-full sm:max-w-2xl h-full overflow-y-auto p-0"
             onInteractOutside={(e) => e.preventDefault()}
             onEscapeKeyDown={(e) => e.preventDefault()}
           >
-            <DialogHeader className="px-4 pt-4 pb-3 md:px-0 md:pt-0 md:pb-0 border-b md:border-none sticky top-0 bg-white z-10 md:static">
-              <DialogTitle className="text-base md:text-lg">
+            <SheetHeader className="px-4 pt-4 pb-3 border-b sticky top-0 bg-white z-10">
+              <SheetTitle className="text-base md:text-lg">
                 {editingOrderId ? `Editar Pedido #${editingOrderId}` : "Criar Pedido para Fornecedor"}
-              </DialogTitle>
-            </DialogHeader>
-            <div className="px-4 pb-6 md:px-0 md:pb-0">
+              </SheetTitle>
+            </SheetHeader>
+            <div className="px-4 pb-6 pt-4">
               {isOrderModalOpen && (
                 <SupplierOrderForm
                   onSubmit={(v) =>
@@ -736,8 +737,8 @@ const SupplierOrdersPage = () => {
                 />
               )}
             </div>
-          </DialogContent>
-        </Dialog>
+          </SheetContent>
+        </Sheet>
       </div>
 
       {/* ── MOBILE: Cards ── */}
