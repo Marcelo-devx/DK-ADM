@@ -229,6 +229,13 @@ export const ProductCombobox = React.memo(function ProductCombobox({
           <CommandList
             className="max-h-[min(300px,45vh)] overflow-y-auto overscroll-contain"
             style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
+            onWheel={(e) => {
+              // Garante que a rolagem do mouse funcione mesmo dentro de um Dialog,
+              // que por padrão bloqueia o scroll de elementos fora do seu próprio conteúdo.
+              e.stopPropagation();
+              const el = e.currentTarget;
+              el.scrollTop += e.deltaY;
+            }}
           >
             {isLoading && results.length === 0 ? (
               <div className="py-6 flex flex-col items-center justify-center text-sm text-muted-foreground">
