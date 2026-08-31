@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -26,12 +26,14 @@ import { cn } from "@/lib/utils";
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 interface PendingItemRow {
-  itemId: number;
-  orderId: number;
+  itemId: number | string;
+  orderId: number | null;
   supplierName: string;
   displayName: string;
   orderedQuantity: number;
   currentStock: number;
+  isExtra?: boolean;
+  productId?: number;
 }
 
 // ─── Busca: pedidos pendentes + itens + estoque atual ──────────────────────
@@ -95,8 +97,39 @@ const fetchPendingItems = async (): Promise<PendingItemRow[]> => {
       displayName,
       orderedQuantity: item.quantity,
       currentStock,
+      productId: item.product_id,
     };
   });
+};
+
+// ─── Busca extra: produtos que batem com o termo mas não têm pedido pendente ──
+const fetchMatchingProductsWithoutPendingOrder = async (
+  term: string,
+  excludeProductIds: number[],
+): Promise<PendingItemRow[]> => {
+  if (!term) return [];
+
+  const { data: products, error } = await supabase
+    .from("products")
+    .select("id, name, brand, stock_quantity")
+    .or(`name.ilike.%${term}%,brand.ilike.%${term}%`)
+    .limit(50);
+  if (error) throw error;
+  if (!products || products.length === 0) return [];
+
+  const excludeSet = new Set(excludeProductIds);
+
+  return products
+    .filter((p) => !excludeSet.has(p.id))
+    .map((p) => ({
+      itemId: `extra-${p.id}`,
+      orderId: null,
+      supplierName: p.brand || "-",
+      displayName: p.name,
+      orderedQuantity: 0,
+      currentStock: p.stock_quantity ?? 0,
+      isExtra: true,
+    }));
 };
 
 // ─── Página ─────────────────────────────────────────────────────────────────
@@ -107,7 +140,25 @@ const PedidosPendentes = () => {
   });
 
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const [supplierFilter, setSupplierFilter] = useState("all");
+
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm.trim().toLowerCase());
+    }, 350);
+    return () => clearTimeout(handle);
+  }, [searchTerm]);
+
+  const pendingProductIds = useMemo(() => {
+    return [...new Set((rows || []).map((r) => r.productId).filter((id): id is number => !!id))];
+  }, [rows]);
+
+  const { data: extraRows } = useQuery({
+    queryKey: ["extraProductsForPendingSearch", debouncedSearchTerm, pendingProductIds],
+    queryFn: () => fetchMatchingProductsWithoutPendingOrder(debouncedSearchTerm, pendingProductIds),
+    enabled: debouncedSearchTerm.length >= 2 && supplierFilter === "all" && !!rows,
+  });
 
   const supplierOptions = useMemo(() => {
     const names = new Set((rows || []).map((r) => r.supplierName));
@@ -117,7 +168,7 @@ const PedidosPendentes = () => {
   const filteredRows = useMemo(() => {
     if (!rows) return [];
     const term = searchTerm.trim().toLowerCase();
-    return rows.filter((row) => {
+    const pendingMatches = rows.filter((row) => {
       const matchesSupplier = supplierFilter === "all" || row.supplierName === supplierFilter;
       const matchesTerm =
         !term ||
@@ -126,7 +177,13 @@ const PedidosPendentes = () => {
         String(row.orderId).includes(term);
       return matchesSupplier && matchesTerm;
     });
-  }, [rows, searchTerm, supplierFilter]);
+
+    if (term.length >= 2 && supplierFilter === "all" && extraRows && extraRows.length > 0) {
+      return [...pendingMatches, ...extraRows];
+    }
+
+    return pendingMatches;
+  }, [rows, searchTerm, supplierFilter, extraRows]);
 
   return (
     <div className="space-y-4 pb-6">
@@ -176,12 +233,18 @@ const PedidosPendentes = () => {
             <div key={row.itemId} className="rounded-xl border bg-white p-3 shadow-sm">
               <div className="flex items-start justify-between gap-2">
                 <p className="font-semibold text-sm text-gray-900 leading-tight flex-1">{row.displayName}</p>
-                <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 shrink-0">
-                  Aguardando
-                </Badge>
+                {row.isExtra ? (
+                  <Badge variant="outline" className="bg-gray-50 text-gray-500 border-gray-200 shrink-0">
+                    Sem pedido
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 shrink-0">
+                    Aguardando
+                  </Badge>
+                )}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Pedido #{row.orderId} · {row.supplierName}
+                {row.isExtra ? row.supplierName : `Pedido #${row.orderId} · ${row.supplierName}`}
               </p>
               <div className="flex items-center gap-4 mt-2">
                 <div className="flex flex-col">
@@ -228,9 +291,11 @@ const PedidosPendentes = () => {
               </TableRow>
             ) : filteredRows.length > 0 ? (
               filteredRows.map((row) => (
-                <TableRow key={row.itemId}>
+                <TableRow key={row.itemId} className={row.isExtra ? "text-muted-foreground" : undefined}>
                   <TableCell className="font-medium">{row.displayName}</TableCell>
-                  <TableCell className="font-mono text-muted-foreground">#{row.orderId}</TableCell>
+                  <TableCell className="font-mono text-muted-foreground">
+                    {row.isExtra ? "-" : `#${row.orderId}`}
+                  </TableCell>
                   <TableCell>{row.supplierName}</TableCell>
                   <TableCell className="text-center font-bold">{row.orderedQuantity}</TableCell>
                   <TableCell className="text-center">
