@@ -12,12 +12,6 @@ import {
   TableHeader,
   TableRow,
 } from "../../components/ui/table";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "../../components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import {
   PlusCircle,
@@ -700,46 +694,41 @@ const SupplierOrdersPage = () => {
           <span className="md:hidden">Novo</span>
         </Button>
 
-        <Sheet
-          open={isOrderModalOpen}
-          onOpenChange={(open) => {
-            if (!open) {
-              setEditingOrderId(null);
-              setEditingInitialValues(null);
-              setEditingPreloadedItems({});
-            }
-            setIsOrderModalOpen(open);
-          }}
-        >
-          <SheetContent
-            side="right"
-            className="w-full sm:max-w-2xl h-full overflow-y-auto p-0"
-            onInteractOutside={(e) => e.preventDefault()}
-            onEscapeKeyDown={(e) => e.preventDefault()}
-          >
-            <SheetHeader className="px-4 pt-4 pb-3 border-b sticky top-0 bg-white z-10">
-              <SheetTitle className="text-base md:text-lg">
-                {editingOrderId ? `Editar Pedido #${editingOrderId}` : "Criar Pedido para Fornecedor"}
-              </SheetTitle>
-            </SheetHeader>
-            <div className="px-4 pb-6 pt-4">
-              {isOrderModalOpen && (
-                <SupplierOrderForm
-                  onSubmit={(v) =>
-                    editingOrderId
-                      ? updateOrderMutation.mutate({ id: editingOrderId, values: v })
-                      : createOrderMutation.mutate(v)
-                  }
-                  isSubmitting={createOrderMutation.isPending || updateOrderMutation.isPending}
-                  onSearch={handleSearch}
-                  initialValues={editingInitialValues}
-                  preloadedItems={editingPreloadedItems}
-                />
-              )}
-            </div>
-          </SheetContent>
-        </Sheet>
       </div>
+
+      {/* ── Formulário de Pedido (inline na página) ── */}
+      {isOrderModalOpen && (
+        <div className="rounded-lg border bg-white p-4 md:p-6 space-y-4">
+          <div className="flex items-center justify-between border-b pb-3">
+            <h2 className="text-base md:text-lg font-semibold">
+              {editingOrderId ? `Editar Pedido #${editingOrderId}` : "Criar Pedido para Fornecedor"}
+            </h2>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setEditingOrderId(null);
+                setEditingInitialValues(null);
+                setEditingPreloadedItems({});
+                setIsOrderModalOpen(false);
+              }}
+            >
+              Fechar
+            </Button>
+          </div>
+          <SupplierOrderForm
+            onSubmit={(v) =>
+              editingOrderId
+                ? updateOrderMutation.mutate({ id: editingOrderId, values: v })
+                : createOrderMutation.mutate(v)
+            }
+            isSubmitting={createOrderMutation.isPending || updateOrderMutation.isPending}
+            onSearch={handleSearch}
+            initialValues={editingInitialValues}
+            preloadedItems={editingPreloadedItems}
+          />
+        </div>
+      )}
 
       {/* ── MOBILE: Cards ── */}
       <div className="md:hidden">
