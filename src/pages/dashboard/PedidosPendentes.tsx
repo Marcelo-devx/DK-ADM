@@ -34,7 +34,23 @@ interface PendingItemRow {
   currentStock: number;
   isExtra?: boolean;
   productId?: number;
+  variantId?: string | null;
 }
+
+// ─── Helper: monta o nome completo de uma variação ─────────────────────────
+const buildVariantDisplayName = (productName: string, variant: any | null): string => {
+  if (!variant) return productName;
+
+  const colorLabel = variant.color || null;
+  const ohmsLabel = variant.ohms ? `${variant.ohms}Ω` : null;
+  const sizeLabel = variant.size || null;
+  const flavorName = variant.flavors?.name || null;
+  const volumeMl = variant.volume_ml || null;
+
+  const variantParts = [colorLabel, sizeLabel, ohmsLabel, flavorName].filter(Boolean);
+  const suffix = volumeMl ? ` (${volumeMl}ml)` : "";
+  return `${productName}${variantParts.length > 0 ? " - " + variantParts.join(" / ") : ""}${suffix}`;
+};
 
 // ─── Busca: pedidos pendentes + itens + estoque atual ──────────────────────
 const fetchPendingItems = async (): Promise<PendingItemRow[]> => {
@@ -98,38 +114,64 @@ const fetchPendingItems = async (): Promise<PendingItemRow[]> => {
       orderedQuantity: item.quantity,
       currentStock,
       productId: item.product_id,
+      variantId: item.variant_id ?? null,
     };
   });
 };
 
-// ─── Busca extra: produtos que batem com o termo mas não têm pedido pendente ──
+// ─── Busca extra: todas as variações de produtos que batem com o termo e ainda não aparecem na lista de pendentes ──
 const fetchMatchingProductsWithoutPendingOrder = async (
   term: string,
-  excludeProductIds: number[],
+  excludeKeys: Set<string>,
 ): Promise<PendingItemRow[]> => {
   if (!term) return [];
 
   const { data: products, error } = await supabase
     .from("products")
-    .select("id, name, brand, stock_quantity")
+    .select("id, name, brand, stock_quantity, product_variants(id, stock_quantity, color, ohms, size, volume_ml, flavors(name))")
     .or(`name.ilike.%${term}%,brand.ilike.%${term}%`)
     .limit(50);
   if (error) throw error;
   if (!products || products.length === 0) return [];
 
-  const excludeSet = new Set(excludeProductIds);
+  const rows: PendingItemRow[] = [];
 
-  return products
-    .filter((p) => !excludeSet.has(p.id))
-    .map((p) => ({
-      itemId: `extra-${p.id}`,
-      orderId: null,
-      supplierName: p.brand || "-",
-      displayName: p.name,
-      orderedQuantity: 0,
-      currentStock: p.stock_quantity ?? 0,
-      isExtra: true,
-    }));
+  products.forEach((p: any) => {
+    const variants = p.product_variants || [];
+    if (variants.length > 0) {
+      variants.forEach((v: any) => {
+        const key = `${p.id}::${v.id}`;
+        if (excludeKeys.has(key)) return;
+        rows.push({
+          itemId: `extra-${v.id}`,
+          orderId: null,
+          supplierName: p.brand || "-",
+          displayName: buildVariantDisplayName(p.name, v),
+          orderedQuantity: 0,
+          currentStock: v.stock_quantity ?? 0,
+          isExtra: true,
+          productId: p.id,
+          variantId: v.id,
+        });
+      });
+    } else {
+      const key = `${p.id}::`;
+      if (excludeKeys.has(key)) return;
+      rows.push({
+        itemId: `extra-${p.id}`,
+        orderId: null,
+        supplierName: p.brand || "-",
+        displayName: p.name,
+        orderedQuantity: 0,
+        currentStock: p.stock_quantity ?? 0,
+        isExtra: true,
+        productId: p.id,
+        variantId: null,
+      });
+    }
+  });
+
+  return rows;
 };
 
 // ─── Página ─────────────────────────────────────────────────────────────────
@@ -142,6 +184,8 @@ const PedidosPendentes = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const [supplierFilter, setSupplierFilter] = useState("all");
+  const [stockFilter, setStockFilter] = useState("all");
+  const [sortOrder, setSortOrder] = useState("az");
 
   useEffect(() => {
     const handle = setTimeout(() => {
@@ -150,13 +194,13 @@ const PedidosPendentes = () => {
     return () => clearTimeout(handle);
   }, [searchTerm]);
 
-  const pendingProductIds = useMemo(() => {
-    return [...new Set((rows || []).map((r) => r.productId).filter((id): id is number => !!id))];
+  const pendingKeys = useMemo(() => {
+    return new Set((rows || []).map((r) => `${r.productId}::${r.variantId ?? ""}`));
   }, [rows]);
 
   const { data: extraRows } = useQuery({
-    queryKey: ["extraProductsForPendingSearch", debouncedSearchTerm, pendingProductIds],
-    queryFn: () => fetchMatchingProductsWithoutPendingOrder(debouncedSearchTerm, pendingProductIds),
+    queryKey: ["extraProductsForPendingSearch", debouncedSearchTerm, [...pendingKeys]],
+    queryFn: () => fetchMatchingProductsWithoutPendingOrder(debouncedSearchTerm, pendingKeys),
     enabled: debouncedSearchTerm.length >= 2 && supplierFilter === "all" && !!rows,
   });
 
@@ -178,12 +222,23 @@ const PedidosPendentes = () => {
       return matchesSupplier && matchesTerm;
     });
 
+    let combined = pendingMatches;
     if (term.length >= 2 && supplierFilter === "all" && extraRows && extraRows.length > 0) {
-      return [...pendingMatches, ...extraRows];
+      combined = [...pendingMatches, ...extraRows];
     }
 
-    return pendingMatches;
-  }, [rows, searchTerm, supplierFilter, extraRows]);
+    combined = combined.filter((row) => {
+      if (stockFilter === "out") return row.currentStock <= 0;
+      if (stockFilter === "in") return row.currentStock > 0;
+      return true;
+    });
+
+    return [...combined].sort((a, b) =>
+      sortOrder === "za"
+        ? b.displayName.localeCompare(a.displayName, "pt-BR")
+        : a.displayName.localeCompare(b.displayName, "pt-BR")
+    );
+  }, [rows, searchTerm, supplierFilter, stockFilter, sortOrder, extraRows]);
 
   return (
     <div className="space-y-4 pb-6">
@@ -218,6 +273,25 @@ const PedidosPendentes = () => {
             {supplierOptions.map((name) => (
               <SelectItem key={name} value={name}>{name}</SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+        <Select value={stockFilter} onValueChange={setStockFilter}>
+          <SelectTrigger className="w-full md:w-48">
+            <SelectValue placeholder="Estoque" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os estoques</SelectItem>
+            <SelectItem value="out">Sem estoque</SelectItem>
+            <SelectItem value="in">Com estoque</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={sortOrder} onValueChange={setSortOrder}>
+          <SelectTrigger className="w-full md:w-48">
+            <SelectValue placeholder="Ordenar" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="az">Nome (A-Z)</SelectItem>
+            <SelectItem value="za">Nome (Z-A)</SelectItem>
           </SelectContent>
         </Select>
       </div>
