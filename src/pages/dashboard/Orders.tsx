@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send, History, FileDown, Calendar, FilterX, ShieldCheck, ShieldX, CheckSquare, Plus, Search, Pencil, ChevronLeft, ChevronRight, XCircle, ChevronDown, SlidersHorizontal } from "lucide-react";
+import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send, History, FileDown, Calendar, FilterX, ShieldCheck, ShieldX, CheckSquare, Plus, Search, Pencil, ChevronLeft, ChevronRight, XCircle, ChevronDown, SlidersHorizontal, User } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { showSuccess, showError } from "@/utils/toast";
@@ -68,6 +68,7 @@ interface Order {
   delivery_status: string;
   user_id: string;
   delivery_info?: string | null;
+  recipient_note?: string | null;
   payment_method?: string | null;
   shipping_address: any;
   profiles: {
@@ -133,7 +134,7 @@ const fetchLatestOrders = async (filters: Filters, hasFilters = false): Promise<
 
   // 2. Monta a query — sem order_items para evitar timeout
   let q = supabase.from("orders").select(
-    "id, created_at, total_price, shipping_cost, coupon_discount, donation_amount, status, delivery_status, user_id, delivery_info, payment_method, shipping_address"
+    "id, created_at, total_price, shipping_cost, coupon_discount, donation_amount, status, delivery_status, user_id, delivery_info, recipient_note, payment_method, shipping_address"
   );
 
   if (filters.orderId) {
@@ -729,7 +730,7 @@ const OrdersPage = () => {
 
       const { data: dayOrders, error: dayError } = await supabase
         .from("orders")
-        .select("id, created_at, total_price, shipping_cost, coupon_discount, donation_amount, status, delivery_status, user_id, delivery_info, payment_method, shipping_address, order_items(item_id, item_type, name_at_purchase, quantity, price_at_purchase, variant_id)")
+        .select("id, created_at, total_price, shipping_cost, coupon_discount, donation_amount, status, delivery_status, user_id, delivery_info, recipient_note, payment_method, shipping_address, order_items(item_id, item_type, name_at_purchase, quantity, price_at_purchase, variant_id)")
         .gte("created_at", startUTC)
         .lte("created_at", endUTC)
         .neq("status", "Cancelado")
@@ -1573,6 +1574,18 @@ const OrdersPage = () => {
                                 </span>
                               </TooltipTrigger>
                               <TooltipContent className="max-w-xs">{order.delivery_info}</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                        {order.recipient_note && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 border border-blue-300 rounded-full px-1.5 py-0.5 text-[10px] font-semibold w-fit whitespace-nowrap cursor-default">
+                                  <User className="w-2.5 h-2.5 shrink-0" /> receber por outro
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs">{order.recipient_note}</TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                         )}

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import {
   Eye, MoreHorizontal, MessageCircle, Package, Truck, CheckCircle2,
   CalendarClock, QrCode, CreditCard, DollarSign, ShieldCheck, ShieldX,
-  CheckSquare, Loader2, XCircle, Printer, History, Trash2, AlertCircle
+  CheckSquare, Loader2, XCircle, Printer, History, Trash2, AlertCircle, User
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -23,6 +23,7 @@ interface Order {
   delivery_status: string;
   user_id: string;
   delivery_info?: string | null;
+  recipient_note?: string | null;
   payment_method?: string | null;
   shipping_address: any;
   profiles: {
@@ -163,6 +164,11 @@ export const OrderMobileCard = ({
           {order.delivery_info && (
             <Badge variant="outline" className="text-[9px] bg-orange-100 text-orange-700 border-orange-300 gap-1 px-1 py-0">
               <AlertCircle className="w-2.5 h-2.5" /> obs.
+            </Badge>
+          )}
+          {order.recipient_note && (
+            <Badge variant="outline" className="text-[9px] bg-blue-100 text-blue-700 border-blue-300 gap-1 px-1 py-0">
+              <User className="w-2.5 h-2.5" /> receber por outro
             </Badge>
           )}
         </button>
