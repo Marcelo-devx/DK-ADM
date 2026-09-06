@@ -24,6 +24,7 @@ interface Order {
   delivery_status?: string;
   user_id: string;
   delivery_info?: string | null;
+  recipient_note?: string | null;
   payment_method?: string | null;
   shipping_address: {
     street: string;
@@ -321,6 +322,11 @@ export const OrderDetailModal = ({ order, isOpen, onClose, onMarkDelivered, isMa
                 <h4 className="text-sm font-bold flex items-center gap-2 text-gray-700">
                     <MapPin className="h-4 w-4" /> Endereço de Entrega
                 </h4>
+                {order.recipient_note && (
+                    <Badge className="bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-100 gap-1 text-xs font-semibold px-2 py-1 whitespace-normal text-left h-auto">
+                        <User className="h-3 w-3 shrink-0" /> {order.recipient_note}
+                    </Badge>
+                )}
                 <div className="text-sm space-y-1 text-muted-foreground">
                     <p className="text-gray-900 font-medium">
                         {order.shipping_address.street}, {order.shipping_address.number}
