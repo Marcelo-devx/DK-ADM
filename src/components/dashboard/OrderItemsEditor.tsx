@@ -23,6 +23,8 @@ interface OrderItem {
 
 interface EditableItem extends OrderItem {
   _originalQuantity: number; // to compute stock diff
+  _originalPrice: number; // snapshot of last-saved price, used to detect pending changes
+  _originalName: string; // snapshot of last-saved name, used to detect pending changes
 }
 
 interface NewItem {
@@ -187,7 +189,12 @@ export function OrderItemsEditor({
   const queryClient = useQueryClient();
 
   const [items, setItems] = useState<EditableItem[]>(
-    initialItems.map((it) => ({ ...it, _originalQuantity: it.quantity }))
+    initialItems.map((it) => ({
+      ...it,
+      _originalQuantity: it.quantity,
+      _originalPrice: it.price_at_purchase,
+      _originalName: it.name_at_purchase,
+    }))
   );
   const [newItems, setNewItems] = useState<NewItem[]>([]);
   const [deletedIds, setDeletedIds] = useState<Set<number>>(new Set());
@@ -302,6 +309,7 @@ export function OrderItemsEditor({
       }
 
       // 3. Insert new items → deduct stock
+      let insertedRows: any[] = [];
       if (validNewItems.length > 0) {
         const toInsert = validNewItems.map((it) => ({
           order_id: orderId,
@@ -312,8 +320,9 @@ export function OrderItemsEditor({
           price_at_purchase: it.price_at_purchase,
           name_at_purchase: it.name_at_purchase,
         }));
-        const { error } = await supabase.from("order_items").insert(toInsert);
+        const { data: inserted, error } = await supabase.from("order_items").insert(toInsert).select();
         if (error) throw new Error(`Erro ao inserir itens: ${error.message}`);
+        insertedRows = inserted ?? [];
 
         for (const it of validNewItems) {
           await adjustStock(it.item_id, it.variant_id, -it.quantity);
@@ -332,10 +341,9 @@ export function OrderItemsEditor({
       const changesSummary: string[] = [];
       if (deletedIds.size > 0) changesSummary.push(`${deletedIds.size} item(s) removido(s)`);
       if (validNewItems.length > 0) changesSummary.push(`${validNewItems.length} item(s) adicionado(s)`);
-      const updatedCount = activeItems.filter((it) => {
-        const orig = initialItems.find((o) => o.id === it.id);
-        return orig && (it.quantity !== orig.quantity || it.price_at_purchase !== orig.price_at_purchase);
-      }).length;
+      const updatedCount = activeItems.filter(
+        (it) => it.quantity !== it._originalQuantity || it.price_at_purchase !== it._originalPrice
+      ).length;
       if (updatedCount > 0) changesSummary.push(`${updatedCount} item(s) alterado(s)`);
       if (changesSummary.length === 0) changesSummary.push("itens do pedido editados");
 
@@ -352,6 +360,35 @@ export function OrderItemsEditor({
         console.error("[OrderItemsEditor] Erro ao registrar histórico:", historyError);
       }
 
+      // 6. Sincroniza o estado local com o que foi realmente persistido:
+      // remove itens excluídos, "confirma" os itens existentes (nova quantidade vira a original)
+      // e move os itens recém-inseridos da caixa "Novos itens" para a lista de itens salvos.
+      // Isso evita que o mesmo item pareça "não salvo" e seja inserido de novo em um segundo clique.
+      setItems([
+        ...activeItems.map((it) => ({
+          ...it,
+          _originalQuantity: it.quantity,
+          _originalPrice: it.price_at_purchase,
+          _originalName: it.name_at_purchase,
+        })),
+        ...insertedRows.map((row: any) => ({
+          id: row.id,
+          order_id: row.order_id,
+          item_id: row.item_id,
+          item_type: row.item_type,
+          quantity: row.quantity,
+          price_at_purchase: Number(row.price_at_purchase),
+          name_at_purchase: row.name_at_purchase,
+          image_url_at_purchase: row.image_url_at_purchase,
+          variant_id: row.variant_id,
+          _originalQuantity: row.quantity,
+          _originalPrice: Number(row.price_at_purchase),
+          _originalName: row.name_at_purchase,
+        })),
+      ]);
+      setNewItems([]);
+      setDeletedIds(new Set());
+
       showSuccess(`Itens e total do pedido #${orderId} atualizados! Novo total: ${fmt(newTotal)}`);
       queryClient.invalidateQueries({ queryKey: ["ordersAdmin"] });
       queryClient.invalidateQueries({ queryKey: ["editedOrderIds"] });
@@ -366,10 +403,12 @@ export function OrderItemsEditor({
   const hasChanges =
     deletedIds.size > 0 ||
     validNewItems.length > 0 ||
-    items.some((it) => {
-      const orig = initialItems.find((o) => o.id === it.id);
-      return orig && (it.quantity !== orig.quantity || it.price_at_purchase !== orig.price_at_purchase || it.name_at_purchase !== orig.name_at_purchase);
-    });
+    items.some(
+      (it) =>
+        it.quantity !== it._originalQuantity ||
+        it.price_at_purchase !== it._originalPrice ||
+        it.name_at_purchase !== it._originalName
+    );
 
   return (
     <div className="space-y-4">
