@@ -35,6 +35,7 @@ export function OrderEditForm({ order, onSave, onCancel, isLoading }: OrderEditF
       donation_amount: Number(order.donation_amount) || 0,
       shipping_address: order.shipping_address,
       delivery_info: order.delivery_info || '',
+      recipient_note: order.recipient_note || '',
     });
   }, [order]);
 
@@ -105,6 +106,7 @@ export function OrderEditForm({ order, onSave, onCancel, isLoading }: OrderEditF
     donation_amount: Number(order.donation_amount) || 0,
     shipping_address: order.shipping_address,
     delivery_info: order.delivery_info || '',
+    recipient_note: order.recipient_note || '',
   });
 
   return (
@@ -313,6 +315,16 @@ export function OrderEditForm({ order, onSave, onCancel, isLoading }: OrderEditF
             value={updates.delivery_info}
             onChange={(e) => handleChange('delivery_info', e.target.value)}
             rows={3}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="recipient_note">Pedido será recebido por outra pessoa</Label>
+          <Textarea
+            id="recipient_note"
+            value={updates.recipient_note}
+            onChange={(e) => handleChange('recipient_note', e.target.value)}
+            rows={2}
+            placeholder="Ex: Pedido será recebido por: Carlos Eduardo"
           />
         </div>
       </div>

@@ -59,6 +59,7 @@ export function OrderEditModal({ order, isOpen, onClose }: OrderEditModalProps) 
               cep: "",
             },
         delivery_info: order.delivery_info || "",
+        recipient_note: order.recipient_note || "",
       });
     }
   }, [order, isOpen]);
@@ -390,6 +391,20 @@ export function OrderEditModal({ order, isOpen, onClose }: OrderEditModalProps) 
                 onChange={(e) => handleChange("delivery_info", e.target.value)}
                 rows={3}
                 placeholder="Código de rastreio, observações..."
+              />
+            </div>
+
+            {/* Entrega para outra pessoa */}
+            <div className="space-y-2">
+              <Label htmlFor="recipient_note" className="text-xs font-semibold uppercase text-muted-foreground">
+                Pedido será recebido por outra pessoa
+              </Label>
+              <Textarea
+                id="recipient_note"
+                value={updates.recipient_note}
+                onChange={(e) => handleChange("recipient_note", e.target.value)}
+                rows={2}
+                placeholder="Ex: Pedido será recebido por: Carlos Eduardo"
               />
             </div>
 
