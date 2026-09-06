@@ -133,54 +133,56 @@ export const OrderDetailModal = ({ order, isOpen, onClose, onMarkDelivered, isMa
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 pr-8">
-            <div>
-                <DialogTitle className="text-xl">Detalhes do Pedido #{order.id}</DialogTitle>
-                <DialogDescription>
-                    Realizado em {new Date(order.created_at).toLocaleString("pt-BR")}
-                </DialogDescription>
+          <div className="flex flex-col gap-3 pr-8">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+              <div>
+                  <DialogTitle className="text-xl">Detalhes do Pedido #{order.id}</DialogTitle>
+                  <DialogDescription>
+                      Realizado em {new Date(order.created_at).toLocaleString("pt-BR")}
+                  </DialogDescription>
+              </div>
+              <div className="flex flex-wrap gap-2 items-center">
+                  {order.payment_method?.toLowerCase().includes('pix') ? (
+                      <Badge variant="outline" className="bg-cyan-50 text-cyan-700 border-cyan-200 gap-1"><QrCode className="w-3 h-3" /> Pix</Badge>
+                  ) : order.payment_method?.toLowerCase().includes('cartão') ? (
+                      <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 gap-1"><CreditCard className="w-3 h-3" /> Cartão</Badge>
+                  ) : null}
+                  <Badge variant="outline" className="bg-gray-100">{order.status}</Badge>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-2 items-center">
-                {order.payment_method?.toLowerCase().includes('pix') ? (
-                    <Badge variant="outline" className="bg-cyan-50 text-cyan-700 border-cyan-200 gap-1"><QrCode className="w-3 h-3" /> Pix</Badge>
-                ) : order.payment_method?.toLowerCase().includes('cartão') ? (
-                    <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 gap-1"><CreditCard className="w-3 h-3" /> Cartão</Badge>
-                ) : null}
-                <Badge variant="outline" className="bg-gray-100">{order.status}</Badge>
-                {(() => {
-                  const isPaidOrFinalized = order.status === "Pago" || order.status === "Finalizada";
-                  const isClosed = ["Entregue", "Cancelado"].includes(order.delivery_status || "");
-                  const isPackaged = ["Embalado", "Despachado"].includes(order.delivery_status || "");
+            {(() => {
+              const isPaidOrFinalized = order.status === "Pago" || order.status === "Finalizada";
+              const isClosed = ["Entregue", "Cancelado"].includes(order.delivery_status || "");
+              const isPackaged = ["Embalado", "Despachado"].includes(order.delivery_status || "");
 
-                  if (!isPaidOrFinalized || isClosed) return null;
+              if (!isPaidOrFinalized || isClosed) return null;
 
-                  if (!isPackaged) {
-                    return onMarkPackaged ? (
-                      <Button
-                        size="sm"
-                        className="bg-amber-500 hover:bg-amber-600 h-8 px-3 text-xs font-bold"
-                        onClick={() => onMarkPackaged(order.id)}
-                        disabled={isMarkingPackaged}
-                      >
-                        {isMarkingPackaged ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Package className="w-3 h-3 mr-1" />}
-                        Marcar Embalado
-                      </Button>
-                    ) : null;
-                  }
+              if (!isPackaged) {
+                return onMarkPackaged ? (
+                  <Button
+                    size="sm"
+                    className="bg-amber-500 hover:bg-amber-600 h-9 px-3 text-xs font-bold w-full sm:w-auto sm:self-end"
+                    onClick={() => onMarkPackaged(order.id)}
+                    disabled={isMarkingPackaged}
+                  >
+                    {isMarkingPackaged ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Package className="w-3 h-3 mr-1" />}
+                    Marcar Embalado
+                  </Button>
+                ) : null;
+              }
 
-                  return onMarkDelivered ? (
-                    <Button
-                      size="sm"
-                      className="bg-green-600 hover:bg-green-700 h-8 px-3 text-xs font-bold"
-                      onClick={() => onMarkDelivered(order.id)}
-                      disabled={isMarkingDelivered}
-                    >
-                      {isMarkingDelivered ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <CheckCircle2 className="w-3 h-3 mr-1" />}
-                      Marcar Entregue
-                    </Button>
-                  ) : null;
-                })()}
-            </div>
+              return onMarkDelivered ? (
+                <Button
+                  size="sm"
+                  className="bg-green-600 hover:bg-green-700 h-9 px-3 text-xs font-bold w-full sm:w-auto sm:self-end"
+                  onClick={() => onMarkDelivered(order.id)}
+                  disabled={isMarkingDelivered}
+                >
+                  {isMarkingDelivered ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <CheckCircle2 className="w-3 h-3 mr-1" />}
+                  Marcar Entregue
+                </Button>
+              ) : null;
+            })()}
           </div>
         </DialogHeader>
 
