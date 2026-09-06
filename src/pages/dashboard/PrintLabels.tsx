@@ -27,6 +27,7 @@ interface Order {
   user_id: string | null;
   email?: string;
   delivery_info?: string | null;
+  recipient_note?: string | null;
   profiles?: {
     first_name: string | null;
     last_name: string | null;
@@ -68,7 +69,7 @@ export default function PrintLabelsPage() {
     queryFn: async () => {
       const { data: ordersData, error } = await supabase
         .from("orders")
-        .select("id, created_at, total_price, status, delivery_status, shipping_address, user_id, delivery_info")
+        .select("id, created_at, total_price, status, delivery_status, shipping_address, user_id, delivery_info, recipient_note")
         .in("status", ["Finalizada", "Pago"])
         .in("delivery_status", ["Aguardando Coleta", "Pendente", "Embalado", "Despachado"])
         .order("created_at", { ascending: false });
@@ -166,12 +167,18 @@ export default function PrintLabelsPage() {
     return result.replace(/\s*\|\s*/g, " ").trim();
   };
 
+  // Combina a observação administrativa com o recado de destinatário (recipient_note)
+  const getObservacao = (order: Order): string => {
+    const parts = [cleanStr(order.recipient_note).trim(), getAdminObs(order.delivery_info)].filter(Boolean);
+    return parts.join(" | ");
+  };
+
   const buildRowValues = (order: Order) => {
     const p = order.profiles;
     const addr = order.shipping_address || {};
     const fullName = `${cleanStr(p?.first_name)} ${cleanStr(p?.last_name)}`.trim();
     const phoneClean = (p?.phone || "").replace(/\D/g, "");
-    const observacao = getAdminObs(order.delivery_info);
+    const observacao = getObservacao(order);
     const notaCircuit = observacao && phoneClean
       ? `${observacao} wa.me/55${phoneClean}`
       : observacao || (phoneClean ? `wa.me/55${phoneClean}` : "");
@@ -426,6 +433,11 @@ export default function PrintLabelsPage() {
                   {addr.cep && <span>• CEP {addr.cep}</span>}
                 </div>
                 {p?.phone && <p className="text-xs text-gray-600">📞 {p.phone}</p>}
+                {order.recipient_note && (
+                  <p className="text-xs text-blue-700 bg-blue-50 rounded px-2 py-0.5 truncate">
+                    👤 {order.recipient_note}
+                  </p>
+                )}
                 {order.delivery_info && (
                   <p className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-0.5 truncate">
                     📝 {order.delivery_info}

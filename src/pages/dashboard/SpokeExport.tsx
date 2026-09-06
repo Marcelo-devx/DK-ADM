@@ -27,6 +27,7 @@ interface Order {
   status: string;
   delivery_status: string;
   delivery_info: string | null;
+  recipient_note: string | null;
   shipping_address: any;
   user_id: string;
   email?: string;
@@ -52,7 +53,7 @@ const checkIsNextRoute = (dateString: string) => {
 const fetchOrdersToExport = async (): Promise<Order[]> => {
   const { data: orders, error: ordersError } = await supabase
     .from("orders")
-    .select("id, created_at, total_price, status, delivery_status, delivery_info, user_id, shipping_address")
+    .select("id, created_at, total_price, status, delivery_status, delivery_info, recipient_note, user_id, shipping_address")
     .in("status", ["Finalizada", "Pago"])
     .in("delivery_status", ["Aguardando Coleta", "Embalado"])
     .order("created_at", { ascending: false });
@@ -137,6 +138,12 @@ const SpokeExportPage = () => {
     return result.replace(/\s*\|\s*/g, " ").trim();
   };
 
+  // Combina a observação administrativa com o recado de destinatário (recipient_note)
+  const getObservacao = (order: Order): string => {
+    const parts = [(order.recipient_note || "").trim(), getAdminObs(order.delivery_info)].filter(Boolean);
+    return parts.join(" | ");
+  };
+
   const handleExport = async (testMode = false) => {
     if (selectedIds.size === 0) { showError("Selecione pelo menos um pedido para exportar."); return; }
     setIsExporting(true);
@@ -147,7 +154,7 @@ const SpokeExportPage = () => {
         const profile = order.profiles;
         const phoneClean = cleanDigits(profile?.phone);
         const fullName = `${profile?.first_name || ""} ${profile?.last_name || ""}`.trim();
-        const observacao = getAdminObs(order.delivery_info);
+        const observacao = getObservacao(order);
         const notesValue = observacao && phoneClean
           ? `${observacao} wa.me/55${phoneClean}`
           : observacao || (phoneClean ? `wa.me/55${phoneClean}` : "");
