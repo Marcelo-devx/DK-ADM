@@ -163,7 +163,10 @@ export const OrderDetailModal = ({ order, isOpen, onClose, onMarkDelivered, isMa
                   <Button
                     size="sm"
                     className="bg-amber-500 hover:bg-amber-600 h-9 px-3 text-xs font-bold w-full sm:w-auto sm:self-end"
-                    onClick={() => onMarkPackaged(order.id)}
+                    onClick={() => {
+                      onMarkPackaged(order.id);
+                      onClose();
+                    }}
                     disabled={isMarkingPackaged}
                   >
                     {isMarkingPackaged ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Package className="w-3 h-3 mr-1" />}
