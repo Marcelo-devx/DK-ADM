@@ -22,18 +22,32 @@ import { ProductCombobox, SelectableItem } from "./ProductCombobox";
 import { LowStockPreviewModal } from "./LowStockPreviewModal";
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
-const itemSchema = z.object({
-  product_id: z.coerce.number().min(1, "Selecione um produto"),
-  variant_id: z.string().nullable().optional(),
-  quantity: z.coerce.number().min(1, "Mínimo 1"),
-  unit_cost: z.coerce.number().min(0.01, "Mínimo 0.01"),
-});
+// product_id fica opcional aqui para permitir a linha vazia "Buscar produto..."
+// (usada como placeholder para adicionar um novo item) sem bloquear o envio do
+// formulário. Linhas sem produto selecionado são filtradas antes de chegar em
+// onSubmit — veja handleFormSubmit abaixo.
+const itemSchema = z
+  .object({
+    product_id: z.coerce.number().optional().nullable(),
+    variant_id: z.string().nullable().optional(),
+    quantity: z.coerce.number().min(1, "Mínimo 1"),
+    unit_cost: z.coerce.number().min(0, "Não pode ser negativo"),
+  })
+  .refine((item) => !item.product_id || item.unit_cost >= 0.01, {
+    message: "Mínimo 0.01",
+    path: ["unit_cost"],
+  });
 
-const formSchema = z.object({
-  supplier_name: z.string().min(2, "O nome do fornecedor é obrigatório."),
-  notes: z.string().optional(),
-  items: z.array(itemSchema).min(1, "Adicione pelo menos um item"),
-});
+const formSchema = z
+  .object({
+    supplier_name: z.string().min(2, "O nome do fornecedor é obrigatório."),
+    notes: z.string().optional(),
+    items: z.array(itemSchema).min(1, "Adicione pelo menos um item"),
+  })
+  .refine((data) => data.items.some((item) => !!item.product_id), {
+    message: "Adicione pelo menos um item com produto selecionado",
+    path: ["items"],
+  });
 
 export type SupplierOrderFormValues = z.infer<typeof formSchema>;
 
@@ -336,9 +350,16 @@ export const SupplierOrderForm = ({
       document.removeEventListener("keydown", handleKeyDown, { capture: true } as any);
   }, [append, fields.length]);
 
+  // Remove linhas sem produto selecionado (ex: linha de placeholder deixada em
+  // branco) antes de enviar, para que elas não bloqueiem a criação/atualização.
+  const handleFormSubmit = form.handleSubmit((values) => {
+    const validItems = values.items.filter((item) => !!item.product_id);
+    onSubmit({ ...values, items: validItems });
+  });
+
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={handleFormSubmit} className="space-y-6">
         {/* Cabeçalho */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
           <FormField
