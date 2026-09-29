@@ -220,6 +220,9 @@ const Sidebar = () => {
       <NavLink to="/dashboard/shipping-rates" className={navLinkClass}>
         {({ isActive }) => (<><Bike className={iconClass("text-indigo-600", isActive)} />Fretes e Taxa</>)}
       </NavLink>
+      <NavLink to="/dashboard/client-vip" className={navLinkClass}>
+        {({ isActive }) => (<><Crown className={iconClass("text-amber-500", isActive)} />Cliente VIP</>)}
+      </NavLink>
 
       {/* ADMINISTRAÇÃO */}
       <p className={sectionTitleClass}>Administração</p>
@@ -321,6 +324,9 @@ const Sidebar = () => {
       <p className={sectionTitleClass}>Logística</p>
       <NavLink to="/dashboard/shipping-rates" className={navLinkClass}>
         {({ isActive }) => (<><Bike className={iconClass("text-indigo-600", isActive)} />Fretes e Taxa</>)}
+      </NavLink>
+      <NavLink to="/dashboard/client-vip" className={navLinkClass}>
+        {({ isActive }) => (<><Crown className={iconClass("text-amber-500", isActive)} />Cliente VIP</>)}
       </NavLink>
 
       {/* CLIENTES */}
@@ -425,6 +431,11 @@ const Sidebar = () => {
             <NavLink to="/dashboard/print-labels" className={navLinkClass}>
               {({ isActive }) => (<><Printer className={iconClass("text-indigo-600", isActive)} />Imprimir Etiquetas</>)}
             </NavLink>
+            {isGerente && (
+              <NavLink to="/dashboard/client-vip" className={navLinkClass}>
+                {({ isActive }) => (<><Crown className={iconClass("text-amber-500", isActive)} />Cliente VIP</>)}
+              </NavLink>
+            )}
           </>
         ) : (
           <>

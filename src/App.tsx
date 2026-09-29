@@ -67,6 +67,7 @@ import WarmupManager from "./pages/dashboard/WarmupManager";
 import ProductReservations from "./pages/dashboard/ProductReservations";
 import AdminAcessoManual from "./pages/dashboard/AdminAcessoManual";
 import PedidosPendentes from "./pages/dashboard/PedidosPendentes";
+import ClientVip from "./pages/dashboard/ClientVip";
 import VerificarAcesso from "./pages/VerificarAcesso";
 
 const DashboardIndex = () => {
@@ -141,6 +142,7 @@ const App = () => (
               <Route path="price-management" element={<PriceManagement />} />
               <Route path="import-clients" element={<ImportClients />} />
               <Route path="shipping-rates" element={<ShippingRates />} />
+              <Route path="client-vip" element={<ClientVip />} />
               <Route path="print-labels" element={<PrintLabels />} />
               <Route path="donations" element={<Donations />} />
               <Route path="crypto" element={<Crypto />} />

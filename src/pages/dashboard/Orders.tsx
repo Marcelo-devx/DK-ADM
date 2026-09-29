@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send, History, FileDown, Calendar, FilterX, ShieldCheck, ShieldX, CheckSquare, Plus, Search, Pencil, ChevronLeft, ChevronRight, XCircle, ChevronDown, SlidersHorizontal, User } from "lucide-react";
+import { MoreHorizontal, DollarSign, Eye, Trash2, Package, Printer, RefreshCw, CheckCircle2, AlertCircle, Loader2, Truck, SquareCheck as CheckboxIcon, X, Clock, CalendarClock, QrCode, CreditCard, MessageCircle, Send, History, FileDown, Calendar, FilterX, ShieldCheck, ShieldX, CheckSquare, Plus, Search, Pencil, ChevronLeft, ChevronRight, XCircle, ChevronDown, SlidersHorizontal, User, Crown } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { showSuccess, showError } from "@/utils/toast";
@@ -77,6 +77,7 @@ interface Order {
     email: string | null;
     phone: string | null;
     cpf_cnpj: string | null;
+    is_vip: boolean | null;
   } | null;
   order_items: any[];
 }
@@ -185,7 +186,7 @@ const fetchLatestOrders = async (filters: Filters, hasFilters = false): Promise<
   if (userIds.length > 0) {
     const { data: profilesData } = await supabase
       .from("profiles")
-      .select("id, first_name, last_name, email, phone, cpf_cnpj")
+      .select("id, first_name, last_name, email, phone, cpf_cnpj, is_vip")
       .in("id", userIds);
 
     if (profilesData) {
@@ -1607,6 +1608,11 @@ const OrdersPage = () => {
                       <div className="flex flex-col gap-0.5">
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-sm text-gray-900">{order.profiles?.first_name} {order.profiles?.last_name}</span>
+                          {order.profiles?.is_vip && (
+                            <Badge className="gap-1 bg-amber-500 text-white text-[10px] px-1.5 py-0">
+                              <Crown className="w-3 h-3" /> VIP
+                            </Badge>
+                          )}
                           {phone && canUseWhatsApp && (
                             <TooltipProvider>
                               <Tooltip>

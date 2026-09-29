@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import {
   Eye, MoreHorizontal, MessageCircle, Package, Truck, CheckCircle2,
   CalendarClock, QrCode, CreditCard, DollarSign, ShieldCheck, ShieldX,
-  CheckSquare, Loader2, XCircle, Printer, History, Trash2, AlertCircle, User
+  CheckSquare, Loader2, XCircle, Printer, History, Trash2, AlertCircle, User, Crown
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -32,6 +32,7 @@ interface Order {
     email: string | null;
     phone: string | null;
     cpf_cnpj: string | null;
+    is_vip: boolean | null;
   } | null;
   order_items: any[];
 }
@@ -264,8 +265,13 @@ export const OrderMobileCard = ({
         {/* Client name + phone */}
         <div className="flex items-center justify-between mb-2">
           <div>
-            <p className="font-semibold text-sm text-gray-900 leading-tight">
+            <p className="font-semibold text-sm text-gray-900 leading-tight flex items-center gap-1.5">
               {order.profiles?.first_name} {order.profiles?.last_name}
+              {order.profiles?.is_vip && (
+                <Badge className="gap-1 bg-amber-500 text-white text-[9px] px-1.5 py-0 shrink-0">
+                  <Crown className="w-2.5 h-2.5" /> VIP
+                </Badge>
+              )}
             </p>
             <p className="text-xs text-muted-foreground font-mono">{formatPhone(phone || "")}</p>
           </div>
