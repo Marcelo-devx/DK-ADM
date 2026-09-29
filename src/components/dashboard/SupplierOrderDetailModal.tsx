@@ -53,7 +53,8 @@ const fetchSupplierOrderItems = async (orderId: number): Promise<SupplierOrderIt
   const { data: itemsData, error: itemsError } = await supabase
     .from("supplier_order_items")
     .select(`id, quantity, received_quantity, unit_cost, variant_id, product_id, variant_name, products(name)`)
-    .eq("supplier_order_id", orderId);
+    .eq("supplier_order_id", orderId)
+    .order("id", { ascending: true });
 
   if (itemsError) throw itemsError;
   const items: SupplierOrderItem[] = (itemsData || []) as any;

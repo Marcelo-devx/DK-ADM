@@ -242,8 +242,9 @@ const SupplierOrdersPage = () => {
     try {
       const { data: itemsData, error: itemsError } = await supabase
         .from("supplier_order_items")
-        .select("product_id, variant_id, quantity, unit_cost, variant_name, flavor_name, volume_ml")
-        .eq("supplier_order_id", order.id);
+        .select("id, product_id, variant_id, quantity, unit_cost, variant_name, flavor_name, volume_ml")
+        .eq("supplier_order_id", order.id)
+        .order("id", { ascending: true });
       if (itemsError) throw itemsError;
 
       const initial = {
@@ -555,7 +556,8 @@ const SupplierOrdersPage = () => {
       const { data: items, error } = await supabase
         .from("supplier_order_items")
         .select(`id, quantity, received_quantity, unit_cost, variant_id, variant_name, product_id, products(name)`)
-        .eq("supplier_order_id", order.id);
+        .eq("supplier_order_id", order.id)
+        .order("id", { ascending: true });
 
       if (error) throw error;
 
