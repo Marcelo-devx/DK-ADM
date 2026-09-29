@@ -54,12 +54,11 @@ export const useClientVip = (searchTerm: string) => {
 
   const setVipMutation = useMutation({
     mutationFn: async ({ userId, isVip }: { userId: string; isVip: boolean }) => {
-      const { data, error } = await supabase.functions.invoke('admin-set-vip', {
-        body: { userId, isVip },
+      const { error } = await supabase.rpc('set_client_vip', {
+        target_user_id: userId,
+        vip: isVip,
       });
       if (error) throw new Error(error.message);
-      if (data?.error) throw new Error(data.error);
-      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clientVipSearch'] });
