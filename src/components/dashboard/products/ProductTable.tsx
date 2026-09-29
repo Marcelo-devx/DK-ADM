@@ -317,7 +317,7 @@ export const ProductTable = ({
                     <div className="flex flex-col gap-1">
                         {(() => {
                           const variantTotal = Number(product.variant_stock_total || 0);
-                          const displayStock = variantTotal > 0 ? variantTotal : (product.stock_quantity || 0);
+                          const displayStock = product.has_variants ? variantTotal : (product.stock_quantity || 0);
                           return (
                             <>
                               <Badge variant={displayStock <= 5 ? "destructive" : "secondary"} className="h-5 text-[10px] w-fit font-black">

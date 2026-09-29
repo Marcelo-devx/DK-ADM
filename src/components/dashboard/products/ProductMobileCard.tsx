@@ -80,7 +80,7 @@ export const ProductMobileCard = ({
   const hasVariants = priceValues.length > 0 || costValues.length > 0;
 
   const variantTotal = Number(product.variant_stock_total || 0);
-  const displayStock = variantTotal > 0 ? variantTotal : product.stock_quantity || 0;
+  const displayStock = product.has_variants ? variantTotal : product.stock_quantity || 0;
   const isLowStock = displayStock <= 5;
   const isOutOfStock = displayStock === 0;
 

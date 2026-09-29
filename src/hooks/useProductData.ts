@@ -21,6 +21,7 @@ export interface ExtendedProduct {
   variant_prices?: number[];
   variant_costs?: (number | null)[];
   variant_stock_total?: number;
+  has_variants?: boolean;
   allocated_in_kits?: number;
   created_at: string;
   flavor_names?: string | null;
@@ -89,6 +90,7 @@ export const useProductData = () => {
           variant_prices: variantsList.map((v: any) => v.price),
           variant_costs: variantsList.map((v: any) => v.cost_price),
           variant_stock_total: variantStockTotal,
+          has_variants: variantsList.length > 0,
           allocated_in_kits: allocated,
           sub_category_names: subCategoryNames,
           variants: variantsList

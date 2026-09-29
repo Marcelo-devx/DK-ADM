@@ -130,8 +130,8 @@ const ProductsPage = () => {
           return multiplier * (pixA - pixB);
 
         case 'stock':
-          const stockA = Number(a.variant_stock_total || 0) || (a.stock_quantity || 0);
-          const stockB = Number(b.variant_stock_total || 0) || (b.stock_quantity || 0);
+          const stockA = a.has_variants ? Number(a.variant_stock_total || 0) : (a.stock_quantity || 0);
+          const stockB = b.has_variants ? Number(b.variant_stock_total || 0) : (b.stock_quantity || 0);
           return multiplier * (stockA - stockB);
 
         default:
@@ -149,8 +149,8 @@ const ProductsPage = () => {
       const matchesBrand = brandFilter === 'all' || product.brand === brandFilter;
       const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                             (product.sku?.toLowerCase().includes(searchTerm.toLowerCase()));
-      const productStock = Number(product.variant_stock_total || 0) > 0
-        ? Number(product.variant_stock_total)
+      const productStock = product.has_variants
+        ? Number(product.variant_stock_total || 0)
         : (product.stock_quantity || 0);
       const matchesMaxStock = maxStockFilter === '' || isNaN(Number(maxStockFilter)) || productStock <= Number(maxStockFilter);
       return matchesCategory && matchesBrand && matchesSearch && matchesMaxStock;
