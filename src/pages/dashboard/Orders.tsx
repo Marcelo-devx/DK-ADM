@@ -233,6 +233,29 @@ const OrdersPage = () => {
   const { isAdmin, isGerenteGeral } = useUser();
   const canUseWhatsApp = isAdmin || isGerenteGeral;
 
+  // ── Faixas de frete cadastradas, para saber se o endereço do pedido está fora da área de entrega ──
+  const { data: shippingRates } = useQuery({
+    queryKey: ["shipping-rates-orders"],
+    queryFn: async () => {
+      const { data } = await supabase.from("shipping_rates").select("neighborhood, city").eq("is_active", true);
+      return data ?? [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // VIP só deve aparecer como "burlando o frete" quando o endereço do pedido não está na área de entrega cadastrada
+  const isVipBypassingShipping = (order: Order) => {
+    if (!order.profiles?.is_vip) return false;
+    const address = order.shipping_address;
+    const neighborhood = address?.neighborhood?.toLowerCase?.().trim();
+    const city = address?.city?.toLowerCase?.().trim();
+    if (!neighborhood || !city || !shippingRates) return false;
+    const isCovered = shippingRates.some(
+      (r: any) => r.neighborhood?.toLowerCase().trim() === neighborhood && r.city?.toLowerCase().trim() === city
+    );
+    return !isCovered;
+  };
+
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
@@ -1421,6 +1444,7 @@ const OrdersPage = () => {
           <OrderMobileCard
             key={order.id}
             order={order}
+            showVipBadge={isVipBypassingShipping(order)}
             isSelected={selectedIds.has(order.id)}
             onToggleSelect={toggleSelectOne}
             onOpenDetail={(o) => { setSelectedOrder(o); setIsDetailModalOpen(true); }}
@@ -1608,7 +1632,7 @@ const OrdersPage = () => {
                       <div className="flex flex-col gap-0.5">
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-sm text-gray-900">{order.profiles?.first_name} {order.profiles?.last_name}</span>
-                          {order.profiles?.is_vip && (
+                          {isVipBypassingShipping(order) && (
                             <Badge className="gap-1 bg-amber-500 text-white text-[10px] px-1.5 py-0">
                               <Crown className="w-3 h-3" /> VIP
                             </Badge>

@@ -39,6 +39,7 @@ interface Order {
 
 interface OrderMobileCardProps {
   order: Order;
+  showVipBadge?: boolean;
   isSelected: boolean;
   onToggleSelect: (id: number) => void;
   onOpenDetail: (order: Order) => void;
@@ -67,6 +68,7 @@ const getPaymentMethodDetails = (method: string | null | undefined) => {
 
 export const OrderMobileCard = ({
   order,
+  showVipBadge,
   isSelected,
   onToggleSelect,
   onOpenDetail,
@@ -267,7 +269,7 @@ export const OrderMobileCard = ({
           <div>
             <p className="font-semibold text-sm text-gray-900 leading-tight flex items-center gap-1.5">
               {order.profiles?.first_name} {order.profiles?.last_name}
-              {order.profiles?.is_vip && (
+              {showVipBadge && (
                 <Badge className="gap-1 bg-amber-500 text-white text-[9px] px-1.5 py-0 shrink-0">
                   <Crown className="w-2.5 h-2.5" /> VIP
                 </Badge>
