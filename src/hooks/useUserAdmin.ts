@@ -46,22 +46,33 @@ export interface UpdateUserPayload {
 
 export const PAGE_SIZE = 50;
 
-async function fetchUsersFromEdge(searchTerm: string, page: number): Promise<{ users: AdminUser[]; total: number }> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
+const SELECT_FIELDS =
+  "id, first_name, last_name, cpf_cnpj, email, phone, date_of_birth, gender, " +
+  "cep, street, number, complement, neighborhood, city, state, " +
+  "force_pix_on_next_purchase, is_credit_card_enabled, " +
+  "is_blocked, created_at, role";
 
-  try {
-    const { data, error } = await supabase.functions.invoke('admin-list-users', {
-      body: { searchTerm, page, pageSize: PAGE_SIZE },
-    });
+async function fetchUsers(searchTerm: string, page: number): Promise<{ users: AdminUser[]; total: number }> {
+  const term = searchTerm.trim();
+  const from = page * PAGE_SIZE;
+  const to = from + PAGE_SIZE - 1;
 
-    if (error) throw new Error(error.message);
-    if (data?.error) throw new Error(data.error);
+  let query = supabase.from('profiles').select(SELECT_FIELDS, { count: 'exact' });
 
-    return { users: data.users ?? [], total: data.total ?? 0 };
-  } finally {
-    clearTimeout(timeout);
+  if (term) {
+    const likeTerm = `%${term}%`;
+    query = query.or(
+      `email.ilike.${likeTerm},cpf_cnpj.ilike.${likeTerm},phone.ilike.${likeTerm},first_name.ilike.${likeTerm},last_name.ilike.${likeTerm}`
+    );
   }
+
+  const { data, error, count } = await query
+    .order('created_at', { ascending: false })
+    .range(from, to);
+
+  if (error) throw new Error(error.message);
+
+  return { users: (data as unknown as AdminUser[]) ?? [], total: count ?? 0 };
 }
 
 export const useUserAdmin = (searchTerm: string = '', page: number = 0) => {
@@ -70,7 +81,7 @@ export const useUserAdmin = (searchTerm: string = '', page: number = 0) => {
   // ── Query principal: busca usuários + total via edge function (service_role) ──
   const usersQuery = useQuery<{ users: AdminUser[]; total: number }, Error>({
     queryKey: ['adminUsers', searchTerm, page],
-    queryFn: () => fetchUsersFromEdge(searchTerm, page),
+    queryFn: () => fetchUsers(searchTerm, page),
     refetchOnWindowFocus: false,
     placeholderData: (prev) => prev,
     staleTime: 30_000,   // considera dados frescos por 30s, evita refetch desnecessário
