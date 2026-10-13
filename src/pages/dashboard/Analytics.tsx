@@ -28,12 +28,12 @@ import { cn } from "@/lib/utils";
 const C = ["#3b82f6","#10b981","#f59e0b","#ef4444","#8b5cf6","#64748b","#ec4899","#14b8a6","#f97316","#06b6d4"];
 
 const PERIODS = [
-  { value: "7d",  label: "Últimos 7 dias" },
-  { value: "30d", label: "Últimos 30 dias" },
-  { value: "90d", label: "Últimos 90 dias" },
-  { value: "6m",  label: "Últimos 6 meses" },
-  { value: "12m", label: "Últimos 12 meses" },
-  { value: "24m", label: "Últimos 24 meses" },
+  { value: "7d",  label: "Últimos 7 dias",   shortLabel: "7 dias" },
+  { value: "30d", label: "Últimos 30 dias",  shortLabel: "30 dias" },
+  { value: "90d", label: "Últimos 90 dias",  shortLabel: "90 dias" },
+  { value: "6m",  label: "Últimos 6 meses",  shortLabel: "6 meses" },
+  { value: "12m", label: "Últimos 12 meses", shortLabel: "12 meses" },
+  { value: "24m", label: "Últimos 24 meses", shortLabel: "24 meses" },
 ];
 
 const R = (v: number) =>
@@ -207,28 +207,52 @@ const AnalyticsPage = () => {
     <div className="space-y-6 pb-24">
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-black text-gray-900 flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" /> Inteligência de Negócio
-          </h1>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-            {periodLabel} · {s.totalOrders ?? 0} pedidos analisados
-          </p>
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-black text-gray-900 flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" /> Inteligência de Negócio
+            </h1>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 flex items-center gap-1.5">
+              {periodLabel} · {s.totalOrders ?? 0} pedidos analisados
+              {isFetching && <RefreshCw className="w-3 h-3 text-blue-500 animate-spin" />}
+            </p>
+          </div>
+
+          {/* Fallback compacto: dropdown, útil em telas bem estreitas */}
+          <div className="sm:hidden flex items-center gap-2 bg-white border rounded-xl px-3 py-2 shadow-sm self-start">
+            <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
+            <Select value={period} onValueChange={setPeriod}>
+              <SelectTrigger className="border-0 focus:ring-0 text-sm font-semibold text-gray-700 bg-transparent p-0 h-auto w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PERIODS.map(p => (
+                  <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-        <div className="flex items-center gap-2 bg-white border rounded-xl px-3 py-2 shadow-sm self-start sm:self-auto">
-          <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
-          <Select value={period} onValueChange={setPeriod}>
-            <SelectTrigger className="border-0 focus:ring-0 text-sm font-semibold text-gray-700 bg-transparent p-0 h-auto w-36 sm:w-44">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {PERIODS.map(p => (
-                <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {isFetching && <RefreshCw className="w-3.5 h-3.5 text-blue-500 animate-spin" />}
+
+        {/* Atalhos de período — visíveis a partir de sm, destacando o período ativo */}
+        <div className="hidden sm:flex items-center gap-1.5 bg-white border rounded-xl p-1.5 shadow-sm w-fit overflow-x-auto">
+          {PERIODS.map(p => (
+            <button
+              key={p.value}
+              type="button"
+              onClick={() => setPeriod(p.value)}
+              aria-pressed={period === p.value}
+              className={cn(
+                "px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors",
+                period === p.value
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+              )}
+            >
+              {p.shortLabel}
+            </button>
+          ))}
         </div>
       </div>
 
