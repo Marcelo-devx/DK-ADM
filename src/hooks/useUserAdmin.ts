@@ -108,13 +108,12 @@ export const useUserAdmin = (searchTerm: string = '', page: number = 0) => {
 
   // ── Bloquear / Desbloquear ──
   const blockUserMutation = useMutation({
-    mutationFn: async ({ userId, isBlocked, reason }: { userId: string; isBlocked: boolean; reason: string }) => {
-      const { data, error } = await supabase.functions.invoke('admin-block-user', {
-        body: { userId, isBlocked, reason }
-      });
+    mutationFn: async ({ userId, isBlocked }: { userId: string; isBlocked: boolean; reason: string }) => {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ is_blocked: isBlocked, updated_at: new Date().toISOString() })
+        .eq('id', userId);
       if (error) throw new Error(error.message);
-      if (data?.error) throw new Error(data.error);
-      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['adminUsers'] });
