@@ -7,12 +7,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Package, Ruler, Droplets, Pencil, X, Check, Loader2, RefreshCcw, Palette, Zap, RefreshCw, Maximize } from "lucide-react";
+import { Plus, Trash2, Package, Ruler, Droplets, Pencil, X, Check, Loader2, RefreshCcw, Palette, Zap, RefreshCw, Maximize, AlertTriangle } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { sortVariantsBySpecification } from "@/utils/variantSort";
 import { cn } from "@/lib/utils";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface Variant {
   id: string;
@@ -64,6 +74,7 @@ export const ProductVariantManager = ({
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Partial<Variant & { flavor_name?: string }>>({});
+  const [isZeroStockDialogOpen, setIsZeroStockDialogOpen] = useState(false);
 
   const [newVariant, setNewVariant] = useState<Partial<Variant & { flavor_name: string }>>({
     flavor_name: "",
@@ -209,6 +220,7 @@ export const ProductVariantManager = ({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["productVariants", productId] });
       showSuccess("Estoque zerado em todas as variações!");
+      setIsZeroStockDialogOpen(false);
     },
     onError: (err: any) => showError(`Erro ao zerar estoque: ${err.message}`),
   });
@@ -257,11 +269,7 @@ export const ProductVariantManager = ({
             variant="secondary"
             size="sm"
             className="bg-white border text-red-600 hover:bg-red-50 text-xs h-8"
-            onClick={() => {
-              if (confirm("Deseja zerar o estoque de TODAS as variações?")) {
-                bulkZeroStockMutation.mutate();
-              }
-            }}
+            onClick={() => setIsZeroStockDialogOpen(true)}
             disabled={bulkZeroStockMutation.isPending || !sortedVariants || sortedVariants.length === 0}
           >
             {bulkZeroStockMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Package className="w-3.5 h-3.5 mr-1" />}
@@ -547,6 +555,53 @@ export const ProductVariantManager = ({
           </TableBody>
         </Table>
       </div>
+
+      {/* ── Confirmação detalhada: Zerar Estoque ── */}
+      <AlertDialog open={isZeroStockDialogOpen} onOpenChange={setIsZeroStockDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="w-5 h-5" /> Zerar estoque de todas as variações?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-left">
+                <p>
+                  Esta ação vai zerar o estoque de{" "}
+                  <strong>{sortedVariants.length} variaç{sortedVariants.length === 1 ? "ão" : "ões"}</strong>, totalizando{" "}
+                  <strong>{sortedVariants.reduce((sum, v) => sum + (v.stock_quantity || 0), 0)} unidades</strong> que serão perdidas.
+                </p>
+                <div className="max-h-48 overflow-y-auto border rounded-md divide-y">
+                  {sortedVariants.map((v) => (
+                    <div key={v.id} className="flex items-center justify-between px-3 py-1.5 text-xs">
+                      <span className="font-medium text-gray-700 truncate">{getSpecLabel(v)}</span>
+                      <Badge
+                        variant={v.stock_quantity > 0 ? "secondary" : "outline"}
+                        className={cn("font-bold shrink-0", v.stock_quantity > 0 && "bg-emerald-100 text-emerald-700")}
+                      >
+                        {v.stock_quantity} un → 0 un
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  O estoque total do produto também será atualizado automaticamente. Esta ação não pode ser desfeita.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => bulkZeroStockMutation.mutate()}
+              disabled={bulkZeroStockMutation.isPending}
+            >
+              {bulkZeroStockMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+              Sim, zerar estoque
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
