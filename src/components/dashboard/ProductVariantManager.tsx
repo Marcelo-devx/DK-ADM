@@ -198,6 +198,21 @@ export const ProductVariantManager = ({
     onError: (err: any) => showError(`Erro ao atualizar em massa: ${err.message}`),
   });
 
+  const bulkZeroStockMutation = useMutation({
+    mutationFn: async () => {
+      if (!productId) throw new Error("Produto não identificado.");
+      const { error } = await supabase.rpc("bulk_zero_variant_stock", {
+        p_product_id: productId,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["productVariants", productId] });
+      showSuccess("Estoque zerado em todas as variações!");
+    },
+    onError: (err: any) => showError(`Erro ao zerar estoque: ${err.message}`),
+  });
+
   const startEditing = (v: Variant) => {
     setEditingId(v.id);
     setEditValues({ ...v, flavor_name: v.flavors?.name || "" });
@@ -236,6 +251,21 @@ export const ProductVariantManager = ({
           >
             {bulkUpdatePricesMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <RefreshCcw className="w-3.5 h-3.5 mr-1" />}
             Replicar Preços
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="bg-white border text-red-600 hover:bg-red-50 text-xs h-8"
+            onClick={() => {
+              if (confirm("Deseja zerar o estoque de TODAS as variações?")) {
+                bulkZeroStockMutation.mutate();
+              }
+            }}
+            disabled={bulkZeroStockMutation.isPending || !sortedVariants || sortedVariants.length === 0}
+          >
+            {bulkZeroStockMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Package className="w-3.5 h-3.5 mr-1" />}
+            Zerar Estoque
           </Button>
           <Button type="button" variant="outline" size="sm" className="text-xs h-8" onClick={() => setIsAdding(!isAdding)}>
             {isAdding ? "Cancelar" : <><Plus className="w-3.5 h-3.5 mr-1" /> Adicionar</>}
