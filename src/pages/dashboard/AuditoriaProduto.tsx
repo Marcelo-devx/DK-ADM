@@ -114,13 +114,14 @@ export default function AuditoriaProduto() {
   });
 
   const purchases = useInfiniteQuery({
-    queryKey: ["auditoria-produto-compradores-historico", user?.id, selected?.productId, selected?.variantId],
+    queryKey: ["auditoria-produto-compradores-historico", "finalizada-entregue", user?.id, selected?.productId, selected?.variantId],
     enabled: allowed && !!selected,
     initialPageParam: 0,
     queryFn: async ({ pageParam }) => {
       let query = supabase.from("order_items")
         .select("id, quantity, price_at_purchase, name_at_purchase, orders!order_items_order_id_fkey!inner(id, user_id, created_at, status, delivery_status, guest_email, guest_phone, shipping_address, profiles!orders_user_id_fkey(first_name, last_name, email, phone))", { count: "exact" })
-        .eq("item_type", "product").eq("item_id", selected!.productId);
+        .eq("item_type", "product").eq("item_id", selected!.productId)
+        .eq("orders.status", "Finalizada").eq("orders.delivery_status", "Entregue");
       if (selected!.variantId) query = query.eq("variant_id", selected!.variantId);
       const { data, error, count } = await query.order("created_at", { ascending: false }).order("id", { ascending: false })
         .range(pageParam, pageParam + PAGE_SIZE - 1);
@@ -177,7 +178,7 @@ export default function AuditoriaProduto() {
       {selected && <Card className="overflow-hidden border-blue-200 shadow-sm">
         <CardHeader className="space-y-3 bg-gradient-to-r from-blue-50 to-indigo-50">
           <div className="flex flex-wrap items-center justify-between gap-3"><CardTitle className="flex items-center gap-2 text-lg text-blue-900"><Users className="h-5 w-5 shrink-0 text-blue-600" />Compradores — {selected.name}</CardTitle><Button variant="outline" size="sm" disabled={purchases.isFetching} onClick={() => void purchases.refetch()}><RefreshCw className={`mr-2 h-4 w-4 ${purchases.isFetching ? "animate-spin" : ""}`} />Atualizar</Button></div>
-          <p className="text-sm text-muted-foreground">SKU: {selected.sku || "—"}. Uma linha por item comprado; inclui pedidos pendentes e cancelados, identificados pelo status.</p>
+          <p className="text-sm text-muted-foreground">SKU: {selected.sku || "—"}. Uma linha por item comprado; somente pedidos com status Finalizada e entrega Entregue.</p>
           {selected.variantId && <p className="text-xs text-muted-foreground">Consulta pelo vínculo da variação. Compras antigas sem variant_id não são atribuídas automaticamente.</p>}
         </CardHeader>
         <CardContent className="space-y-4 pt-4">

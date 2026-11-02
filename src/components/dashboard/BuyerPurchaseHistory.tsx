@@ -44,15 +44,15 @@ export default function BuyerPurchaseHistory({ userId, guestEmail, orderId, name
     onSuccess: onSelectProduct,
   });
   const history = useQuery({
-    queryKey: ["auditoria-produto-historico-navegavel", user?.id, userId, guestEmail, userId || guestEmail ? null : orderId],
+    queryKey: ["auditoria-produto-historico-navegavel", "finalizada-entregue", user?.id, userId, guestEmail, userId || guestEmail ? null : orderId],
     enabled: isAdmin || isGerenteGeral,
     queryFn: async () => {
       const items: HistoryItem[] = [];
       let offset = 0;
       while (true) {
         let query = supabase.from("order_items")
-          .select("id, item_id, variant_id, item_type, name_at_purchase, quantity, order_id, orders!order_items_order_id_fkey!inner(id, user_id, guest_email, status)")
-          .not("orders.status", "in", "(Pendente,Cancelado)");
+          .select("id, item_id, variant_id, item_type, name_at_purchase, quantity, order_id, orders!order_items_order_id_fkey!inner(id, user_id, guest_email, status, delivery_status)")
+          .eq("orders.status", "Finalizada").eq("orders.delivery_status", "Entregue");
         if (userId) query = query.eq("orders.user_id", userId);
         else if (guestEmail) query = query.is("orders.user_id", null).eq("orders.guest_email", guestEmail);
         else query = query.eq("order_id", orderId);
@@ -86,7 +86,7 @@ export default function BuyerPurchaseHistory({ userId, guestEmail, orderId, name
         <h3 className="flex items-center gap-2 font-semibold text-blue-900"><ShoppingBag className="h-5 w-5 text-blue-600" />Histórico de compras de {name}</h3>
         {history.data && <div className="flex gap-2"><Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">{history.data.orderCount} pedidos</Badge><Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">{history.data.quantity} unidades</Badge></div>}
       </div>
-      <p className="mb-3 text-xs text-slate-500">Produtos e kits de todos os pedidos, exceto pendentes e cancelados. Quantidades somadas por item/variação e nome registrado na compra.</p>
+      <p className="mb-3 text-xs text-slate-500">Produtos e kits apenas de pedidos com status Finalizada e entrega Entregue. Quantidades somadas por item/variação e nome registrado na compra.</p>
       <p className="mb-3 text-xs text-blue-700">Clique em um produto ou variação para consultar seus compradores. Itens sem vínculo com uma variação consultam o produto completo; kits não são selecionáveis nesta auditoria.</p>
       {selection.isPending && <p role="status" className="mb-3 flex items-center gap-2 text-sm text-blue-600"><Loader2 className="h-4 w-4 animate-spin" />Selecionando produto...</p>}
       {selection.isError && <p role="alert" className="mb-3 text-sm text-destructive">Não foi possível selecionar: {selection.error.message}</p>}
