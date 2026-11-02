@@ -9,6 +9,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -24,6 +25,7 @@ import {
   AlertCircle, Package, Tag, Clock, Truck, Star, QrCode, CreditCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { startOfMonth, endOfMonth, format, subDays } from "date-fns";
 
 const C = ["#3b82f6","#10b981","#f59e0b","#ef4444","#8b5cf6","#64748b","#ec4899","#14b8a6","#f97316","#06b6d4"];
 
@@ -35,6 +37,33 @@ const PERIODS = [
   { value: "12m", label: "Últimos 12 meses", shortLabel: "12 meses" },
   { value: "24m", label: "Últimos 24 meses", shortLabel: "24 meses" },
 ];
+
+type ExtraPreset = "today" | "yesterday" | "thisMonth" | "lastMonth";
+
+const EXTRA_PRESETS: { key: ExtraPreset; label: string }[] = [
+  { key: "today", label: "Hoje" },
+  { key: "yesterday", label: "Ontem" },
+  { key: "thisMonth", label: "Este mês" },
+  { key: "lastMonth", label: "Mês passado" },
+];
+
+const getExtraPresetRange = (preset: ExtraPreset): { start: string; end: string } => {
+  const today = new Date();
+  switch (preset) {
+    case "today":
+      return { start: format(today, "yyyy-MM-dd"), end: format(today, "yyyy-MM-dd") };
+    case "yesterday": {
+      const y = subDays(today, 1);
+      return { start: format(y, "yyyy-MM-dd"), end: format(y, "yyyy-MM-dd") };
+    }
+    case "thisMonth":
+      return { start: format(startOfMonth(today), "yyyy-MM-dd"), end: format(today, "yyyy-MM-dd") };
+    case "lastMonth": {
+      const lastMonthDate = subDays(startOfMonth(today), 1);
+      return { start: format(startOfMonth(lastMonthDate), "yyyy-MM-dd"), end: format(endOfMonth(lastMonthDate), "yyyy-MM-dd") };
+    }
+  }
+};
 
 const R = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v ?? 0);
@@ -120,15 +149,18 @@ const AnalyticsSkeleton = () => (
 );
 
 // ─── Hook: busca os 4 RPCs em paralelo ───────────────────────────────────────
-function useAnalyticsData(period: string) {
+function useAnalyticsData(period: string, customRange: { start: string; end: string } | null) {
+  const p_start_date = customRange ? `${customRange.start}T00:00:00` : null;
+  const p_end_date = customRange ? `${customRange.end}T23:59:59` : null;
+
   return useQuery({
-    queryKey: ["analytics-v3", period],
+    queryKey: ["analytics-v3", period, customRange?.start, customRange?.end],
     queryFn: async () => {
       const [summaryRes, monthlyRes, productsRes, demoRes] = await Promise.all([
-        supabase.rpc("get_analytics_summary", { p_period: period }),
-        supabase.rpc("get_analytics_monthly",  { p_period: period }),
-        supabase.rpc("get_analytics_products", { p_period: period }),
-        supabase.rpc("get_analytics_demographics", { p_period: period }),
+        supabase.rpc("get_analytics_summary", { p_period: period, p_start_date, p_end_date }),
+        supabase.rpc("get_analytics_monthly",  { p_period: period, p_start_date, p_end_date }),
+        supabase.rpc("get_analytics_products", { p_period: period, p_start_date, p_end_date }),
+        supabase.rpc("get_analytics_demographics", { p_period: period, p_start_date, p_end_date }),
       ]);
 
       if (summaryRes.error) throw new Error(summaryRes.error.message);
@@ -153,7 +185,35 @@ function useAnalyticsData(period: string) {
 // ─── Página principal ─────────────────────────────────────────────────────────
 const AnalyticsPage = () => {
   const [period, setPeriod] = useState("12m");
-  const { data, isLoading, isError, error, refetch, isFetching } = useAnalyticsData(period);
+  const [customRange, setCustomRange] = useState<{ start: string; end: string } | null>(null);
+  const [startDateInput, setStartDateInput] = useState("");
+  const [endDateInput, setEndDateInput] = useState("");
+
+  const { data, isLoading, isError, error, refetch, isFetching } = useAnalyticsData(period, customRange);
+
+  const applyPeriod = (value: string) => {
+    setPeriod(value);
+    setCustomRange(null);
+    setStartDateInput("");
+    setEndDateInput("");
+  };
+
+  const applyExtraPreset = (preset: ExtraPreset) => {
+    const { start, end } = getExtraPresetRange(preset);
+    setStartDateInput(start);
+    setEndDateInput(end);
+    setCustomRange({ start, end });
+  };
+
+  const handleManualDateChange = (field: "start" | "end", value: string) => {
+    const nextStart = field === "start" ? value : startDateInput;
+    const nextEnd = field === "end" ? value : endDateInput;
+    setStartDateInput(nextStart);
+    setEndDateInput(nextEnd);
+    if (nextStart && nextEnd) {
+      setCustomRange({ start: nextStart, end: nextEnd });
+    }
+  };
 
   if (isLoading) return <AnalyticsSkeleton />;
 
@@ -201,7 +261,9 @@ const AnalyticsPage = () => {
   const maxRegionOrders = Math.max(...(demo.regions ?? []).map((r: any) => r.orders), 1);
   const maxHour = Math.max(...fullHourly.map((h: any) => h.orders), 1);
 
-  const periodLabel = PERIODS.find(p => p.value === period)?.label ?? period;
+  const periodLabel = customRange
+    ? `${format(new Date(customRange.start + "T12:00:00"), "dd/MM/yyyy")} a ${format(new Date(customRange.end + "T12:00:00"), "dd/MM/yyyy")}`
+    : PERIODS.find(p => p.value === period)?.label ?? period;
 
   return (
     <div className="space-y-6 pb-24">
@@ -222,9 +284,9 @@ const AnalyticsPage = () => {
           {/* Fallback compacto: dropdown, útil em telas bem estreitas */}
           <div className="sm:hidden flex items-center gap-2 bg-white border rounded-xl px-3 py-2 shadow-sm self-start">
             <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
-            <Select value={period} onValueChange={setPeriod}>
+            <Select value={customRange ? "" : period} onValueChange={applyPeriod}>
               <SelectTrigger className="border-0 focus:ring-0 text-sm font-semibold text-gray-700 bg-transparent p-0 h-auto w-40">
-                <SelectValue />
+                <SelectValue placeholder="Período" />
               </SelectTrigger>
               <SelectContent>
                 {PERIODS.map(p => (
@@ -235,24 +297,65 @@ const AnalyticsPage = () => {
           </div>
         </div>
 
-        {/* Atalhos de período — visíveis a partir de sm, destacando o período ativo */}
-        <div className="hidden sm:flex items-center gap-1.5 bg-white border rounded-xl p-1.5 shadow-sm w-fit overflow-x-auto">
-          {PERIODS.map(p => (
-            <button
-              key={p.value}
-              type="button"
-              onClick={() => setPeriod(p.value)}
-              aria-pressed={period === p.value}
-              className={cn(
-                "px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors",
-                period === p.value
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-gray-500 hover:bg-gray-100 hover:text-gray-700"
-              )}
-            >
-              {p.shortLabel}
-            </button>
-          ))}
+        {/* Filtro de período */}
+        <div className="flex flex-col gap-3 bg-white p-3 rounded-xl border shadow-sm">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {PERIODS.map(p => (
+              <button
+                key={p.value}
+                type="button"
+                onClick={() => applyPeriod(p.value)}
+                aria-pressed={!customRange && period === p.value}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors",
+                  !customRange && period === p.value
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                )}
+              >
+                {p.shortLabel}
+              </button>
+            ))}
+            <span className="w-px h-5 bg-gray-200 mx-1" />
+            {EXTRA_PRESETS.map(p => (
+              <Button
+                key={p.key}
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => applyExtraPreset(p.key)}
+                className="h-7 px-2.5 text-xs font-bold"
+              >
+                {p.label}
+              </Button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
+              <div className="flex flex-col">
+                <span className="text-[10px] font-bold uppercase text-muted-foreground">De</span>
+                <Input
+                  type="date"
+                  value={startDateInput}
+                  onChange={(e) => handleManualDateChange("start", e.target.value)}
+                  className="h-8 w-36 text-xs"
+                />
+              </div>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold uppercase text-muted-foreground">Até</span>
+              <Input
+                type="date"
+                value={endDateInput}
+                onChange={(e) => handleManualDateChange("end", e.target.value)}
+                className="h-8 w-36 text-xs"
+              />
+            </div>
+            {customRange && (
+              <Badge variant="secondary" className="h-6 text-[10px] font-semibold">Período personalizado</Badge>
+            )}
+          </div>
         </div>
       </div>
 
