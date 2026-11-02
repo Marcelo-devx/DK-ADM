@@ -18,14 +18,26 @@ import {
 const STATUSES_DASHBOARD = ["Finalizada", "Pago"];
 
 const fetchAllOrders = async (startDate: string, endDate: string) => {
-  const { data, error } = await supabase
-    .from("orders")
-    .select("id, created_at, status, total_price, coupon_discount, donation_amount, payment_method, guest_email, user_id")
-    .gte("created_at", startDate)
-    .lte("created_at", endDate + "T23:59:59")
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-  return data || [];
+  let allOrders: any[] = [];
+  let from = 0;
+  const pageSize = 1000;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("orders")
+      .select("id, created_at, status, total_price, coupon_discount, donation_amount, payment_method, guest_email, user_id")
+      .gte("created_at", startDate)
+      .lte("created_at", endDate + "T23:59:59")
+      .order("created_at", { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    allOrders = allOrders.concat(data);
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return allOrders;
 };
 
 const fmt = (val: number) =>
