@@ -63,6 +63,7 @@ import InvestigarUsuario from "./pages/dashboard/InvestigarUsuario";
 import ReativarPedidos from "./pages/dashboard/ReativarPedidos";
 import AuditoriaCartao from "./pages/dashboard/AuditoriaCartao";
 import AuditoriaPedidos from "./pages/dashboard/AuditoriaPedidos";
+import AuditoriaProduto from "./pages/dashboard/AuditoriaProduto";
 import WarmupManager from "./pages/dashboard/WarmupManager";
 import ProductReservations from "./pages/dashboard/ProductReservations";
 import AdminAcessoManual from "./pages/dashboard/AdminAcessoManual";
@@ -163,6 +164,7 @@ const App = () => (
               <Route path="reativar-pedidos" element={<ReativarPedidos />} />
               <Route path="auditoria-cartao" element={<AuditoriaCartao />} />
               <Route path="auditoria-pedidos" element={<AuditoriaPedidos />} />
+              <Route path="auditoria-produto" element={<AuditoriaProduto />} />
               <Route path="warmup-manager" element={<WarmupManager />} />
               <Route path="product-reservations" element={<ProductReservations />} />
               <Route path="acesso-manual" element={<AdminAcessoManual />} />

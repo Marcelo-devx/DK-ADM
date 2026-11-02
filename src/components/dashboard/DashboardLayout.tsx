@@ -55,6 +55,7 @@ const GERENTE_GERAL_ALLOWED_ROUTES = [
   "/dashboard/relatorio-entrada-estoque",
   "/dashboard/cleanup-orders",
   "/dashboard/client-vip",
+  "/dashboard/auditoria-produto",
 ];
 
 interface SidebarContextType {

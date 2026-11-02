@@ -271,6 +271,9 @@ const Sidebar = () => {
       <NavLink to="/dashboard/auditoria-pedidos" className={navLinkClass}>
         {({ isActive }) => (<><ShieldCheck className={iconClass("text-orange-600", isActive)} />Auditoria Pedidos</>)}
       </NavLink>
+      <NavLink to="/dashboard/auditoria-produto" className={navLinkClass}>
+        {({ isActive }) => (<><FileSearch className={iconClass("text-orange-600", isActive)} />Auditoria de Produto</>)}
+      </NavLink>
       <NavLink to="/dashboard/warmup-manager" className={navLinkClass}>
         {({ isActive }) => (<><Flame className={iconClass("text-orange-500", isActive)} />Gestão de Aquecimento</>)}
       </NavLink>
@@ -316,6 +319,9 @@ const Sidebar = () => {
       <p className={sectionTitleClass}>Catálogo</p>
       <NavLink to="/dashboard/products" className={navLinkClass}>
         {({ isActive }) => (<><Package className={iconClass("text-blue-600", isActive)} />Produtos</>)}
+      </NavLink>
+      <NavLink to="/dashboard/auditoria-produto" className={navLinkClass}>
+        {({ isActive }) => (<><FileSearch className={iconClass("text-orange-600", isActive)} />Auditoria de Produto</>)}
       </NavLink>
 
       {/* LOGÍSTICA */}
