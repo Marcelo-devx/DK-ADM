@@ -208,7 +208,7 @@ export default function AuditoriaProduto() {
                     <TableCell className="whitespace-nowrap font-medium text-emerald-700">{money.format(row.quantity * row.price_at_purchase)}</TableCell>
                     <TableCell><Badge className={o.status === "Cancelado" ? "" : o.status === "Pendente" ? "bg-amber-100 text-amber-800 hover:bg-amber-100" : "bg-emerald-100 text-emerald-800 hover:bg-emerald-100"} variant={o.status === "Cancelado" ? "destructive" : "secondary"}>{o.status}</Badge><div className="mt-1 text-xs text-muted-foreground">{o.delivery_status || "—"}</div></TableCell>
                   </TableRow>
-                  {expanded && <TableRow className="bg-blue-50/60 hover:bg-blue-50/60"><TableCell colSpan={7} className="p-3 sm:p-4"><div id={`buyer-history-${row.id}`}><BuyerPurchaseHistory userId={o.user_id} guestEmail={o.guest_email} orderId={o.id} name={name} /></div></TableCell></TableRow>}
+                  {expanded && <TableRow className="bg-blue-50/60 hover:bg-blue-50/60"><TableCell colSpan={7} className="p-3 sm:p-4"><div id={`buyer-history-${row.id}`}><BuyerPurchaseHistory userId={o.user_id} guestEmail={o.guest_email} orderId={o.id} name={name} onSelectProduct={selectProduct} /></div></TableCell></TableRow>}
                 </Fragment>;
               })}</TableBody>
             </Table>
