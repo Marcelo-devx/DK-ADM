@@ -18,7 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import React, { useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { startOfMonth, format, subDays, startOfDay, endOfDay } from "date-fns";
+import { startOfMonth, endOfMonth, format, subDays, startOfDay, endOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   Tooltip,
@@ -264,9 +264,58 @@ const StatusBadge = ({ status }: { status: string }) => {
 };
 
 // ─── Componente principal ─────────────────────────────────────────────────────
+type PeriodPreset = "today" | "yesterday" | "7d" | "30d" | "thisMonth" | "lastMonth" | "custom";
+
+const PERIOD_PRESETS: { key: PeriodPreset; label: string }[] = [
+  { key: "today", label: "Hoje" },
+  { key: "yesterday", label: "Ontem" },
+  { key: "7d", label: "Últimos 7 dias" },
+  { key: "30d", label: "Últimos 30 dias" },
+  { key: "thisMonth", label: "Este mês" },
+  { key: "lastMonth", label: "Mês passado" },
+];
+
+const getPresetRange = (preset: PeriodPreset): { start: string; end: string } => {
+  const today = new Date();
+  switch (preset) {
+    case "today":
+      return { start: format(today, "yyyy-MM-dd"), end: format(today, "yyyy-MM-dd") };
+    case "yesterday": {
+      const y = subDays(today, 1);
+      return { start: format(y, "yyyy-MM-dd"), end: format(y, "yyyy-MM-dd") };
+    }
+    case "7d":
+      return { start: format(subDays(today, 6), "yyyy-MM-dd"), end: format(today, "yyyy-MM-dd") };
+    case "30d":
+      return { start: format(subDays(today, 29), "yyyy-MM-dd"), end: format(today, "yyyy-MM-dd") };
+    case "thisMonth":
+      return { start: format(startOfMonth(today), "yyyy-MM-dd"), end: format(today, "yyyy-MM-dd") };
+    case "lastMonth": {
+      const lastMonthDate = subDays(startOfMonth(today), 1);
+      return { start: format(startOfMonth(lastMonthDate), "yyyy-MM-dd"), end: format(endOfMonth(lastMonthDate), "yyyy-MM-dd") };
+    }
+    default:
+      return { start: format(startOfMonth(today), "yyyy-MM-dd"), end: format(today, "yyyy-MM-dd") };
+  }
+};
+
 const DashboardPage = () => {
   const [startDate, setStartDate] = useState(format(startOfMonth(new Date()), "yyyy-MM-dd"));
   const [endDate, setEndDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [activePreset, setActivePreset] = useState<PeriodPreset>("thisMonth");
+
+  const applyPreset = (preset: PeriodPreset) => {
+    const { start, end } = getPresetRange(preset);
+    setStartDate(start);
+    setEndDate(end);
+    setActivePreset(preset);
+  };
+
+  const handleManualDateChange = (field: "start" | "end", value: string) => {
+    if (field === "start") setStartDate(value);
+    else setEndDate(value);
+    setActivePreset("custom");
+  };
 
   const { data: stats, isLoading: isLoadingStats, refetch: refetchStats, isFetching: isFetchingStats } = useQuery({
     queryKey: ["dashboardFinancialStats", startDate, endDate],
@@ -311,19 +360,48 @@ const DashboardPage = () => {
         </div>
 
         {/* Filtro de período */}
-        <div className="flex flex-wrap items-end gap-2 bg-white p-3 rounded-xl border shadow-sm">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
-            <div className="flex flex-col">
-              <span className="text-[10px] font-bold uppercase text-muted-foreground">De</span>
-              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-8 w-36 text-xs" />
+        <div className="flex flex-col gap-3 bg-white p-3 rounded-xl border shadow-sm">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {PERIOD_PRESETS.map((p) => (
+              <Button
+                key={p.key}
+                type="button"
+                size="sm"
+                variant={activePreset === p.key ? "default" : "outline"}
+                onClick={() => applyPreset(p.key)}
+                className="h-7 px-2.5 text-xs"
+              >
+                {p.label}
+              </Button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
+              <div className="flex flex-col">
+                <span className="text-[10px] font-bold uppercase text-muted-foreground">De</span>
+                <Input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => handleManualDateChange("start", e.target.value)}
+                  className="h-8 w-36 text-xs"
+                />
+              </div>
             </div>
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold uppercase text-muted-foreground">Até</span>
+              <Input
+                type="date"
+                value={endDate}
+                onChange={(e) => handleManualDateChange("end", e.target.value)}
+                className="h-8 w-36 text-xs"
+              />
+            </div>
+            {activePreset === "custom" && (
+              <Badge variant="secondary" className="h-6 text-[10px] font-semibold">Período personalizado</Badge>
+            )}
+            <span className="text-xs text-muted-foreground italic">Filtro aplicado nos KPIs financeiros abaixo</span>
           </div>
-          <div className="flex flex-col">
-            <span className="text-[10px] font-bold uppercase text-muted-foreground">Até</span>
-            <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-8 w-36 text-xs" />
-          </div>
-          <span className="text-xs text-muted-foreground italic">Filtro aplicado nos KPIs financeiros abaixo</span>
         </div>
       </div>
 
