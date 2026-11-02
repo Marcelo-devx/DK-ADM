@@ -107,6 +107,9 @@ const Sidebar = () => {
       <NavLink to="/dashboard/orders" className={navLinkClass}>
         {({ isActive }) => (<><DollarSign className={iconClass("text-green-600", isActive)} />Pedidos (Clientes)</>)}
       </NavLink>
+      <NavLink to="/dashboard/auditoria-produto" className={navLinkClass}>
+        {({ isActive }) => (<><FileSearch className={iconClass("text-orange-600", isActive)} />Auditoria de Produto</>)}
+      </NavLink>
       <NavLink to="/dashboard/user-admin" className={navLinkClass}>
         {({ isActive }) => (<><ShieldAlert className={iconClass("text-red-600", isActive)} />Admin Usuários</>)}
       </NavLink>
@@ -271,9 +274,6 @@ const Sidebar = () => {
       <NavLink to="/dashboard/auditoria-pedidos" className={navLinkClass}>
         {({ isActive }) => (<><ShieldCheck className={iconClass("text-orange-600", isActive)} />Auditoria Pedidos</>)}
       </NavLink>
-      <NavLink to="/dashboard/auditoria-produto" className={navLinkClass}>
-        {({ isActive }) => (<><FileSearch className={iconClass("text-orange-600", isActive)} />Auditoria de Produto</>)}
-      </NavLink>
       <NavLink to="/dashboard/warmup-manager" className={navLinkClass}>
         {({ isActive }) => (<><Flame className={iconClass("text-orange-500", isActive)} />Gestão de Aquecimento</>)}
       </NavLink>
@@ -286,6 +286,9 @@ const Sidebar = () => {
       <p className={sectionTitleClass}>Operação</p>
       <NavLink to="/dashboard/orders" className={navLinkClass}>
         {({ isActive }) => (<><DollarSign className={iconClass("text-green-600", isActive)} />Pedidos (Clientes)</>)}
+      </NavLink>
+      <NavLink to="/dashboard/auditoria-produto" className={navLinkClass}>
+        {({ isActive }) => (<><FileSearch className={iconClass("text-orange-600", isActive)} />Auditoria de Produto</>)}
       </NavLink>
       <NavLink to="/dashboard/user-admin" className={navLinkClass}>
         {({ isActive }) => (<><ShieldAlert className={iconClass("text-red-600", isActive)} />Admin Usuários</>)}
@@ -319,9 +322,6 @@ const Sidebar = () => {
       <p className={sectionTitleClass}>Catálogo</p>
       <NavLink to="/dashboard/products" className={navLinkClass}>
         {({ isActive }) => (<><Package className={iconClass("text-blue-600", isActive)} />Produtos</>)}
-      </NavLink>
-      <NavLink to="/dashboard/auditoria-produto" className={navLinkClass}>
-        {({ isActive }) => (<><FileSearch className={iconClass("text-orange-600", isActive)} />Auditoria de Produto</>)}
       </NavLink>
 
       {/* LOGÍSTICA */}
