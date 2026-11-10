@@ -9,6 +9,7 @@ import { ProductToolbar } from "@/components/dashboard/products/ProductToolbar";
 import { ProductDialogs } from "@/components/dashboard/products/ProductDialogs";
 import { ExtendedProduct } from "@/hooks/useProductData";
 import { Button } from "@/components/ui/button";
+import { variationFields, getVariationValue, type VariationField, type VariationFilters, type VariationOptions } from "@/components/dashboard/products/ProductVariationFilters";
 
 interface SortState {
   column: string | null;
@@ -40,6 +41,31 @@ const ProductsPage = () => {
   const [maxStockFilter, setMaxStockFilter] = useState<string>("");
   const [sortState, setSortState] = useState<SortState>({ column: null, direction: null });
   const [currentPage, setCurrentPage] = useState(1);
+  const [variationFilters, setVariationFilters] = useState<VariationFilters>({});
+
+  const variationOptions = useMemo(() => {
+    const categoryProducts = (products ?? []).filter(product => categoryFilter === "all" || product.category === categoryFilter);
+    const options: VariationOptions = {};
+    for (const { key } of variationFields) {
+      const values = categoryProducts.flatMap(product => (product.variants ?? []).map(variant => getVariationValue(variant, key))).filter(Boolean);
+      options[key] = [...new Set(values)].sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
+    }
+    return options;
+  }, [products, categoryFilter]);
+
+  const handleCategoryFilterChange = (value: string) => {
+    setCategoryFilter(value);
+    setVariationFilters({});
+  };
+
+  const handleVariationFilterChange = (field: VariationField, value: string) => {
+    setVariationFilters(previous => {
+      const next = { ...previous };
+      if (value === "all") delete next[field];
+      else next[field] = value;
+      return next;
+    });
+  };
 
   // States for Import Flow (needs to pass data to modal)
   const [productsToConfirm, setProductsToConfirm] = useState<any[]>([]);
@@ -153,17 +179,21 @@ const ProductsPage = () => {
         ? Number(product.variant_stock_total || 0)
         : (product.stock_quantity || 0);
       const matchesMaxStock = maxStockFilter === '' || isNaN(Number(maxStockFilter)) || productStock <= Number(maxStockFilter);
-      return matchesCategory && matchesBrand && matchesSearch && matchesMaxStock;
+      const selectedFields = variationFields.filter(({ key }) => variationFilters[key]);
+      const matchesVariation = selectedFields.length === 0 || (product.variants ?? []).some(variant =>
+        selectedFields.every(({ key }) => `value:${getVariationValue(variant, key)}` === variationFilters[key])
+      );
+      return matchesCategory && matchesBrand && matchesSearch && matchesMaxStock && matchesVariation;
     });
     
     // Depois aplica a ordenação
     return sortProducts(result);
-  }, [products, categoryFilter, brandFilter, searchTerm, maxStockFilter, sortState]);
+  }, [products, categoryFilter, brandFilter, searchTerm, maxStockFilter, sortState, variationFilters]);
 
   // Sempre que os filtros/ordenação mudam, volta para a primeira página
   useEffect(() => {
     setCurrentPage(1);
-  }, [categoryFilter, brandFilter, searchTerm, maxStockFilter, sortState]);
+  }, [categoryFilter, brandFilter, searchTerm, maxStockFilter, sortState, variationFilters]);
 
   const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE));
 
@@ -399,7 +429,10 @@ const ProductsPage = () => {
         brandFilter={brandFilter}
         onBrandFilterChange={setBrandFilter}
         categoryFilter={categoryFilter}
-        onCategoryFilterChange={setCategoryFilter}
+        onCategoryFilterChange={handleCategoryFilterChange}
+        variationFilters={variationFilters}
+        variationOptions={variationOptions}
+        onVariationFilterChange={handleVariationFilterChange}
         maxStockFilter={maxStockFilter}
         onMaxStockFilterChange={setMaxStockFilter}
         brands={brands}

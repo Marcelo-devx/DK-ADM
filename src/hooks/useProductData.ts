@@ -2,6 +2,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { showSuccess, showError } from "@/utils/toast";
 
+export interface ProductFilterVariant {
+  flavors: { name: string } | { name: string }[] | null;
+  volume_ml: number | null;
+  color: string | null;
+  ohms: number | null;
+  size: string | null;
+}
+
 // Definição local se não estiver global
 export interface ExtendedProduct {
   id: number;
@@ -25,6 +33,7 @@ export interface ExtendedProduct {
   allocated_in_kits?: number;
   created_at: string;
   flavor_names?: string | null;
+  variants?: ProductFilterVariant[];
 }
 
 export const useProductData = () => {

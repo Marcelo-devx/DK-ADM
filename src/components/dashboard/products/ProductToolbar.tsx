@@ -7,6 +7,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { PlusCircle, Search, DownloadCloud, FileUp, FileDown, Eye, Loader2, SlidersHorizontal, X, FilterX, Package, ClipboardList, AlertTriangle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { ProductVariationFilters, type VariationField, type VariationFilters, type VariationOptions } from "./ProductVariationFilters";
 
 interface ProductToolbarProps {
   searchTerm: string;
@@ -15,6 +16,9 @@ interface ProductToolbarProps {
   onBrandFilterChange: (value: string) => void;
   categoryFilter: string;
   onCategoryFilterChange: (value: string) => void;
+  variationFilters: VariationFilters;
+  variationOptions: VariationOptions;
+  onVariationFilterChange: (field: VariationField, value: string) => void;
   maxStockFilter: string;
   onMaxStockFilterChange: (value: string) => void;
   brands: { id: number; name: string }[] | undefined;
@@ -38,6 +42,9 @@ export const ProductToolbar = ({
   onBrandFilterChange,
   categoryFilter,
   onCategoryFilterChange,
+  variationFilters,
+  variationOptions,
+  onVariationFilterChange,
   maxStockFilter,
   onMaxStockFilterChange,
   brands,
@@ -54,15 +61,17 @@ export const ProductToolbar = ({
   isExporting = false,
 }: ProductToolbarProps) => {
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const variationFilterCount = Object.keys(variationFilters).length;
 
   const hasActiveFilters =
-    searchTerm || brandFilter !== "all" || categoryFilter !== "all" || maxStockFilter !== "";
+    searchTerm || brandFilter !== "all" || categoryFilter !== "all" || maxStockFilter !== "" || variationFilterCount > 0;
 
   const activeFilterCount = [
     searchTerm ? 1 : 0,
     brandFilter !== "all" ? 1 : 0,
     categoryFilter !== "all" ? 1 : 0,
     maxStockFilter !== "" ? 1 : 0,
+    variationFilterCount,
   ].reduce((a, b) => a + b, 0);
 
   const clearAllFilters = () => {
@@ -206,6 +215,12 @@ export const ProductToolbar = ({
                     ))}
                   </div>
                 </div>
+
+                <ProductVariationFilters
+                  filters={variationFilters}
+                  options={variationOptions}
+                  onChange={onVariationFilterChange}
+                />
 
                 {/* Estoque baixo */}
                 <div>
@@ -458,6 +473,25 @@ export const ProductToolbar = ({
           <div className="flex items-center justify-end">
             <span className="text-xs text-muted-foreground font-bold uppercase tracking-wider">{totalCount} encontrados</span>
           </div>
+          {Object.values(variationOptions).some(values => values.length > 0) && (
+            <div className="col-span-full border-t pt-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-semibold text-gray-600">Variações da categoria</span>
+                {variationFilterCount > 0 && (
+                  <Button variant="ghost" size="sm" onClick={() => Object.keys(variationFilters).forEach(field => onVariationFilterChange(field as VariationField, "all"))}>
+                    <FilterX className="mr-1 h-3.5 w-3.5" /> Limpar variações
+                  </Button>
+                )}
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+                <ProductVariationFilters
+                  filters={variationFilters}
+                  options={variationOptions}
+                  onChange={onVariationFilterChange}
+                />
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
