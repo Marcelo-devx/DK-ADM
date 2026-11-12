@@ -39,6 +39,7 @@ import Secrets from "./pages/dashboard/Secrets";
 import CloudinaryStats from "./pages/dashboard/CloudinaryStats";
 import Analytics from "./pages/dashboard/Analytics";
 import MetaflowInsights from "./pages/dashboard/MetaflowInsights";
+import DoublePoints from "./pages/dashboard/DoublePoints";
 import PriceManagement from "./pages/dashboard/PriceManagement";
 import ImportClients from "./pages/dashboard/ImportClients";
 import ShippingRates from "./pages/dashboard/ShippingRates";
@@ -140,6 +141,7 @@ const App = () => (
               <Route path="cloudinary-stats" element={<CloudinaryStats />} />
               <Route path="analytics" element={<Analytics />} />
               <Route path="metaflow-insights" element={<MetaflowInsights />} />
+              <Route path="pontos-em-dobro" element={<DoublePoints />} />
               <Route path="price-management" element={<PriceManagement />} />
               <Route path="import-clients" element={<ImportClients />} />
               <Route path="shipping-rates" element={<ShippingRates />} />

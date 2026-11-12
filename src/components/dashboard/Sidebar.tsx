@@ -100,6 +100,9 @@ const Sidebar = () => {
       <NavLink to="/dashboard/metaflow-insights" className={navLinkClass}>
         {({ isActive }) => (<><TrendingUp className={iconClass("text-slate-500", isActive)} />Metaflow Insights</>)}
       </NavLink>
+      <NavLink to="/dashboard/pontos-em-dobro" className={navLinkClass}>
+        {({ isActive }) => (<><Gift className={iconClass("text-amber-600", isActive)} />Pontos em dobro</>)}
+      </NavLink>
 
       {/* OPERAÇÃO */}
 
